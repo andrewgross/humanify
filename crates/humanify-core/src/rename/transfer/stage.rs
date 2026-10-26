@@ -21,6 +21,7 @@ use crate::modules::soundness::collect_eval_with_taint;
 use crate::prior::MatchStage;
 use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::RenameState;
+use crate::rename::validated::scopes::BindingId;
 use crate::trail::Anchor;
 use crate::twins::gates::{RowState, TwinGateOutput, TwinInputs, compute_gated_statement_twins};
 
@@ -36,6 +37,12 @@ use super::{TransferOutcome, TransferRun, TwinTransfers, run_transfer_pipeline};
 #[derive(Clone, Debug, Default)]
 pub struct PreFreeze {
     pub library: Vec<(usize, String)>,
+    /// Spans of the modules the names mode placed at vendor paths
+    /// (library-names plan step 4): everything inside them is library
+    /// code with a settled home, so their fn and module-binding rows are
+    /// skipped below before any wave can ask for them. Empty when
+    /// nothing was placed or the mode is off.
+    pub library_spans: Vec<(u32, u32)>,
 }
 
 /// `detectAndMarkLibraries` over a match stage's fresh side: the file's
@@ -54,6 +61,7 @@ pub fn library_freeze(
             skip_libraries,
             source,
         )?,
+        library_spans: Vec::new(),
     })
 }
 
@@ -209,7 +217,30 @@ fn settle(
     freeze: &PreFreeze,
     profile: NameProfile,
 ) -> Result<Settled, String> {
-    let fresh_state = RenameState::new(stage.fresh.ingest.semantic(), Anchor::Fresh, profile);
+    let mut fresh_state = RenameState::new(stage.fresh.ingest.semantic(), Anchor::Fresh, profile);
+    // The names mode's placed modules, before anything else runs: every
+    // binding declared inside the placed spans is library-held — the
+    // validated path refuses to rename it, whichever route asks (the
+    // transfer's carries, the waves, the reconcile's caller records).
+    // The layout's spans are era-absolute and the state is the era's own,
+    // so the hold covers the whole run over this text. The lazy-init
+    // helper's binding is released by the plumbing pass that masks it.
+    let held: Vec<BindingId> = fresh_state
+        .view()
+        .bindings
+        .iter()
+        .enumerate()
+        .filter(|(_, binding)| {
+            freeze
+                .library_spans
+                .iter()
+                .any(|&(s, e)| binding.id_span.start >= s && binding.id_span.end <= e)
+        })
+        .map(|(i, _)| BindingId(i as u32))
+        .collect();
+    for binding in held {
+        fresh_state.mark_library_held(binding);
+    }
     let prior_semantic = stage.prior.ingest.semantic();
     let prior_state = RenameState::new(prior_semantic, Anchor::Fresh, profile);
     let prior_rows = SideRows::build(
@@ -285,6 +316,27 @@ pub fn pre_transfer_states(
     for &(i, _) in &freeze.library {
         if fn_state[i].is_pending() {
             fn_state[i].mark_skipped("library", &graph.functions[i].session_id);
+        }
+    }
+    // The names mode's placed modules: their rows are library code with a
+    // settled vendor path (the split moves the whole region), so nothing
+    // inside these spans is ever asked, in either era.
+    if !freeze.library_spans.is_empty() {
+        let mut spans = freeze.library_spans.clone();
+        spans.sort_unstable();
+        let inside = |start: u32, end: u32| {
+            let at = spans.partition_point(|&(s, _)| s <= start);
+            at > 0 && end <= spans[at - 1].1
+        };
+        for (i, f) in graph.functions.iter().enumerate() {
+            if inside(f.span.start, f.span.end) && fn_state[i].is_pending() {
+                fn_state[i].mark_skipped("library", &f.session_id);
+            }
+        }
+        for (i, b) in graph.module_bindings.iter().enumerate() {
+            if inside(b.span.start, b.span.end) && binding_state[i].is_pending() {
+                binding_state[i].mark_skipped("library", &b.session_id);
+            }
         }
     }
     (fn_state, binding_state)

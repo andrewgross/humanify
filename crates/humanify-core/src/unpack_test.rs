@@ -2328,3 +2328,110 @@ fn names_mode_needs_the_claim_rows() {
         "the refusal says what is missing: {err}"
     );
 }
+
+#[test]
+fn names_mode_claims_the_lazy_module_regions_in_era_ordinals() {
+    // A lazy module BEFORE any extracted factory: the placement group's
+    // rows — the helper as an unclaimed pending, the claimed init head —
+    // become a claimed region in ERA ordinals, which here (the one
+    // factory sits after the region, so nothing before it is removed)
+    // are the raw container ordinals. The CJS factory is also what puts
+    // the run on the classified path at all: a helper-less floor bundle
+    // claims nothing (no regions, by design — an empty layout, and
+    // nothing moves).
+    let bundle = concat!(
+        "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n",
+        "var Gq = W(() => {\n",
+        "  var pkg = {name:\"ms\",version:\"1.0.0\",main:\"index.js\",license:\"MIT\",probe:()=>1};\n",
+        "});\n",
+        "var x = (I, A) => () => (A || (I((A = {exports:{}}).exports, A), A.exports));\n",
+        "var mod_z = x((exports) => {\n",
+        "  exports.two = 2;\n",
+        "});\n",
+        "var app = () => Gq() && mod_z().two;\n"
+    );
+    let answers_dir = TempDir::new("names-lazy-answers");
+    fs::write(answers_dir.0.join("modules.cjs.jsonl"), "\n").unwrap();
+    let answers = answers_of(&answers_dir);
+    let request = crate::libdetect::discovery::DiscoveryRequest {
+        list_units: true,
+        placement_groups: true,
+        options: crate::libdetect::discovery::DiscoveryOptions {
+            factory_bodies: true,
+            ..Default::default()
+        },
+        module_answers: Some(answers),
+        ..Default::default()
+    };
+    let t = TempDir::new("names-lazy");
+    let out = unpack_bun(
+        bundle,
+        &t.0,
+        BunUnpackOptions {
+            library_discovery: Some(request),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        out.claimed_module_regions,
+        vec![crate::naming::module_names::ClaimedRegion {
+            statements: vec![0, 1],
+            claims: vec![None, Some("ms".to_string())],
+        }],
+        "the helper is the group's unclaimed pending, the claimed init its head: {:?}",
+        out.claimed_module_regions
+    );
+}
+
+#[test]
+fn a_names_region_after_an_extracted_factory_shifts_to_era_ordinals() {
+    // The standing vendor-bridge invariant: an extracted factory removes
+    // one container statement, so a lazy module after it shifts down by
+    // one in the era body.
+    let bundle = concat!(
+        "var x = (I, A) => () => (A || (I((A = {exports:{}}).exports, A), A.exports));\n",
+        "var mod_a = x((exports) => {\n",
+        "  exports.one = 1;\n",
+        "});\n",
+        "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n",
+        "var Gq = W(() => {\n",
+        "  var pkg = {name:\"ms\",version:\"1.0.0\",main:\"index.js\",license:\"MIT\",probe:()=>1};\n",
+        "});\n",
+        "var app = () => Gq() && mod_a().one;\n"
+    );
+    let answers_dir = TempDir::new("names-shift-answers");
+    fs::write(answers_dir.0.join("modules.cjs.jsonl"), "\n").unwrap();
+    let answers = answers_of(&answers_dir);
+    let request = crate::libdetect::discovery::DiscoveryRequest {
+        list_units: true,
+        placement_groups: true,
+        options: crate::libdetect::discovery::DiscoveryOptions {
+            factory_bodies: true,
+            ..Default::default()
+        },
+        module_answers: Some(answers),
+        ..Default::default()
+    };
+    let t = TempDir::new("names-shift");
+    let out = unpack_bun(
+        bundle,
+        &t.0,
+        BunUnpackOptions {
+            library_discovery: Some(request),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    // mod_a is extracted; var W was raw ordinal 2, var Gq 3 — one lower
+    // in the era body the split will see.
+    assert_eq!(
+        out.claimed_module_regions,
+        vec![crate::naming::module_names::ClaimedRegion {
+            statements: vec![1, 2],
+            claims: vec![None, Some("ms".to_string())],
+        }],
+        "{:?}",
+        out.claimed_module_regions
+    );
+}

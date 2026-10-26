@@ -136,6 +136,10 @@ pub struct NamingInput<'t> {
     /// The file's library classification (None: no banner regions) —
     /// `libdetect::function_carry`, the one owner.
     pub library: Option<&'t crate::libdetect::function_carry::LibraryClassification>,
+    /// The names mode's claimed placement groups in the fresh text's
+    /// wrapper-body ordinals (the unpack converts them; `library.matching
+    /// = "names"` only, exp156). Empty = nothing was claimed.
+    pub claimed_regions: &'t [crate::naming::module_names::ClaimedRegion],
 }
 
 /// A post-generate pass that ran, with the text it produced (None when it
@@ -201,6 +205,10 @@ pub struct NamingOutcome {
     pub library_imports: crate::naming::plumbing::PlumbingNames,
     /// What the module step did (`naming::module_names`).
     pub module_names: crate::naming::module_names::ModuleNamingReport,
+    /// What the names mode placed (`naming::module_names`, exp156): the
+    /// moved modules' vendor paths (the split reads them) and their
+    /// spans (already applied as a freeze). Empty when nothing moved.
+    pub library_layout: crate::naming::module_names::LibraryLayout,
 }
 
 /// Run the naming stage.
@@ -230,6 +238,7 @@ pub fn run_naming<P: NameProvider>(
         fast: config.fast,
         prompt_window: config.prompt_window,
         module_naming: config.module_naming,
+        claimed_regions: input.claimed_regions,
     };
     let mut run_era = || match input.prior {
         Some(prior) => match_prior_version(
@@ -290,8 +299,14 @@ pub fn run_naming<P: NameProvider>(
         plumbing,
         library_imports,
         module_names,
+        library_layout,
         ..
     } = era;
+    // The names mode's placed modules, in the GENERATED text's
+    // coordinates: the prior-diff reconcile re-parses that text and
+    // builds its own bindings, so it needs its own hold over the same
+    // regions (era coordinates would point at the wrong bytes there).
+    let library_generated_spans = library_layout.generated_spans.clone();
     let mut reports = processor.reports.clone();
     reports.extend(library.reports.clone());
     let mut out = NamingOutcome {
@@ -326,6 +341,7 @@ pub fn run_naming<P: NameProvider>(
         plumbing,
         library_imports,
         module_names,
+        library_layout,
     };
     // `buildLedgerPostStages`: (input text, the pass's ledger) per pass
     // that produced code — reconcile over the generated text, the sweep
@@ -361,6 +377,7 @@ pub fn run_naming<P: NameProvider>(
             config.name_profile,
             trail,
             ledger_walk,
+            &library_generated_spans,
         )
     };
     let (verdict, reconciled, trail) = match input.prior.filter(|_| reconcile_gates) {
@@ -392,9 +409,11 @@ pub fn run_naming<P: NameProvider>(
     };
     out.output_valid = verdict == validate::Verdict::Valid;
     out.verdict = Some(verdict);
+    let mut recon_library_spans: Vec<(u32, u32)> = Vec::new();
     match reconciled {
-        Some(Ok((run, stage))) => {
+        Some(Ok((run, stage, library_spans))) => {
             ledger_stages.extend(stage.map(|l| (generated.clone(), l)));
+            recon_library_spans = library_spans;
             out.reconcile = Some(run);
         }
         Some(Err(error)) => out.reconcile_error = Some(error),
@@ -417,6 +436,14 @@ pub fn run_naming<P: NameProvider>(
         // deferred sweep's provenance targeting consults the name join —
         // the declared approximation (naming::passes::sweep::DecidedNames).
         let decided = DecidedNames::of(&trail, &out.reports, &era_exhausted);
+        // This parse builds its own bindings, so the hold must be armed
+        // over the placed modules again (a sweep ask would name
+        // library-placed code the mode exists to leave alone).
+        let sweep_library_spans = deferred_library_spans(
+            recon_code.is_some(),
+            &recon_library_spans,
+            &library_generated_spans,
+        );
         match run_deferred_sweep(
             &text,
             anchor,
@@ -430,6 +457,7 @@ pub fn run_naming<P: NameProvider>(
             &config.tunables,
             &decided,
             &stems,
+            sweep_library_spans,
         ) {
             Ok(o) => {
                 ledger_stages.extend(o.ledger.map(|l| (text.clone(), l)));
@@ -576,11 +604,26 @@ restored from the prior are missing from this output; re-run it"
     )
 }
 
+/// The placed modules' spans in the DEFERRED SWEEP's text: the
+/// prior-diff reconcile's folds when it re-rendered, else the era's
+/// generated-text coordinates (the texts are the same, so the same
+/// spans apply).
+fn deferred_library_spans<'a>(
+    reconciled: bool,
+    recon: &'a [(u32, u32)],
+    generated: &'a [(u32, u32)],
+) -> &'a [(u32, u32)] {
+    if reconciled { recon } else { generated }
+}
+
 /// The prior-diff reconcile over the generated text: the trail it hands
-/// on, and — when it ran — its result and its rename-ledger stage.
+/// on, and — when it ran — its result, its rename-ledger stage, and the
+/// placed modules' spans in the text it re-rendered (the deferred sweep
+/// parses that text next and needs its own hold over them).
 type ReconcileRun = (
     PassRun<ReconcileResult>,
     Option<crate::rename::validated::ledger::RenameLedger>,
+    Vec<(u32, u32)>,
 );
 
 fn reconcile_pass(
@@ -590,14 +633,24 @@ fn reconcile_pass(
     profile: NameProfile,
     trail: StrategyTrail,
     ledger_walk: Option<crate::naming::reconcile::step::LedgerWalk>,
+    library_spans: &[(u32, u32)],
 ) -> (StrategyTrail, Result<ReconcileRun, String>) {
-    match run_prior_diff_reconciliation(generated, prior, eligible, profile, trail, ledger_walk) {
+    match run_prior_diff_reconciliation(
+        generated,
+        prior,
+        eligible,
+        profile,
+        trail,
+        ledger_walk,
+        library_spans,
+    ) {
         Ok(PriorDiffOutcome {
             result,
             code,
+            library_spans,
             trail,
             ledger,
-        }) => (trail, Ok((PassRun { result, code }, ledger))),
+        }) => (trail, Ok((PassRun { result, code }, ledger, library_spans))),
         // Kept, never dropped: the CLI prints it (audit R3 — a failed
         // `diff` used to skip the whole pass in silence).
         Err((error, trail)) => (trail, Err(error)),

@@ -75,6 +75,10 @@ pub enum RejectionReason {
     StaleBinding,
     /// The binding's own name IS a module export name (finding #55).
     ExportedName,
+    /// The binding is declared inside a names-mode placed module
+    /// (library-names plan step 4): library-placed code keeps the
+    /// minifier's names as-is, so nothing may rename it.
+    LibraryPlaced,
 }
 
 impl RejectionReason {
@@ -90,6 +94,7 @@ impl RejectionReason {
             RejectionReason::ShadowsChild => "shadows-child",
             RejectionReason::StaleBinding => "stale-binding",
             RejectionReason::ExportedName => "exported-name",
+            RejectionReason::LibraryPlaced => "library-placed",
         }
     }
 }
@@ -266,6 +271,14 @@ pub struct RenameState {
     next_order: u64,
     /// `carriedNames`: bindings whose APPLIED name is below the floor.
     carried: BTreeSet<BindingId>,
+    /// Bindings declared inside a names-mode placed module (the
+    /// library-layout spans): nothing may rename them — not the
+    /// prior-version transfer, not the waves, not the reconcile — the
+    /// split places the module at the index's vendor path verbatim, and
+    /// byte-identity across versions is the mode's whole point. Empty in
+    /// every other mode. The lazy-init helper's ONE binding is exempted
+    /// by the plumbing pass that owns its mask.
+    library_held: BTreeSet<BindingId>,
     /// The decision ledger: per binding, whether an LLM ask settled it
     /// this run. Written by the ask lanes (the waves' `Tier::Llm` rows,
     /// the sweep's `Tier::CoverageSweep` rows — NOT the deterministic
@@ -339,6 +352,7 @@ impl RenameState {
             maps,
             next_order,
             carried: BTreeSet::new(),
+            library_held: BTreeSet::new(),
             decisions: BTreeMap::new(),
             claims: trail.claims,
             applied: Vec::new(),
@@ -509,6 +523,28 @@ impl RenameState {
     /// WITHOUT a rename (the binding cascade's same-name settle).
     pub fn record_carried(&mut self, binding: BindingId) {
         self.carried.insert(binding);
+    }
+
+    /// Library-hold a binding: declared inside a names-mode placed
+    /// module, never renamable ([`RenameState::library_held`]). Marked
+    /// once per state, from the naming run's library layout, BEFORE any
+    /// transfer or wave runs.
+    pub fn mark_library_held(&mut self, binding: BindingId) {
+        self.library_held.insert(binding);
+    }
+
+    /// The plumbing pass's ONE exemption: it owns the lazy-init helper's
+    /// mask (`__esm`), applied module-wide over whatever name anything
+    /// else chose — the one rename inside a placed module that must run.
+    pub fn release_library_hold(&mut self, binding: BindingId) {
+        self.library_held.remove(&binding);
+    }
+
+    /// Whether `binding` is library-held ([`RenameState::library_held`]):
+    /// the sweep's target selection reads this to never ask about
+    /// library-placed code.
+    pub fn is_library_held(&self, binding: BindingId) -> bool {
+        self.library_held.contains(&binding)
     }
 
     // -- the decision ledger --------------------------------------------------
@@ -794,6 +830,14 @@ impl RenameState {
             new_name,
             expected,
         } = request;
+        // The names mode's placed modules stay exactly as the minifier
+        // left them (the guard's single choke point: every route —
+        // transfer, waves, reconcile, votes — applies through here).
+        if let Some(binding) = self.binding_in(scope, old_name)
+            && self.library_held.contains(&binding)
+        {
+            return RenameAttempt::rejected(RejectionReason::LibraryPlaced);
+        }
         if expected.is_some() && self.binding_in(scope, old_name) != expected {
             return RenameAttempt::rejected(RejectionReason::StaleBinding);
         }

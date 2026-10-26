@@ -459,6 +459,7 @@ fn pipeline_body(
         profiler,
         mixed_files: &mixed_files,
         failed_calls: Default::default(),
+        claimed_regions: &unpacked.claimed_module_regions,
     };
     drop(ph);
     let ph = phase("format+naming");
@@ -514,6 +515,9 @@ fn pipeline_body(
             // runtime the split is handed — being a bundled app is a
             // property of the input.
             input_bundle: Some(bundled_code.as_str()),
+            // exp156: the naming stage's layout — which modules the names
+            // mode placed at the index's vendor paths.
+            library: &outcome.library_layout.moved,
         };
         let _ph = phase("split");
         let span = profiler.pipeline_span("split");
@@ -1233,6 +1237,11 @@ struct NamingRun<'a> {
     /// The naming stage's failed calls over every file (the waves and
     /// sweeps, the module namer) — the run's `providerErrors`.
     failed_calls: crate::provider_failures::ProviderFailures,
+    /// The names mode's claimed placement groups (library-names plan step
+    /// 4, exp156): the unpack already converted them into the naming
+    /// era's wrapper-body ordinals for the bundle's runtime file. Empty
+    /// in every other mode.
+    claimed_regions: &'a [humanify_core::naming::module_names::ClaimedRegion],
 }
 
 impl NamingRun<'_> {
@@ -1320,6 +1329,7 @@ impl NamingRun<'_> {
                 fresh: formatted,
                 prior: self.prior,
                 library,
+                claimed_regions: self.claimed_regions,
             },
             &self.config,
             &self.provider,

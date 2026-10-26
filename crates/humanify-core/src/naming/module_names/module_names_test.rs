@@ -139,6 +139,7 @@ fn run(fresh: &str, prior: Option<&str>, provider: &ModuleProvider) -> NamingOut
             fresh,
             prior,
             library: None,
+            claimed_regions: &[],
         },
         &config(),
         provider,
@@ -420,4 +421,133 @@ fn the_split_names_each_file_by_its_module_name() {
         file_of("var initColorUtils")
     );
     assert!(file_of("var initThemePicker").ends_with("/theme-picker.js"));
+}
+
+// ---- names mode: library placement (exp156) ----------------------------------
+
+use crate::naming::module_names::{ClaimedRegion, LibraryLayout};
+
+/// `BUNDLE`'s modules as the era extracts them: m0 = statements 0..=4
+/// (`var W` through `var Gq`), m1 = statement 5 (`var Hq`), m2 = 6..=8.
+/// A claimed region for m1 — the whole-claimed one — and one for m2 with
+/// unclaimed holes (partial: it must stay).
+fn lazy_regions() -> Vec<ClaimedRegion> {
+    vec![
+        ClaimedRegion {
+            statements: vec![5],
+            claims: vec![Some("ms".to_string())],
+        },
+        ClaimedRegion {
+            statements: vec![6, 7, 8],
+            claims: vec![None, None, Some("ms".to_string())],
+        },
+    ]
+}
+
+fn run_with_regions(
+    fresh: &str,
+    prior: Option<&str>,
+    provider: &ModuleProvider,
+    regions: &[ClaimedRegion],
+) -> NamingOutcome {
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(config().params);
+    run_naming(
+        &NamingInput {
+            fresh,
+            prior,
+            library: None,
+            claimed_regions: regions,
+        },
+        &config(),
+        provider,
+        &mut log,
+    )
+    .expect("the stage runs")
+}
+
+#[test]
+fn a_wholly_claimed_module_moves_to_vendor_and_is_never_asked() {
+    let provider = ModuleProvider::new(by_purpose);
+    let out = run_with_regions(BUNDLE, None, &provider, &lazy_regions());
+    let layout: &LibraryLayout = &out.library_layout;
+    assert_eq!(
+        layout.moved,
+        vec![(1usize, "vendor/ms/module-1.js".to_string())],
+        "only the wholly claimed module moves; the partial one stays: {:?}",
+        layout.moved
+    );
+    // The model names nothing of the moved module: not the wrapper, not
+    // the body's function, not the file (the module step skips it).
+    assert!(
+        !asked_by_waves(&provider, "Hq"),
+        "the moved module's wrapper is never asked"
+    );
+    // Not a module-step entry: the step asked only the OTHER two modules
+    // (the prompt keys renumber the asked set), and none of its applied
+    // names is the moved wrapper's.
+    assert_eq!(
+        out.module_names.asked, 2,
+        "three modules, one moved: only two are asked"
+    );
+    assert!(
+        out.module_names
+            .named
+            .iter()
+            .chain(&out.module_names.named_on_disclosure)
+            .chain(&out.module_names.fallback)
+            .all(|(old, _)| old != "Hq"),
+        "the moved module's wrapper is never named: {:?}",
+        out.module_names.named
+    );
+    // Its identifiers stay exactly as they were — the wrapper keeps its
+    // own minified name (the lazy helper's rename to `__esm` is the
+    // plumbing pass's, module-wide, not the moved module's identifier).
+    let code = out.code.expect("shipped");
+    assert!(code.contains("var Hq = __esm("), "{code}");
+    assert!(
+        !code.contains("var init") || code.contains("var initColorUtils"),
+        "the OTHER modules still name normally: {code}"
+    );
+}
+
+#[test]
+fn a_moved_modules_exclusion_holds_over_a_prior_too() {
+    // The prior is the same bundle fully named; with the region claimed,
+    // the transfer must not carry the prior's names into the moved
+    // module either — its statements are library-placed, names as-is.
+    let first = run(BUNDLE, None, &ModuleProvider::new(by_purpose));
+    let prior = first.code.expect("shipped");
+    let provider = ModuleProvider::new(|_| Some("other-name"));
+    let out = run_with_regions(BUNDLE, Some(&prior), &provider, &lazy_regions());
+    let layout = &out.library_layout;
+    assert_eq!(
+        layout.moved,
+        vec![(1usize, "vendor/ms/module-1.js".to_string())]
+    );
+    let code = out.code.expect("shipped");
+    assert!(
+        code.contains("var Hq = __esm("),
+        "the moved module keeps its own names over a prior: {code}"
+    );
+    assert!(
+        !asked_by_waves(&provider, "Hq"),
+        "and nothing inside it is asked"
+    );
+}
+
+#[test]
+fn an_unjoinable_region_moves_nothing() {
+    // A region whose statements are no module's segment (here: the
+    // barrel module's head alone, missing its pendings) is ignored, not
+    // force-fitted: conservative is the policy.
+    let provider = ModuleProvider::new(by_purpose);
+    let regions = vec![ClaimedRegion {
+        statements: vec![5, 7],
+        claims: vec![Some("ms".to_string()), Some("ms".to_string())],
+    }];
+    let out = run_with_regions(BUNDLE, None, &provider, &regions);
+    assert!(
+        out.library_layout.moved.is_empty(),
+        "an unjoinable region moves nothing"
+    );
 }

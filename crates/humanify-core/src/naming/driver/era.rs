@@ -40,6 +40,7 @@ use crate::naming::waves::processor::{
 };
 use crate::naming::waves::render::{
     FnPrinter, Occurrences, private_rename_edits, program_edits, render_program_with,
+    span_in_generated_text,
 };
 use crate::prior::MatchStage;
 use crate::rename::eligibility::Eligibility;
@@ -87,6 +88,11 @@ pub struct EraOptions<'o> {
     pub prompt_window: usize,
     /// `NamingConfig::module_naming`.
     pub module_naming: Option<crate::place::assign::namer::SplitNamerBudget>,
+    /// The names mode's claimed placement groups, already in this era's
+    /// wrapper-body ordinals (the unpack converts them; empty when the
+    /// mode is off). Read BEFORE the freeze: the layout it plans feeds
+    /// both the model-exclusion spans and the split's vendor paths.
+    pub claimed_regions: &'o [crate::naming::module_names::ClaimedRegion],
 }
 
 /// The module step's input over a side's ESTree JSON: the wrapper body's
@@ -256,6 +262,10 @@ pub struct NamingEra {
     pub library_imports: crate::naming::plumbing::PlumbingNames,
     /// The module step (`naming::module_names`).
     pub module_names: crate::naming::module_names::ModuleNamingReport,
+    /// What the names mode placed (`naming::module_names`, exp156): the
+    /// moved modules' vendor paths for the split, and their spans (the
+    /// freeze already applied them). Empty when nothing moved.
+    pub library_layout: crate::naming::module_names::LibraryLayout,
 }
 
 /// The match's carry before the names settle: the matcher's texts and
@@ -315,8 +325,26 @@ pub fn prior_era<P: NameProvider>(
 ) -> Result<NamingEra, String> {
     let semantic = stage.fresh.ingest.semantic();
     let graph = stage.fresh.graph;
+    // The claimed regions must be planned BEFORE the transfer: its moved
+    // statements' spans are a freeze the transfer's state marking reads,
+    // so a library-placed module's rows are never asked in this era
+    // either — the prior's names for them are not carried.
+    let modules = module_source_of(
+        stage.fresh.json,
+        stage.fresh.wrapper.map(|w| w.body_span),
+        semantic.source_text(),
+        opts.module_wrappers,
+    );
+    let library_layout = modules
+        .as_ref()
+        .map(|source| {
+            crate::naming::module_names::plan_library_modules(source, opts.claimed_regions)
+        })
+        .unwrap_or_default();
     let ph = crate::profiling::phase("era:transfer");
-    let freeze = crate::rename::transfer::library_freeze(stage, opts.library, opts.skip_libraries)?;
+    let mut freeze =
+        crate::rename::transfer::library_freeze(stage, opts.library, opts.skip_libraries)?;
+    freeze.library_spans = library_layout.spans.clone();
     let (outcome, twins) =
         crate::rename::transfer::apply_prior_version(stage, &freeze, opts.name_profile)?;
     drop(ph);
@@ -369,18 +397,13 @@ pub fn prior_era<P: NameProvider>(
     let ph = crate::profiling::phase("era:naming-graph");
     let naming = Naming::build(semantic, graph);
     drop(ph);
-    let modules = module_source_of(
-        stage.fresh.json,
-        stage.fresh.wrapper.map(|w| w.body_span),
-        semantic.source_text(),
-        opts.module_wrappers,
-    );
     let mut era = run_era(
         &naming,
         start,
         freeze.library,
         Some((prior, pending)),
         modules.as_ref(),
+        library_layout,
         opts,
         provider,
         log,
@@ -472,6 +495,21 @@ pub fn fresh_era<P: NameProvider>(
         &json,
         found.as_ref().map(|w| w.body_span),
     );
+    let modules = module_source_of(
+        &json,
+        found.as_ref().map(|w| w.body_span),
+        fresh,
+        opts.module_wrappers,
+    );
+    // Planned before the freeze for the same reason as the prior era: the
+    // moved statements' spans are part of the freeze the state marking
+    // reads, so the model is never asked for a library-placed module.
+    let library_layout = modules
+        .as_ref()
+        .map(|source| {
+            crate::naming::module_names::plan_library_modules(source, opts.claimed_regions)
+        })
+        .unwrap_or_default();
     let freeze = PreFreeze {
         library: classify_library_functions(
             &json,
@@ -480,6 +518,7 @@ pub fn fresh_era<P: NameProvider>(
             opts.skip_libraries,
             opts.library,
         )?,
+        library_spans: library_layout.spans.clone(),
     };
     let (fn_state, binding_state) = pre_transfer_states(graph, semantic, wrapper, &freeze);
     let n_fns = graph.functions.len();
@@ -498,18 +537,13 @@ pub fn fresh_era<P: NameProvider>(
     };
     let capture = opts.capture.then(|| capture_graph(graph, &start.rename));
     let naming = Naming::build(semantic, graph);
-    let modules = module_source_of(
-        &json,
-        found.as_ref().map(|w| w.body_span),
-        fresh,
-        opts.module_wrappers,
-    );
     let mut era = run_era(
         &naming,
         start,
         freeze.library,
         None,
         modules.as_ref(),
+        library_layout,
         opts,
         provider,
         log,
@@ -527,6 +561,7 @@ fn run_era<P: NameProvider>(
     library: Vec<(usize, String)>,
     prior: Option<(PriorStats, PendingCarry)>,
     modules: Option<&crate::naming::module_names::ModuleSource<'_>>,
+    mut library_layout: crate::naming::module_names::LibraryLayout,
     opts: &EraOptions<'_>,
     provider: &P,
     log: &mut DispatchLog,
@@ -538,6 +573,34 @@ fn run_era<P: NameProvider>(
     let semantic = naming.semantic;
     let graph = naming.graph;
     let eligible = Eligibility::new(opts.never_rename);
+    // The names mode's moved modules: every binding inside their spans is
+    // library code that stays exactly as it is (the index placed the
+    // file; identifier restoration is out of scope). The row skips above
+    // keep the waves off them; recording them as CARRIED — the standing
+    // "settled below the floor without a rename" mark — keeps the naming
+    // floor's sweep off them too, or their still-minified names would be
+    // re-asked there.
+    if !library_layout.spans.is_empty() {
+        let inside: Vec<u32> = start
+            .rename
+            .view()
+            .bindings
+            .iter()
+            .enumerate()
+            .filter(|(_, binding)| {
+                library_layout
+                    .spans
+                    .iter()
+                    .any(|&(s, e)| binding.id_span.start >= s && binding.id_span.end <= e)
+            })
+            .map(|(i, _)| i as u32)
+            .collect();
+        for i in inside {
+            start
+                .rename
+                .record_carried(crate::rename::validated::scopes::BindingId(i));
+        }
+    }
     // The plumbing the pipeline names itself, before any prompt shows it
     // (and over whatever name the transfer carried).
     let plumbing = crate::naming::plumbing::name_lazy_init_helper(
@@ -566,6 +629,7 @@ fn run_era<P: NameProvider>(
             &start.rename,
             &occ,
             &start.lazy_init_helpers,
+            &library_layout.moved,
             &mut start.binding_state,
         ),
         _ => crate::naming::module_names::ModulePlan::default(),
@@ -688,6 +752,9 @@ fn run_era<P: NameProvider>(
         plumbing,
         library_imports,
         module_names,
+        // Filled after `era:generate` (the moved modules' spans are
+        // folded into the generated text's coordinates first).
+        library_layout: Default::default(),
     };
     drop(ph);
     let ph = crate::profiling::phase("era:naming-floor");
@@ -740,6 +807,18 @@ fn run_era<P: NameProvider>(
     let ph = crate::profiling::phase("era:generate");
     let privates = private_rename_edits(semantic.source_text(), &start.private);
     let generated = render_program_with(semantic, &state, &privates);
+    // The moved modules' spans in the generated text, for the passes that
+    // re-parse it (the prior-diff reconcile arm the same library hold
+    // there). Zero work for every run that placed nothing.
+    if !library_layout.spans.is_empty() {
+        let edits = program_edits(semantic, &state, &privates);
+        library_layout.generated_spans = library_layout
+            .spans
+            .iter()
+            .map(|&(s, e)| span_in_generated_text(&edits, s, e))
+            .collect();
+    }
+    era.library_layout = library_layout;
     drop(ph);
     // The ledger's base stage: the AST as the naming era left it (every
     // pass before `generate` — the floor and the pre-generate sweep

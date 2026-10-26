@@ -15,7 +15,7 @@ use oxc_allocator::Allocator;
 
 use super::{ReconcileOptions, ReconcileResult, collect_word_tokens, hunks, reconcile_diff_noise};
 use crate::ingest::Ingest;
-use crate::naming::waves::render::{program_edits, render_program};
+use crate::naming::waves::render::{program_edits, render_program, span_in_generated_text};
 use crate::rename::eligibility::Eligibility;
 use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::RenameState;
@@ -26,6 +26,11 @@ pub struct PriorDiffOutcome {
     pub result: ReconcileResult,
     /// The re-rendered text — set only when a rename applied.
     pub code: Option<String>,
+    /// The names mode's placed modules in the COORDINATES OF `code`
+    /// (the input spans when nothing renamed, else folded through this
+    /// pass's renames): the deferred sweep parses that text and builds
+    /// its own bindings, so it needs its own hold over the same regions.
+    pub library_spans: Vec<(u32, u32)>,
     /// The strategy trail, continued through this pass.
     pub trail: StrategyTrail,
     /// The rename ledger's stage for this pass (`--rename-ledger`, only
@@ -68,6 +73,7 @@ pub fn run_prior_diff_reconciliation(
     profile: NameProfile,
     trail: StrategyTrail,
     ledger: Option<LedgerWalk>,
+    library_spans: &[(u32, u32)],
 ) -> Result<PriorDiffOutcome, (String, StrategyTrail)> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
@@ -86,12 +92,47 @@ pub fn run_prior_diff_reconciliation(
     drop(ph);
     let ph = crate::profiling::phase("reconcile:options");
     let mut state = RenameState::with_trail(semantic, Anchor::Generated, trail, profile);
+    // The names mode's placed modules, in THIS text's coordinates: this
+    // parse builds its own bindings, so the era's hold does not reach
+    // them — arm the same hold here or the diff would restore the prior's
+    // names into library-placed code (the one churn the mode exists to
+    // remove). Empty in every other mode.
+    if !library_spans.is_empty() {
+        use crate::rename::validated::scopes::BindingId;
+        let held: Vec<BindingId> = state
+            .view()
+            .bindings
+            .iter()
+            .enumerate()
+            .filter(|(_, binding)| {
+                library_spans
+                    .iter()
+                    .any(|&(s, e)| binding.id_span.start >= s && binding.id_span.end <= e)
+            })
+            .map(|(i, _)| BindingId(i as u32))
+            .collect();
+        for binding in held {
+            state.mark_library_held(binding);
+        }
+    }
     let opts = pipeline_options(prior_text);
     drop(ph);
     let ph = crate::profiling::phase("reconcile:apply");
     let result = reconcile_diff_noise(semantic, &mut state, &diff_text, eligible, &opts);
     drop(ph);
     let code = (!result.renames.is_empty()).then(|| render_program(semantic, &state));
+    // The placed modules follow the text: nothing renamed inside them
+    // (the hold above), so the pass's renames only shift them WHOLLY —
+    // fold their spans through the same edits the render applies.
+    let library_spans_out = if !library_spans.is_empty() && code.is_some() {
+        let edits = program_edits(semantic, &state, &[]);
+        library_spans
+            .iter()
+            .map(|&(s, e)| span_in_generated_text(&edits, s, e))
+            .collect()
+    } else {
+        library_spans.to_vec()
+    };
     let ledger = ledger.filter(|_| code.is_some()).map(|walk| {
         use crate::rename::validated::ledger::{build_rename_ledger, parse_clears_scope_cache};
         if walk == LedgerWalk::AfterLaterParse
@@ -105,6 +146,7 @@ pub fn run_prior_diff_reconciliation(
     Ok(PriorDiffOutcome {
         result,
         code,
+        library_spans: library_spans_out,
         trail: state.finish().trail,
         ledger,
     })

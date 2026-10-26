@@ -724,6 +724,11 @@ pub struct FossilOptions<'t> {
     pub min_folder_files: usize,
     /// The placement trail to record into (`--diagnostics`), if armed.
     pub trail: Option<&'t mut PlacementTrail>,
+    /// The names mode's placed modules (library-names plan step 4,
+    /// exp156): `(module index, vendor path)` pre-filled before the
+    /// prior match — the index's path wins over anything the prior or a
+    /// fresh name would say, and seeds `used` so nothing claims it.
+    pub library: &'t [(usize, String)],
 }
 
 impl Default for FossilOptions<'_> {
@@ -731,6 +736,7 @@ impl Default for FossilOptions<'_> {
         FossilOptions {
             min_folder_files: MIN_FOLDER_FILES,
             trail: None,
+            library: &[],
         }
     }
 }
@@ -782,7 +788,23 @@ definitions) — fix detection or run with --disable fossil-split"
     let mut used = OrderedSet::default();
     used.add(FOSSIL_BOOTSTRAP_FILE);
     let mut file_of_module: Vec<Option<String>> = vec![None; extract.modules.len()];
+    // The names mode's placed modules first (exp156): their vendor paths
+    // are the index's spelling, decided upstream of any match — the prior
+    // hop's ledger inherited the same path, so the two mechanisms agree;
+    // on a disagreement the index wins, never the model's fresh name.
+    for &(i, ref path) in options.library {
+        if i >= extract.modules.len() {
+            return Err(format!(
+                "library placement: module {i} is outside this bundle's fossils"
+            ));
+        }
+        used.add(path);
+        file_of_module[i] = Some(path.to_string());
+    }
     for &(fresh_idx, prior_idx) in &matched.matches {
+        if file_of_module[fresh_idx].is_some() {
+            continue;
+        }
         let file = prior_modules[prior_idx].file.clone();
         used.add(&file);
         file_of_module[fresh_idx] = Some(file);

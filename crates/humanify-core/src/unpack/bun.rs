@@ -306,6 +306,11 @@ pub struct BunUnpackOutcome {
     /// Library discovery over the app code (exp095), when asked for —
     /// report-only: nothing is named, moved or renamed by it.
     pub library_discovery: Option<crate::libdetect::discovery::DiscoveryReport>,
+    /// The names mode's claimed placement groups (library-names plan step
+    /// 4, exp156), already converted to the naming era's wrapper-body
+    /// ordinals — the CLI threads them into the naming stage, whose
+    /// layout the split reads. Empty in every other mode.
+    pub claimed_module_regions: Vec<crate::naming::module_names::ClaimedRegion>,
 }
 
 /// What the content carry did: how many modules it could pair, against
@@ -403,6 +408,7 @@ pub fn unpack_bun(
             declared_carry: None,
             app_declarations: Vec::new(),
             library_discovery: discover_raw(code, floor_pieces, floor_request),
+            claimed_module_regions: Vec::new(),
         })
     };
 
@@ -465,6 +471,7 @@ pub fn unpack_bun(
     let mut declared_carry = None;
     let mut app_declarations = Vec::new();
     let mut library_discovery = None;
+    let mut claimed_module_regions = Vec::new();
     // What the bundler kept about the whole bundle (P17), read once.
     let bundle_facts = options.module_identity.bundle_facts(code);
     if let (Some(c), Some(planner)) = (classification.as_mut(), planner.as_ref()) {
@@ -479,7 +486,7 @@ pub fn unpack_bun(
         app_declarations =
             crate::modules::identity::scan_app_declarations(code, &app_statements(c));
         library_discovery = discovery_report(code, &ingest, &options, grammar, &classified_modules);
-        place_names_modules(
+        claimed_module_regions = place_names_modules(
             c,
             code,
             &ingest,
@@ -703,14 +710,17 @@ pub fn unpack_bun(
         }),
         app_declarations,
         library_discovery,
+        claimed_module_regions,
     })
 }
 
 /// The names-mode block of [`unpack_bun`] (library-names plan step 4,
 /// exp156): the placement planner decides which wholly claimed factories
 /// MOVE to the index's `vendor/<package>/<file>`, before any name is
-/// chosen. Loud when the answers cannot be read — a silent fall-through
-/// would un-place every module without a word.
+/// chosen, and the claimed LAZY regions are converted to the naming
+/// era's ordinals for the naming stage's own layout. Loud when the
+/// answers cannot be read — a silent fall-through would un-place every
+/// module without a word.
 fn place_names_modules(
     c: &mut BunModuleClassification,
     code: &str,
@@ -718,9 +728,9 @@ fn place_names_modules(
     options: &BunUnpackOptions<'_>,
     discovery: Option<&crate::libdetect::discovery::DiscoveryReport>,
     require_var: Option<&str>,
-) -> Result<(), String> {
+) -> Result<Vec<crate::naming::module_names::ClaimedRegion>, String> {
     let Some(source) = options.library_discovery.and_then(|r| r.module_answers) else {
-        return Ok(());
+        return Ok(Vec::new());
     };
     if !options.library_discovery.is_some_and(|r| r.list_units) {
         return Err(
@@ -729,7 +739,13 @@ fn place_names_modules(
         );
     }
     let report = discovery.ok_or("library-matching names ran no discovery")?;
-    place_factories_from_index(c, code, ingest, report, source, require_var)
+    place_factories_from_index(c, code, ingest, report, source, require_var)?;
+    Ok(claimed_regions(
+        ingest,
+        &c.container,
+        &c.factories,
+        &report.placement_groups,
+    ))
 }
 
 /// The names-mode placement consumer (library-names plan step 4, exp156).
@@ -795,6 +811,73 @@ fn place_factories_from_index(
         }
     }
     Ok(())
+}
+
+/// The claimed placement groups as the naming era will see them
+/// (library-names plan step 4, exp156): each group statement's RAW
+/// container ordinal minus every container statement the unpack
+/// spliced out before it — the vendor-bridge invariant, since the
+/// naming era's wrapper body is the container AFTER the factory
+/// extraction. A statement is gone exactly when it is one declaration
+/// whose every declarator is an extracted factory (a joined declaration
+/// that keeps a declarator survives, minus its factories); a group row
+/// the container does not hold exactly cannot be joined on the naming
+/// side and is dropped whole — a wrong ordinal would move the wrong
+/// statements.
+fn claimed_regions(
+    ingest: &Ingest<'_>,
+    container: &[oxc_span::Span],
+    factories: &[FactoryRecord],
+    groups: &[crate::libdetect::discovery::PlacementGroupRow],
+) -> Vec<crate::naming::module_names::ClaimedRegion> {
+    let extracted: std::collections::HashSet<(u32, u32)> = factories
+        .iter()
+        .map(|f| (f.span.start, f.span.end))
+        .collect();
+    let mut removed: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
+    for node in ingest.semantic().nodes().iter() {
+        let oxc_ast::AstKind::VariableDeclaration(declaration) = node.kind() else {
+            continue;
+        };
+        if !declaration.declarations.is_empty()
+            && declaration
+                .declarations
+                .iter()
+                .all(|d| extracted.contains(&(d.span.start, d.span.end)))
+        {
+            let span = oxc_span::GetSpan::span(node);
+            removed.insert((span.start, span.end));
+        }
+    }
+    let mut era_of: std::collections::HashMap<(u32, u32), usize> =
+        std::collections::HashMap::with_capacity(container.len());
+    let mut removed_before = 0;
+    for (i, span) in container.iter().enumerate() {
+        era_of.insert((span.start, span.end), i - removed_before);
+        if removed.contains(&(span.start, span.end)) {
+            removed_before += 1;
+        }
+    }
+    let mut out = Vec::with_capacity(groups.len());
+    for group in groups {
+        let Some(statements) = group
+            .statements
+            .iter()
+            .map(|row| era_of.get(&(row.start, row.end)).copied())
+            .collect::<Option<Vec<usize>>>()
+        else {
+            continue;
+        };
+        out.push(crate::naming::module_names::ClaimedRegion {
+            statements,
+            claims: group
+                .statements
+                .iter()
+                .map(|row| row.package.clone())
+                .collect(),
+        });
+    }
+    out
 }
 
 /// Library discovery over the app code (exp095), report-only, when the run
