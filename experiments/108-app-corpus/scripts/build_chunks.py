@@ -10,8 +10,9 @@ usage: build_chunks.py <data-dir> <name> <cpus> <procs> <humanify-index> <packag
   --as-of       the index date (default 2026-10-11, every index before exp142)
   --build-pins  build shards only for these pins (a DELTA on a store that holds the rest: exp142); the merge still
                 reads <packages.txt> + <pins.txt>
-  --wave-lock   run the chunks in WAVES of <procs>, each wave under an exclusive flock of this file, released between
-                waves so another lane waiting on it (an eval on /work/heavy.lock) runs before the next wave (exp152)
+  --wave-lock   hold an exclusive flock of this file while chunks run; when another process waits on it (an eval on
+                /work/heavy.lock), launch no new chunk, and once the running ones finish hand the lock over and queue
+                behind it (exp152). A wave ends only when someone waits: a fixed wave idled ~25% of the cores
   --progress    rewrite this file after every chunk: versions done/total, rate, ETA (exp152)
 Writes <data-dir>/ix/<name> (refuses an existing one); logs in <data-dir>/logs/chunks-<name>/, a per-chunk
 peak-RSS table in <data-dir>/logs/chunks-<name>.tsv, timings appended to <data-dir>/logs/merge-<name>.log.
@@ -26,9 +27,10 @@ ASOF = "2026-10-11"
 
 
 class WaveLock:
-    """An exclusive flock held while a wave of chunks runs (--wave-lock). Between waves it is released, and when the
-    kernel lists a process BLOCKED on the file (/proc/locks `->`), the next wave waits (bounded) until that process
-    holds it, then queues behind it: a plain release-and-relock would usually win the race against the waiter."""
+    """An exclusive flock held while chunks run (--wave-lock). A wave ends when the kernel lists a process BLOCKED on
+    the file (/proc/locks `->`): no new chunk starts, and once the running ones finish the lock is released, the next
+    wave waits (bounded) until that process holds it, then queues behind it: a plain release-and-relock would usually
+    win the race against the waiter."""
 
     def __init__(self, path):
         self.path, self.fd, self.draining = path, None, False
@@ -38,6 +40,9 @@ class WaveLock:
             fcntl.flock(self.fd, fcntl.LOCK_UN)
             os.close(self.fd)
             self.fd = None
+
+    def someone_waits(self):
+        return self.path is not None and waiters(os.stat(self.path).st_ino)
 
     def between_waves(self, log):
         self.draining = False
@@ -115,15 +120,15 @@ def main():
     wave = WaveLock(opts.get("--wave-lock"))
     done = 0
     while todo or running:
-        if not running:
+        if wave.path and (wave.fd is None or (wave.draining and not running)):
             wave.between_waves(f"{ld}/waves.log")
+        wave.draining = wave.draining or wave.someone_waits()
         while todo and len(running) < procs and not wave.draining:
             i, cr, cp = todo.pop(0)
             log = open(f"{ld}/{i:04d}.log", "w")
             p = subprocess.Popen(["taskset", "-c", cpus, ix, "build", "--packages", cr, "--pinned", cp, *common,
                                   "--jobs", "4", "--offline", "--out", f"{ld}/{i:04d}.ix"], stdout=log, stderr=log)
             running[p.pid] = (i, time.time(), p)
-        wave.draining = wave.path is not None  # a wave is launched whole; the next waits for the lock again
         pid, status, ru = os.wait4(-1, 0)
         if pid not in running:
             continue

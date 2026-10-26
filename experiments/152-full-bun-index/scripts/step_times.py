@@ -9,7 +9,8 @@ Per-step split of the shard phase (installs, bundles and fingerprinting overlap 
                 fingerprinting, the edge and literal tables, entries, map-comment stripping and shard writes.
 Each is summed over versions as task-seconds; the shard phase's wall time is split by those shares.
 
-usage: python3 -I step_times.py <data-dir> <name> <index dir> <pins.txt> <humanify-index> <bun> <out build.json>"""
+usage: python3 -I step_times.py <data-dir> <name> <index dir> <pins.txt> <humanify-index> <bun> <out build.json>
+                                 [<notes.json>]   (a list of strings: what happened during the build, kept as `notes`)"""
 import collections
 import datetime
 import glob
@@ -87,7 +88,8 @@ def main():
     calls = per_version_times(data, work)
     steps = collections.Counter()
     built, failed, reused = 0, collections.Counter(), 0
-    logs = sorted(glob.glob(f"{data}/logs/chunks-{name}/*.log"))
+    # every run of the driver (a restarted one keeps the earlier run's logs as chunks-<name>-run<N>/)
+    logs = sorted(glob.glob(f"{data}/logs/chunks-{name}*/*.log"))
     building, fail_msgs = set(), {}
     for p in logs:
         for line in open(p, errors="replace"):
@@ -129,11 +131,13 @@ def main():
         if m:
             merge[m[1]] = float(m[2])
     fetch = re.search(r"registry fetch start (\S+) end (\S+)", open(f"{data}/logs/registry-fetch.log").read())
-    waits = [float(m) for m in re.findall(r"waited (\d+)s", open(f"{data}/logs/chunks-{name}/waves.log").read())]
+    waits = [float(m) for p in glob.glob(f"{data}/logs/chunks-{name}*/waves.log")
+             for m in re.findall(r"waited (\d+)s", open(p).read())]
     shard_wall = merge["shard seconds"]
     total = sum(steps.values()) or 1
     manifest = json.load(open(f"{ix}/manifest.json"))
-    tsv = [l.rstrip("\n").split("\t") for l in open(f"{data}/logs/chunks-{name}.tsv")][1:]
+    tsv = [r for p in sorted(glob.glob(f"{data}/logs/chunks-{name}*.tsv"))
+           for r in [l.rstrip("\n").split("\t") for l in open(p)][1:]]
     doc = {
         "index": hashlib.sha256(open(f"{ix}/manifest.json", "rb").read()).hexdigest(),
         "format": manifest["format"],
@@ -154,7 +158,7 @@ def main():
                            "share; the phases overlap across 7 processes x 4 jobs on 30 cores",
         "taskSeconds": {k: round(v, 1) for k, v in steps.items()},
         "resources": {"cores": "34-63 (30)", "processes": 7, "jobsPerProcess": 4, "chunkVersions": 60,
-                      "chunks": len(tsv), "chunkPeakRssGbMax": max(float(r[3]) for r in tsv),
+                      "chunkProcesses": len(tsv), "chunkPeakRssGbMax": max(float(r[3]) for r in tsv),
                       "mergePeakRssGb": merge.get("merge peak rss gb"),
                       "chunkExitNonZero": sum(1 for r in tsv if r[1] != "0")},
         "tools": {"humanify-index": {"commit": tool(["git", "-C", os.path.dirname(binary), "rev-parse", "HEAD"]),
@@ -175,6 +179,8 @@ def main():
             "ownerVersions": sum(len(v) for v in json.load(open(f"{ix}/versions.json")).values()),
         },
     }
+    if len(sys.argv) > 8:
+        doc["notes"] = json.load(open(sys.argv[8]))
     with open(out, "w") as f:
         json.dump(doc, f, indent=2)
         f.write("\n")
