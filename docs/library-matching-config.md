@@ -87,11 +87,11 @@ CLI:     --library-matching off | report | names     default off
 Config:  [library] section of the one config file (--config <file>)
 ```
 
-| `--library-matching` | detection                                    | index                                       | what library code gets                                                                                        |
-| -------------------- | -------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `off` (default)      | path/banner (as today)                       | not read                                    | per `unnamed`                                                                                                 |
-| `report`             | path/banner + index lookup + graph discovery | read, slice chosen from the detected recipe | per `unnamed`; index findings go to diagnostics/stats only. Must be byte-identical to `off` (warm neutrality) |
-| `names`              | same as report                               | read                                        | index claims may name code (step 5); refused until an eval passes it                                          |
+| `--library-matching` | detection                                    | index                                       | what library code gets                                                                                                                                                                   |
+| -------------------- | -------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `off` (default)      | path/banner (as today)                       | not read                                    | per `unnamed`                                                                                                                                                                            |
+| `report`             | path/banner + index lookup + graph discovery | read, slice chosen from the detected recipe | per `unnamed`; index findings go to diagnostics/stats only. Must be byte-identical to `off` (warm neutrality)                                                                            |
+| `names`              | same as report                               | read                                        | index claims may name code (step 5); refused until an eval passes it — the internal escape is `library.names_unlocked = true` (measurement only; Andrew lifts the refusal, nothing else) |
 
 `[library] unnamed` — what happens to code identified as library that has no
 name from the index (in `off` and `report`, that is all of it):

@@ -479,3 +479,78 @@ fn the_exp132_factory_keys_default_on_and_turn_off() {
             && !o.factory_whole_seed
     );
 }
+
+#[test]
+fn names_unlocked_is_the_measurement_escape() {
+    let ix = Index::new("escape", |_| {});
+    let c = build(
+        &[
+            "in.js",
+            "--library-matching",
+            "names",
+            "--library-index",
+            ix.path(),
+        ],
+        "[library]\nnames_unlocked = true\n",
+    )
+    .expect("unlocked names builds");
+    assert_eq!(c.library.matching, LibraryMatching::Names);
+    assert!(c.library.names_unlocked);
+    assert_eq!(
+        c.library_index_problem(),
+        None,
+        "an unlocked names run checks its index exactly like report"
+    );
+    // Without the unlock the refusal stays armed and names the escape.
+    refused(
+        &[
+            "in.js",
+            "--library-matching",
+            "names",
+            "--library-index",
+            ix.path(),
+        ],
+        "",
+        "--library-matching names is refused until an eval passes it",
+    );
+    refused(
+        &[
+            "in.js",
+            "--library-matching",
+            "names",
+            "--library-index",
+            ix.path(),
+        ],
+        "",
+        "library.names_unlocked",
+    );
+}
+
+#[test]
+fn unlocked_names_still_needs_an_index() {
+    refused(
+        &["in.js", "--library-matching", "names"],
+        "[library]\nnames_unlocked = true\n",
+        "--library-matching names needs --library-index",
+    );
+    // The auto-built machinery answers it, exactly as for report.
+    build(
+        &["in.js", "--library-matching", "names"],
+        "[library]\nnames_unlocked = true\nindex_build = \"auto\"\n",
+    )
+    .expect("auto build machinery owns the index question for names too");
+}
+
+#[test]
+fn names_unlocked_without_names_is_a_conflict() {
+    refused(
+        &["in.js"],
+        "[library]\nnames_unlocked = true\n",
+        "library.names_unlocked is set but matching is not names",
+    );
+    refused(
+        &["in.js", "--library-matching", "report"],
+        "[library]\nnames_unlocked = true\n",
+        "library.names_unlocked is set but matching is not names",
+    );
+}

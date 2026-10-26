@@ -413,6 +413,19 @@ pub static KEYS: &[Key] = &[
     },
     Key {
         section: "library",
+        name: "names_unlocked",
+        kind: Kind::Bool,
+        flag: None,
+        default: off,
+        unset: "",
+        doc: "The internal escape that lifts the \"names\" refusal — measurement runs \
+              only, never a default: the refusal stays armed until an eval passes the \
+              mode. With it, and matching = \"names\", index claims name library code \
+              and library-covered files place under vendor/<package>/. Refused with any \
+              other mode.",
+    },
+    Key {
+        section: "library",
         name: "index",
         kind: Kind::Text,
         flag: Some("--library-index"),

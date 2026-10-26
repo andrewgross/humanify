@@ -68,6 +68,8 @@ naming_floor_sweep = true
 [library]
 # What library matching does: "off" (path/banner detection only), "report" (also the index lookup + graph discovery, written to .humanify/library-report.json; output bytes unchanged), "names" (refused until an eval passes it).
 # matching = "off"   (usually the flag --library-matching)
+# The internal escape that lifts the "names" refusal — measurement runs only, never a default: the refusal stays armed until an eval passes the mode. With it, and matching = "names", index claims name library code and library-covered files place under vendor/<package>/. Refused with any other mode.
+names_unlocked = false
 # The library fingerprint index: its directory, or its id (resolved under index_store).
 # index =   (unset: no index; required unless matching is "off", refused with "off"; usually the flag --library-index)
 # Where index ids live (<index_store>/<id>/manifest.json).

@@ -292,6 +292,11 @@ pub enum IndexBuild {
 #[serde(rename_all = "camelCase")]
 pub struct Library {
     pub matching: LibraryMatching,
+    /// The internal escape that lifts the `names` refusal
+    /// (`library.names_unlocked`; measurement only, never a default —
+    /// the refusal is armed until an eval passes the mode and Andrew
+    /// accepts it).
+    pub names_unlocked: bool,
     /// The index as given (a directory or an id).
     pub index: Option<String>,
     pub index_store: Option<String>,
@@ -389,13 +394,14 @@ impl Library {
         }
     }
 
-    /// Whether the run-time index machinery runs (exp154): matching is
-    /// `report`, NO index was passed (an explicit index wins and the
-    /// machinery stays off), and `index_build` is `auto`. Everything the
-    /// machinery touches lives under `index_store_dir`; a run without it
-    /// — the default — never reads the store, never spawns a build.
+    /// Whether the run-time index machinery runs (exp154): matching is on
+    /// (`report`, or `names` under its unlock), NO index was passed (an
+    /// explicit index wins and the machinery stays off), and
+    /// `index_build` is `auto`. Everything the machinery touches lives
+    /// under `index_store_dir`; a run without it — the default — never
+    /// reads the store, never spawns a build.
     pub fn runs_index_machinery(&self) -> bool {
-        self.matching == LibraryMatching::Report
+        self.matching != LibraryMatching::Off
             && self.index.is_none()
             && self.index_build == IndexBuild::Auto
     }
@@ -663,6 +669,7 @@ fn library_of(r: &Resolved) -> Library {
     };
     Library {
         matching: parse_enum(r.text("library.matching")).expect("a checked choice"),
+        names_unlocked: r.flag_on("library.names_unlocked"),
         index: r.text("library.index"),
         index_store: r.text("library.index_store"),
         index_store_dir: r.text("library.index_store_dir").expect("defaulted"),
@@ -770,28 +777,48 @@ pub fn library_from_file(file: Option<&ConfigFile>) -> Result<Library, Vec<Strin
 fn library_violations(r: &Resolved) -> Vec<String> {
     let mode = r.text("library.matching").unwrap_or_default();
     let index = r.text("library.index").is_some();
+    let names_unlocked = r.flag_on("library.names_unlocked");
     let mut out = Vec::new();
-    match (mode.as_str(), index) {
-        ("names", _) => out.push(
+    match (mode.as_str(), index, names_unlocked) {
+        ("names", _, false) => out.push(
             "--library-matching names is refused until an eval passes it \
-             (docs/library-matching-config.md §2): use --library-matching report"
+             (docs/library-matching-config.md §2): use --library-matching report — \
+             the internal escape is library.names_unlocked = true (measurement \
+             only, never a default)"
                 .to_string(),
         ),
-        ("report", false) if r.text("library.index_build").as_deref() == Some("auto") => {}
-        ("report", false) => out.push(
+        ("names", false, true) if r.text("library.index_build").as_deref() == Some("auto") => {}
+        ("names", false, true) => out.push(
+            "--library-matching names needs --library-index <dir|id>, or \
+             library.index_build = \"auto\" to let the run find or build one in \
+             library.index_store_dir"
+                .to_string(),
+        ),
+        ("report", false, _) if r.text("library.index_build").as_deref() == Some("auto") => {}
+        ("report", false, _) => out.push(
             "--library-matching report needs --library-index <dir|id>, or \
              library.index_build = \"auto\" to let the run find or build one in \
              library.index_store_dir"
                 .to_string(),
         ),
-        ("off", true) => out.push(
+        ("off", true, _) => out.push(
             "--library-index given with --library-matching off: the index would be \
              silently ignored — pass --library-matching report, or drop the index"
                 .to_string(),
         ),
         _ => {}
     }
-    if mode.as_str() != "report" && r.text("library.index_build").as_deref() == Some("auto") {
+    if names_unlocked && mode != "names" {
+        out.push(
+            "library.names_unlocked is set but matching is not names: nothing to \
+             unlock — remove it, or pass --library-matching names"
+                .to_string(),
+        );
+    }
+    if mode != "report"
+        && mode != "names"
+        && r.text("library.index_build").as_deref() == Some("auto")
+    {
         out.push(
             "library.index_build = \"auto\" needs --library-matching report: with matching \
              off the run would never read the index it built"
