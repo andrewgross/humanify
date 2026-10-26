@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use super::library_layout::{LayoutInput, ModuleAnswer, RegionInput, plan};
+use super::library_layout::{INNER_CONTESTED, LayoutInput, ModuleAnswer, RegionInput, plan};
 
 fn answer(owners: &[&str], files: &[&str]) -> ModuleAnswer {
     ModuleAnswer {
@@ -211,6 +211,33 @@ fn a_multi_file_index_answer_takes_a_synthetic_name() {
     };
     let out = plan(&input);
     assert_eq!(out.regions[0].move_path(), Some("vendor/ms/module-1.js"));
+}
+
+#[test]
+fn an_inner_contest_never_moves_whatever_else_agrees() {
+    // The fold sentinel a group's own contents can produce (its wrapper
+    // and its body claimed by two packages): no slot of the region may
+    // become a Move, whatever the other slots say.
+    let answers = BTreeMap::new();
+    let input = LayoutInput {
+        regions: vec![
+            // The contested slot alone:
+            claimed(&[Some(INNER_CONTESTED)]),
+            // The contested slot beside agreement:
+            claimed(&[Some("ms"), Some(INNER_CONTESTED)]),
+            // The contested slot beside a gap:
+            claimed(&[Some(INNER_CONTESTED), None]),
+        ],
+        module_answers: &answers,
+    };
+    let out = plan(&input);
+    for (i, region) in out.regions.iter().enumerate() {
+        assert_eq!(
+            region.leave_reason(),
+            Some("contested"),
+            "region {i}: an inner contest is a contest, never a move"
+        );
+    }
 }
 
 #[test]

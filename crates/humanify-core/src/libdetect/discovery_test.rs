@@ -1769,3 +1769,64 @@ fn call_context_can_support_an_ambiguous_seed_against_the_isolation_veto() {
     assert_eq!(run(CallSupport::Or), (Some("zod".into()), false));
     assert_eq!(run(CallSupport::Replace), (Some("zod".into()), false));
 }
+
+#[test]
+fn placement_groups_list_a_lazy_module_s_statements_with_folded_claims() {
+    use crate::libdetect::discovery::placement_groups;
+    // One lazy module (the `b` wrapper, run()'s facts): lib, priv and x
+    // hoist before it, app follows it and joins no group. The head's row
+    // is LAST and folds the claims of the wrapper and its body.
+    let code = "var lib = () => priv();\nvar priv = () => 1;\nvar x;\nvar I = b(() => { x = lib(); });\nvar app = () => I();\n";
+    let r = run(code, &[("var lib", "P", declared())]);
+    let groups = placement_groups(&r.graph, &r.found);
+    assert_eq!(groups.len(), 1, "one lazy module: one placement group");
+    let g = &groups[0];
+    let head_of = |s: &crate::libdetect::discovery::PlacementStatementRow| {
+        &code[s.start as usize..code.len()]
+    };
+    assert_eq!(g.statements.len(), 4, "lib, priv, x, then the head");
+    assert!(head_of(&g.statements[0]).starts_with("var lib"));
+    assert!(head_of(&g.statements[1]).starts_with("var priv"));
+    assert!(head_of(&g.statements[2]).starts_with("var x"));
+    assert!(head_of(&g.statements[3]).starts_with("var I"));
+    assert!(
+        !g.statements
+            .iter()
+            .any(|s| { code[s.start as usize..].starts_with("var app") }),
+        "a statement after the head belongs to no group"
+    );
+    // Absolute anchor: the seeded statement's row carries its claim.
+    assert_eq!(g.statements[0].package.as_deref(), Some("P"));
+    // Every pendings row mirrors the claim of its unit, whatever the
+    // fixpoint does with them.
+    for (i, head) in ["var lib", "var priv", "var x"].iter().enumerate() {
+        let expected = r.claim(head).map(|(p, _, _)| p);
+        assert_eq!(
+            g.statements[i].package.as_deref(),
+            expected,
+            "{head}'s row must mirror its unit's claim"
+        );
+    }
+    // The head's row folds the wrapper and its body.
+    let fold: std::collections::BTreeSet<&str> = [r.claim("var I"), r.claim("x = lib")]
+        .into_iter()
+        .flatten()
+        .map(|(p, _, _)| p)
+        .collect();
+    assert_eq!(fold.len(), 1, "wrapper and body agree on one package here");
+    assert_eq!(g.statements[3].package.as_deref(), fold.first().copied());
+}
+
+#[test]
+fn placement_groups_list_a_group_with_no_claims_at_all() {
+    use crate::libdetect::discovery::placement_groups;
+    let code = "var x;\nvar I = b(() => { x = 1; });\nvar app = () => I();\n";
+    let r = run(code, &[]);
+    let groups = placement_groups(&r.graph, &r.found);
+    assert_eq!(groups.len(), 1);
+    assert!(
+        groups[0].statements.iter().all(|s| s.package.is_none()),
+        "an unclaimed group is listed with all-None rows: the planner, not \
+         the exporter, decides it stays"
+    );
+}

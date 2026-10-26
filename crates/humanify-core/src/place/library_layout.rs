@@ -41,6 +41,31 @@ pub struct RegionInput {
     pub sort_key: String,
 }
 
+/// The fold marker for one slot whose own contents disagree — a wrapper
+/// the GLUE rule claimed for one package over a body another claims. It
+/// is written only by [`fold_claims`] (the group exporter folds a head's
+/// wrapper-and-body claims into one row); no npm name can look like it,
+/// and the planner refuses any region carrying it, whatever else agrees.
+pub const INNER_CONTESTED: &str = "<contested>";
+
+/// Fold the claims over one slot's own contents into that slot's single
+/// claim: all-agree passes the package through, a disagreement folds to
+/// [`INNER_CONTESTED`], silence stays `None`.
+pub fn fold_claims<'a, I>(claims: I) -> Option<String>
+where
+    I: IntoIterator<Item = Option<&'a str>>,
+{
+    let mut package: Option<&str> = None;
+    for claim in claims.into_iter().flatten() {
+        match package {
+            None => package = Some(claim),
+            Some(seen) if seen == claim => {}
+            Some(_) => return Some(INNER_CONTESTED.to_string()),
+        }
+    }
+    package.map(str::to_string)
+}
+
 /// The index's answer for a whole vendored module: owning packages and
 /// source files, sorted by the caller (`LibraryIndex` rows arrive sorted).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -145,6 +170,10 @@ fn claim_verdict(region: &RegionInput) -> Result<&str, &'static str> {
         let Some(claim) = claim.as_deref() else {
             continue;
         };
+        // A folded slot whose own contents disagree: no move of any kind.
+        if claim == INNER_CONTESTED {
+            return Err("contested");
+        }
         match package {
             None => package = Some(claim),
             Some(seen) if seen == claim => {}

@@ -385,6 +385,7 @@ impl Library {
             options: self.discovery_options(),
             unit_prints: false,
             call_context: false,
+            placement_groups: self.matching == LibraryMatching::Names,
         }
     }
 

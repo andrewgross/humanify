@@ -768,6 +768,9 @@ fn discovery_over(
             request.options.factory_bodies,
         );
     }
+    if request.placement_groups {
+        report.placement_groups = crate::libdetect::discovery::placement_groups(&graph, &found);
+    }
     Some(report)
 }
 
