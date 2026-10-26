@@ -240,11 +240,15 @@ fn every_key_without_a_flag_was_a_flag_that_moved_or_is_new() {
     // variables until then; docs/library-matching-config.md §1.3).
     // New in step 8: the naming prompt's code window (a constant until
     // then; docs/tuning-values.md).
+    // New in exp154, never flags: the run-time index build switch and its
+    // package cap (docs/design/library-names-plan.md step 3).
     let new_keys = |d: &str| {
         d == "library.index_store"
             || d == "naming.code_window_lines"
             || d.starts_with("library.lookup.")
             || d.starts_with("library.discovery.")
+            || d == "library.index_build"
+            || d == "library.index_build_max_packages"
     };
     for k in KEYS
         .iter()

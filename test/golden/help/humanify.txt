@@ -6,13 +6,14 @@ Arguments:
   <input>  The input minified JavaScript file
 
 Options:
-      --config <file>            TOML config file: every setting that is not a flag (see humanify.example.toml for each key, its default and meaning). A flag that disagrees with the file is refused
-  -o, --output-dir <output>      Output directory (default: output)
-      --prior-version <path>     Path to a prior humanified file for cross-version rename reuse
-      --endpoint <url>           OpenAI-compatible API endpoint (default: https://api.openai.com/v1). The API key is read from HUMANIFY_API_KEY (the environment or a .env file), never from a flag
-  -m, --model <model>            Model identifier (default: gpt-4o-mini)
-  -v, --verbose...               Increase verbosity (-v for info, -vv for debug)
-      --library-matching <mode>  Library matching: off (path/banner detection only, the default), report (also the library index lookup + graph discovery, reported; output unchanged), names (refused until an eval passes it)
-      --library-index <dir|id>   The library fingerprint index (a directory, or an id under library.index_store); required unless --library-matching is off, refused with off
-  -h, --help                     Print help
-  -V, --version                  Print version
+      --config <file>              TOML config file: every setting that is not a flag (see humanify.example.toml for each key, its default and meaning). A flag that disagrees with the file is refused
+  -o, --output-dir <output>        Output directory (default: output)
+      --prior-version <path>       Path to a prior humanified file for cross-version rename reuse
+      --endpoint <url>             OpenAI-compatible API endpoint (default: https://api.openai.com/v1). The API key is read from HUMANIFY_API_KEY (the environment or a .env file), never from a flag
+  -m, --model <model>              Model identifier (default: gpt-4o-mini)
+  -v, --verbose...                 Increase verbosity (-v for info, -vv for debug)
+      --library-matching <mode>    Library matching: off (path/banner detection only, the default), report (also the library index lookup + graph discovery, reported; output unchanged), names (refused until an eval passes it)
+      --library-index <dir|id>     The library fingerprint index (a directory, or an id under library.index_store); required unless --library-matching is off, refused with off
+      --library-index-store <dir>  The run's library-index cache (library.index_store_dir, resolved against the output dir): the shard store, the registry snapshot, the pinned bundler tools and every merged index a run-time build (library.index_build) finds there
+  -h, --help                       Print help
+  -V, --version                    Print version

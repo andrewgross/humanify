@@ -481,6 +481,7 @@ dependencies = [
  "clap",
  "dotenvy",
  "humanify-core",
+ "humanify-index",
  "humanify-llm",
  "humanify-model",
  "mimalloc",

@@ -35,6 +35,7 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
         pinned: Vec::new(),
         merge_only: false,
         sponge_regions: SpongeRegions::Drop,
+        quiet: true,
     }
 }
 
@@ -58,7 +59,7 @@ fn a_package_spec_is_a_name_or_a_pinned_version() {
 #[test]
 fn the_plan_lists_the_as_of_versions_and_the_shards_to_build() {
     let cfg = config("list", "2020-12-01T23:59:59.999Z");
-    let p = plan(&cfg).expect("plan");
+    let p = plan(&cfg, Default::default()).expect("plan");
     let tasks: Vec<String> = p
         .tasks
         .iter()
@@ -79,17 +80,17 @@ fn the_plan_lists_the_as_of_versions_and_the_shards_to_build() {
 fn an_offline_plan_refuses_a_package_it_has_no_snapshot_of() {
     let mut cfg = config("offline", "2020-12-01T23:59:59.999Z");
     cfg.packages.push("left-pad".into());
-    let err = plan(&cfg).expect_err("no snapshot");
+    let err = plan(&cfg, Default::default()).expect_err("no snapshot");
     assert!(err.contains("left-pad"), "{err}");
 }
 
 #[test]
 fn a_shard_already_in_the_store_is_reused() {
     let cfg = config("reuse", "2020-12-01T23:59:59.999Z");
-    let first = plan(&cfg).expect("plan");
+    let first = plan(&cfg, Default::default()).expect("plan");
     let inputs = first.tasks[0].missing[0].clone();
     write_shard(&cfg.store, &Shard::new(&inputs)).expect("write");
-    let second = plan(&cfg).expect("plan");
+    let second = plan(&cfg, Default::default()).expect("plan");
     assert_eq!(second.tasks[0].reused, vec![inputs]);
     assert!(second.tasks[0].missing.is_empty());
     assert_eq!(second.tasks[1].missing.len(), 1);
@@ -102,7 +103,7 @@ fn merge_only_builds_nothing_and_merges_what_the_store_holds() {
     cfg.merge_only = true;
     let out = cfg.store.parent().unwrap().join("ix");
     cfg.out = Some(out.clone());
-    let first = plan(&cfg).expect("plan");
+    let first = plan(&cfg, Default::default()).expect("plan");
     // the literal shard of ms@2.1.2 only; the other three versions have none
     let mut shard = Shard::new(&first.tasks[0].missing[0]);
     shard.literals.push(ShardLiteral {
@@ -373,7 +374,7 @@ fn a_pinned_only_package_is_indexed_at_its_pins_alone() {
     let mut cfg = config("pinned-only", "2020-12-01T23:59:59.999Z");
     cfg.packages = Vec::new();
     cfg.pinned = vec!["ms@1.0.0".into(), "ms@0.7.1".into()];
-    let p = plan(&cfg).expect("plan");
+    let p = plan(&cfg, Default::default()).expect("plan");
     let tasks: Vec<(String, String)> = p
         .tasks
         .iter()

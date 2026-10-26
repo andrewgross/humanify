@@ -303,13 +303,92 @@ fn pipeline_body(
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<i32, Crash> {
     use humanify_core::profiling::phase;
+    use std::sync::atomic::{AtomicBool, Ordering};
     let input = config.io.input.as_str();
     let switches = &config.switches;
     let outputs = &config.diagnostics;
     let ph = phase("read+detect");
     let bundled_code = read_utf8(input)?;
     let (toolchain, markers) = detect_stage(&bundled_code, config, profiler);
-    let prior = load_prior_version_code(config, renderer)?;
+    // The run-time index machinery (exp154, `runtime_index`): the moment
+    // detection resolves the bundler the store search — and, on a miss, the
+    // build — starts on its own thread. The prior load, the dispatch setup
+    // and the naming config overlap it; the library load takes its answer
+    // through the joint (a deadline'd channel, never a poll). The scope
+    // below must not end before that: `thread::scope` joins the job thread,
+    // and the join IS the wait.
+    let machinery = config.library.runs_index_machinery();
+    let stop = AtomicBool::new(false);
+    let (prior, naming_config, mut dispatch_log, library) = std::thread::scope(|scope| {
+        let index_job = machinery.then(|| {
+            crate::runtime_index::start(
+                scope,
+                profiler,
+                bundled_code.as_str(),
+                config,
+                toolchain.bundler,
+                toolchain.minifier,
+                &stop,
+            )
+        });
+        let setup = (|| -> Result<
+            (
+                Option<String>,
+                NamingConfig,
+                humanify_core::artifact_dump::DispatchLog,
+                LibraryLoad,
+            ),
+            Crash,
+        > {
+            let prior = load_prior_version_code(config, renderer)?;
+            let mut naming_config = naming_config(config, &toolchain);
+            // The module step names each recorded module once, for its
+            // wrapper and its file — offered whenever the toolchain offers
+            // the module markers (the step checks they describe the bundle,
+            // as the split does).
+            naming_config.module_naming =
+                (markers == MarkerOffer::Offered).then(|| split_namer_budget(&config.llm));
+            // The run's per-dispatch recorder (finding #65): `--dump-artifacts`
+            // streams prompts.jsonl + cache-keys.jsonl rows to part files as
+            // the dispatches commit; `--dump-asks` retains the small ask
+            // rows; WITHOUT either flag nothing per ask survives its
+            // dispatch — the accumulated dispatch records were the ~99GB
+            // holder of a full-bundle fresh run.
+            let dispatch_log = match outputs.dump_artifacts.as_deref() {
+                Some(dir) => humanify_core::artifact_dump::DispatchLog::dump(
+                    naming_config.params.clone(),
+                    Path::new(dir),
+                )
+                .map_err(|e| Crash(node_fs_error(&e, "open", dir)))?,
+                None => {
+                    if outputs.dump_asks.is_some() {
+                        humanify_core::artifact_dump::DispatchLog::asks(
+                            naming_config.params.clone(),
+                        )
+                    } else {
+                        humanify_core::artifact_dump::DispatchLog::off(naming_config.params.clone())
+                    }
+                }
+            };
+            let library = load_library_index(
+                &bundled_code,
+                config,
+                &toolchain,
+                renderer,
+                profiler,
+                index_job,
+                &stop,
+            )?;
+            Ok((prior, naming_config, dispatch_log, library))
+        })();
+        if setup.is_err() && machinery {
+            // The run failed before it took the job's answer: stop the
+            // build so the scope's join waits at most one in-flight
+            // subprocess, never the build's own deadline.
+            stop.store(true, Ordering::SeqCst);
+        }
+        setup
+    })?;
     drop(ph);
 
     // armRecorders: the diagnostics/dump recorders arrive with the stages
@@ -319,33 +398,6 @@ fn pipeline_body(
     // then library detection picks the files the per-file stages process.
     let out_dir = config.io.output_dir.as_str();
     let prior_path = config.matching.prior_version.as_deref().map(Path::new);
-    // The run's per-dispatch recorder (finding #65): `--dump-artifacts`
-    // streams prompts.jsonl + cache-keys.jsonl rows to part files as the
-    // dispatches commit; `--dump-asks` retains the small ask rows;
-    // WITHOUT either flag nothing per ask survives its dispatch — the
-    // accumulated dispatch records were the ~99GB holder of a full-bundle
-    // fresh run.
-    let mut naming_config = naming_config(config, &toolchain);
-    // The module step names each recorded module once, for its wrapper and
-    // its file — offered whenever the toolchain offers the module markers
-    // (the step checks they describe the bundle, as the split does).
-    naming_config.module_naming =
-        (markers == MarkerOffer::Offered).then(|| split_namer_budget(&config.llm));
-    let mut dispatch_log = match outputs.dump_artifacts.as_deref() {
-        Some(dir) => humanify_core::artifact_dump::DispatchLog::dump(
-            naming_config.params.clone(),
-            Path::new(dir),
-        )
-        .map_err(|e| Crash(node_fs_error(&e, "open", dir)))?,
-        None => {
-            if outputs.dump_asks.is_some() {
-                humanify_core::artifact_dump::DispatchLog::asks(naming_config.params.clone())
-            } else {
-                humanify_core::artifact_dump::DispatchLog::off(naming_config.params.clone())
-            }
-        }
-    };
-    let library = load_library_index(&bundled_code, config, &toolchain, renderer)?;
     let ph = phase("unpack+vendor");
     let mut unpacked = unpack_bundle(
         &bundled_code,
@@ -676,13 +728,17 @@ fn count_claims(report: &serde_json::Value) -> usize {
 }
 
 /// What the library decision opened for this run: the index slice, its
-/// id, and — `report` with no slice for the bundle's recipe — the loud
-/// warning's text (the run goes on with path/banner detection).
+/// id, the run-time machinery's usage trail when it ran, and — `report`
+/// with no slice for the bundle's recipe — the loud warning's text (the
+/// run goes on with path/banner detection).
 #[derive(Default)]
 struct LibraryLoad {
     index: Option<LibraryIndex>,
     index_id: Option<String>,
     recipe_missing: Option<String>,
+    /// The machinery's answer (`indexSource` in the library report): set
+    /// only when the run found or built its index at run time (exp154).
+    source: Option<crate::runtime_index::IndexSource>,
 }
 
 /// `--library-matching report`: open the index's slice for the recipe the
@@ -692,21 +748,56 @@ struct LibraryLoad {
 /// (`Config::library_index_problem`); a missing slice is a WARNING, not a
 /// refusal — report changes no output byte, so a run that cannot look up
 /// has lost only its report.
+///
+/// The index itself comes one of two ways (exp154): as given
+/// (`--library-index <dir|id>` — an explicit index wins, the machinery
+/// stays off), or from the machinery — `index_job` is the handle to the
+/// store search / run-time build `pipeline_body` started beside the run;
+/// taking its answer here is the joint. A machinery failure fails the run
+/// loudly (matching is `report` with no index passed, so there is nothing
+/// to fall back to).
 fn load_library_index(
     code: &str,
     config: &Config,
     toolchain: &Toolchain,
     renderer: &mut dyn ProgressRenderer,
+    profiler: &humanify_core::profiling::Profiler,
+    index_job: Option<crate::runtime_index::IndexJob>,
+    stop: &std::sync::atomic::AtomicBool,
 ) -> Result<LibraryLoad, Crash> {
     use humanify_core::libindex::lookup::LoadError;
     if config.library.matching != LibraryMatching::Report {
         return Ok(LibraryLoad::default());
     }
-    let dir = config
-        .library
-        .index_dir()
-        .expect("report needs an index (checked at the parse point)")
-        .map_err(Crash)?;
+    let (dir, source) = match index_job {
+        Some(job) => match job.join(profiler, stop) {
+            crate::runtime_index::JobAnswer::Found(dir, source)
+            | crate::runtime_index::JobAnswer::Built(dir, source) => (dir, Some(source)),
+            crate::runtime_index::JobAnswer::Failed(error) => {
+                return Err(Crash(format!(
+                    "run-time library index (library.index_build = \"auto\"): {error}"
+                )));
+            }
+        },
+        None => {
+            if config.library.index_build == crate::config::IndexBuild::Auto {
+                // index_build = "auto" but an explicit index was passed: the
+                // explicit index wins, the machinery never runs. Say so —
+                // the run's cache is not being searched.
+                renderer.message(
+                    "library.index_build = \"auto\" stays off: --library-index was passed",
+                );
+            }
+            (
+                config
+                    .library
+                    .index_dir()
+                    .expect("report needs an index or the machinery (checked at the parse point)")
+                    .map_err(Crash)?,
+                None,
+            )
+        }
+    };
     let recipe =
         humanify_core::libindex::recipe::detect_recipe(code, toolchain.bundler, toolchain.minifier);
     match LibraryIndex::load(&dir, &recipe, config.library.lookup.terser_slices) {
@@ -714,6 +805,7 @@ fn load_library_index(
             index_id: Some(index.id.clone()),
             index: Some(index),
             recipe_missing: None,
+            source,
         }),
         Err(LoadError::NoSlice { id, why }) => {
             let warning =
@@ -723,6 +815,7 @@ fn load_library_index(
                 index: None,
                 index_id: Some(id),
                 recipe_missing: Some(warning),
+                source,
             })
         }
         Err(LoadError::Unusable(e)) => Err(Crash(format!("library index {}: {e}", dir.display()))),
@@ -817,11 +910,17 @@ impl RunReports<'_> {
     /// The library decision's record: the mode, the index id, and a
     /// missing recipe slice (`recipeMissing`, the warning's text).
     fn library_matching_block(&self) -> serde_json::Value {
-        serde_json::json!({
+        let mut doc = serde_json::json!({
             "matching": "report",
             "indexId": self.library.index_id,
             "recipeMissing": self.library.recipe_missing,
-        })
+        });
+        // The machinery's usage trail — only when it ran (the explicit
+        // index path records nothing new, exp154).
+        if let Some(source) = &self.library.source {
+            doc["indexSource"] = serde_json::to_value(source).expect("serializable");
+        }
+        doc
     }
 
     /// `--library-matching report` writes its report whether or not

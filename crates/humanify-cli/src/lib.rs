@@ -17,6 +17,7 @@ pub mod pipeline_config;
 pub mod progress;
 pub mod provider_failures;
 pub mod report;
+pub mod runtime_index;
 pub mod split_stage;
 pub mod surface;
 pub mod unified;
@@ -69,6 +70,8 @@ mod launch_parity_test;
 mod library_config_test;
 #[cfg(test)]
 mod match_verb_test;
+#[cfg(test)]
+mod runtime_index_test;
 #[cfg(test)]
 mod surface_test;
 #[cfg(test)]

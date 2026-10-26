@@ -72,6 +72,12 @@ naming_floor_sweep = true
 # index =   (unset: no index; required unless matching is "off", refused with "off"; usually the flag --library-index)
 # Where index ids live (<index_store>/<id>/manifest.json).
 # index_store =   (unset: an index id cannot be resolved: pass the index directory)
+# The run's library-index cache, resolved against the output dir: the shard store/ (reused across builds), the packument snapshot registry/, the pinned bundler tools tools/, and every merged index as <id>/ with its build.json sidecar. Nothing outside it is ever autoloaded.
+# index_store_dir = ".humanify/library-index"   (usually the flag --library-index-store)
+# Whether a run may build the index it needs AT RUN TIME (exp154): "off" (report needs --library-index <dir|id>) or "auto" (matching "report" with no index: search index_store_dir for one with the bundle's bundler slice, else build one from the packages the bundle itself reveals — any build failure fails the run loudly; an explicit --library-index wins and the machinery stays off).
+index_build = "off"
+# The safety cap on the packages a run-time index build may plan from the bundle's own evidence: over it the run refuses instead of indexing.
+index_build_max_packages = 300
 # Library code with no index name: "leave" (library files not model-named, library functions in mixed files frozen with the <library>_<name> prefix) or "model" (the model names everything).
 unnamed = "leave"
 # List every claimed, vetoed, library-class and queued unit in the report (default: totals and packages).

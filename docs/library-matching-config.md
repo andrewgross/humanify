@@ -115,10 +115,47 @@ change only `report` (and, once allowed, `names`) runs; `humanify.example.toml`
 is generated from the registry and holds every value below. Which index to
 point `library.index` at: docs/design/library-index.md §10.
 
+**The run-time machinery (exp154, plan step 3, default off).** With
+`index_build = "auto"` and matching `report` and NO `--library-index`, the run
+finds or builds the index it needs in its own cache (`index_store_dir`,
+resolved against the output dir), in parallel with ingest: the store search
+starts as soon as detection resolves the bundler, and the library load joins it
+under one deadline (span `library.index.wait`) — never a sleep-poll. A found
+index is one whose manifest carries this bundle's slice and whose as-of covers
+the bundle; as-of FRESHNESS is deliberately not judged. Nothing usable → the
+run builds one **in-process** from the packages the bundle itself reveals
+(library banners, inlined `package.json`-style declarations) plus their
+dependency closure — **no base-list bootstrap, no LLM** — using the Bun pinned
+in the cache's `tools/`; **Bun is never downloaded**, and a cache without one
+is a loud failure naming the exact fetch command. Any build failure in `auto`
+fails the run loudly (exit 1 naming the stage): there is no fallback. The
+bundle's own Bun version is not detected (recorded `"unknown"`; the newest
+cached Bun is picked, and the report says which). What the machinery did goes
+to the report's `libraryMatching.indexSource` (found vs built, the candidates
+the store search considered and its verdicts, per-stage wall times) and to the
+profile summary's "Library index" block.
+
 ```toml
 [library]
 unnamed = "leave"              # "leave" | "model"
 report_units = false
+
+# exp154 (library-names-plan step 3): the run-time index machinery, DEFAULT OFF —
+# a run with none of these keys set never reads the store, never spawns a build.
+# index =                      # --library-index <dir|id>: explicit, wins over everything below
+index_store_dir = ".humanify/library-index"   # --library-index-store <dir>: the run's index cache,
+                               #   resolved against the output dir: store/ shards, registry/,
+                               #   tools/bun-<V>/, one <id>/ per merged index + build.json sidecar
+index_build = "off"            # "off" | "auto" (no flag): auto = matching "report" with NO
+                               #   --library-index searches the store for an index with this
+                               #   bundle's bundler slice, else builds one (in-process, in
+                               #   parallel with ingest) from the packages the bundle itself
+                               #   reveals; ANY build failure fails the run loudly (exit 1
+                               #   naming the stage); Bun is used from the cache at
+                               #   tools/bun-<V>/, never downloaded — a cache without one is a
+                               #   loud failure naming the exact fetch command
+index_build_max_packages = 300 # safety cap on a run-time build's package list, refused at the
+                               #   parse point when exceeded
 
 [library.lookup]
 min_nodes = 30
@@ -237,7 +274,7 @@ recipeMissing` entry in diagnostics and stats; detection falls back to
   unpacking. **Report stays a warning in the binary** (a report-only run
   has lost only its report, and the user still gets their output), **but
   the eval refuses it**: `run.sh` runs `humanify index verify <id> --recipe
-  <detected>` per pair before the first launch and stops the label on a
+<detected>` per pair before the first launch and stops the label on a
   missing slice, because a label's library numbers from a run without a
   slice are meaningless.
 - **When detection cannot tell the target** (a Bun bundle that does not say
