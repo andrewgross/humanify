@@ -438,6 +438,15 @@ pub struct FactoryRecord {
     /// unclaimed, partial, contested, or the index disagrees — or no
     /// names mode is on.
     pub index_path: Option<String>,
+    /// Why the names-mode planner left the module in place, when it did
+    /// (`unclaimed`, `partial`, `contested`, `index-disagrees`,
+    /// `duplicate-file`): the diagnostic side of [`Self::index_path`], read
+    /// by the `discover` verb's dump (exp157). None on a move.
+    pub index_leave: Option<&'static str>,
+    /// The whole-module vendor content key (`modules::vendor_content`) the
+    /// names-mode planner read the index by — the diagnostic side of the
+    /// placement decision (exp157). None when the body does not key.
+    pub module_key: Option<String>,
 }
 
 /// The classification: the helper var + every factory, in source order.
@@ -847,6 +856,9 @@ pub fn classify_bun_modules<'a>(
                 identity: None,
                 hints: Vec::new(),
                 index_path: None,
+                index_leave: None,
+
+                module_key: None,
             });
         }
     }

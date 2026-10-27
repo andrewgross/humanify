@@ -472,7 +472,7 @@ fn a_wholly_claimed_module_moves_to_vendor_and_is_never_asked() {
     let layout: &LibraryLayout = &out.library_layout;
     assert_eq!(
         layout.moved,
-        vec![(1usize, "vendor/ms/module-1.js".to_string())],
+        vec![(1usize, "vendor/ms/module-2374bc3b.js".to_string())],
         "only the wholly claimed module moves; the partial one stays: {:?}",
         layout.moved
     );
@@ -522,7 +522,7 @@ fn a_moved_modules_exclusion_holds_over_a_prior_too() {
     let layout = &out.library_layout;
     assert_eq!(
         layout.moved,
-        vec![(1usize, "vendor/ms/module-1.js".to_string())]
+        vec![(1usize, "vendor/ms/module-2374bc3b.js".to_string())]
     );
     let code = out.code.expect("shipped");
     assert!(

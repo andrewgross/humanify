@@ -101,6 +101,79 @@ fn an_unclaimed_region_stays() {
     assert_eq!(out.regions[0].leave_reason(), Some("unclaimed"));
 }
 
+// exp157: the bundler scatters a package between versions, so the same
+// module can carry claims in one version and none in the other. When the
+// region's whole-module key has a CLEAN index answer — one owner, one
+// file — the index alone is enough evidence: the region moves to the
+// answer's path, so both versions land the identical vendor path.
+#[test]
+fn an_unclaimed_region_with_a_clean_index_answer_moves_on_the_index() {
+    let answers = BTreeMap::from([(
+        "key1".to_string(),
+        answer(&["@otel/exporter-metrics"], &["build/src/platform/node.js"]),
+    )]);
+    let input = LayoutInput {
+        regions: vec![module_region(&[None, None, None], "key1", "sort-a")],
+        module_answers: &answers,
+    };
+    let out = plan(&input);
+    assert_eq!(
+        out.regions[0].move_path(),
+        Some("vendor/@otel/exporter-metrics/build/src/platform/node.js"),
+        "no claims but a clean index answer still moves — the index is the \
+         evidence that survives a bundler reshuffle"
+    );
+}
+
+#[test]
+fn an_unclaimed_region_with_a_multi_owner_answer_stays() {
+    let answers = BTreeMap::from([("key1".to_string(), answer(&["ms", "other"], &["index.js"]))]);
+    let input = LayoutInput {
+        regions: vec![module_region(&[None, None], "key1", "sort-a")],
+        module_answers: &answers,
+    };
+    let out = plan(&input);
+    assert_eq!(
+        out.regions[0].leave_reason(),
+        Some("unclaimed"),
+        "two owners and no claim: nobody can say whose module it is"
+    );
+}
+
+#[test]
+fn an_unclaimed_region_with_a_clean_owner_but_many_files_takes_a_synthetic_name() {
+    let answers = BTreeMap::from([(
+        "key1".to_string(),
+        answer(&["ms"], &["lib/a.js", "lib/b.js"]),
+    )]);
+    let input = LayoutInput {
+        regions: vec![module_region(&[None, None], "key1", "sort-a")],
+        module_answers: &answers,
+    };
+    let out = plan(&input);
+    assert_eq!(
+        out.regions[0].move_path(),
+        Some("vendor/ms/module-sort-a.js"),
+        "the owner is agreed even though the file is not — the synthetic \
+         spelling under the index's package keeps the move"
+    );
+}
+
+#[test]
+fn an_unclaimed_region_with_a_no_row_key_stays() {
+    let answers = BTreeMap::from([("other".to_string(), answer(&["ms"], &["index.js"]))]);
+    let input = LayoutInput {
+        regions: vec![module_region(&[None, None], "key1", "sort-a")],
+        module_answers: &answers,
+    };
+    let out = plan(&input);
+    assert_eq!(
+        out.regions[0].leave_reason(),
+        Some("unclaimed"),
+        "no claim and no index row: nothing says the region is a library's"
+    );
+}
+
 #[test]
 fn the_same_input_twice_gives_the_identical_plan() {
     let answers = BTreeMap::from([
@@ -126,10 +199,13 @@ fn the_same_input_twice_gives_the_identical_plan() {
 }
 
 #[test]
-fn synthetic_names_are_sorted_module_group_ordinals_not_bundle_order() {
-    // No index answers at all: both groups of ms take synthetic names,
-    // numbered by SORT KEY, so a version that reorders the bundle (or
-    // claims one more group ahead of these) cannot rename them.
+fn synthetic_names_come_from_the_region_s_own_content_not_the_bundle() {
+    // No index answers at all: each group of ms takes a synthetic name
+    // derived from its OWN sort key — the module's head statement's
+    // rename-invariant hash — so nothing about the other regions or the
+    // bundle's order can rename it (exp157: the ordinal scheme renumbered
+    // a package's synthetic regions whenever a version's composition
+    // added or dropped one, and the shared content landed at a new path).
     let answers = BTreeMap::new();
     let mk = |sort: &str| RegionInput {
         claims: vec![Some("ms".to_string())],
@@ -137,29 +213,89 @@ fn synthetic_names_are_sorted_module_group_ordinals_not_bundle_order() {
         sort_key: sort.to_string(),
     };
     let forward = plan(&LayoutInput {
-        regions: vec![mk("sort-a"), mk("sort-b")],
+        regions: vec![mk("aaaaaaaa11111111"), mk("bbbbbbbb22222222")],
         module_answers: &answers,
     });
     let backwards = plan(&LayoutInput {
-        regions: vec![mk("sort-b"), mk("sort-a")],
+        regions: vec![mk("bbbbbbbb22222222"), mk("aaaaaaaa11111111")],
         module_answers: &answers,
     });
     assert_eq!(
         forward.regions[0].move_path(),
-        Some("vendor/ms/module-1.js")
+        Some("vendor/ms/module-aaaaaaaa.js")
     );
     assert_eq!(
         forward.regions[1].move_path(),
-        Some("vendor/ms/module-2.js")
+        Some("vendor/ms/module-bbbbbbbb.js")
     );
     assert_eq!(
         backwards.regions[0].move_path(),
-        Some("vendor/ms/module-2.js"),
-        "the same region keeps its ordinal whatever order the regions arrive in"
+        Some("vendor/ms/module-bbbbbbbb.js"),
+        "the same region keeps its content-derived name whatever order the \
+         regions arrive in"
     );
     assert_eq!(
         backwards.regions[1].move_path(),
-        Some("vendor/ms/module-1.js")
+        Some("vendor/ms/module-aaaaaaaa.js")
+    );
+}
+
+// exp157, the brief's composition fixture: the same library region
+// discovered with slightly different composition — a sibling region of
+// the same package arrives in one version and not the other — must land
+// the SAME vendor path. Under the ordinal scheme the sibling shifted
+// every rank after it.
+#[test]
+fn a_composition_change_elsewhere_in_the_package_leaves_the_shared_names() {
+    let answers = BTreeMap::new();
+    let mk = |sort: &str| RegionInput {
+        claims: vec![Some("ms".to_string())],
+        module: None,
+        sort_key: sort.to_string(),
+    };
+    let two = plan(&LayoutInput {
+        regions: vec![mk("aaaaaaaa11111111"), mk("cccccccc33333333")],
+        module_answers: &answers,
+    });
+    // The next version discovers one more ms region, sorting FIRST.
+    let three = plan(&LayoutInput {
+        regions: vec![
+            mk("0000000044444444"),
+            mk("aaaaaaaa11111111"),
+            mk("cccccccc33333333"),
+        ],
+        module_answers: &answers,
+    });
+    assert_eq!(two.regions[0].move_path(), three.regions[1].move_path());
+    assert_eq!(two.regions[1].move_path(), three.regions[2].move_path());
+    assert_eq!(
+        two.regions[0].move_path(),
+        Some("vendor/ms/module-aaaaaaaa.js")
+    );
+}
+
+#[test]
+fn a_synthetic_name_tie_keeps_its_members_distinct_by_arrival_order() {
+    // Two regions whose sort keys tie (the same blurred head) cannot share
+    // a path: the first by (sort key, arrival) keeps the plain name, the
+    // next takes -2. Bundle order decides ONLY inside a content tie.
+    let answers = BTreeMap::new();
+    let mk = |sort: &str| RegionInput {
+        claims: vec![Some("ms".to_string())],
+        module: None,
+        sort_key: sort.to_string(),
+    };
+    let out = plan(&LayoutInput {
+        regions: vec![mk("aaaaaaaa11111111"), mk("aaaaaaaa11111111")],
+        module_answers: &answers,
+    });
+    let paths: Vec<_> = out.regions.iter().map(|r| r.move_path()).collect();
+    assert_eq!(
+        paths,
+        vec![
+            Some("vendor/ms/module-aaaaaaaa.js"),
+            Some("vendor/ms/module-aaaaaaaa-2.js")
+        ]
     );
 }
 
@@ -210,7 +346,10 @@ fn a_multi_file_index_answer_takes_a_synthetic_name() {
         module_answers: &answers,
     };
     let out = plan(&input);
-    assert_eq!(out.regions[0].move_path(), Some("vendor/ms/module-1.js"));
+    assert_eq!(
+        out.regions[0].move_path(),
+        Some("vendor/ms/module-sort-a.js")
+    );
 }
 
 #[test]

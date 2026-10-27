@@ -126,6 +126,7 @@ fn the_rule_reaches_the_lookup_and_the_units_are_listed() {
                 bundler: None,
                 unit_prints,
                 call_context: false,
+                bundle_order: false,
                 work_dir: None,
             },
         )
@@ -169,6 +170,7 @@ fn a_bad_setting_or_an_unreadable_index_fails_the_verb() {
         bundler: None,
         unit_prints: false,
         call_context: false,
+        bundle_order: false,
         work_dir: None,
     };
     assert!(discover(&code, &args(Some("/nonexistent/index"))).is_err());
@@ -233,6 +235,7 @@ fn the_bundler_override_resolves_the_slice_and_the_verdict_is_kept() {
                 bundler,
                 unit_prints: false,
                 call_context: false,
+                bundle_order: false,
                 work_dir: None,
             },
         )
@@ -264,6 +267,7 @@ fn a_bundle_no_module_helper_wraps_is_discovered_statement_by_statement() {
             bundler: Some("bun"),
             unit_prints: true,
             call_context: false,
+            bundle_order: false,
             work_dir: None,
         },
     )
@@ -287,6 +291,7 @@ fn a_bundle_that_does_not_parse_reports_that_no_discovery_ran() {
             bundler: Some("rollup"),
             unit_prints: true,
             call_context: false,
+            bundle_order: false,
             work_dir: None,
         },
     )
@@ -327,6 +332,7 @@ fn webpack_and_rollup_bundles_are_discovered_with_their_own_grammar() {
                     bundler: forced,
                     unit_prints: true,
                     call_context: false,
+                    bundle_order: false,
                     work_dir: None,
                 },
             )
@@ -361,6 +367,7 @@ fn a_bundle_whose_recipe_the_index_lacks_fails_the_instrument() {
             bundler: Some("bun"),
             unit_prints: false,
             call_context: false,
+            bundle_order: false,
             work_dir: None,
         },
     )

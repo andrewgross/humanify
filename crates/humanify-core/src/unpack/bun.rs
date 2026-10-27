@@ -331,6 +331,17 @@ pub struct BundleOrderRow {
     pub file_name: String,
     #[serde(rename = "runtimeIdentifier")]
     pub runtime_identifier: Option<String>,
+    /// The names-mode placement answer, when the planner moved the module
+    /// (exp157's `discover --bundle-order` instrument). None otherwise.
+    #[serde(rename = "indexPath", skip_serializing_if = "Option::is_none")]
+    pub index_path: Option<String>,
+    /// Why the planner left the module in place, when it did. None otherwise.
+    #[serde(rename = "indexLeave", skip_serializing_if = "Option::is_none")]
+    pub index_leave: Option<String>,
+    /// The whole-module vendor content key the planner read the index by
+    /// (`modules::vendor_content`), when the module has one. None otherwise.
+    #[serde(rename = "moduleKey", skip_serializing_if = "Option::is_none")]
+    pub module_key: Option<String>,
 }
 
 /// One factory's extraction ranges (`ExtractedModule`).
@@ -620,6 +631,9 @@ pub fn unpack_bun(
             factory_var: module.name.clone(),
             file_name: rel_path.clone(),
             runtime_identifier: module_plan.identifier.clone(),
+            index_path: record.and_then(|r| r.index_path.clone()),
+            index_leave: record.and_then(|r| r.index_leave.map(str::to_string)),
+            module_key: record.and_then(|r| r.module_key.clone()),
         });
         entries.push(ManifestEntry {
             file_name: rel_path,
@@ -805,9 +819,16 @@ fn place_factories_from_index(
         regions,
         module_answers: &answers,
     });
-    for (factory, placement) in c.factories.iter_mut().zip(&layout.regions) {
-        if let crate::place::library_layout::Placement::Move { path } = placement {
-            factory.index_path = Some(path.clone());
+    for ((factory, placement), key) in c.factories.iter_mut().zip(&layout.regions).zip(keys.iter())
+    {
+        factory.module_key = key.clone();
+        match placement {
+            crate::place::library_layout::Placement::Move { path } => {
+                factory.index_path = Some(path.clone());
+            }
+            crate::place::library_layout::Placement::Leave { reason } => {
+                factory.index_leave = Some(reason);
+            }
         }
     }
     Ok(())

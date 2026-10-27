@@ -13,18 +13,25 @@
 //! get the same plan whichever order the groups appear in, so an unchanged
 //! library lands at an identical vendor path in every version.
 //!
-//! Conservatism is the policy, not a fallback. A region moves only when a
-//! single package claims every one of its units; an unclaimed unit
-//! interleaved with claimed ones stays (`partial` — moving would split the
-//! module group the units belong to), and so do two packages in one group
+//! Conservatism is the policy, not a fallback. A region moves when a
+//! single package claims every one of its units, or — exp157 — when it
+//! carries no claim at all but its whole-module key has a CLEAN index
+//! answer (one owner, one file: the bundler scatters a package between
+//! versions and strips a module's claims, and the content key is the
+//! evidence that survives the reshuffle); an unclaimed unit interleaved
+//! with claimed ones stays (`partial` — moving would split the module
+//! group the units belong to), and so do two packages in one group
 //! (`contested`) and a whole-module key the index attributes to someone
 //! else (`index-disagrees`). A file path two regions would share moves the
 //! first region by sort key only (`duplicate-file`).
 //!
 //! Synthetic names are the index's misses: a claimed region with no clean
-//! file answer takes `module-<N>.js`, where N is the region's 1-based rank
-//! among its package's synthetic regions sorted by sort key — so a version
-//! that reshuffles the bundle renumbers nothing.
+//! file answer takes `module-<hash8>.js`, where hash8 is the first 8 hex
+//! of the region's own content-derived sort key (its module head
+//! statement's rename-invariant hash) — so neither the bundle's order nor
+//! the package's other regions can rename it (exp157: an ordinal rank
+//! renumbered whenever a version's composition changed). A tie in the
+//! sort key itself falls back to arrival order as `-2`, `-3`.
 
 use std::collections::BTreeMap;
 
@@ -139,24 +146,40 @@ pub fn plan(input: &LayoutInput) -> LayoutPlan {
 /// One region's claim verdict: the single claiming package and the file it
 /// wants, else the reason it cannot move.
 fn region_want(region: &RegionInput, answers: &BTreeMap<String, ModuleAnswer>) -> Want {
-    let package = match claim_verdict(region) {
-        Ok(package) => package,
-        Err(reason) => return Want::Leave { reason },
-    };
     let answer = answer_for(region, answers);
-    if answer_is_foreign(answer, package) {
-        // A whole-module key the index gives to someone else: the claim
-        // and the index cannot both be right, so nothing moves.
-        return Want::Leave {
-            reason: "index-disagrees",
-        };
-    }
-    // An agreed answer with exactly one file is the real npm spelling;
-    // no answer (or no single file) falls to a synthetic name below.
-    let file = answer.and_then(single_file);
-    Want::Move {
-        package: package.to_string(),
-        file,
+    match claim_verdict(region) {
+        Ok(package) => {
+            if answer_is_foreign(answer, package) {
+                // A whole-module key the index gives to someone else: the
+                // claim and the index cannot both be right, so nothing moves.
+                return Want::Leave {
+                    reason: "index-disagrees",
+                };
+            }
+            // An agreed answer with exactly one file is the real npm spelling;
+            // no answer (or no single file) falls to a synthetic name below.
+            let file = answer.and_then(single_file);
+            Want::Move {
+                package: package.to_string(),
+                file,
+            }
+        }
+        // No claim on any unit — the index may still answer cleanly (exp157):
+        // a bundler reshuffle can strip a package's claims from a module it
+        // carried in the previous version, and the whole-module key is the
+        // evidence that survives it (one owner, one file: this exact body is
+        // that package's that file). Claims that disagree stay leaves — a
+        // conflict is evidence, silence is not.
+        Err(reason) => match reason {
+            "unclaimed" => match answer {
+                Some(answer) if answer.owners.len() == 1 => Want::Move {
+                    package: answer.owners[0].clone(),
+                    file: single_file(answer),
+                },
+                _ => Want::Leave { reason },
+            },
+            _ => Want::Leave { reason },
+        },
     }
 }
 
@@ -231,9 +254,14 @@ fn resolve_paths(input: &LayoutInput, wants: &[Want]) -> Vec<Option<String>> {
     paths
 }
 
-/// Number each package's synthetic regions 1.. by (sort key, index) and
-/// fill their paths in — the ONLY place order enters the plan, and it is
-/// the order of the keys' CONTENT, never the bundle's.
+/// Name each package's synthetic regions after their OWN content —
+/// `module-<first 8 of the sort key>.js`, the module head statement's
+/// rename-invariant hash — so no other region's presence and no bundle
+/// order can rename one (exp157: the ordinal scheme renumbered a
+/// package's synthetic regions whenever a version's composition added or
+/// dropped one, and unchanged content landed at a new path). Only a tie
+/// in the sort key itself — the same blurred head — falls back to
+/// arrival order, spelled `-2`, `-3`, … after the first.
 fn assign_synthetic_paths(input: &LayoutInput, wants: &[Want], paths: &mut [Option<String>]) {
     let mut by_package: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
     for (idx, want) in wants.iter().enumerate() {
@@ -245,15 +273,27 @@ fn assign_synthetic_paths(input: &LayoutInput, wants: &[Want], paths: &mut [Opti
             by_package.entry(package.as_str()).or_default().push(idx);
         }
     }
-    for (package, mut idxs) in by_package {
+    for (package, idxs) in by_package {
+        let mut idxs = idxs;
         idxs.sort_by(|&a, &b| {
             input.regions[a]
                 .sort_key
                 .cmp(&input.regions[b].sort_key)
                 .then(a.cmp(&b))
         });
-        for (rank, idx) in idxs.into_iter().enumerate() {
-            paths[idx] = compose_path(package, &format!("module-{}", rank + 1));
+        let mut previous: Option<&str> = None;
+        let mut ties = 0;
+        for idx in idxs {
+            let key = &input.regions[idx].sort_key;
+            let stem = if previous == Some(key.as_str()) {
+                ties += 1;
+                format!("module-{}-{}", &key[..key.len().min(8)], ties + 1)
+            } else {
+                ties = 0;
+                format!("module-{}", &key[..key.len().min(8)])
+            };
+            previous = Some(key.as_str());
+            paths[idx] = compose_path(package, &stem);
         }
     }
 }

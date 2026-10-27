@@ -2259,7 +2259,7 @@ fn names_mode_gives_an_unanswered_claimed_factory_a_stable_synthetic_path() {
     .unwrap();
     let files = tree(&t.0);
     assert!(
-        files.contains_key(Path::new("vendor/ms/module-1.js")),
+        files.contains_key(Path::new("vendor/ms/module-a7712902.js")),
         "a claimed module the index does not know takes a synthetic name: {files:?}"
     );
     let entries = factories(&read_manifest(&t.0));
@@ -2267,7 +2267,7 @@ fn names_mode_gives_an_unanswered_claimed_factory_a_stable_synthetic_path() {
         .iter()
         .find(|e| s(e, "name") == "ms")
         .expect("an entry named for the package");
-    assert_eq!(s(ms, "fileName"), "vendor/ms/module-1.js");
+    assert_eq!(s(ms, "fileName"), "vendor/ms/module-a7712902.js");
     assert_eq!(s(ms, "nameSource"), "index");
 }
 

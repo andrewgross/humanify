@@ -46,6 +46,8 @@ fn rec(structural_hash: &str, name: &str, source: NameSource) -> FactoryRecord {
         identity: None,
         hints: Vec::new(),
         index_path: None,
+        index_leave: None,
+        module_key: None,
     }
 }
 
