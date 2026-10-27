@@ -410,25 +410,12 @@ fn pipeline_body(
         // `--library-matching report`: discovery runs, its rows go to the
         // library report (and the diagnostics), nowhere else. `names`
         // (plan step 4, under its unlock) asks for the same report and
-        // adds the placement answers: the unpack places wholly claimed
-        // factories at the index's vendor paths — nothing else reads them.
-        (config.library.matching != LibraryMatching::Off).then(|| {
-            let mut request = config.library.discovery_request(library.index.as_ref());
-            if config.library.matching == LibraryMatching::Names {
-                request.module_answers =
-                    Some(humanify_core::libdetect::discovery::ModuleAnswersSource {
-                        dir: library
-                            .dir
-                            .as_deref()
-                            .expect("names refused a loadless index"),
-                        slice: library
-                            .slice
-                            .as_deref()
-                            .expect("names refused a sliceless index"),
-                    });
-            }
-            request
-        }),
+        // reads the index's whole-module answers — the unpack places
+        // wholly claimed factories at the index's vendor paths, and
+        // nothing else reads them. The request builder attaches the
+        // answers itself (the discover verb builds the same request).
+        (config.library.matching != LibraryMatching::Off)
+            .then(|| config.library.discovery_request(library.index.as_ref())),
         profiler,
         renderer,
     )?;
@@ -761,12 +748,6 @@ struct LibraryLoad {
     /// The machinery's answer (`indexSource` in the library report): set
     /// only when the run found or built its index at run time (exp154).
     source: Option<crate::runtime_index::IndexSource>,
-    /// The index directory a `names` run reads whole-module answers from,
-    /// and the slice it reads (`modules.<slice>.jsonl`) — set exactly when
-    /// a slice was opened (`--library-matching names` refuses the run when
-    /// there is none; a `report` run only warns).
-    dir: Option<std::path::PathBuf>,
-    slice: Option<String>,
 }
 
 /// `--library-matching report`: open the index's slice for the recipe the
@@ -832,8 +813,6 @@ fn load_library_index(
         humanify_core::libindex::recipe::detect_recipe(code, toolchain.bundler, toolchain.minifier);
     let load = match LibraryIndex::load(&dir, &recipe, config.library.lookup.terser_slices) {
         Ok(index) => LibraryLoad {
-            dir: Some(dir.clone()),
-            slice: Some(index.slice.clone()),
             index_id: Some(index.id.clone()),
             index: Some(index),
             recipe_missing: None,
@@ -850,8 +829,6 @@ fn load_library_index(
                 format!("WARNING: {why} — library matching reports path/banner detection only");
             renderer.message(&warning);
             LibraryLoad {
-                dir: Some(dir.clone()),
-                slice: None,
                 index: None,
                 index_id: Some(id),
                 recipe_missing: Some(warning),

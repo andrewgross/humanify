@@ -39,6 +39,10 @@ pub struct LibraryIndex {
     /// The recipe slice read (`bun-bun-cjs-min`) and why it was chosen;
     /// empty when built from rows.
     pub slice: String,
+    /// The directory the index was loaded from: where a names-mode run
+    /// reads its whole-module answers (`modules.<slice>.jsonl`, exp156);
+    /// empty when built from rows — no answers file exists beside rows.
+    pub dir: std::path::PathBuf,
     slice_reason: String,
     /// Every owner package, sorted: an owner id is its position.
     packages: Vec<String>,
@@ -106,6 +110,7 @@ impl LibraryIndex {
         LibraryIndex {
             id: String::new(),
             slice: String::new(),
+            dir: std::path::PathBuf::new(),
             slice_reason: String::new(),
             units: UnitTable::open(Source::Memory(units)).expect("an encoded unit table opens"),
             terser_units: Vec::new(),
@@ -331,6 +336,7 @@ impl LibraryIndex {
         Ok(LibraryIndex {
             id,
             slice,
+            dir: dir.to_path_buf(),
             slice_reason: reason,
             known,
             packages,

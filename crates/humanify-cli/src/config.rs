@@ -395,7 +395,20 @@ impl Library {
             unit_prints: false,
             call_context: false,
             placement_groups: self.matching == LibraryMatching::Names,
-            module_answers: None,
+            // A names run reads the index's whole-module answers out of the
+            // same directory the index was loaded from (plan step 4,
+            // exp156): ONE builder decides this for the pipeline and the
+            // discover verb alike, so the verb's instrument sees the same
+            // placement a run performs. A rows-built index (tests) has no
+            // directory; the answers read then fails loud, as it must.
+            module_answers: index
+                .filter(|_| self.matching == LibraryMatching::Names)
+                .map(
+                    |index| humanify_core::libdetect::discovery::ModuleAnswersSource {
+                        dir: index.dir.as_path(),
+                        slice: index.slice.as_str(),
+                    },
+                ),
         }
     }
 

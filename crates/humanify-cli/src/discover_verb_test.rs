@@ -367,3 +367,50 @@ fn a_bundle_whose_recipe_the_index_lacks_fails_the_instrument() {
     .expect_err("no slice for bun:target=node");
     assert!(err.contains("no slice for recipe bun:target=node"), "{err}");
 }
+
+/// A names-mode run reads the index's whole-module answers (library-names
+/// plan step 4, exp156): the request says where they live, so the unpack
+/// can place wholly claimed factories at the index's vendor paths. The
+/// request is the ONE builder both the pipeline and this verb use — a
+/// names run through the verb once silently placed nothing (zero
+/// `indexPath` rows across 120 bun-corpus bundles) because only the
+/// pipeline attached the source.
+#[test]
+fn a_names_request_carries_the_index_module_answers() {
+    let code = fixture();
+    let ix_dir = self_index(&code, "answers");
+    let names = library("[library]\nmatching = \"names\"\nnames_unlocked = true\n");
+    let recipe = {
+        let detection = humanify_core::detect::detect_bundle(&code);
+        let toolchain = humanify_core::toolchain::resolve_toolchain(&detection, None, None);
+        humanify_core::libindex::recipe::detect_recipe(&code, toolchain.bundler, toolchain.minifier)
+    };
+    let index = humanify_core::libindex::lookup::LibraryIndex::load(
+        &ix_dir,
+        &recipe,
+        humanify_core::libindex::recipe::TerserSlices::Off,
+    )
+    .expect("the fixture self-index loads");
+    let request = names.discovery_request(Some(&index));
+    assert!(request.list_units, "names reads the claim rows");
+    assert!(request.placement_groups, "names asks for the groups");
+    let source = request
+        .module_answers
+        .expect("names reads the index's whole-module answers");
+    assert_eq!(Path::new(source.dir), ix_dir);
+    assert_eq!(source.slice, index.slice);
+    // Every other mode asks for claims, never for answers.
+    for report in [
+        library("[library]\nmatching = \"report\"\n"),
+        library("[library]\nmatching = \"off\"\n"),
+    ] {
+        assert!(
+            report
+                .discovery_request(Some(&index))
+                .module_answers
+                .is_none(),
+            "report/off never read answers"
+        );
+    }
+    std::fs::remove_dir_all(&ix_dir).ok();
+}
