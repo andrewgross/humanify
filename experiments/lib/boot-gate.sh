@@ -62,11 +62,20 @@ BOOT_GATE_MODEL="claude-opus-4-1"
 #   live prompt fails "issue with the selected model" — a false boot FAIL on
 #   every tree (2026-10-02, ANTHROPIC_MODEL=GLM-… from the session; it failed
 #   all four boots of the control-843826be-8gpu eval);
+# - its ENDPOINT override (ANTHROPIC_BASE_URL, and the auth that goes with
+#   it): inherited, the walked CLI points at the launcher's endpoint and the
+#   prompt fails "issue with the selected model" with the PINNED model's name
+#   in the message — the name is a red herring, the request dies at the
+#   endpoint. 2026-10-27, exp156-names-eval: ANTHROPIC_BASE_URL=
+#   http://host.docker.internal:8100 failed all four boots (the same false
+#   FAIL shape as the 2026-10-02 model leak). A walked tree has its own
+#   configuration for where it talks to; the launcher's is never it.
 # - its SESSION identity (CLAUDECODE, CLAUDE_CODE_*): the walked CLI would act
 #   as a child of the launching session (walk.sh's list, now shared).
 BOOT_ENV=(env
   -u ANTHROPIC_MODEL -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL
   -u ANTHROPIC_DEFAULT_HAIKU_MODEL -u ANTHROPIC_DEFAULT_FABLE_MODEL -u CLAUDE_CODE_SUBAGENT_MODEL
+  -u ANTHROPIC_BASE_URL -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN
   -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION
   -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_MESSAGING_SOCKET
   -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_BRIDGE_SESSION_ID)
