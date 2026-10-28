@@ -262,8 +262,30 @@ wholesale on content drift. Branch `exp158-naming-stability`.
   pair's `nameOnly` mass is the stub namer's raw-spelling drift, not placement); re-placing the
   era's synthetic files costs 35 `movedPath` on 2.1.85 and 15 on 2.1.86 and nothing else
   (identical 1,589, nameOnly 0, realChange 0). The rejected 0.55 relaxation, measured on the same
-  instrument: trulyAdded 13 → 59, trulyRemoved 34 → 99. The 034 eval and the library scorer: see
-  the experiment report.
+  instrument: trulyAdded 13 → 59, trulyRemoved 34 → 99.
+  034 eval (names mode, one cold run, scratch base, vs the names-mode label `exp157-vendstab-names`;
+  the default-mode reference `ref-scratch-0f338ffa-r1` is a different regime — names mode charges
+  vendor content change the default regime leaves in `src/`, so every names-mode bar is exp157's):
+  novel 4,188 / realLn 416,377 **byte-equal** (zero band); vendorReal 3,693 → 3,699 (~0±32);
+  vendorLn 1,491 **=**; mints 1,769 → 1,754; treeLn 150,551 → 149,557 (−994, the quiet pair −729);
+  cleanReal 85,671 → 84,924 (−747 — path churn leaving the real bucket with `fileAddRemove` −489;
+  `realLn` byte-equal says no real change moved with it). The eval pair's buckets: identical 1,585 /
+  nameOnly 19 / movedPath 0 / realChange 19 / trulyAdded 13 / trulyRemoved 2 — the counts equal
+  exp157's, but the trulyAdded LIST changed: the old key's tie family (`lodash[/df83ae16×3]`,
+  `lodash-es/b28cc807`) and the `2374bc3b` two-package collision are gone; what remains is two
+  cross-package claim flips (`lodash-es/module-0581b523{.js}` → `lodash/…` and same for
+  `5b5305a7` — matching's territory) and content one-sided on one version. Every pair exits 0 with
+  cache +0; warm self-hop byte-identical, 0 cache writes; the COLD self-hop on 2.1.216 reads
+  1,288 lines — outside the naming-locked reference range, the same names-mode regime as the
+  exp156 (1,294) and exp157 (1,264) baselines.
+  Library scorer (structural rule, the edges/2 index, `matching=names` + `names_unlocked`):
+  byte-identical to the exp157 baselines on all three corpora — cc P 1.0 / R 0.819 / F0.5 0.958,
+  app claimed 0; bun-dev per-bundle lines byte-identical (90 bundles, app 0); bun-held 30 bundles,
+  verdict block identical (app claimed 0).
+  Default-mode neutrality (vs main `6c8cde934`, pair 85→86, warm standing cache
+  `/work/neutrality-cache`): **NEUTRAL** — 0 differing files / 0 differing lines, cache writes
+  +0/+0 (the baseline leg's 0 is the load-bearing one), exit 0/0. Both fixes are byte-inert with
+  `names` off.
 
 ## Not in this plan
 
