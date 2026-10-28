@@ -28,8 +28,10 @@ pub enum Regime {
     Cluster,
 }
 
-/// What placement is asked to do.
-pub struct PlacementGate<'a> {
+/// What placement is asked to do. The namers take their own lifetime: the
+/// mutable references are invariant, and the gate otherwise mixes the
+/// split's borrowed data with them.
+pub struct PlacementGate<'a, 'n> {
     pub regime: Regime,
     /// The prior release's `split-ledger.json` (the oracle run's
     /// `--prior-version` sibling).
@@ -47,9 +49,9 @@ pub struct PlacementGate<'a> {
     pub switches: PlacementSwitches,
     /// The cluster regime's file+folder namer (the fossil regime names
     /// files by their module names, read from the wrappers — no namer).
-    pub namer: Option<&'a mut dyn SplitNamer>,
+    pub namer: Option<&'n mut dyn SplitNamer>,
     /// The cluster regime's holistic top-level reviser.
-    pub reviser: Option<&'a mut dyn TreeReviser>,
+    pub reviser: Option<&'n mut dyn TreeReviser>,
     /// The run's bundle layout (`prior_text`'s top-level statements).
     pub layout: crate::toolchain::BundleLayout,
     /// The run's module wrapper grammar (P3): the module helper the
@@ -59,6 +61,11 @@ pub struct PlacementGate<'a> {
     /// markers' boundaries when the markers do not describe the whole
     /// bundle ([`crate::place::method`]). Empty: none.
     pub module_ends: Vec<usize>,
+    /// The names mode's placed modules (library-names plan step 4,
+    /// exp156): `(module index, vendor path)` the fossil regime
+    /// pre-fills before any match or fresh name. The split refuses a
+    /// non-empty layout under any other regime.
+    pub library: &'a [(usize, String)],
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
@@ -87,7 +94,7 @@ pub struct Placed {
 pub fn assign_regime(
     input: &SplitInput,
     shipped: &str,
-    gate: PlacementGate,
+    gate: PlacementGate<'_, '_>,
     prior: Option<&StableSplitLedger>,
     trail: &mut PlacementTrail,
     out_dir: Option<&Path>,
@@ -105,6 +112,7 @@ pub fn assign_regime(
                 FossilOptions {
                     min_folder_files: MIN_FOLDER_FILES,
                     trail: Some(trail),
+                    library: gate.library,
                 },
             )?;
             let s = &assigned.stats;

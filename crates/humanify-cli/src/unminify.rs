@@ -60,6 +60,10 @@ pub struct Unpacked {
     /// Library discovery (exp095), when the run asked for it — report-only,
     /// for the diagnostics.
     pub library_discovery: Option<humanify_core::libdetect::discovery::DiscoveryReport>,
+    /// The names mode's claimed placement groups (library-names plan step
+    /// 4, exp156), already in the naming era's wrapper-body ordinals —
+    /// handed to the naming stage in memory. Empty in every other mode.
+    pub claimed_module_regions: Vec<humanify_core::naming::module_names::ClaimedRegion>,
 }
 
 /// `unpackBundle`: run the run's adapter into `out_dir` through the one
@@ -122,7 +126,14 @@ pub fn unpack_bundle(
             library_discovery,
         },
     )?;
-    let (files, vendor_record, content_carry, app_declarations, library_discovery) = match outcome {
+    let (
+        files,
+        vendor_record,
+        content_carry,
+        app_declarations,
+        library_discovery,
+        claimed_module_regions,
+    ) = match outcome {
         AdapterOutcome::VendorRecord(outcome) => {
             report_vendor_unpack(&outcome, renderer);
             let outcome = *outcome;
@@ -132,6 +143,7 @@ pub fn unpack_bundle(
                 outcome.content_carry,
                 outcome.app_declarations,
                 outcome.library_discovery,
+                outcome.claimed_module_regions,
             )
         }
         AdapterOutcome::Files {
@@ -143,6 +155,7 @@ pub fn unpack_bundle(
             None,
             Vec::new(),
             library_discovery.map(|r| *r),
+            Vec::new(),
         ),
     };
     span.end(Some(
@@ -162,6 +175,7 @@ pub fn unpack_bundle(
         content_carry,
         app_declarations,
         library_discovery,
+        claimed_module_regions,
     })
 }
 
@@ -215,21 +229,28 @@ fn log_name_sources(outcome: &bun::BunUnpackOutcome) {
     let Some(c) = &outcome.name_counts else {
         return;
     };
-    let total =
-        c.declared + c.carry_over + c.declared_pair + c.content_pair + c.llm + c.fallback + c.asset;
+    let total = c.declared
+        + c.carry_over
+        + c.declared_pair
+        + c.content_pair
+        + c.llm
+        + c.fallback
+        + c.asset
+        + c.index;
     if total == 0 {
         return;
     }
     verbose().log(&format!(
         "Vendor name sources ({total} factories): {} carry-over, {} declared-pair, {} content-pair, \
-         {} declared, {} llm, {} fallback, {} app text asset",
+         {} declared, {} llm, {} fallback, {} app text asset, {} index",
         c.carry_over,
         c.declared_pair,
         c.content_pair,
         c.declared,
         c.llm,
         c.fallback,
-        c.asset
+        c.asset,
+        c.index
     ));
     if outcome.llm_renamed > 0 {
         verbose().log(&format!(

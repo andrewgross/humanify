@@ -2108,3 +2108,330 @@ fn a_joined_declaration_extracts_each_factory_by_its_declarator() {
     let ingest = crate::ingest::Ingest::parse(&allocator, &runtime, "runtime.js");
     assert!(ingest.errors.is_empty(), "{runtime}");
 }
+
+// ---- library-matching names: factory placement (exp156) ----------------------
+
+/// Two bundled CommonJS modules; the second declares a package object in
+/// its own factory body (an index-side unit once factories are cut), so
+/// discovery claims it for `ms`. Placement is a LAYOUT question only —
+/// identifier spellings are out of scope (library-names plan step 4).
+const NAMES_BUNDLE: &str = concat!(
+    "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
+    "var mod_a=x((exports,module)=>{\n",
+    "  module.exports={one:1};\n",
+    "});\n",
+    "var mod_b=x((exports,module)=>{\n",
+    "  var pkg={name:\"ms\",version:\"1.0.0\",main:\"index.js\",license:\"MIT\",probe:()=>1};\n",
+    "  module.exports=pkg;\n",
+    "});\n",
+    "var main=mod_a()&&mod_b();"
+);
+
+/// The names-mode discovery request: the claim rows the placement fold
+/// reads (`list_units`), factories cut into index-side units, and where
+/// the index's whole-module answers live.
+/// The error string of a run that should have refused (the outcome has no
+/// Debug, so `unwrap_err` is out).
+fn refuse(r: Result<crate::unpack::bun::BunUnpackOutcome, String>) -> String {
+    match r {
+        Err(e) => e,
+        Ok(_) => panic!("the run should have refused"),
+    }
+}
+
+fn names_request<'x>(
+    answers: crate::libdetect::discovery::ModuleAnswersSource<'x>,
+) -> crate::libdetect::discovery::DiscoveryRequest<'x> {
+    crate::libdetect::discovery::DiscoveryRequest {
+        list_units: true,
+        options: crate::libdetect::discovery::DiscoveryOptions {
+            factory_bodies: true,
+            ..Default::default()
+        },
+        module_answers: Some(answers),
+        ..Default::default()
+    }
+}
+
+/// The answers directory with `rows` written to its `modules.cjs.jsonl`.
+fn answers_dir(tag: &str, rows: &[String]) -> TempDir {
+    let answers = TempDir::new(tag);
+    fs::write(
+        answers.0.join("modules.cjs.jsonl"),
+        rows.iter().map(|r| format!("{r}\n")).collect::<String>(),
+    )
+    .unwrap();
+    answers
+}
+
+/// The answers source of an answers directory the caller keeps alive.
+fn answers_of(dir: &TempDir) -> crate::libdetect::discovery::ModuleAnswersSource<'_> {
+    crate::libdetect::discovery::ModuleAnswersSource {
+        dir: dir.0.as_path(),
+        slice: "cjs",
+    }
+}
+
+/// The bundle's factory content keys, in bundle order — what the index's
+/// `modules.jsonl` rows are keyed by.
+fn content_keys(bundle: &str) -> Vec<String> {
+    crate::modules::vendor_content::bundle_content_keys(
+        bundle,
+        crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .into_iter()
+    .map(|k| k.key.expect("keyed"))
+    .collect()
+}
+
+#[test]
+fn names_mode_places_a_whole_claimed_factory_at_the_index_path() {
+    let bundle = NAMES_BUNDLE;
+    let keys = content_keys(bundle);
+    assert_eq!(keys.len(), 2, "both factories keyed: {keys:?}");
+    let answers_dir = answers_dir(
+        "names-path-answers",
+        &[format!(
+            "{{\"key\":\"{}\",\"owner\":\"ms\",\"files\":[\"index.js\"],\"versions\":[]}}",
+            keys[1]
+        )],
+    );
+    let answers = answers_of(&answers_dir);
+    let first = TempDir::new("names-path-a");
+    let out = unpack_bun(
+        bundle,
+        &first.0,
+        BunUnpackOptions {
+            library_discovery: Some(names_request(answers)),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let report = out.library_discovery.expect("names asks discovery");
+    assert!(
+        report.claims.iter().any(|c| c.package == "ms"),
+        "the second module is claimed for ms: {:?}",
+        report.claims
+    );
+    let files = tree(&first.0);
+    assert!(
+        files.contains_key(Path::new("vendor/ms/index.js")),
+        "the claimed module lands at the index's real npm file: {files:?}"
+    );
+    let entries = factories(&read_manifest(&first.0));
+    let ms = entries
+        .iter()
+        .find(|e| s(e, "name") == "ms")
+        .expect("an entry named for the package");
+    assert_eq!(s(ms, "fileName"), "vendor/ms/index.js");
+    assert_eq!(s(ms, "nameSource"), "index");
+    // Determinism: the same bundle and answers, byte-identical trees.
+    let second = TempDir::new("names-path-b");
+    unpack_bun(
+        bundle,
+        &second.0,
+        BunUnpackOptions {
+            library_discovery: Some(names_request(answers)),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(tree(&first.0), tree(&second.0));
+}
+
+#[test]
+fn names_mode_gives_an_unanswered_claimed_factory_a_stable_synthetic_path() {
+    let bundle = NAMES_BUNDLE;
+    // The answers file exists but holds no row for the claimed module: a
+    // synthetic-but-stable name, never a refusal and never app code.
+    let answers_dir = answers_dir("names-synth-answers", &[]);
+    let answers = answers_of(&answers_dir);
+    let t = TempDir::new("names-synth");
+    unpack_bun(
+        bundle,
+        &t.0,
+        BunUnpackOptions {
+            library_discovery: Some(names_request(answers)),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let files = tree(&t.0);
+    assert!(
+        files.contains_key(Path::new("vendor/ms/module-a7712902.js")),
+        "a claimed module the index does not know takes a synthetic name: {files:?}"
+    );
+    let entries = factories(&read_manifest(&t.0));
+    let ms = entries
+        .iter()
+        .find(|e| s(e, "name") == "ms")
+        .expect("an entry named for the package");
+    assert_eq!(s(ms, "fileName"), "vendor/ms/module-a7712902.js");
+    assert_eq!(s(ms, "nameSource"), "index");
+}
+
+#[test]
+fn names_mode_refuses_when_the_modules_file_is_missing() {
+    // A names run names a directory that is not an index's answer source:
+    // the loud refusal names the file it wanted, never a silent fallback.
+    let answers_dir = TempDir::new("names-no-modules-file");
+    let answers = crate::libdetect::discovery::ModuleAnswersSource {
+        dir: answers_dir.0.as_path(),
+        slice: "cjs",
+    };
+    let t = TempDir::new("names-refused");
+    let err = refuse(unpack_bun(
+        NAMES_BUNDLE,
+        &t.0,
+        BunUnpackOptions {
+            library_discovery: Some(names_request(answers)),
+            ..Default::default()
+        },
+    ));
+    assert!(
+        err.contains("modules.cjs.jsonl"),
+        "the refusal names the missing file: {err}"
+    );
+}
+
+#[test]
+fn names_mode_needs_the_claim_rows() {
+    // `module_answers` set without `list_units`: the placement fold has
+    // nothing to read, which would silently un-place every module — fail
+    // loud instead.
+    let answers_dir = TempDir::new("names-no-rows");
+    fs::write(answers_dir.0.join("modules.cjs.jsonl"), "\n").unwrap();
+    let answers = crate::libdetect::discovery::ModuleAnswersSource {
+        dir: answers_dir.0.as_path(),
+        slice: "cjs",
+    };
+    let request = crate::libdetect::discovery::DiscoveryRequest {
+        options: crate::libdetect::discovery::DiscoveryOptions {
+            factory_bodies: true,
+            ..Default::default()
+        },
+        module_answers: Some(answers),
+        ..Default::default()
+    };
+    let t = TempDir::new("names-no-claims");
+    let err = refuse(unpack_bun(
+        NAMES_BUNDLE,
+        &t.0,
+        BunUnpackOptions {
+            library_discovery: Some(request),
+            ..Default::default()
+        },
+    ));
+    assert!(
+        err.contains("list_units"),
+        "the refusal says what is missing: {err}"
+    );
+}
+
+#[test]
+fn names_mode_claims_the_lazy_module_regions_in_era_ordinals() {
+    // A lazy module BEFORE any extracted factory: the placement group's
+    // rows — the helper as an unclaimed pending, the claimed init head —
+    // become a claimed region in ERA ordinals, which here (the one
+    // factory sits after the region, so nothing before it is removed)
+    // are the raw container ordinals. The CJS factory is also what puts
+    // the run on the classified path at all: a helper-less floor bundle
+    // claims nothing (no regions, by design — an empty layout, and
+    // nothing moves).
+    let bundle = concat!(
+        "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n",
+        "var Gq = W(() => {\n",
+        "  var pkg = {name:\"ms\",version:\"1.0.0\",main:\"index.js\",license:\"MIT\",probe:()=>1};\n",
+        "});\n",
+        "var x = (I, A) => () => (A || (I((A = {exports:{}}).exports, A), A.exports));\n",
+        "var mod_z = x((exports) => {\n",
+        "  exports.two = 2;\n",
+        "});\n",
+        "var app = () => Gq() && mod_z().two;\n"
+    );
+    let answers_dir = TempDir::new("names-lazy-answers");
+    fs::write(answers_dir.0.join("modules.cjs.jsonl"), "\n").unwrap();
+    let answers = answers_of(&answers_dir);
+    let request = crate::libdetect::discovery::DiscoveryRequest {
+        list_units: true,
+        placement_groups: true,
+        options: crate::libdetect::discovery::DiscoveryOptions {
+            factory_bodies: true,
+            ..Default::default()
+        },
+        module_answers: Some(answers),
+        ..Default::default()
+    };
+    let t = TempDir::new("names-lazy");
+    let out = unpack_bun(
+        bundle,
+        &t.0,
+        BunUnpackOptions {
+            library_discovery: Some(request),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        out.claimed_module_regions,
+        vec![crate::naming::module_names::ClaimedRegion {
+            statements: vec![0, 1],
+            claims: vec![None, Some("ms".to_string())],
+        }],
+        "the helper is the group's unclaimed pending, the claimed init its head: {:?}",
+        out.claimed_module_regions
+    );
+}
+
+#[test]
+fn a_names_region_after_an_extracted_factory_shifts_to_era_ordinals() {
+    // The standing vendor-bridge invariant: an extracted factory removes
+    // one container statement, so a lazy module after it shifts down by
+    // one in the era body.
+    let bundle = concat!(
+        "var x = (I, A) => () => (A || (I((A = {exports:{}}).exports, A), A.exports));\n",
+        "var mod_a = x((exports) => {\n",
+        "  exports.one = 1;\n",
+        "});\n",
+        "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n",
+        "var Gq = W(() => {\n",
+        "  var pkg = {name:\"ms\",version:\"1.0.0\",main:\"index.js\",license:\"MIT\",probe:()=>1};\n",
+        "});\n",
+        "var app = () => Gq() && mod_a().one;\n"
+    );
+    let answers_dir = TempDir::new("names-shift-answers");
+    fs::write(answers_dir.0.join("modules.cjs.jsonl"), "\n").unwrap();
+    let answers = answers_of(&answers_dir);
+    let request = crate::libdetect::discovery::DiscoveryRequest {
+        list_units: true,
+        placement_groups: true,
+        options: crate::libdetect::discovery::DiscoveryOptions {
+            factory_bodies: true,
+            ..Default::default()
+        },
+        module_answers: Some(answers),
+        ..Default::default()
+    };
+    let t = TempDir::new("names-shift");
+    let out = unpack_bun(
+        bundle,
+        &t.0,
+        BunUnpackOptions {
+            library_discovery: Some(request),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    // mod_a is extracted; var W was raw ordinal 2, var Gq 3 — one lower
+    // in the era body the split will see.
+    assert_eq!(
+        out.claimed_module_regions,
+        vec![crate::naming::module_names::ClaimedRegion {
+            statements: vec![1, 2],
+            claims: vec![None, Some("ms".to_string())],
+        }],
+        "{:?}",
+        out.claimed_module_regions
+    );
+}

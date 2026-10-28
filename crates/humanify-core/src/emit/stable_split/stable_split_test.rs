@@ -72,6 +72,7 @@ fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
             vendor_captures: &[],
             vendor_fresh: None,
             input_gate: InputGate::TextAtHand,
+            library: &[],
         },
     )
     .expect("the split runs");
@@ -138,6 +139,7 @@ fn bridge_options<'a>(
         // reads the text at hand here (see the gated tests below for the
         // original-bundle path).
         input_gate: InputGate::TextAtHand,
+        library: &[],
     }
 }
 
@@ -286,6 +288,7 @@ fn gated_options<'a>(original_bundle: Option<&'a str>) -> SplitOptions<'a, 'a> {
         vendor_captures: &[],
         vendor_fresh: None,
         input_gate: original_bundle.map_or(InputGate::TextAtHand, InputGate::Original),
+        library: &[],
     }
 }
 
@@ -526,4 +529,87 @@ fn an_all_lazy_bundle_keeps_the_marker_method() {
     let outcome = stable_split(&code, offered_options()).expect("the split runs");
     assert_eq!(outcome.method.regime, Regime::Fossil);
     assert_eq!(outcome.method.coverage.map(|c| c.modules), Some(30));
+}
+
+// ---- names mode: library placement reaches the fossil split (exp156) --------
+
+/// A moved module's vendor path is pre-filled: its statements land in
+/// `vendor/<package>/<file>.js`, the prior-match and fresh-naming loops
+/// never touch it, and the ledger records the path for the next hop.
+#[test]
+fn a_moved_library_module_lands_at_its_vendor_path() {
+    let mut decls = String::from(LAZY_HELPER);
+    for i in 0..30 {
+        decls.push_str(&format!(
+            "  function read{i:02}() {{ return value{i:02} + {i}; }}\n\
+             \x20 var value{i:02};\n\
+             \x20 var init{i:02} = __esm(() => {{ value{i:02} = readConfig({i}); }});\n"
+        ));
+    }
+    let code = format!("(function () {{\n{decls}  init00();\n}})();\n");
+    let outcome = stable_split(
+        &code,
+        SplitOptions {
+            library: &[(1, "vendor/ms/module-1.js".to_string())],
+            ..offered_options()
+        },
+    )
+    .expect("the split runs");
+    assert_eq!(outcome.method.regime, Regime::Fossil);
+    let (_, text) = outcome
+        .files
+        .iter()
+        .find(|(f, _)| f == "vendor/ms/module-1.js")
+        .expect("the moved module's file");
+    assert!(
+        text.contains("var init01")
+            && text.contains("readConfig(1)")
+            && !text.contains("readConfig(0)"),
+        "exactly module 1's statements (the __esm helper reference may be \
+         rewritten to its file's require): {text}"
+    );
+    // The ledger carries the path — the next hop's match inherits it.
+    let ledger = outcome.ledger.as_object().expect("a ledger object");
+    let modules = match ledger.get("fossilModules") {
+        Some(humanify_model::js::JsValue::Array(items)) => items,
+        other => panic!("fossilModules is not an array: {other:?}"),
+    };
+    let file = modules[1]
+        .as_object()
+        .and_then(|m| m.get("file"))
+        .and_then(humanify_model::js::JsValue::as_str)
+        .expect("module 1's file");
+    assert_eq!(file, "vendor/ms/module-1.js");
+    // And no other file shares the name.
+    assert_eq!(
+        outcome
+            .files
+            .iter()
+            .filter(|(f, _)| f.starts_with("vendor/"))
+            .count(),
+        1
+    );
+}
+
+/// The layout only exists in the fossil regime's terms: a bundle the
+/// method does not give the markers to, with a non-empty layout, fails
+/// LOUD — a silent skip would have excluded the module's identifiers
+/// from naming and then never moved the file.
+#[test]
+fn a_non_fossil_bundle_with_a_library_layout_fails_loud() {
+    let code = clustered_bundle(LAZY_HELPER);
+    let err = match stable_split(
+        &code,
+        SplitOptions {
+            library: &[(1, "vendor/ms/module-1.js".to_string())],
+            ..offered_options()
+        },
+    ) {
+        Ok(_) => panic!("a clustered bundle with a library layout must fail"),
+        Err(err) => err,
+    };
+    assert!(
+        err.contains("library placement"),
+        "the refusal names the conflict: {err}"
+    );
 }

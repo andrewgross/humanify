@@ -83,6 +83,11 @@ pub struct SplitStageInput<'a> {
     /// vendor captures and the finish's re-link read it — never whatever
     /// record happens to sit in the output folder (toolchain review R6).
     pub vendor_record: Option<&'a humanify_core::modules::vendor_names::BunModulesManifest>,
+    /// The names mode's placed modules (library-names plan step 4,
+    /// exp156): `(module index, vendor path)` from the naming stage's
+    /// layout — the fossil split pre-fills those paths. Empty in every
+    /// other mode.
+    pub library: &'a [(usize, String)],
 }
 
 /// `loadPriorSplitLedger`: `--split-ledger` wins, else the ledger beside
@@ -389,6 +394,7 @@ fn split_before_commit(
             input_gate: gate,
             layout: input.toolchain.layout.piece,
             module_wrappers: input.toolchain.module_wrappers.piece,
+            library: input.library,
         },
     )?;
     renderer.message(&format!(

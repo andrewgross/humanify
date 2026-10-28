@@ -51,6 +51,11 @@ pub struct DiscoverArgs<'a> {
     pub unit_prints: bool,
     /// `--call-context`: the call-context census (`callContext`, exp153).
     pub call_context: bool,
+    /// `--bundle-order`: every extracted module in bundle order with the
+    /// names-mode placement answer (`indexPath`) or the leave reason
+    /// (`indexLeave`) — the exp157 placement instrument. The verb runs the
+    /// adapter either way; this only says whether the rows reach the doc.
+    pub bundle_order: bool,
     /// Where the adapter unpacks (default: a scratch dir, removed after).
     pub work_dir: Option<&'a str>,
 }
@@ -128,6 +133,7 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
     // run it on the raw bundle before they unpack — the same call, made
     // here without unpacking (the verb needs no file of theirs, and
     // webcrack's subprocess has nothing to add to discovery).
+    let mut bundle_order: Vec<humanify_core::unpack::bun::BundleOrderRow> = Vec::new();
     let report = if adapter.vendor_record_stamp().is_some() {
         let outcome = humanify_core::unpack::run_adapter(
             adapter,
@@ -136,7 +142,15 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
             Path::new(&work_dir),
             run,
         );
-        outcome.map(|o| o.library_discovery().cloned())
+        outcome.map(|o| {
+            bundle_order = match &o {
+                humanify_core::unpack::AdapterOutcome::VendorRecord(vendor) => {
+                    vendor.bundle_order.clone()
+                }
+                humanify_core::unpack::AdapterOutcome::Files { .. } => Vec::new(),
+            };
+            o.library_discovery().cloned()
+        })
     } else {
         Ok(humanify_core::unpack::discover_without_vendor_record(
             code,
@@ -179,6 +193,11 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
         "noDiscovery": no_discovery,
         "rule": rule_name(args.library),
         "libraryDiscovery": report,
+        "bundleOrder": if args.bundle_order {
+            bundle_order.clone()
+        } else {
+            Vec::new()
+        },
     }))
 }
 

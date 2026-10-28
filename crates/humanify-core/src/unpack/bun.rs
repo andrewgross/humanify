@@ -306,6 +306,11 @@ pub struct BunUnpackOutcome {
     /// Library discovery over the app code (exp095), when asked for —
     /// report-only: nothing is named, moved or renamed by it.
     pub library_discovery: Option<crate::libdetect::discovery::DiscoveryReport>,
+    /// The names mode's claimed placement groups (library-names plan step
+    /// 4, exp156), already converted to the naming era's wrapper-body
+    /// ordinals — the CLI threads them into the naming stage, whose
+    /// layout the split reads. Empty in every other mode.
+    pub claimed_module_regions: Vec<crate::naming::module_names::ClaimedRegion>,
 }
 
 /// What the content carry did: how many modules it could pair, against
@@ -326,6 +331,17 @@ pub struct BundleOrderRow {
     pub file_name: String,
     #[serde(rename = "runtimeIdentifier")]
     pub runtime_identifier: Option<String>,
+    /// The names-mode placement answer, when the planner moved the module
+    /// (exp157's `discover --bundle-order` instrument). None otherwise.
+    #[serde(rename = "indexPath", skip_serializing_if = "Option::is_none")]
+    pub index_path: Option<String>,
+    /// Why the planner left the module in place, when it did. None otherwise.
+    #[serde(rename = "indexLeave", skip_serializing_if = "Option::is_none")]
+    pub index_leave: Option<String>,
+    /// The whole-module vendor content key the planner read the index by
+    /// (`modules::vendor_content`), when the module has one. None otherwise.
+    #[serde(rename = "moduleKey", skip_serializing_if = "Option::is_none")]
+    pub module_key: Option<String>,
 }
 
 /// One factory's extraction ranges (`ExtractedModule`).
@@ -403,6 +419,7 @@ pub fn unpack_bun(
             declared_carry: None,
             app_declarations: Vec::new(),
             library_discovery: discover_raw(code, floor_pieces, floor_request),
+            claimed_module_regions: Vec::new(),
         })
     };
 
@@ -465,6 +482,7 @@ pub fn unpack_bun(
     let mut declared_carry = None;
     let mut app_declarations = Vec::new();
     let mut library_discovery = None;
+    let mut claimed_module_regions = Vec::new();
     // What the bundler kept about the whole bundle (P17), read once.
     let bundle_facts = options.module_identity.bundle_facts(code);
     if let (Some(c), Some(planner)) = (classification.as_mut(), planner.as_ref()) {
@@ -479,6 +497,14 @@ pub fn unpack_bun(
         app_declarations =
             crate::modules::identity::scan_app_declarations(code, &app_statements(c));
         library_discovery = discovery_report(code, &ingest, &options, grammar, &classified_modules);
+        claimed_module_regions = place_names_modules(
+            c,
+            code,
+            &ingest,
+            &options,
+            library_discovery.as_ref(),
+            require_var.as_deref(),
+        )?;
         if let Some(entries) = &prior.stale_era {
             // A stale-era prior (TS or an older hashVersion): re-key its
             // names and order by CONTENT onto this run's structural hashes
@@ -605,6 +631,9 @@ pub fn unpack_bun(
             factory_var: module.name.clone(),
             file_name: rel_path.clone(),
             runtime_identifier: module_plan.identifier.clone(),
+            index_path: record.and_then(|r| r.index_path.clone()),
+            index_leave: record.and_then(|r| r.index_leave.map(str::to_string)),
+            module_key: record.and_then(|r| r.module_key.clone()),
         });
         entries.push(ManifestEntry {
             file_name: rel_path,
@@ -695,7 +724,181 @@ pub fn unpack_bun(
         }),
         app_declarations,
         library_discovery,
+        claimed_module_regions,
     })
+}
+
+/// The names-mode block of [`unpack_bun`] (library-names plan step 4,
+/// exp156): the placement planner decides which wholly claimed factories
+/// MOVE to the index's `vendor/<package>/<file>`, before any name is
+/// chosen, and the claimed LAZY regions are converted to the naming
+/// era's ordinals for the naming stage's own layout. Loud when the
+/// answers cannot be read — a silent fall-through would un-place every
+/// module without a word.
+fn place_names_modules(
+    c: &mut BunModuleClassification,
+    code: &str,
+    ingest: &Ingest<'_>,
+    options: &BunUnpackOptions<'_>,
+    discovery: Option<&crate::libdetect::discovery::DiscoveryReport>,
+    require_var: Option<&str>,
+) -> Result<Vec<crate::naming::module_names::ClaimedRegion>, String> {
+    let Some(source) = options.library_discovery.and_then(|r| r.module_answers) else {
+        return Ok(Vec::new());
+    };
+    if !options.library_discovery.is_some_and(|r| r.list_units) {
+        return Err(
+            "library-matching names needs the discovery claim rows: list_units must be on"
+                .to_string(),
+        );
+    }
+    let report = discovery.ok_or("library-matching names ran no discovery")?;
+    place_factories_from_index(c, code, ingest, report, source, require_var)?;
+    Ok(claimed_regions(
+        ingest,
+        &c.container,
+        &c.factories,
+        &report.placement_groups,
+    ))
+}
+
+/// The names-mode placement consumer (library-names plan step 4, exp156).
+/// The report's claim rows fold — per retained factory, by span — into the
+/// one claim the planner sees for the module; the planner decides move or
+/// stay (conservatively: unclaimed, partial via the fold, contested, or
+/// the index disagreeing all stay); and every MOVED factory records the
+/// index's full vendor path on its record (`index_path`). Identifier
+/// spellings are out of scope: the only readers are the naming ladder's
+/// Index rung (the package name) and the file-name chooser (the path).
+fn place_factories_from_index(
+    c: &mut BunModuleClassification,
+    code: &str,
+    ingest: &Ingest<'_>,
+    report: &crate::libdetect::discovery::DiscoveryReport,
+    source: crate::libdetect::discovery::ModuleAnswersSource<'_>,
+    require_var: Option<&str>,
+) -> Result<(), String> {
+    use crate::place::library_layout::{LayoutInput, RegionInput, plan};
+    // One folded claim per factory: the claims inside its declarator, in
+    // start order. A factory holds no other factory's statements, so one
+    // cursor walks the whole sorted list.
+    let mut claims: Vec<&crate::libdetect::discovery::ClaimRow> = report.claims.iter().collect();
+    claims.sort_by_key(|claim| claim.start);
+    let mut cursor = 0;
+    let mut folded: Vec<Option<String>> = Vec::with_capacity(c.factories.len());
+    for factory in &c.factories {
+        while cursor < claims.len() && claims[cursor].end <= factory.span.start {
+            cursor += 1;
+        }
+        let inside = claims[cursor..]
+            .iter()
+            .take_while(|claim| claim.start < factory.span.end)
+            .filter(|claim| claim.end <= factory.span.end)
+            .map(|claim| Some(claim.package.as_str()));
+        folded.push(crate::place::library_layout::fold_claims(inside));
+    }
+    // The whole-module keys the index holds this run's factories by.
+    let declared = scope::statement_level_names(ingest, &c.container);
+    let keys = fresh_content_keys(code, &c.factories, require_var, &declared);
+    let wanted: std::collections::BTreeSet<String> = keys.iter().flatten().cloned().collect();
+    let answers =
+        crate::libindex::module_answers::read_module_answers(source.dir, source.slice, &wanted)?;
+    let regions: Vec<RegionInput> = c
+        .factories
+        .iter()
+        .enumerate()
+        .map(|(i, factory)| RegionInput {
+            claims: vec![folded[i].clone()],
+            module: keys[i].clone(),
+            sort_key: keys[i]
+                .clone()
+                .unwrap_or_else(|| factory.structural_hash.clone()),
+        })
+        .collect();
+    let layout = plan(&LayoutInput {
+        regions,
+        module_answers: &answers,
+    });
+    for ((factory, placement), key) in c.factories.iter_mut().zip(&layout.regions).zip(keys.iter())
+    {
+        factory.module_key = key.clone();
+        match placement {
+            crate::place::library_layout::Placement::Move { path } => {
+                factory.index_path = Some(path.clone());
+            }
+            crate::place::library_layout::Placement::Leave { reason } => {
+                factory.index_leave = Some(reason);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The claimed placement groups as the naming era will see them
+/// (library-names plan step 4, exp156): each group statement's RAW
+/// container ordinal minus every container statement the unpack
+/// spliced out before it — the vendor-bridge invariant, since the
+/// naming era's wrapper body is the container AFTER the factory
+/// extraction. A statement is gone exactly when it is one declaration
+/// whose every declarator is an extracted factory (a joined declaration
+/// that keeps a declarator survives, minus its factories); a group row
+/// the container does not hold exactly cannot be joined on the naming
+/// side and is dropped whole — a wrong ordinal would move the wrong
+/// statements.
+fn claimed_regions(
+    ingest: &Ingest<'_>,
+    container: &[oxc_span::Span],
+    factories: &[FactoryRecord],
+    groups: &[crate::libdetect::discovery::PlacementGroupRow],
+) -> Vec<crate::naming::module_names::ClaimedRegion> {
+    let extracted: std::collections::HashSet<(u32, u32)> = factories
+        .iter()
+        .map(|f| (f.span.start, f.span.end))
+        .collect();
+    let mut removed: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
+    for node in ingest.semantic().nodes().iter() {
+        let oxc_ast::AstKind::VariableDeclaration(declaration) = node.kind() else {
+            continue;
+        };
+        if !declaration.declarations.is_empty()
+            && declaration
+                .declarations
+                .iter()
+                .all(|d| extracted.contains(&(d.span.start, d.span.end)))
+        {
+            let span = oxc_span::GetSpan::span(node);
+            removed.insert((span.start, span.end));
+        }
+    }
+    let mut era_of: std::collections::HashMap<(u32, u32), usize> =
+        std::collections::HashMap::with_capacity(container.len());
+    let mut removed_before = 0;
+    for (i, span) in container.iter().enumerate() {
+        era_of.insert((span.start, span.end), i - removed_before);
+        if removed.contains(&(span.start, span.end)) {
+            removed_before += 1;
+        }
+    }
+    let mut out = Vec::with_capacity(groups.len());
+    for group in groups {
+        let Some(statements) = group
+            .statements
+            .iter()
+            .map(|row| era_of.get(&(row.start, row.end)).copied())
+            .collect::<Option<Vec<usize>>>()
+        else {
+            continue;
+        };
+        out.push(crate::naming::module_names::ClaimedRegion {
+            statements,
+            claims: group
+                .statements
+                .iter()
+                .map(|row| row.package.clone())
+                .collect(),
+        });
+    }
+    out
 }
 
 /// Library discovery over the app code (exp095), report-only, when the run
@@ -767,6 +970,9 @@ fn discovery_over(
             classified,
             request.options.factory_bodies,
         );
+    }
+    if request.placement_groups {
+        report.placement_groups = crate::libdetect::discovery::placement_groups(&graph, &found);
     }
     Some(report)
 }

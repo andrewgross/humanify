@@ -311,6 +311,55 @@ fn a_statement_whose_hash_lived_in_another_prior_module_reads_as_a_move() {
     assert_ne!(moved.prior_file.as_deref(), Some(moved.file.as_str()));
 }
 
+/// The names mode's pre-filled modules (library-names plan step 4,
+/// exp156) record their OWN trail tier: the trail is the one record of
+/// what the run itself moved, so a run can state its placed bytes without
+/// re-deriving the layout.
+#[test]
+fn the_trail_records_library_prefilled_modules_as_library_index() {
+    let b = bundle();
+    let mut trail = PlacementTrail::default();
+    assign_fossil(
+        &b.values,
+        &b.spans,
+        &b.hashes,
+        None,
+        FossilOptions {
+            trail: Some(&mut trail),
+            library: &[(0, "vendor/zod/index.js".to_string())],
+            ..FossilOptions::default()
+        },
+    )
+    .expect("assign");
+    // Module 0 is statements 0-3, the __esm helper declaration included
+    // (the fossil extract's partition of the whole body).
+    for i in 0..=3u64 {
+        let row = trail
+            .rows
+            .iter()
+            .find(|r| r.index == i)
+            .expect("module 0 row");
+        assert_eq!(row.placed_by, "library-index", "statement {i}");
+        assert_eq!(row.file, "vendor/zod/index.js", "statement {i}");
+    }
+    assert_eq!(
+        trail
+            .rows
+            .iter()
+            .filter(|r| r.placed_by == "library-index")
+            .count(),
+        4
+    );
+    // Nothing else inherits the tier: the beta module (statements 4-6)
+    // still records its fresh fossil names.
+    for i in 4..=6u64 {
+        let beta = trail.rows.iter().find(|r| r.index == i).expect("beta row");
+        assert_eq!(beta.placed_by, "fossil-fresh", "statement {i}");
+    }
+    let eager = trail.rows.iter().find(|r| r.index == 7).expect("eager");
+    assert_eq!(eager.placed_by, "fossil-eager");
+}
+
 /// Two modules whose wrappers carry module names (the naming stage's
 /// module step, docs/design/module-naming.md): the first is helper-first
 /// (`roundToNearest` leads a color module), the second imports it.

@@ -261,6 +261,29 @@ pub fn program_edits(
     edits
 }
 
+/// One source span's coordinates in the text the edits render to
+/// ([`program_edits`] over the era's source): every edit wholly before
+/// the span shifts both ends by its length delta, every edit wholly
+/// inside it shifts only its end — an identifier's edit never crosses a
+/// span boundary. Used by the names mode to carry the placed modules'
+/// spans (era coordinates) into the generated text, where the passes
+/// that re-parse (the prior-diff reconcile) build their own coordinate
+/// systems.
+pub fn span_in_generated_text(edits: &[Replacement], start: u32, end: u32) -> (u32, u32) {
+    let mut s = start as i64;
+    let mut e = end as i64;
+    for r in edits {
+        let delta = r.text.len() as i64 - (r.span.end - r.span.start) as i64;
+        if r.span.end <= start {
+            s += delta;
+            e += delta;
+        } else if r.span.end <= end {
+            e += delta;
+        }
+    }
+    (s.max(0) as u32, e.max(0) as u32)
+}
+
 /// The statement-twin tier's private-name rewrites as edits of `text`
 /// (TS `applyTwinPrivateRenames`: each set in order renames every one of
 /// its `#name` nodes that STILL carries the set's old name). Private names

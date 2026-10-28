@@ -103,6 +103,10 @@ pub fn name_lazy_init_helper(
         return out;
     };
     let current = state.name_of(binding).to_string();
+    // The helper's mask is the ONE rename inside a names-mode placed
+    // module that must run (module-wide, over whatever anything chose),
+    // so it releases the library hold the naming run armed.
+    state.release_library_hold(binding);
     // A settled binding (the transfer carried a name) gets a post-pass row:
     // the plumbing name overrides it.
     let post_pass = binding_state[row].is_settled();

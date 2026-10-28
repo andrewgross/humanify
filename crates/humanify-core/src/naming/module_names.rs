@@ -90,6 +90,112 @@ use evidence::EvidenceSource;
 #[cfg(test)]
 mod module_names_test;
 
+/// One names-mode placement group reaching the naming era
+/// (library-names plan step 4, exp156): the discovery report's
+/// `placementGroups` row for one lazy module, converted by the unpack —
+/// its statements as the naming era's wrapper-body indices (the raw
+/// container ordinal minus every extracted factory statement before it,
+/// the standing vendor-bridge invariant), its claims the row's folded
+/// packages in the report's row order (pendings first, head last).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClaimedRegion {
+    pub statements: Vec<usize>,
+    pub claims: Vec<Option<String>>,
+}
+
+/// What the names-mode placement decided for the era's modules
+/// (library-names plan step 4, exp156): the wholly claimed lazy modules
+/// that MOVE to `vendor/<package>/<file>` (with the module's index in the
+/// era's own extraction), and the moved statements' spans — the
+/// model-exclusion set, applied as a freeze BEFORE the transfer and the
+/// waves in both eras.
+#[derive(Default, Debug)]
+pub struct LibraryLayout {
+    /// `(module index, vendor path)` per moved module, module order.
+    pub moved: Vec<(usize, String)>,
+    /// The moved statements' spans, statement order.
+    pub spans: Vec<(u32, u32)>,
+    /// The same spans in the GENERATED text's coordinates (the render's
+    /// substitutions folded in; written by the naming era after it
+    /// renders). The passes that re-parse the generated text — the
+    /// prior-diff reconcile — resolve their own bindings and cannot read
+    /// the era's coordinates, so they read these instead.
+    pub generated_spans: Vec<(u32, u32)>,
+}
+
+/// The names-mode placement plan over the claimed regions (the planner
+/// is [`crate::place::library_layout`], pure): join each region to the
+/// era's own extraction by STRICT statement-set equality — an intruder
+/// or a missing statement means no match and the region stays — then let
+/// the planner decide move or stay. Same gate as the module step: the
+/// markers must describe the bundle, else nothing moves and nothing is
+/// excluded (the split would not split by modules either).
+pub fn plan_library_modules(source: &ModuleSource<'_>, regions: &[ClaimedRegion]) -> LibraryLayout {
+    use crate::place::library_layout::{LayoutInput, RegionInput, plan};
+    let mut layout = LibraryLayout::default();
+    if regions.is_empty() {
+        return layout;
+    }
+    let body = source.body;
+    let spans: Vec<(u32, u32)> = body.iter().map(|s| span_of(s).unwrap_or((0, 0))).collect();
+    let factory = source.grammar.identify_factory_helper(source.text);
+    let coverage = marker_coverage(body, &spans, factory.as_ref().map(|h| h.name.as_str()));
+    if !crate::place::method::markers_describe_bundle(&coverage) {
+        return layout;
+    }
+    let hashes = vec![String::new(); body.len()];
+    let Ok(extract) = extract_fossil_modules(body, &hashes) else {
+        return layout;
+    };
+    // The join: a module's segment is exactly the region's statements.
+    let mut module_of: HashMap<&[usize], usize> = HashMap::new();
+    for (i, module) in extract.modules.iter().enumerate() {
+        module_of.insert(module.statements.as_slice(), i);
+    }
+    let mut sorted: Vec<usize>;
+    let mut joined: Vec<(usize, RegionInput)> = Vec::new();
+    for region in regions {
+        sorted = region.statements.clone();
+        sorted.sort_unstable();
+        let Some(&module) = module_of.get(sorted.as_slice()) else {
+            continue;
+        };
+        joined.push((
+            module,
+            RegionInput {
+                claims: region.claims.clone(),
+                // Lazy regions have no whole-module key in the index (it
+                // holds bundled CommonJS modules), so an agreed region
+                // takes the planner's synthetic spelling — stable by the
+                // head statement's rename-invariant hash.
+                module: None,
+                sort_key: crate::hash::statement_hash::statement_hash(
+                    &body[extract.modules[module].init_index],
+                ),
+            },
+        ));
+    }
+    if joined.is_empty() {
+        return layout;
+    }
+    let answers = std::collections::BTreeMap::new();
+    let planned = plan(&LayoutInput {
+        regions: joined.iter().map(|(_, region)| region.clone()).collect(),
+        module_answers: &answers,
+    });
+    for ((module, _), placement) in joined.iter().zip(&planned.regions) {
+        if let crate::place::library_layout::Placement::Move { path } = placement {
+            layout.moved.push((*module, path.clone()));
+            for &statement in &extract.modules[*module].statements {
+                if let Some(span) = spans.get(statement) {
+                    layout.spans.push(*span);
+                }
+            }
+        }
+    }
+    layout
+}
+
 /// The lifecycle reason a marked wrapper is skipped by the waves under.
 pub const MODULE_STEP_SKIP: &str = "module-naming";
 
@@ -192,12 +298,16 @@ fn is_barrel(module: &FossilModule) -> bool {
 /// wrappers. Empty (the step does not run) when the markers do not
 /// describe the bundle. `helper_names` are the lazy-init helpers' names
 /// in the text (`naming::plumbing::lazy_init_helpers_of`).
+/// `library_moved` are the module indexes the names mode placed at vendor
+/// paths (exp156): they are neither asked (`asked`/`barrels`) nor counted
+/// as `carried` — the library freeze already skipped their rows.
 pub fn plan_module_naming(
     source: &ModuleSource<'_>,
     graph: &UnifiedGraph,
     state: &RenameState,
     occ: &Occurrences,
     helper_names: &HashSet<String>,
+    library_moved: &[(usize, String)],
     binding_state: &mut [Lifecycle],
 ) -> ModulePlan {
     let body = source.body;
@@ -228,11 +338,15 @@ pub fn plan_module_naming(
             .collect(),
         ..ModulePlan::default()
     };
+    let moved: HashSet<usize> = library_moved.iter().map(|(i, _)| *i).collect();
     for (i, module) in extract.modules.iter().enumerate() {
         let wrapper = wrapper_ident(&body[module.init_index], &module.init_name)
             .and_then(span_of)
             .and_then(|(start, _)| occ.binding_at(start));
         plan.wrappers.push(wrapper);
+        if moved.contains(&i) {
+            continue;
+        }
         let Some(row) = wrapper.and_then(|b| row_of.get(&b).copied()) else {
             continue;
         };

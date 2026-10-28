@@ -81,6 +81,14 @@ pub struct SplitOptions<'a, 'n> {
     /// The run's module wrapper grammar (the toolchain's P3 piece): the
     /// module helper the fresh grouping's vendor bucket takes (review R7).
     pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
+    /// The names mode's placed modules (library-names plan step 4,
+    /// exp156): `(module index, vendor path)` per module the naming
+    /// stage's layout moved — the fossil split pre-fills those paths
+    /// before any match or fresh name. The indices are the era's own
+    /// extraction's, which the wrapper-body 1:1 alignment makes valid
+    /// here. Non-empty with a non-fossil regime is refused (below):
+    /// the layout's model exclusion assumed the module split.
+    pub library: &'a [(usize, String)],
 }
 
 /// Where the split's ≥50 wrapper-binding gate is read. Being a bundled
@@ -276,6 +284,19 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     // coverage of the app code, module factories set aside.
     let coverage = bundle_marker_coverage(&input, shipped, options.module_wrappers);
     let method = choose_split_method(options.markers, options.prior.is_some(), Some(coverage));
+    // A library layout only means something under the module split: the
+    // naming era excluded the moved modules from the model on the premise
+    // that the fossil split would place them. Any other regime here is a
+    // half-state (the markers stopped describing the bundle between the
+    // two stages, or a fossil-split disable) — refuse it rather than
+    // move library code without its exclusion.
+    if !options.library.is_empty() && method.regime != Regime::Fossil {
+        return Err(format!(
+            "library placement requires the fossil split, but this bundle chose {:?} \
+             (check the fossil-split disable, and the markers' coverage)",
+            method.regime
+        ));
+    }
     let (use_namer, use_reviser) = namers_used(method.regime);
     let module_ends = module_ends_kept(&method, options.markers, &input.body);
     drop(ph);
@@ -302,6 +323,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             layout,
             module_wrappers: options.module_wrappers,
             module_ends,
+            library: options.library,
         },
         options.prior,
         trail,

@@ -204,6 +204,31 @@ pub struct FileNameChooser {
     carried: HashSet<(String, String)>,
 }
 
+/// The package FOLDER of a names-mode placement answer
+/// (`vendor/<package>/<file>.js`, scoped packages keeping their
+/// directory) — the name the ladder gives the module. None when the path
+/// is not a placement answer at all.
+pub fn index_folder_of(path: &str) -> Option<&str> {
+    let rest = path.strip_prefix(VENDOR_DIR)?.strip_prefix('/')?;
+    let rest = rest.strip_suffix(".js")?;
+    rest.rsplit_once('/').map(|(folder, _)| folder)
+}
+
+/// The placement answer split into (folder, stem) for the file-name
+/// chooser — the stem is the index's real npm file (`index`),
+/// `module-<N>` for a synthetic one.
+fn index_folder_and_stem(path: &str) -> Option<(String, String)> {
+    let folder = index_folder_of(path)?.to_string();
+    let stem = path
+        .strip_prefix(VENDOR_DIR)?
+        .strip_prefix('/')?
+        .strip_suffix(".js")?
+        .rsplit_once('/')?
+        .1
+        .to_string();
+    Some((folder, stem))
+}
+
 /// A carried `vendor/<folder>/<stem>.js` path split into (folder, stem) —
 /// None when it is not a reusable vendor path.
 fn carried_folder_and_stem(file_name: &str) -> Option<(String, String)> {
@@ -298,6 +323,20 @@ impl FileNameChooser {
             }
             if let Some(file_name) = self.carried_lookup(record) {
                 return lookup(VENDOR_DIR, file_name);
+            }
+            // The names-mode placement answer (library-names plan step 4):
+            // the file is the index's to spell — a real npm file when the
+            // index holds it, a stable `module-<N>` when it does not.
+            // Before the identity member: an index answer outranks what
+            // the module declares about itself, and before the grouped or
+            // flat logic: the folder is the package's, never the name
+            // count's.
+            if let Some((folder, stem)) =
+                record.index_path.as_deref().and_then(index_folder_and_stem)
+            {
+                let used = self.used_by_folder.entry(folder.clone()).or_default();
+                let unique = unique_case_insensitive_name(&stem, used, "");
+                return lookup(VENDOR_DIR, format!("{folder}/{unique}"));
             }
             // A module named as its declared package that declares a member
             // of it is filed as that member (`highlight.js/actionscript`,

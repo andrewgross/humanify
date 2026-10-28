@@ -249,6 +249,7 @@ fn every_key_without_a_flag_was_a_flag_that_moved_or_is_new() {
             || d.starts_with("library.discovery.")
             || d == "library.index_build"
             || d == "library.index_build_max_packages"
+            || d == "library.names_unlocked"
     };
     for k in KEYS
         .iter()

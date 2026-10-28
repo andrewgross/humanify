@@ -2598,6 +2598,24 @@ pub struct DiscoveryRequest<'x> {
     /// The call-context census in the report (`callContext`, exp153): the
     /// `discover` verb's `--call-context`. The pipeline never asks.
     pub call_context: bool,
+    /// The names-mode placement groups in the report
+    /// (`placementGroups`, library-names plan step 4, exp156). The FIRST
+    /// thing the pipeline asks for — a names-mode run only.
+    pub placement_groups: bool,
+    /// Where the index's whole-module answers live (library-names plan
+    /// step 4): a names-mode run reads `modules.<slice>.jsonl` out of the
+    /// loaded index's directory and lets the placement planner move wholly
+    /// claimed factories to `vendor/<package>/<file>`. None: no names mode.
+    pub module_answers: Option<ModuleAnswersSource<'x>>,
+}
+
+/// The index directory a names-mode run reads whole-module answers from,
+/// and the slice whose `modules.<slice>.jsonl` holds them
+/// ([`crate::libindex::module_answers`]). Copy: the request is Copy.
+#[derive(Clone, Copy)]
+pub struct ModuleAnswersSource<'x> {
+    pub dir: &'x std::path::Path,
+    pub slice: &'x str,
 }
 
 impl<'x> DiscoveryRequest<'x> {
@@ -2713,6 +2731,81 @@ pub fn library_regions(graph: &ReferenceGraph, found: &Discovery) -> crate::grap
             .map(|(&u, c)| (graph.units[u as usize].span, id[c.package.as_str()]))
             .collect(),
     )
+}
+
+/// One statement of a placement group: its RAW span (bundle-text
+/// coordinates, the coordinate system every claim row uses) and the fold
+/// over its claims — `None` unclaimed, `Some(INNER_CONTESTED)` when the
+/// statement's own contents disagree.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlacementStatementRow {
+    pub start: u32,
+    pub end: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
+}
+
+/// One names-mode placement group (library-names plan step 4, exp156): a
+/// LAZY module's top-level statements in bundle order — the hoisted
+/// statements first, the module's wrapper statement LAST, its row folding
+/// the claims of the wrapper and its body. The head-last convention is
+/// the caller's join key: the fossil module the split records ends at its
+/// init wrapper, exactly as this row vector does.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlacementGroupRow {
+    pub statements: Vec<PlacementStatementRow>,
+}
+
+/// The names-mode placement groups over a discovery: one per LAZY module
+/// (Factory heads never appear — a bundled CommonJS module is extracted
+/// whole at unpack, where its own claim answers from the report's claim
+/// rows by span). Unclaimed groups ARE listed, with all-`None` rows:
+/// which of them may move is the placement planner's question
+/// (`place::library_layout`), not the exporter's; a run in a matching
+/// mode other than `names` never asks for them.
+pub fn placement_groups(graph: &ReferenceGraph, found: &Discovery) -> Vec<PlacementGroupRow> {
+    let groups = module_groups(graph);
+    let claim_of = |u: u32| found.claims.get(&u).map(|c| c.package.as_str());
+    let row = |u: u32, package: Option<String>| PlacementStatementRow {
+        start: graph.units[u as usize].span.start,
+        end: graph.units[u as usize].span.end,
+        package,
+    };
+    let mut out: Vec<PlacementGroupRow> = Vec::new();
+    for u in 0..graph.units.len() as u32 {
+        if !matches!(graph.units[u as usize].kind, UnitKind::LazyModule) {
+            continue;
+        }
+        let Some(g) = groups.of[u as usize] else {
+            continue;
+        };
+        // The group's hoisted statements, in bundle order: `module_groups`
+        // appends the module's BODY units after them, which fold into the
+        // head's row instead of standing as rows of their own.
+        let pendings = groups.statements[g as usize]
+            .iter()
+            .copied()
+            .filter(|&s| matches!(graph.units[s as usize].kind, UnitKind::Statement));
+        let mut statements: Vec<PlacementStatementRow> = pendings
+            .map(|s| row(s, claim_of(s).map(str::to_string)))
+            .collect();
+        let wrapper_and_body = std::iter::once(claim_of(u)).chain(
+            groups
+                .bodies
+                .get(&u)
+                .into_iter()
+                .flatten()
+                .map(|&b| claim_of(b)),
+        );
+        statements.push(row(
+            u,
+            crate::place::library_layout::fold_claims(wrapper_and_body),
+        ));
+        out.push(PlacementGroupRow { statements });
+    }
+    out
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3524,6 +3617,11 @@ pub struct DiscoveryReport {
     /// ([`DiscoveryRequest::call_context`]; the `discover` verb).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub call_context: Vec<CallContextRow>,
+    /// The names-mode placement groups (library-names plan step 4,
+    /// exp156): one per lazy module, only when asked for
+    /// ([`DiscoveryRequest::placement_groups`]; matching level `names`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub placement_groups: Vec<PlacementGroupRow>,
 }
 
 impl DiscoveryReport {

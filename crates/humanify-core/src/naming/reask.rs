@@ -84,7 +84,8 @@ pub fn class_of(reason: RejectionReason) -> ReaskClass {
         RejectionReason::NoBinding
         | RejectionReason::StaleBinding
         | RejectionReason::ExportedName
-        | RejectionReason::CaptureInSubtree => ReaskClass::Unrecoverable,
+        | RejectionReason::CaptureInSubtree
+        | RejectionReason::LibraryPlaced => ReaskClass::Unrecoverable,
     }
 }
 

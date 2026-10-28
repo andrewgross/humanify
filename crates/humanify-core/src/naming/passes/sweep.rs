@@ -157,6 +157,11 @@ fn is_sweep_candidate(
     if is_convention_carveout(&e.name) || state.is_eval_taint_frozen(e.binding, taint) {
         return false;
     }
+    // A names-mode placed module's bindings are library code: never
+    // asked (the model never sees library-placed code).
+    if state.is_library_held(e.binding) {
+        return false;
+    }
     if state.is_renamed(e.binding) || state.is_decided(e.binding) {
         return false;
     }
@@ -1233,6 +1238,7 @@ pub fn run_deferred_sweep<P: NameProvider>(
     tunables: &WaveTunables,
     decided: &DecidedNames,
     stems: &MinifiedStems,
+    library_spans: &[(u32, u32)],
 ) -> Result<DeferredSweepOutcome, (String, StrategyTrail)> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
@@ -1246,6 +1252,27 @@ pub fn run_deferred_sweep<P: NameProvider>(
     let ph = crate::profiling::phase("sweep:names");
     let taint = collect_eval_with_taint(semantic);
     let mut state = RenameState::with_trail(semantic, anchor, trail, stems.profile());
+    // The names mode's placed modules, in THIS text's coordinates (the
+    // same hold the naming era arms — this parse builds its own
+    // bindings): neither asked (the candidate filter reads the hold)
+    // nor renamable here.
+    if !library_spans.is_empty() {
+        let held: Vec<BindingId> = state
+            .view()
+            .bindings
+            .iter()
+            .enumerate()
+            .filter(|(_, binding)| {
+                library_spans
+                    .iter()
+                    .any(|&(s, e)| binding.id_span.start >= s && binding.id_span.end <= e)
+            })
+            .map(|(i, _)| BindingId(i as u32))
+            .collect();
+        for binding in held {
+            state.mark_library_held(binding);
+        }
+    }
     let sweep = sweep_minted_names(
         semantic,
         &mut state,

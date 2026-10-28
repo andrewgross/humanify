@@ -11,9 +11,14 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib096 import HERE  # noqa: E402
 
-SETS = ["cc", "heldout", "wrangler", "esbuild-app", "test-bun", "test-esbuild", "test-webpack", "test-rollup",
+SETS = ["bun-dev-bun", "bun-dev-node", "bun-held-bun", "bun-held-node", "cc",
+        "heldout", "wrangler", "esbuild-app", "test-bun", "test-esbuild", "test-webpack", "test-rollup",
         "test2-bun", "test2-esbuild", "test2-webpack", "test2-rollup", "dev-webpack", "dev-rollup"]
-SET_NAMES = {"cc": "Claude Code 2.1.216 (sample est.)", "heldout": "held-out apps (67, Bun)",
+SET_NAMES = {"bun-dev-bun": "dev apps (45), Bun build, target=bun, minified (exp150)",
+             "bun-dev-node": "dev apps (45), Bun build, target=node, minified (exp150)",
+             "bun-held-bun": "held-out apps (15), Bun target=bun (exp150; summaries only, never diagnosed)",
+             "bun-held-node": "held-out apps (15), Bun target=node (exp150; summaries only, never diagnosed)",
+             "cc": "Claude Code 2.1.216 (sample est.)", "heldout": "held-out apps (67, Bun)",
              "wrangler": "wrangler (esbuild, re-minified)", "esbuild-app": "task-master-ai (esbuild)",
              "test-bun": "TEST split: new apps, Bun (the held-out recipe)",
              "test-esbuild": "TEST split: the same apps, esbuild (the index's esbuild recipe)",

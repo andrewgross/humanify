@@ -153,6 +153,72 @@ sample of 2.1.216). Rebuild only what Bun needs:
   - The 034 eval: `novel` / `realLn` unchanged, vendor noise down.
 - Andrew decides the flip.
 
+### 5. Placement stability (exp157)
+
+- **The question.** `names` mode placed a library differently depending on whether the run built its tree
+  from scratch or inherited a prior tree — the same module content landed at different `vendor/` paths,
+  which the cross-version diff books as whole-file remove + add.
+- **The diagnosis.** The planner's `unclaimed` verdict (no factory claim inside the region's span — the
+  bundler scattered the package between versions, exp047's mechanism) fell back to hash names that are
+  derived from the bundle's COMPOSITION: a per-package ordinal rank of the regions present, so adding or
+  removing one region elsewhere in the package renumbered the survivors. Shape itself was proven innocent:
+  a stub run of the same bundle with and without `--prior-version` placed the naming era identically
+  (15 files / 39 statements, byte-identical); every divergence traced to composition or to the naming era's
+  strict statement-set join (a fossil joins a region only on exact statement-set equality — content drift
+  flips the join wholesale, so the region loses its index answer and falls back).
+- **The fix** (both in `crates/humanify-core/src/place/library_layout.rs`):
+  1. an `unclaimed` region with a CLEAN index answer (one owner) now moves on the INDEX's evidence instead
+     of leaving; contested / partial / multi-owner / no-row regions still leave unchanged;
+  2. synthetic file names come from the region's own content (`module-<first 8 of the module head
+statement's rename-invariant hash>`), not from the bundle's composition; arrival order only breaks a
+     tie (`-2`, `-3`), so adding a region elsewhere in the package can no longer rename the survivors.
+- **What it bought.** On the quiet pair (2.1.85→86, names mode): `vendorNoise` 3,192 → 136 lines,
+  `vendorChurn` 4,732 → 1,633, bodies-name-only 3,132 → 100, `movedPath` 10 → 0, identical bytes 1,784 →
+  9,029; 86% of vendor bytes sit at index paths on both sides (was 52%). Across all four pairs (names
+  mode, vs the exp156 baseline): `vendorNoise` 4,766 → 1,491, `vendorChurn` 8,600 → 5,184, `vendorReal`
+  3,834 → 3,693, `novel` / `realLn` byte-equal per pair and total (4,188 / 416,377). Warm self-hop
+  byte-identical with 0 cache writes.
+
+  Per pair, names mode (exp156 baseline → exp157; vR = vendorReal, vN = vendorNoise, vC = vendorChurn,
+  mints = mintedLeftovers):
+
+  | pair    | vR          | vN          | vC          | bodies-name-only | mints     |
+  | ------- | ----------- | ----------- | ----------- | ---------------- | --------- |
+  | 85→86   | 1540 → 1497 | 3192 → 136  | 4732 → 1633 | 3132 → 100       | 668 → 655 |
+  | 118→119 | 865 → 835   | 10 → 10     | 875 → 845   | 0 → 0            | 209 → 209 |
+  | 197→198 | 865 → 862   | 1367 → 1148 | 2232 → 2010 | 4 → 0            | 211 → 242 |
+  | 215→216 | 564 → 499   | 197 → 197   | 761 → 696   | 14 → 14          | 666 → 663 |
+
+  In DEFAULT mode (vs the 2026-10-03 reference `ref-scratch-0f338ffa-r1`; conflates the merged exp150–155
+  arcs since the fix is byte-inert there): vendorReal 1302 → 454, vendorNoise 3524 → 1199, mints 341 → 241,
+  `novel` / `realLn` byte-equal (4,188 / 416,377).
+
+- **The residual is not placement.** The remaining `vendorReal` (1,497 on the quiet pair) decomposes as:
+  1,298 lines in 13 `trulyAdded` files — the naming era's strict statement-set join flipping between
+  versions (a region emitted as a module on one side, fossil-bound on the other); 622 lines of rename
+  ripple in `realChange` files — minted names re-rolled between the two runs and appear in string-literal
+  and require-path positions (the scorer's signature preserves literals), plus app-side emitted-path
+  changes that vendor files `require()`. Both are naming-era phenomena, not path choice.
+- **Gates.**
+  - `npm run check`: **ALL 13 STAGES PASSED**, exit 0.
+  - Default-mode neutrality (branch parent `1840f83d6`, pair 85→86, warm standing cache,
+    `--endpoint http://127.0.0.1:9/v1`): **NEUTRAL** — 0 differing files / 0 differing lines, cache
+    writes +0/+0, exit 0/0. The fix is byte-inert with `names` off.
+  - Names-mode neutrality (same pair and cache, the four `names` settings on, live endpoint): valid run —
+    the baseline leg wrote **0** cache entries (it replayed the candidate's 1,027 answers exactly) and
+    exits match (0/0) — and **NOT NEUTRAL by design**: 3,283 files / 23,613 lines, all of it the intended
+    mechanism (vendor paths moved onto index evidence and content-derived names, plus the `require` lines
+    and call sites that point at them; the `src/` half is require-literal + import-call updates only).
+  - Determinism: every pair exits 0 with cache +0; warm self-hop byte-identical, 0 cache writes. The COLD
+    self-hop on 2.1.216 reads 1,264 lines — outside the 2–184 reference range, same as the exp156 baseline
+    (1,294): that range is measured with naming locked, and `names` mode re-rolls vendor and app names
+    freely, so it is the regime, not this change.
+  - Library scorer (exp096, structural rule, the edges/2 index, the four `names` settings): byte-identical
+    to the exp156 baseline on all three corpora — cc P 1.0 / R 0.819 / F0.5 0.958, app claimed 0, wrong
+    family 0; bun-dev P 99.8% / wrong 149.9 KB; bun-held P 100% / wrong 5.6 KB. Placed share on the quiet
+    pair: 86% of vendor bytes at index paths on BOTH sides (1,220 index / 358 fallback / 11 declared /
+    3 asset factories per tree).
+
 ## Not in this plan
 
 - Identifier restore from package source.

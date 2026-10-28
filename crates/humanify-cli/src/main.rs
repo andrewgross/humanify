@@ -140,6 +140,10 @@ enum Command {
         /// Also take the call-context census (`callContext`, exp153).
         #[arg(long)]
         call_context: bool,
+        /// Also list every extracted module with the names-mode placement
+        /// answer (`indexPath` / `indexLeave`) under `bundleOrder` (exp157).
+        #[arg(long)]
+        bundle_order: bool,
         /// Where the adapter unpacks (default: a scratch dir, removed).
         #[arg(long)]
         work_dir: Option<String>,
@@ -288,6 +292,7 @@ fn main() {
             bundler,
             unit_prints,
             call_context,
+            bundle_order,
             work_dir,
             out,
         }) => {
@@ -305,6 +310,7 @@ fn main() {
                 bundler: bundler.as_deref(),
                 unit_prints,
                 call_context,
+                bundle_order,
                 work_dir: work_dir.as_deref(),
             };
             if let Err(e) = humanify_cli::discover_verb::run_discover(&args, out.as_deref()) {

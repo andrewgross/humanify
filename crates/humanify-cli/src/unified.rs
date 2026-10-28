@@ -408,8 +408,13 @@ fn pipeline_body(
         prior_path,
         switches.switch_on(Switch::ManifestPriorOrder),
         // `--library-matching report`: discovery runs, its rows go to the
-        // library report (and the diagnostics), nowhere else.
-        (config.library.matching == LibraryMatching::Report)
+        // library report (and the diagnostics), nowhere else. `names`
+        // (plan step 4, under its unlock) asks for the same report and
+        // reads the index's whole-module answers — the unpack places
+        // wholly claimed factories at the index's vendor paths, and
+        // nothing else reads them. The request builder attaches the
+        // answers itself (the discover verb builds the same request).
+        (config.library.matching != LibraryMatching::Off)
             .then(|| config.library.discovery_request(library.index.as_ref())),
         profiler,
         renderer,
@@ -441,6 +446,7 @@ fn pipeline_body(
         profiler,
         mixed_files: &mixed_files,
         failed_calls: Default::default(),
+        claimed_regions: &unpacked.claimed_module_regions,
     };
     drop(ph);
     let ph = phase("format+naming");
@@ -496,6 +502,9 @@ fn pipeline_body(
             // runtime the split is handed — being a bundled app is a
             // property of the input.
             input_bundle: Some(bundled_code.as_str()),
+            // exp156: the naming stage's layout — which modules the names
+            // mode placed at the index's vendor paths.
+            library: &outcome.library_layout.moved,
         };
         let _ph = phase("split");
         let span = profiler.pipeline_span("split");
@@ -766,7 +775,9 @@ fn load_library_index(
     stop: &std::sync::atomic::AtomicBool,
 ) -> Result<LibraryLoad, Crash> {
     use humanify_core::libindex::lookup::LoadError;
-    if config.library.matching != LibraryMatching::Report {
+    // `names` loads the slice too (its placement answers live beside it);
+    // only `off` skips the machinery entirely.
+    if config.library.matching == LibraryMatching::Off {
         return Ok(LibraryLoad::default());
     }
     let (dir, source) = match index_job {
@@ -800,26 +811,35 @@ fn load_library_index(
     };
     let recipe =
         humanify_core::libindex::recipe::detect_recipe(code, toolchain.bundler, toolchain.minifier);
-    match LibraryIndex::load(&dir, &recipe, config.library.lookup.terser_slices) {
-        Ok(index) => Ok(LibraryLoad {
+    let load = match LibraryIndex::load(&dir, &recipe, config.library.lookup.terser_slices) {
+        Ok(index) => LibraryLoad {
             index_id: Some(index.id.clone()),
             index: Some(index),
             recipe_missing: None,
             source,
-        }),
+        },
         Err(LoadError::NoSlice { id, why }) => {
+            // A report run goes on with path/banner detection only; a
+            // names run has nothing to place WITH, so it refuses, loudly,
+            // with the same reason the report would warn about.
+            if config.library.matching == LibraryMatching::Names {
+                return Err(Crash(format!("--library-matching names cannot run: {why}")));
+            }
             let warning =
                 format!("WARNING: {why} — library matching reports path/banner detection only");
             renderer.message(&warning);
-            Ok(LibraryLoad {
+            LibraryLoad {
                 index: None,
                 index_id: Some(id),
                 recipe_missing: Some(warning),
                 source,
-            })
+            }
         }
-        Err(LoadError::Unusable(e)) => Err(Crash(format!("library index {}: {e}", dir.display()))),
-    }
+        Err(LoadError::Unusable(e)) => {
+            return Err(Crash(format!("library index {}: {e}", dir.display())));
+        }
+    };
+    Ok(load)
 }
 
 /// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved
@@ -1194,6 +1214,11 @@ struct NamingRun<'a> {
     /// The naming stage's failed calls over every file (the waves and
     /// sweeps, the module namer) — the run's `providerErrors`.
     failed_calls: crate::provider_failures::ProviderFailures,
+    /// The names mode's claimed placement groups (library-names plan step
+    /// 4, exp156): the unpack already converted them into the naming
+    /// era's wrapper-body ordinals for the bundle's runtime file. Empty
+    /// in every other mode.
+    claimed_regions: &'a [humanify_core::naming::module_names::ClaimedRegion],
 }
 
 impl NamingRun<'_> {
@@ -1281,6 +1306,7 @@ impl NamingRun<'_> {
                 fresh: formatted,
                 prior: self.prior,
                 library,
+                claimed_regions: self.claimed_regions,
             },
             &self.config,
             &self.provider,

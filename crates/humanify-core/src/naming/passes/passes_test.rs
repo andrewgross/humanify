@@ -997,6 +997,7 @@ fn the_deferred_sweep_skips_decided_names_and_keeps_exhausted_ones() {
         &crate::naming::waves::batch::WaveTunables::default(),
         &decided,
         &crate::rename::floor::MinifiedStems::empty(crate::rename::name_profile::NameProfile::Bun),
+        &[],
     )
     .expect("the sweep parses its text");
     let asked = provider.asked.borrow().clone();
