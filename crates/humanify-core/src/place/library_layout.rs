@@ -27,11 +27,13 @@
 //!
 //! Synthetic names are the index's misses: a claimed region with no clean
 //! file answer takes `module-<hash8>.js`, where hash8 is the first 8 hex
-//! of the region's own content-derived sort key (its module head
-//! statement's rename-invariant hash) — so neither the bundle's order nor
-//! the package's other regions can rename it (exp157: an ordinal rank
-//! renumbered whenever a version's composition changed). A tie in the
-//! sort key itself falls back to arrival order as `-2`, `-3`.
+//! of the region's own content-derived sort key — for the naming era, the
+//! module's whole statement set hashed together (exp158; the head
+//! statement's hash alone collided across different modules and renumbered
+//! a package's synthetic regions whenever a version's composition
+//! changed) — so neither the bundle's order nor the package's other
+//! regions can rename it. A tie in the sort key itself falls back to
+//! arrival order as `-2`, `-3`.
 
 use std::collections::BTreeMap;
 
@@ -255,13 +257,14 @@ fn resolve_paths(input: &LayoutInput, wants: &[Want]) -> Vec<Option<String>> {
 }
 
 /// Name each package's synthetic regions after their OWN content —
-/// `module-<first 8 of the sort key>.js`, the module head statement's
-/// rename-invariant hash — so no other region's presence and no bundle
-/// order can rename one (exp157: the ordinal scheme renumbered a
-/// package's synthetic regions whenever a version's composition added or
-/// dropped one, and unchanged content landed at a new path). Only a tie
-/// in the sort key itself — the same blurred head — falls back to
-/// arrival order, spelled `-2`, `-3`, … after the first.
+/// `module-<first 8 of the sort key>.js`, the caller's content key — so
+/// no other region's presence and no bundle order can rename one (exp157:
+/// the ordinal scheme renumbered a package's synthetic regions whenever a
+/// version's composition added or dropped one, and unchanged content
+/// landed at a new path; exp158: the era's key is the module's whole
+/// statement set hashed together, since a blurred head statement alone
+/// collides across different modules). Only a tie in the sort key itself
+/// falls back to arrival order, spelled `-2`, `-3`, … after the first.
 fn assign_synthetic_paths(input: &LayoutInput, wants: &[Want], paths: &mut [Option<String>]) {
     let mut by_package: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
     for (idx, want) in wants.iter().enumerate() {

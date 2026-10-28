@@ -219,6 +219,52 @@ statement's rename-invariant hash>`), not from the bundle's composition; arrival
     pair: 86% of vendor bytes at index paths on BOTH sides (1,220 index / 358 fallback / 11 declared /
     3 asset factories per tree).
 
+### 6. The era's synthetic names and its join (exp158)
+
+Two mechanical blockers on the way to identifier restoration (step 7): the era's synthetic names
+renamed on composition changes, and the strict region-to-module join was suspected of flipping
+wholesale on content drift. Branch `exp158-naming-stability`.
+
+- **Fix 1 — the synthetic key is the module's whole statement set.** The era's synthetic
+  `module-<hash8>.js` names keyed the module's HEAD statement only; short generic wrappers (the same
+  blurred `var m = W(() => …)` shape) tie across different modules, and the tie fell to arrival
+  order — so a version that discovered one more region renamed every survivor (the eval pair's
+  `trulyAdded` bucket held the `lodash/module-df83ae16{,-2,-3}` and `lodash-es/module-df83ae16{,-2}`
+  tie family and the `2374bc3b` collision shared by `@azure/core-tracing` and `@smithy/types`). The
+  era's key (`module_content_key`, `naming/module_names.rs`) is now the module's per-statement
+  rename-invariant hashes SORTED and hashed together — order-independent, content-derived — with
+  arrival order only breaking an exact content tie (`module-<key8>-2.js`). The unpack side
+  (`place_factories_from_index`) is untouched: its per-factory text keys were never the disease.
+  Owner note: the task pointed at `place/vendor_names.rs`, which does not exist — the measured
+  disease is the era's key in `naming/module_names.rs`; `modules/vendor_names.rs`'s
+  `FileNameChooser` `lib_<hash8>-N` uniquifier is default-reachable but ties only byte-identical
+  bodies (no measured churn on the pair) and was left alone.
+- **Fix 2 — the drift-tolerant join relaxation is REFUTED by measurement.** The strict join (a
+  region joins the module whose statement set is exactly its own) was suspected of flipping
+  wholesale on content drift. The statement-level census (exp157's join census) put the two-sided
+  overlap bar at 0.55 — the lowest symmetric bar with zero conflicting candidates. The OUTCOME
+  census says otherwise: dumping the join's inputs from the binary on the 2.1.85→2.1.86 pair and
+  replaying the join offline (the replay reproduces the strict join counts, 75/52, AND the pair's
+  bucket counts, trulyRemoved 34 / trulyAdded 13, exactly), every bar from 0.5 to 0.95 in all three
+  forms — two-sided, region-side only, module-side only — INCREASED the era's one-sided placed
+  paths (strict 34/13 → 0.55 two-sided 99/59 → 0.55 region-side 156/146); the near-miss
+  relationships themselves do not replicate across versions, because the claims flip packages
+  wholesale (matching's territory). The relaxation shipped nowhere; the strict join stays, with
+  exp158's PACKAGE GUARD (a module two packages claim never moves, whichever pass — a safety
+  property; on the pair it refused 0 exact and 4–5 fuzzy candidates).
+- **Reachability.** Both fixes are names-mode-only: `humanify-cli/src/config.rs` sets
+  `module_answers`/`placement_groups` only when `matching == names`, `place_names_modules`
+  early-returns without them, and `plan_library_modules` returns immediately on empty regions. No
+  default flip; `library.names_unlocked` stays measurement-only.
+- **Gates.** On the quiet pair's stub trees (the tree-compare buckets, the instrument the join
+  disease was measured with): the final design reproduces exp157's placement exactly — trulyAdded
+  13 / trulyRemoved 34 / movedPath 0 / nameOnly 1,588 / realChange 3, before AND after (the stub
+  pair's `nameOnly` mass is the stub namer's raw-spelling drift, not placement); re-placing the
+  era's synthetic files costs 35 `movedPath` on 2.1.85 and 15 on 2.1.86 and nothing else
+  (identical 1,589, nameOnly 0, realChange 0). The rejected 0.55 relaxation, measured on the same
+  instrument: trulyAdded 13 → 59, trulyRemoved 34 → 99. The 034 eval and the library scorer: see
+  the experiment report.
+
 ## Not in this plan
 
 - Identifier restore from package source.

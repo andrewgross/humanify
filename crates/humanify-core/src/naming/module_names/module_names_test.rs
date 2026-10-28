@@ -472,7 +472,7 @@ fn a_wholly_claimed_module_moves_to_vendor_and_is_never_asked() {
     let layout: &LibraryLayout = &out.library_layout;
     assert_eq!(
         layout.moved,
-        vec![(1usize, "vendor/ms/module-2374bc3b.js".to_string())],
+        vec![(1usize, "vendor/ms/module-55da5bd8.js".to_string())],
         "only the wholly claimed module moves; the partial one stays: {:?}",
         layout.moved
     );
@@ -522,7 +522,7 @@ fn a_moved_modules_exclusion_holds_over_a_prior_too() {
     let layout = &out.library_layout;
     assert_eq!(
         layout.moved,
-        vec![(1usize, "vendor/ms/module-2374bc3b.js".to_string())]
+        vec![(1usize, "vendor/ms/module-55da5bd8.js".to_string())]
     );
     let code = out.code.expect("shipped");
     assert!(
@@ -549,5 +549,191 @@ fn an_unjoinable_region_moves_nothing() {
     assert!(
         out.library_layout.moved.is_empty(),
         "an unjoinable region moves nothing"
+    );
+}
+
+// ---- exp158: the synthetic name is the module's own statement-set hash,
+// the join stays strict (the drift-tolerant relaxation was measured and
+// refuted — see plan_library_modules), and a module two packages claim
+// never moves -------------------------------------------------------------------
+
+use crate::naming::module_names::{ModuleSource, plan_library_modules};
+
+/// The naming era, purely: parse `source`, take the program body (no
+/// wrapper), and plan the claimed regions against the era's extraction.
+fn era_layout(source: &str, regions: &[ClaimedRegion]) -> LibraryLayout {
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, source, "test.js");
+    let json = crate::ingest::program_estree_json(ingest.program);
+    let body = crate::cut::container_statement_values(&json, None)
+        .expect("program body")
+        .clone();
+    plan_library_modules(
+        &ModuleSource {
+            body: &body,
+            text: source,
+            grammar: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
+        },
+        regions,
+    )
+}
+
+fn claimed_all(statements: &[usize], package: &str) -> ClaimedRegion {
+    ClaimedRegion {
+        statements: statements.to_vec(),
+        claims: statements
+            .iter()
+            .map(|_| Some(package.to_string()))
+            .collect(),
+    }
+}
+
+/// Three modules whose wrapper statements are the same blurred shape
+/// (`var mX = W(() => { gY(); })` — the identifiers the hash masks), each
+/// preceded by its own helper whose literal differs: m0 = 0..=2 (with the
+/// W helper), m1 = 3..=4, m2 = 5..=6. The wrappers' head hashes TIE; the
+/// modules' contents differ.
+const TIE_BUNDLE: &str = "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n\
+function hc(x) {\n  return x + \"c-one\";\n}\n\
+var mc = W(() => {\n  gA();\n});\n\
+function ha(x) {\n  return x + \"a-two\";\n}\n\
+var ma = W(() => {\n  gB();\n});\n\
+function hb(x) {\n  return x + \"b-three\";\n}\n\
+var mb = W(() => {\n  gC();\n});\n";
+
+// exp158, the brief's composition fixture: the same library module
+// discovered with a sibling added elsewhere in the package must land the
+// SAME vendor path. Under the head-hash scheme the tied wrappers fell to
+// arrival order (`-2`, `-3`), so the sibling — sorting first — renamed
+// every survivor.
+#[test]
+fn a_composition_change_elsewhere_in_the_package_leaves_the_shared_names_alone() {
+    let two = era_layout(
+        TIE_BUNDLE,
+        &[claimed_all(&[3, 4], "ms"), claimed_all(&[5, 6], "ms")],
+    );
+    // The next version discovers m0's region too.
+    let three = era_layout(
+        TIE_BUNDLE,
+        &[
+            claimed_all(&[0, 1, 2], "ms"),
+            claimed_all(&[3, 4], "ms"),
+            claimed_all(&[5, 6], "ms"),
+        ],
+    );
+    assert_eq!(two.moved.len(), 2, "{:?}", two.moved);
+    assert_eq!(three.moved.len(), 3, "{:?}", three.moved);
+    assert_eq!(
+        two.moved[0], three.moved[1],
+        "the shared module keeps its name whatever else joins the package"
+    );
+    assert_eq!(
+        two.moved[1], three.moved[2],
+        "the shared module keeps its name whatever else joins the package"
+    );
+}
+
+#[test]
+fn tied_head_hashes_get_distinct_names_when_the_statement_sets_differ() {
+    let out = era_layout(
+        TIE_BUNDLE,
+        &[
+            claimed_all(&[0, 1, 2], "ms"),
+            claimed_all(&[3, 4], "ms"),
+            claimed_all(&[5, 6], "ms"),
+        ],
+    );
+    assert_eq!(out.moved.len(), 3, "{:?}", out.moved);
+    let (_, path_a) = &out.moved[0];
+    let (_, path_b) = &out.moved[1];
+    let (_, path_c) = &out.moved[2];
+    assert_ne!(path_a, path_b, "distinct contents, distinct names");
+    assert_ne!(path_b, path_c, "distinct contents, distinct names");
+    assert_ne!(path_a, path_c, "distinct contents, distinct names");
+    for (i, (_, path)) in out.moved.iter().enumerate() {
+        assert!(
+            path.starts_with("vendor/ms/module-") && path.ends_with(".js"),
+            "module {i} takes the planner's synthetic spelling: {path}"
+        );
+        assert!(
+            !path.contains("-2"),
+            "the members are distinguished by content, not arrival: {path}"
+        );
+    }
+}
+
+#[test]
+fn a_content_tie_keeps_its_members_distinct_by_arrival_order() {
+    // Two modules whose STATEMENT SETS hash identically (same helper, same
+    // wrapper shape) cannot share a path: the first by (sort key, arrival)
+    // keeps the plain name, the next takes -2 — bundle order decides ONLY
+    // inside a content tie.
+    let bundle = "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n\
+function ha(x) {\n  return x + \"same\";\n}\n\
+var ma = W(() => {\n  g();\n});\n\
+function hb(x) {\n  return x + \"same\";\n}\n\
+var mb = W(() => {\n  g();\n});\n\
+function hcm(x) {\n  return x + \"same\";\n}\n\
+var mc2 = W(() => {\n  g();\n});\n";
+    let out = era_layout(
+        bundle,
+        &[claimed_all(&[3, 4], "ms"), claimed_all(&[5, 6], "ms")],
+    );
+    assert_eq!(out.moved.len(), 2, "{:?}", out.moved);
+    assert_eq!(out.moved[0].0, 1);
+    assert_eq!(out.moved[1].0, 2);
+    let plain = out.moved[0].1.clone();
+    let second = out.moved[1].1.clone();
+    assert!(plain.starts_with("vendor/ms/module-"), "{plain}");
+    assert!(!plain.contains("-2"), "{plain}");
+    assert_eq!(
+        second,
+        format!("{}-2.js", plain.strip_suffix(".js").expect("a .js path")),
+        "the exact content tie falls back to arrival order"
+    );
+}
+
+// exp158, the join stays STRICT (the drift-tolerant relaxation was
+// measured and refuted on the 2.1.85→2.1.86 pair — every overlap bar from
+// 0.5 to 0.95, in all three forms, INCREASED the era's one-sided placed
+// paths instead of collapsing the trulyAdded files it targeted: the
+// near-miss relationships do not replicate across versions): a region
+// whose statement set has drifted off its module's segment does not join,
+// whatever the overlap.
+#[test]
+fn a_region_drifted_off_its_module_does_not_join() {
+    // m2 = statements 6..=8; the region reports 6,7 — two thirds of both
+    // sides, and still no join: only an exact statement set joins.
+    let out = era_layout(BUNDLE, &[claimed_all(&[6, 7], "ms")]);
+    assert!(
+        out.moved.is_empty(),
+        "a drifted region does not join: {:?}",
+        out.moved
+    );
+}
+
+#[test]
+fn a_region_the_module_mostly_does_not_hold_does_not_join() {
+    // Statement 7 alone sits in m2 = 6..=8.
+    let out = era_layout(BUNDLE, &[claimed_all(&[7], "ms")]);
+    assert!(
+        out.moved.is_empty(),
+        "a one-of-three region does not join: {:?}",
+        out.moved
+    );
+}
+
+// exp158, the package guard: a module two packages claim (here the region
+// covers m2 exactly, but statement 8 — its own wrapper — is claimed by
+// zod) is never moved, whoever agrees: moving it would merge two
+// packages' code into one vendor file.
+#[test]
+fn a_module_two_packages_claim_is_never_moved() {
+    let regions = vec![claimed_all(&[6, 7, 8], "ms"), claimed_all(&[8], "zod")];
+    let out = era_layout(BUNDLE, &regions);
+    assert!(
+        out.moved.is_empty(),
+        "a contested module never moves: {:?}",
+        out.moved
     );
 }

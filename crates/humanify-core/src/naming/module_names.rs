@@ -66,6 +66,7 @@ use std::collections::{HashMap, HashSet};
 
 use humanify_model::llm::NameProvider;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::artifact_dump::DispatchLog;
 use crate::graph::UnifiedGraph;
@@ -84,7 +85,7 @@ use crate::rename::transfer::lifecycle::Lifecycle;
 use crate::rename::validated::scopes::BindingId;
 use crate::rename::validated::{RejectionReason, RenameRequest, RenameState, TrailSpec};
 use crate::trail::{Attempt, Outcome, Tier};
-use crate::twins::fossil::{FossilModule, extract_fossil_modules, marker_coverage};
+use crate::twins::fossil::{FossilExtract, FossilModule, extract_fossil_modules, marker_coverage};
 use evidence::EvidenceSource;
 
 #[cfg(test)]
@@ -125,11 +126,25 @@ pub struct LibraryLayout {
 
 /// The names-mode placement plan over the claimed regions (the planner
 /// is [`crate::place::library_layout`], pure): join each region to the
-/// era's own extraction by STRICT statement-set equality — an intruder
-/// or a missing statement means no match and the region stays — then let
-/// the planner decide move or stay. Same gate as the module step: the
-/// markers must describe the bundle, else nothing moves and nothing is
-/// excluded (the split would not split by modules either).
+/// era's own extraction — a region joins the module whose statement set
+/// is exactly its own ([`join_regions`]; a module two packages claim is
+/// never joined) — then let the planner decide move or stay. Same gate as
+/// the module step: the markers must describe the bundle, else nothing
+/// moves and nothing is excluded (the split would not split by modules
+/// either).
+///
+/// exp158 tried the drift-tolerant relaxation (a join at a two-sided
+/// overlap bar, X derived from the exp157 join census at 0.55) and
+/// REFUTED it by measurement: replaying the join offline over the
+/// 2.1.85→2.1.86 pair (the join inputs dumped from the binary, the replay
+/// reproducing both the strict join counts and the pair's bucket counts
+/// exactly), every bar from 0.5 to 0.95 and all three forms (two-sided,
+/// region-side only, module-side only) INCREASED the era's one-sided
+/// placement — strict 34/13 moved paths held on one version only, 0.55
+/// two-sided 99/59 — because the near-miss relationships themselves do
+/// not replicate across versions (the claims flip packages wholesale,
+/// matching's territory). The strict join stays; what changed is the
+/// NAME ([`module_content_key`]) and the guard.
 pub fn plan_library_modules(source: &ModuleSource<'_>, regions: &[ClaimedRegion]) -> LibraryLayout {
     use crate::place::library_layout::{LayoutInput, RegionInput, plan};
     let mut layout = LibraryLayout::default();
@@ -147,31 +162,20 @@ pub fn plan_library_modules(source: &ModuleSource<'_>, regions: &[ClaimedRegion]
     let Ok(extract) = extract_fossil_modules(body, &hashes) else {
         return layout;
     };
-    // The join: a module's segment is exactly the region's statements.
-    let mut module_of: HashMap<&[usize], usize> = HashMap::new();
-    for (i, module) in extract.modules.iter().enumerate() {
-        module_of.insert(module.statements.as_slice(), i);
-    }
-    let mut sorted: Vec<usize>;
+    let join_of = join_regions(regions, &extract);
     let mut joined: Vec<(usize, RegionInput)> = Vec::new();
-    for region in regions {
-        sorted = region.statements.clone();
-        sorted.sort_unstable();
-        let Some(&module) = module_of.get(sorted.as_slice()) else {
-            continue;
-        };
+    for (region, module) in regions.iter().zip(&join_of) {
+        let Some(module) = module else { continue };
         joined.push((
-            module,
+            *module,
             RegionInput {
                 claims: region.claims.clone(),
                 // Lazy regions have no whole-module key in the index (it
                 // holds bundled CommonJS modules), so an agreed region
                 // takes the planner's synthetic spelling — stable by the
-                // head statement's rename-invariant hash.
+                // module's own statement-set content key.
                 module: None,
-                sort_key: crate::hash::statement_hash::statement_hash(
-                    &body[extract.modules[module].init_index],
-                ),
+                sort_key: module_content_key(&extract.modules[*module], body),
             },
         ));
     }
@@ -194,6 +198,101 @@ pub fn plan_library_modules(source: &ModuleSource<'_>, regions: &[ClaimedRegion]
         }
     }
     layout
+}
+
+/// Join every region to the era module it sits in, per region (`None` =
+/// no join). The extraction partitions the body, so every statement sits
+/// in at most one module; every claim names a package. One pass: a
+/// region joins the module whose statement set is exactly its own — the
+/// drift-tolerant relaxation was measured and refuted (see
+/// [`plan_library_modules`]) — and never one two packages claim.
+fn join_regions(regions: &[ClaimedRegion], extract: &FossilExtract) -> Vec<Option<usize>> {
+    let mut claims_of: HashMap<usize, Vec<&str>> = HashMap::new();
+    for region in regions {
+        for (&statement, claim) in region.statements.iter().zip(&region.claims) {
+            if let Some(package) = claim.as_deref() {
+                claims_of.entry(statement).or_default().push(package);
+            }
+        }
+    }
+    let mut module_of: HashMap<&[usize], usize> = HashMap::new();
+    for (i, module) in extract.modules.iter().enumerate() {
+        module_of.insert(module.statements.as_slice(), i);
+    }
+    // The exact pass — with exp158's package guard: two packages in one
+    // module never move.
+    let mut sorted: Vec<usize>;
+    let mut join_of: Vec<Option<usize>> = Vec::with_capacity(regions.len());
+    for region in regions {
+        sorted = region.statements.clone();
+        sorted.sort_unstable();
+        let join = module_of
+            .get(sorted.as_slice())
+            .copied()
+            .and_then(|module| {
+                let package = region_package(&region.claims);
+                (!packages_conflict(&extract.modules[module], &claims_of, package.as_deref()))
+                    .then_some(module)
+            });
+        join_of.push(join);
+    }
+    join_of
+}
+
+/// The region's own claim fold — the one package its claims agree on, or
+/// `None` (unclaimed, or a fold whose own contents disagree, the
+/// [`INNER_CONTESTED`] sentinel).
+fn region_package(claims: &[Option<String>]) -> Option<String> {
+    use crate::place::library_layout::{INNER_CONTESTED, fold_claims};
+    match fold_claims(claims.iter().map(|c| c.as_deref())) {
+        Some(package) if package != INNER_CONTESTED => Some(package),
+        _ => None,
+    }
+}
+
+/// exp158's package guard: the claims inside the module's statements and
+/// the joining region's own claim fold must name at most ONE package —
+/// two in one vendor file would merge two packages' code, whoever
+/// agrees. `None` (an unclaimed or contested region) contributes nothing
+/// of its own; the module's own claims still decide.
+fn packages_conflict(
+    module: &FossilModule,
+    claims_of: &HashMap<usize, Vec<&str>>,
+    package: Option<&str>,
+) -> bool {
+    let mut names: HashSet<&str> = module
+        .statements
+        .iter()
+        .filter_map(|&s| claims_of.get(&s))
+        .flatten()
+        .copied()
+        .collect();
+    names.extend(package);
+    names.len() > 1
+}
+
+/// The region's content key (exp158): the module's whole statement set,
+/// each statement rename-invariantly hashed, the hashes SORTED and hashed
+/// together — so the name follows the module's own content, in either
+/// statement order, and neither a sibling region's presence nor a
+/// composition change can rename it. The head statement's hash alone is
+/// what the scheme replaced: short generic wrapper statements collide
+/// across different modules (three lodash regions whose wrappers are the
+/// same blurred shape drew one name in arrival order), so a version that
+/// discovered one more region renamed the survivors.
+fn module_content_key(module: &FossilModule, body: &[Value]) -> String {
+    let mut hashes: Vec<String> = module
+        .statements
+        .iter()
+        .map(|&s| crate::hash::statement_hash::statement_hash(&body[s]))
+        .collect();
+    hashes.sort_unstable();
+    let mut hasher = Sha256::default();
+    for hash in &hashes {
+        hasher.update(hash.as_bytes());
+        hasher.update(b"|");
+    }
+    format!("{:x}", hasher.finalize())
 }
 
 /// The lifecycle reason a marked wrapper is skipped by the waves under.
