@@ -306,6 +306,9 @@ pub struct BunUnpackOutcome {
     /// Library discovery over the app code (exp095), when asked for —
     /// report-only: nothing is named, moved or renamed by it.
     pub library_discovery: Option<crate::libdetect::discovery::DiscoveryReport>,
+    /// The vendored bodies' restoration (exp160 Site B), when the capture
+    /// found answers — the totals for the run's restored-identifier line.
+    pub body_restoration: Option<crate::naming::restore::BodyRestorationReport>,
     /// The names mode's claimed placement groups (library-names plan step
     /// 4, exp156), already converted to the naming era's wrapper-body
     /// ordinals — the CLI threads them into the naming stage, whose
@@ -420,6 +423,7 @@ pub fn unpack_bun(
             app_declarations: Vec::new(),
             library_discovery: discover_raw(code, floor_pieces, floor_request),
             claimed_module_regions: Vec::new(),
+            body_restoration: None,
         })
     };
 
@@ -606,6 +610,12 @@ pub fn unpack_bun(
     let mut body_edits = plan.ref_edits.clone();
     body_edits.extend(helper_edits.iter().cloned());
     let mut file_of_record: HashMap<usize, String> = HashMap::new();
+    // Site B (exp160): the vendored bodies' names — the index's own
+    // answers first, then the prior release's same-path spellings. The
+    // map is captured in names mode only, so default runs see an empty
+    // map and this is byte-inert.
+    let restorations = restoration_capture_map(&library_discovery);
+    let mut body_restoration = crate::naming::restore::BodyRestorationReport::default();
     for (module_index, (module, module_plan)) in modules.iter().zip(&plan.plans).enumerate() {
         let body = vendored_body(
             code,
@@ -619,6 +629,16 @@ pub fn unpack_bun(
         let rel_path = format!(
             "{}/{}.js",
             module_plan.naming.dir, module_plan.naming.file_name
+        );
+        // The restoration pass over this body: the index's answers for its
+        // captured statements, then the prior's spellings for the slots the
+        // index did not answer. A body without answers comes back verbatim.
+        let body = restored_body(
+            &body,
+            &rel_path,
+            &restorations,
+            prior.root.as_deref(),
+            &mut body_restoration,
         );
         if let Some(i) = record_index {
             file_of_record.insert(i, rel_path.clone());
@@ -725,7 +745,42 @@ pub fn unpack_bun(
         app_declarations,
         library_discovery,
         claimed_module_regions,
+        body_restoration: (!restorations.is_empty()).then_some(body_restoration),
     })
+}
+
+/// Site B's capture, as the lookup map the write loop applies (exp160):
+/// the discovery report's restoration rows. Empty outside names mode.
+fn restoration_capture_map(
+    library_discovery: &Option<crate::libdetect::discovery::DiscoveryReport>,
+) -> std::collections::BTreeMap<String, crate::libindex::table::RestorationRow> {
+    library_discovery
+        .as_ref()
+        .map(|r| r.restoration_map())
+        .unwrap_or_default()
+}
+
+/// Site B's per-body restoration (exp160, library-names plan step 7): the
+/// index's answers for the body's captured statements, then the prior
+/// release's same-path spellings for the slots the index did not answer
+/// ([`crate::naming::restore::restore_body_text`]). An empty capture —
+/// every non-names run — answers nothing: the body ships verbatim and no
+/// prior file is read.
+fn restored_body(
+    body: &str,
+    rel_path: &str,
+    restorations: &std::collections::BTreeMap<String, crate::libindex::table::RestorationRow>,
+    prior_root: Option<&Path>,
+    report: &mut crate::naming::restore::BodyRestorationReport,
+) -> String {
+    if restorations.is_empty() {
+        return body.to_string();
+    }
+    let prior_body = prior_root.and_then(|root| fs::read_to_string(root.join(rel_path)).ok());
+    let restored =
+        crate::naming::restore::restore_body_text(body, restorations, prior_body.as_deref());
+    report.record(&restored.outcome);
+    restored.text
 }
 
 /// The names-mode block of [`unpack_bun`] (library-names plan step 4,

@@ -181,11 +181,15 @@ pub fn choose_file_names(factories: &[FactoryRecord]) -> Vec<NameLookup> {
 ///
 /// A package that identified >=2 modules groups into `vendor/<package>/`,
 /// each module named by its stable structural stem; a single-identifying
-/// package stays flat, named by its sanitized cascade name. The grouping
-/// gate is on the NAME, not nameSource: a lib_<hash> fallback identifies no
-/// package, and the same name carried from a prior release arrives as
-/// carry-over, so a source test would group on the second hop what it left
-/// flat on the first.
+/// package stays flat, named by its sanitized cascade name — in DEFAULT
+/// mode. In names mode (the record carries the placement pass's stamp,
+/// `index_path` or `index_leave`; plan step 7) every named module groups,
+/// whatever the count (D2): the vendor root holds no package-named file
+/// beside a package folder. The grouping gate is on the NAME, not
+/// nameSource: a lib_<hash> fallback identifies no package and stays flat
+/// in both modes, and the same name carried from a prior release arrives
+/// as carry-over, so a source test would group on the second hop what it
+/// left flat on the first.
 pub struct FileNameChooser {
     /// Exact-name occurrence counts over identified (non-fallback) records
     /// (`countIdentifiedNames`) — a name shared by >=2 is a package with
@@ -350,8 +354,16 @@ impl FileNameChooser {
                 return lookup(VENDOR_DIR, format!("{folder}/{unique}"));
             }
             let base = strip_js_extension(name);
+            // D2 (library-names plan step 7): a names-mode record — the
+            // placement pass stamped it (`index_path`/`index_leave`) —
+            // groups under its package's folder whatever the name count;
+            // the flat spelling at the vendor root is the split the plan
+            // ruled out. Default mode keeps the >=2 gate, byte-inert. A
+            // hash-fallback name identifies no package and stays flat in
+            // both modes — content-hash names are never package names.
+            let names_mode = record.index_path.is_some() || record.index_leave.is_some();
             let grouped = !is_hash_fallback_name(name)
-                && self.name_counts.get(name.as_str()).is_some_and(|n| *n >= 2);
+                && (names_mode || self.name_counts.get(name.as_str()).is_some_and(|n| *n >= 2));
             let folder = if grouped {
                 sanitize_fs_path(&base)
             } else {

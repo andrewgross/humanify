@@ -437,6 +437,14 @@ fn pipeline_body(
     // Stages 6-9 per file.
     let mut failures = Failures::default();
     let prompt_window = naming_config.prompt_window;
+    // The restoration answers ride the discovery report (the run's carried
+    // artifact); the map is rebuilt from its rows — the report's row IS
+    // the map's entry.
+    let restorations = unpacked
+        .library_discovery
+        .as_ref()
+        .map(|r| r.restoration_map())
+        .unwrap_or_default();
     let mut naming = NamingRun {
         split: config.split.enabled,
         config: naming_config,
@@ -447,6 +455,7 @@ fn pipeline_body(
         mixed_files: &mixed_files,
         failed_calls: Default::default(),
         claimed_regions: &unpacked.claimed_module_regions,
+        restorations: &restorations,
     };
     drop(ph);
     let ph = phase("format+naming");
@@ -1219,6 +1228,11 @@ struct NamingRun<'a> {
     /// era's wrapper-body ordinals for the bundle's runtime file. Empty
     /// in every other mode.
     claimed_regions: &'a [humanify_core::naming::module_names::ClaimedRegion],
+    /// The claimed units' captured restoration answers (exp160), keyed by
+    /// unit print hash — the discovery capture's map, empty for an index
+    /// without names tables.
+    restorations:
+        &'a std::collections::BTreeMap<String, humanify_core::libindex::table::RestorationRow>,
 }
 
 impl NamingRun<'_> {
@@ -1307,6 +1321,7 @@ impl NamingRun<'_> {
                 prior: self.prior,
                 library,
                 claimed_regions: self.claimed_regions,
+                restorations: self.restorations,
             },
             &self.config,
             &self.provider,

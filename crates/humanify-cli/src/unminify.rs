@@ -220,6 +220,15 @@ fn report_vendor_unpack(outcome: &bun::BunUnpackOutcome, renderer: &mut dyn Prog
             r.leftovers
         ));
     }
+    if let Some(r) = &outcome.body_restoration
+        && r.totals.bindings > 0
+    {
+        renderer.message(&format!(
+            "Vendor identifier restoration: {} identifiers restored across {} vendor files \
+             ({} statements answered, {} conflicts abstained)",
+            r.totals.bindings, r.files, r.totals.statements, r.totals.conflicts
+        ));
+    }
     log_name_sources(outcome);
 }
 

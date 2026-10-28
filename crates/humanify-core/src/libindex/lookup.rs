@@ -520,6 +520,38 @@ impl LibraryIndex {
         }
     }
 
+    /// The restoration answers (exp160) a claimed unit carries: per
+    /// contributing print hash of the structural route
+    /// ([`Self::structural_scores_relaxed`]) the row's restore answer,
+    /// `package`'s hits only. Absent answers are dropped — the caller
+    /// keeps current behaviour for them — and `Ambiguous` is passed
+    /// through for the caller's policy. Runs only for units discovery
+    /// already claimed, so the route replays what claimed them.
+    pub(crate) fn restoration_answers(
+        &self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+        package: &str,
+    ) -> Vec<(String, table::RestoreAnswer)> {
+        let Some(owner) = self.packages.iter().position(|p| p == package) else {
+            return Vec::new();
+        };
+        let route = self.structural_scores_relaxed(q, rules, same);
+        route
+            .hits
+            .get(&(owner as u32))
+            .map(|hits| {
+                hits.iter()
+                    .filter_map(|(hash, hit)| {
+                        let answer = self.restore_names(*hit);
+                        (answer != table::RestoreAnswer::Absent).then(|| (hash.clone(), answer))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// An owner id's package name.
     pub fn package_name(&self, owner: u32) -> &str {
         &self.packages[owner as usize]
@@ -550,21 +582,70 @@ impl LibraryIndex {
         rules: &LookupRules,
         same: &dyn Fn(&str, &str) -> bool,
     ) -> Option<BTreeSet<u32>> {
-        let owners: BTreeSet<u32> = ReferenceStore::candidates(self, hash)
-            .iter()
-            .filter(|h| {
-                rules
-                    .specificity
-                    .is_none_or(|(factor, slack)| h.module_bytes <= factor * module_bytes + slack)
-            })
-            .map(|h| h.owner)
-            .collect();
-        let many = if rules.max_packages_by_family {
-            self.families_exceed(&owners, rules.max_packages, same)
+        self.look_hits(hash, module_bytes, rules, same)
+            .map(|hits| hits.keys().copied().collect())
+    }
+
+    /// [`Self::look`] with the matched unit row kept beside each owner —
+    /// one row per owner, the smallest module bytes and then the lowest
+    /// row (the same determinism the store's own merge applies). The
+    /// restoration capture (exp160) reads the row the claim matched to ask
+    /// it for the print's original names.
+    pub(crate) fn look_hits(
+        &self,
+        hash: &str,
+        module_bytes: u64,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> Option<BTreeMap<u32, UnitHit>> {
+        let hits = self.specific_hits(hash, module_bytes, rules);
+        let many = self.too_many(&hits.keys().copied().collect(), rules, same);
+        (!hits.is_empty() && !many).then_some(hits)
+    }
+
+    /// The candidates of `hash` inside the specificity rule's module-size
+    /// bound, one per owner at the smallest module bytes and then the
+    /// lowest row.
+    fn specific_hits(
+        &self,
+        hash: &str,
+        module_bytes: u64,
+        rules: &LookupRules,
+    ) -> BTreeMap<u32, UnitHit> {
+        let mut hits: BTreeMap<u32, UnitHit> = BTreeMap::new();
+        for h in ReferenceStore::candidates(self, hash).iter().filter(|h| {
+            rules
+                .specificity
+                .is_none_or(|(factor, slack)| h.module_bytes <= factor * module_bytes + slack)
+        }) {
+            match hits.entry(h.owner) {
+                std::collections::btree_map::Entry::Vacant(e) => {
+                    e.insert(*h);
+                }
+                std::collections::btree_map::Entry::Occupied(mut e) => {
+                    let m = e.get_mut();
+                    if (h.module_bytes, h.row) < (m.module_bytes, m.row) {
+                        *m = *h;
+                    }
+                }
+            }
+        }
+        hits
+    }
+
+    /// Whether `owners` bust the package-count rule (per family under
+    /// `same`, or outright) — the cap `look` and `look_confirmed` share.
+    fn too_many(
+        &self,
+        owners: &BTreeSet<u32>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> bool {
+        if rules.max_packages_by_family {
+            self.families_exceed(owners, rules.max_packages, same)
         } else {
             owners.len() > rules.max_packages
-        };
-        (!owners.is_empty() && !many).then_some(owners)
+        }
     }
 
     /// The call-context relaxers (exp153, [`CallContextRules::relax_floor`],
@@ -577,7 +658,7 @@ impl LibraryIndex {
         q: &UnitQuery<'_>,
         rules: &LookupRules,
         same: &dyn Fn(&str, &str) -> bool,
-    ) -> Option<BTreeSet<u32>> {
+    ) -> Option<BTreeMap<u32, UnitHit>> {
         let cc = rules.call_context;
         let whole = &q.prints.whole;
         if whole.content < rules.min_content {
@@ -590,33 +671,21 @@ impl LibraryIndex {
         if !small && !cc.relax_common {
             return None;
         }
-        let owners: BTreeSet<u32> = ReferenceStore::candidates(self, &whole.hash)
-            .iter()
-            .filter(|h| {
-                rules
-                    .specificity
-                    .is_none_or(|(factor, slack)| h.module_bytes <= factor * q.module_bytes + slack)
-            })
-            .map(|h| h.owner)
-            .collect();
-        let many = |o: &BTreeSet<u32>| {
-            if rules.max_packages_by_family {
-                self.families_exceed(o, rules.max_packages, same)
-            } else {
-                o.len() > rules.max_packages
-            }
-        };
+        let hits = self.specific_hits(&whole.hash, q.module_bytes, rules);
+        let owners: BTreeSet<u32> = hits.keys().copied().collect();
+        let many = |o: &BTreeSet<u32>| self.too_many(o, rules, same);
         if owners.is_empty() || (!small && !many(&owners)) {
             return None;
         }
         if small && many(&owners) && !cc.relax_common {
             return None;
         }
-        let confirmed: BTreeSet<u32> = owners
+        let confirmed: BTreeMap<u32, UnitHit> = hits
             .into_iter()
-            .filter(|&o| self.call_confirms(q, rules, &|x| x == o))
+            .filter(|(o, _)| self.call_confirms(q, rules, &|x| x == *o))
             .collect();
-        (!confirmed.is_empty() && !many(&confirmed)).then_some(confirmed)
+        let many = self.too_many(&confirmed.keys().copied().collect(), rules, same);
+        (!confirmed.is_empty() && !many).then_some(confirmed)
     }
 
     /// Do `owners` span more than `max` families under `same`? Stops at the
@@ -761,7 +830,8 @@ impl LibraryIndex {
         previous: Option<u32>,
         same: &dyn Fn(&str, &str) -> bool,
     ) -> Option<(u32, u32, bool)> {
-        let (score, relaxed) = self.structural_scores_relaxed(q, rules, same);
+        let route = self.structural_scores_relaxed(q, rules, same);
+        let (score, relaxed) = (&route.score, route.relaxed);
         let whole = &q.prints.whole;
         let best = *score.values().max()?;
         let mut tied: Vec<u32> = score
@@ -888,7 +958,7 @@ impl LibraryIndex {
         rules: &LookupRules,
         same: &dyn Fn(&str, &str) -> bool,
     ) -> HashMap<u32, u32> {
-        self.structural_scores_relaxed(q, rules, same).0
+        self.structural_scores_relaxed(q, rules, same).score
     }
 
     /// [`Self::structural_scores`], and whether the scores came from a
@@ -898,33 +968,45 @@ impl LibraryIndex {
         q: &UnitQuery<'_>,
         rules: &LookupRules,
         same: &dyn Fn(&str, &str) -> bool,
-    ) -> (HashMap<u32, u32>, bool) {
+    ) -> StructuralRoute {
         let usable =
             |p: &UnitPrint, content: u32| p.nodes >= rules.min_nodes && p.content >= content;
         let whole = &q.prints.whole;
-        let mut score: HashMap<u32, u32> = HashMap::new();
+        let mut route = StructuralRoute::default();
         if usable(whole, rules.min_content)
-            && let Some(owners) = self.look(&whole.hash, q.module_bytes, rules, same)
+            && let Some(hits) = self.look_hits(&whole.hash, q.module_bytes, rules, same)
         {
-            for p in owners {
-                score.insert(p, whole.nodes);
+            for (p, hit) in hits {
+                route.score.insert(p, whole.nodes);
+                route
+                    .hits
+                    .entry(p)
+                    .or_default()
+                    .push((whole.hash.clone(), hit));
             }
+            return route;
         }
-        if score.is_empty()
-            && let Some(owners) = self.look_confirmed(q, rules, same)
+        if route.score.is_empty()
+            && let Some(hits) = self.look_confirmed(q, rules, same)
         {
-            for p in owners {
-                score.insert(p, whole.nodes);
+            for (p, hit) in hits {
+                route.score.insert(p, whole.nodes);
+                route
+                    .hits
+                    .entry(p)
+                    .or_default()
+                    .push((whole.hash.clone(), hit));
             }
-            return (score, true);
+            route.relaxed = true;
+            return route;
         }
-        if score.is_empty() {
-            let mut hits: Vec<(&UnitPrint, BTreeSet<u32>)> = q
+        if route.score.is_empty() {
+            let mut hits: Vec<(&UnitPrint, BTreeMap<u32, UnitHit>)> = q
                 .prints
                 .functions
                 .iter()
                 .filter(|f| usable(f, rules.min_function_content))
-                .filter_map(|f| Some((f, self.look(&f.hash, q.module_bytes, rules, same)?)))
+                .filter_map(|f| Some((f, self.look_hits(&f.hash, q.module_bytes, rules, same)?)))
                 .collect();
             hits.sort_by_key(|(f, _)| std::cmp::Reverse(f.nodes));
             let mut taken: Vec<(u32, u32)> = Vec::new();
@@ -934,12 +1016,13 @@ impl LibraryIndex {
                     continue;
                 }
                 taken.push((s, e));
-                for p in owners {
-                    *score.entry(p).or_default() += f.nodes;
+                for (p, hit) in owners {
+                    *route.score.entry(p).or_default() += f.nodes;
+                    route.hits.entry(p).or_default().push((f.hash.clone(), hit));
                 }
             }
         }
-        (score, false)
+        route
     }
 }
 
@@ -1213,6 +1296,22 @@ impl LookupRules {
             ..LookupRules::default()
         }
     }
+}
+
+/// The structural rule's route over one unit query ([`Self::structural_scores_relaxed`]):
+/// the per-package node scores, whether a call-context relaxer produced
+/// them, and — beside the scores — the unit row each package's score was
+/// matched through, per contributing print hash. The restoration capture
+/// (exp160) reads a claimed unit's rows to ask them for the prints'
+/// original names; the scores alone cannot say which row matched.
+#[derive(Default)]
+pub struct StructuralRoute {
+    pub score: HashMap<u32, u32>,
+    pub relaxed: bool,
+    /// Per owner, `(print hash, matched row)` per contributing print,
+    /// in route order (the whole print first, then functions by node
+    /// count).
+    pub hits: BTreeMap<u32, Vec<(String, UnitHit)>>,
 }
 
 /// One statement unit to look up, in statement order.

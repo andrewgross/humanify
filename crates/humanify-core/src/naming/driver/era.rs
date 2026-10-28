@@ -93,6 +93,12 @@ pub struct EraOptions<'o> {
     /// mode is off). Read BEFORE the freeze: the layout it plans feeds
     /// both the model-exclusion spans and the split's vendor paths.
     pub claimed_regions: &'o [crate::naming::module_names::ClaimedRegion],
+    /// The claimed units' captured restoration answers (exp160,
+    /// [`crate::libindex::table::RestorationRow`]), keyed by unit print
+    /// hash — empty in every other mode, and empty for an index without
+    /// names tables.
+    pub restorations:
+        &'o std::collections::BTreeMap<String, crate::libindex::table::RestorationRow>,
 }
 
 /// The module step's input over a side's ESTree JSON: the wrapper body's
@@ -601,6 +607,51 @@ fn run_era<P: NameProvider>(
                 .record_carried(crate::rename::validated::scopes::BindingId(i));
         }
     }
+    // exp160, library-names plan step 7: the index's restoration answers
+    // for the claimed statements, applied before anything else names —
+    // through the validated path, the library hold lifted for this one
+    // writer. The restored bindings are recorded carried and held, their
+    // names join the waves' transferred sets (a module-level one skips
+    // its row), so no wave, sweep or reconcile re-asks or re-rolls them;
+    // their statements' spans join the layout's protected spans.
+    if !opts.restorations.is_empty()
+        && let Some(source) = modules
+        && !opts.claimed_regions.is_empty()
+    {
+        let outcome = crate::naming::restore::apply_era_restoration(
+            &mut start.rename,
+            semantic,
+            source,
+            opts.claimed_regions,
+            opts.restorations,
+        );
+        for (binding, name) in &outcome.applied {
+            start.rename.record_carried(*binding);
+            start.rename.mark_library_held(*binding);
+            let id_span = start.rename.view().binding(*binding).id_span;
+            // The innermost function whose span holds the binding: the
+            // wave ask reads the fn's transferred set by name.
+            if let Some(f) = (0..graph.functions.len())
+                .filter(|&i| {
+                    let span = graph.functions[i].span;
+                    span.start <= id_span.start && id_span.end <= span.end
+                })
+                .min_by_key(|&i| graph.functions[i].span.end - graph.functions[i].span.start)
+            {
+                start.transferred[f].insert(name.clone());
+            }
+            // A module-level binding: its row skips entirely.
+            if let Some(j) = graph
+                .module_bindings
+                .iter()
+                .position(|b| b.symbol == start.rename.view().binding(*binding).symbol)
+            {
+                start.binding_state[j]
+                    .mark_skipped("library-restored", &graph.module_bindings[j].session_id);
+            }
+        }
+        library_layout.restored_spans = outcome.spans;
+    }
     // The plumbing the pipeline names itself, before any prompt shows it
     // (and over whatever name the transfer carried).
     let plumbing = crate::naming::plumbing::name_lazy_init_helper(
@@ -810,13 +861,16 @@ fn run_era<P: NameProvider>(
     // The moved modules' spans in the generated text, for the passes that
     // re-parse it (the prior-diff reconcile arm the same library hold
     // there). Zero work for every run that placed nothing.
-    if !library_layout.spans.is_empty() {
+    if !library_layout.spans.is_empty() || !library_layout.restored_spans.is_empty() {
         let edits = program_edits(semantic, &state, &privates);
-        library_layout.generated_spans = library_layout
-            .spans
-            .iter()
-            .map(|&(s, e)| span_in_generated_text(&edits, s, e))
-            .collect();
+        let fold = |spans: &[(u32, u32)]| -> Vec<(u32, u32)> {
+            spans
+                .iter()
+                .map(|&(s, e)| span_in_generated_text(&edits, s, e))
+                .collect()
+        };
+        library_layout.generated_spans = fold(&library_layout.spans);
+        library_layout.restored_generated_spans = fold(&library_layout.restored_spans);
     }
     era.library_layout = library_layout;
     drop(ph);

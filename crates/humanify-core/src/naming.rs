@@ -48,6 +48,9 @@ pub mod prompts;
 pub mod reask;
 pub mod reconcile;
 pub mod report;
+pub mod restore;
+#[cfg(test)]
+mod restore_test;
 pub mod shown;
 pub mod snap;
 pub mod validation;

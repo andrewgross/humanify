@@ -122,6 +122,13 @@ pub struct LibraryLayout {
     /// prior-diff reconcile — resolve their own bindings and cannot read
     /// the era's coordinates, so they read these instead.
     pub generated_spans: Vec<(u32, u32)>,
+    /// The claimed statements the restoration renamed (exp160), in era
+    /// coordinates and then (after the era renders) in generated ones —
+    /// the protected-span set beside the placed modules': the prior-diff
+    /// reconcile holds these too, so the prior's names never overwrite
+    /// the index's.
+    pub restored_spans: Vec<(u32, u32)>,
+    pub restored_generated_spans: Vec<(u32, u32)>,
 }
 
 /// The names-mode placement plan over the claimed regions (the planner

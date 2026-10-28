@@ -23,7 +23,9 @@
 //! group the units belong to), and so do two packages in one group
 //! (`contested`) and a whole-module key the index attributes to someone
 //! else (`index-disagrees`). A file path two regions would share moves the
-//! first region by sort key only (`duplicate-file`).
+//! first region by sort key only; the loser re-paths to its own synthetic
+//! in-package name (D1, plan step 7) — a package's regions coalesce under
+//! its folder, never one file beside a stayed region.
 //!
 //! Synthetic names are the index's misses: a claimed region with no clean
 //! file answer takes `module-<hash8>.js`, where hash8 is the first 8 hex
@@ -141,7 +143,7 @@ pub fn plan(input: &LayoutInput) -> LayoutPlan {
         .collect();
     let paths = resolve_paths(input, &wants);
     LayoutPlan {
-        regions: settle(input, &wants, &paths),
+        regions: settle(&wants, &paths),
     }
 }
 
@@ -160,7 +162,7 @@ fn region_want(region: &RegionInput, answers: &BTreeMap<String, ModuleAnswer>) -
             }
             // An agreed answer with exactly one file is the real npm spelling;
             // no answer (or no single file) falls to a synthetic name below.
-            let file = answer.and_then(single_file);
+            let file = answer.and_then(chosen_file);
             Want::Move {
                 package: package.to_string(),
                 file,
@@ -176,7 +178,7 @@ fn region_want(region: &RegionInput, answers: &BTreeMap<String, ModuleAnswer>) -
             "unclaimed" => match answer {
                 Some(answer) if answer.owners.len() == 1 => Want::Move {
                     package: answer.owners[0].clone(),
-                    file: single_file(answer),
+                    file: chosen_file(answer),
                 },
                 _ => Want::Leave { reason },
             },
@@ -221,12 +223,27 @@ fn answer_is_foreign(answer: Option<&ModuleAnswer>, package: &str) -> bool {
     }
 }
 
-fn single_file(answer: &ModuleAnswer) -> Option<String> {
+/// The region's file from an index answer: ONE file is it; several files
+/// take the index's MAIN file — the one whose basename is `index`, in the
+/// caller's sorted order — when the answer has one (D1, plan step 7: a
+/// package-level answer still lands the region inside the package, under a
+/// sensible name). None, and the region falls to the content-hash
+/// synthetic form below.
+fn chosen_file(answer: &ModuleAnswer) -> Option<String> {
     if answer.files.len() == 1 {
-        Some(answer.files[0].clone())
-    } else {
-        None
+        return Some(answer.files[0].clone());
     }
+    answer
+        .files
+        .iter()
+        .find(|file| strip_js_extension(basename(file)) == "index")
+        .cloned()
+}
+
+/// Everything after the last `/` (a file with no separator is its own
+/// basename).
+fn basename(file: &str) -> &str {
+    file.rsplit_once('/').map_or(file, |(_, base)| base)
 }
 
 /// The index answer for the region's whole-module key, if it has one.
@@ -251,6 +268,26 @@ fn resolve_paths(input: &LayoutInput, wants: &[Want]) -> Vec<Option<String>> {
             } => compose_path(package, file),
             Want::Move { .. } => None, // synthetic, numbered below
         });
+    }
+    // D1: a composed path two regions claim moves its best claimant only
+    // (sort key, then arrival) — the loser re-paths to its OWN synthetic
+    // in-package name below. A package's regions all coalesce under its
+    // folder; a loser never stays put beside the winner.
+    let mut best: BTreeMap<String, (String, usize)> = BTreeMap::new();
+    for (idx, path) in paths.iter().enumerate() {
+        if let Some(path) = path {
+            let key = (input.regions[idx].sort_key.clone(), idx);
+            if best.get(path).is_none_or(|incumbent| &key < incumbent) {
+                best.insert(path.clone(), key);
+            }
+        }
+    }
+    for (idx, path) in paths.iter_mut().enumerate() {
+        if let Some(p) = path.as_deref()
+            && best[p].1 != idx
+        {
+            *path = None;
+        }
     }
     assign_synthetic_paths(input, wants, &mut paths);
     paths
@@ -313,39 +350,18 @@ fn compose_path(package: &str, file: &str) -> Option<String> {
     Some(format!("vendor/{package}/{file}.js"))
 }
 
-/// Turn resolved paths into decisions, running the duplicate race as a
-/// second pass so a displaced incumbent loses its slot cleanly: the one
-/// region a path belongs to is its best (sort key, index) claimant, every
-/// other claimant of the same path leaves as a duplicate.
-fn settle(input: &LayoutInput, wants: &[Want], paths: &[Option<String>]) -> Vec<Placement> {
-    let mut best: BTreeMap<&str, (String, usize)> = BTreeMap::new();
-    for (idx, path) in paths.iter().enumerate() {
-        if let Some(path) = path {
-            let key = (input.regions[idx].sort_key.clone(), idx);
-            let better = match best.get(path.as_str()) {
-                None => true,
-                Some(incumbent) => &key < incumbent,
-            };
-            if better {
-                best.insert(path, key);
-            }
-        }
-    }
-    paths
+/// Turn resolved paths into decisions. Every path is unique here — the
+/// duplicate race ran in [`resolve_paths`] and its losers re-pathed, so a
+/// region moves exactly when a path resolved for it.
+fn settle(wants: &[Want], paths: &[Option<String>]) -> Vec<Placement> {
+    wants
         .iter()
-        .enumerate()
-        .map(|(idx, path)| match path {
-            None => match &wants[idx] {
+        .zip(paths)
+        .map(|(want, path)| match path {
+            Some(path) => Placement::Move { path: path.clone() },
+            None => match want {
                 Want::Leave { reason } => Placement::Leave { reason },
                 Want::Move { .. } => unreachable!("a Move want always resolves to a path"),
-            },
-            // The path's best claimant is unique by (sort key, index), so
-            // the index alone says whether this region is the winner.
-            Some(path) => match best.get(path.as_str()) {
-                Some((_, at)) if *at == idx => Placement::Move { path: path.clone() },
-                _ => Placement::Leave {
-                    reason: "duplicate-file",
-                },
             },
         })
         .collect()

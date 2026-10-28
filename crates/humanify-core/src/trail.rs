@@ -60,6 +60,11 @@ pub enum Tier {
     /// model's answer to "what is this file for?" (`naming::module_names`,
     /// docs/design/module-naming.md), the same name its file takes.
     ModuleNaming,
+    /// A library identifier's name restored from the index's own answer
+    /// (`naming::restore`, exp160, library-names plan step 7): the name
+    /// the package's source declares, never asked of the model, never a
+    /// guess — absent slots keep whatever named them.
+    Restoration,
 }
 
 impl Tier {
@@ -89,6 +94,7 @@ impl Tier {
             Tier::ToolchainPlumbing => "toolchain-plumbing",
             Tier::LibraryImport => "library-import",
             Tier::ModuleNaming => "module-naming",
+            Tier::Restoration => "restoration",
         }
     }
 }

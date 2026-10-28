@@ -140,6 +140,21 @@ pub struct NamingInput<'t> {
     /// wrapper-body ordinals (the unpack converts them; `library.matching
     /// = "names"` only, exp156). Empty = nothing was claimed.
     pub claimed_regions: &'t [crate::naming::module_names::ClaimedRegion],
+    /// The claimed units' captured restoration answers (exp160), keyed by
+    /// unit print hash. Empty = nothing was claimed, or the index holds
+    /// no names tables.
+    pub restorations:
+        &'t std::collections::BTreeMap<String, crate::libindex::table::RestorationRow>,
+}
+
+/// The empty restorations map — every call site with no captured answers
+/// (tests, every non-names mode).
+pub fn no_restorations()
+-> &'static std::collections::BTreeMap<String, crate::libindex::table::RestorationRow> {
+    static EMPTY: std::sync::LazyLock<
+        std::collections::BTreeMap<String, crate::libindex::table::RestorationRow>,
+    > = std::sync::LazyLock::new(std::collections::BTreeMap::new);
+    &EMPTY
 }
 
 /// A post-generate pass that ran, with the text it produced (None when it
@@ -239,6 +254,7 @@ pub fn run_naming<P: NameProvider>(
         prompt_window: config.prompt_window,
         module_naming: config.module_naming,
         claimed_regions: input.claimed_regions,
+        restorations: input.restorations,
     };
     let mut run_era = || match input.prior {
         Some(prior) => match_prior_version(
@@ -306,7 +322,15 @@ pub fn run_naming<P: NameProvider>(
     // coordinates: the prior-diff reconcile re-parses that text and
     // builds its own bindings, so it needs its own hold over the same
     // regions (era coordinates would point at the wrong bytes there).
-    let library_generated_spans = library_layout.generated_spans.clone();
+    // The placed modules' generated spans, and the restoration's beside
+    // them (exp160): the passes that re-parse the generated text hold both
+    // — the prior's names must not overwrite the index's.
+    let library_generated_spans: Vec<(u32, u32)> = library_layout
+        .generated_spans
+        .iter()
+        .chain(&library_layout.restored_generated_spans)
+        .cloned()
+        .collect();
     let mut reports = processor.reports.clone();
     reports.extend(library.reports.clone());
     let mut out = NamingOutcome {
