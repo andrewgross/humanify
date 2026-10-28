@@ -138,6 +138,18 @@ a names effect). The 10 npm-install refusals match `ix-edges`' builds
 exactly. Names index id
 `5d30fedd585254766b035a87991264b99abae752690515a4a51e292be47b2413`.
 
+## Verification (the tree with the pass, vs main `6c8cde934`)
+
+- **Gate** (`npm run check`): 13/13 PASS.
+- **Warm neutrality vs main** (`neutrality 6c8cde934 2.1.85:2.1.86`, standing
+  cache `/work/neutrality-cache`, dead endpoint): **NEUTRAL both modes** —
+  0 differing files / 0 differing lines, cache writes +0/+0 (baseline leg
+  +0 is the load-bearing one), exit 0/0, in DEFAULT mode
+  (`/work/exp159-data/neutrality-default.log`) and in REPORT mode
+  (`library.matching=report` over `/work/library-index/current`,
+  `/work/exp159-data/neutrality-report.log`). Nothing reads the table yet,
+  so both modes are byte-identical with main, as designed.
+
 ## HANDOFF — what the naming lane must answer
 
 The index side is DONE; nothing in the run reads the table yet. The naming
