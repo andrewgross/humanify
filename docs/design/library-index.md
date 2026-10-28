@@ -188,6 +188,9 @@ run reads.
   callee-prints.<slice>.bin  lookup: CALLEE print (16 hex = u64) -> owner ids whose edges flat-record it, INSIDE under the row's owner, OUT-OF under the callee's own (exp155; derived at merge from the edge rows — the readable stamp moved to `edges/2` while every module shard's key still spells `edges/1`)
   literals.bin           lookup: literal -> package count, files; file -> owner id, literal ids
   helpers.jsonl          {"hash", "owners"}   the helper SOURCES' own prints, every slice (exp129; absent when none)
+  names.<slice>.jsonl    {"hash", "owner", "file", "names", "versions"}   one row per (unit row, DISTINCT names list) (exp159; absent when built without --names)
+  names.<slice>.bin      lookup: unit row (its position in units.<slice>.bin) -> its names lists, as (slot, name id, kind) (exp159)
+  names.json             every restored name string, sorted: a name id is its position (exp159)
   stoplists.json         copied data (§7); its sha256 in the manifest
   families.json          copied data (§7); its sha256 in the manifest
 ```
@@ -227,6 +230,24 @@ OUT-OF reads from it; a `/3` index (no edge tables, no `edges` stamp)
 still loads and answers `NotRecorded`. The stamp is
 `fingerprints.edges` = `edges/1`, in every module shard's key, so module
 shards rebuild (literal shards do not).
+
+**Names (exp159, `--names`; build-only — the run reads it, nothing names
+with it yet).** A unit row's ORIGINAL identifier names, recovered at build
+time from the package's own installed sources through the build's
+sourcemap (positional, never a hash join — the minifier's structural
+rewrites cap a hash join at ~20%, measured in exp159's census; a declared
+identifier anchors to an original LINE and the original file's
+identifiers on that line pair with it in order, count-mismatched lines
+recover NOTHING). Keyed by UNIT ROW (the same positional id
+`units.<slice>.bin` gives), and `--names` also changes the module shard
+KEY (`+unit-names/1`) so a names build never reuses a plain shard; every
+other table is byte-identical either way. A unit row holds one names
+list per (owner, file, list) — a version that spelled its identifiers
+differently is a SECOND list, kept and answered as AMBIGUOUS by
+`LibraryIndex::restore_names` (1.6% of rows on the 237-pin census; a run
+must not guess). The stamp `fingerprints.names` = `names/1` is OPTIONAL
+in the fingerprint set: an index without it is readable and answers
+absence; a DIFFERENT value is refused.
 
 **Version ranges.** `versions` is a list of `[from, to]` pairs over the
 owner's indexed versions in `versions.json` order: `["1.0.0","1.2.0"]`

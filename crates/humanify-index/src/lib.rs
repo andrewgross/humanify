@@ -3,6 +3,7 @@ pub mod asof;
 pub mod build;
 pub mod cache;
 pub mod merge;
+pub mod names;
 pub mod recipe;
 pub mod registry;
 pub mod shard;
@@ -19,6 +20,8 @@ mod cache_test;
 mod edges_test;
 #[cfg(test)]
 mod merge_test;
+#[cfg(test)]
+mod names_test;
 #[cfg(test)]
 mod recipe_test;
 #[cfg(test)]

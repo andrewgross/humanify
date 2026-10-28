@@ -107,6 +107,12 @@ enum Command {
         /// path's version).
         #[arg(long, default_value = "drop")]
         sponge_regions: String,
+        /// Derive and store each unit's ORIGINAL identifier names (exp159,
+        /// from the build's own sourcemap and the package sources): marks
+        /// the index `names/1`. Default off — without it the shard bytes
+        /// are byte-identical to before.
+        #[arg(long)]
+        names: bool,
         /// Print the plan (versions, refusals, shards to build or reuse)
         /// and stop.
         #[arg(long)]
@@ -183,6 +189,7 @@ fn main() {
         offline,
         merge_only,
         sponge_regions,
+        names,
         dry_run,
     } = command
     else {
@@ -230,6 +237,7 @@ fn main() {
             offline,
             merge_only,
             quiet: false,
+            names,
             sponge_regions: match sponge_regions.as_str() {
                 "drop" => SpongeRegions::Drop,
                 "origin" => SpongeRegions::Origin,

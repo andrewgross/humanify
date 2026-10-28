@@ -126,6 +126,10 @@ pub struct ShardUnit {
     /// (owner, hash).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub out_of: Vec<humanify_core::libindex::format::Callee>,
+    /// The ORIGINAL identifier names the print's slots restore (exp159),
+    /// only when the shard was built `--names` (the `names/1` stamp).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<humanify_core::libindex::names::RestoredName>,
 }
 
 /// One source file's literal set.

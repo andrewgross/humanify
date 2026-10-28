@@ -28,7 +28,7 @@ use std::borrow::Cow;
 use crate::graph::edges::Scope;
 use crate::hash::forms::{CanonicalForm, LIBRARY_UNITS, MATCH_KEY};
 use crate::libindex::lookup::{LibraryIndex, UnitHit};
-use crate::libindex::table::EdgeCallee;
+use crate::libindex::table::{EdgeCallee, RestoreAnswer};
 use crate::matching::{FingerprintIndex, IndexKind, IndexNode};
 
 /// Which store answered.
@@ -103,6 +103,14 @@ pub trait ReferenceStore {
         piece: Self::Piece,
         read: EdgeRead,
     ) -> Result<StoreEdges<Self::Callee>, Refused>;
+
+    /// The piece's restored ORIGINAL identifier names (exp159, `names/1`):
+    /// what the package's own source declares where the print's
+    /// declarations anchor. The index store answers from its names table
+    /// (absence, one list, or several — an ambiguous answer, the caller's
+    /// to settle); the prior store keeps no names table and answers
+    /// absence, never a guess.
+    fn restore_names(&self, piece: Self::Piece) -> RestoreAnswer;
 }
 
 impl ReferenceStore for FingerprintIndex<'_> {
@@ -160,6 +168,10 @@ impl ReferenceStore for FingerprintIndex<'_> {
                 .filter_map(|span| self.entry_of_span(*span))
                 .collect(),
         ))
+    }
+
+    fn restore_names(&self, _piece: usize) -> RestoreAnswer {
+        RestoreAnswer::Absent
     }
 }
 
@@ -220,6 +232,10 @@ impl ReferenceStore for LibraryIndex {
                     .into(),
             )),
         }
+    }
+
+    fn restore_names(&self, piece: UnitHit) -> RestoreAnswer {
+        LibraryIndex::restore_names(self, piece)
     }
 }
 

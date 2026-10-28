@@ -110,6 +110,13 @@ pub struct BuildConfig {
     /// inside a pipeline, where stray stdout would corrupt the run's
     /// surface. The FAILED lines stay (stderr, errors only).
     pub quiet: bool,
+    /// Restore the packages' ORIGINAL identifier names beside the unit
+    /// rows (exp159): every unit print also carries the names its slots
+    /// stand for, recovered from the build's own sourcemap and the
+    /// package's installed sources. Default off — the shard rows are
+    /// byte-identical without it (a `names/1` stamp marks an index built
+    /// with it).
+    pub names: bool,
 }
 
 /// What the run-time build records into the run's profiler, and the two
@@ -295,6 +302,7 @@ pub(crate) fn shard_inputs(
     version: &str,
     slices: &[SliceRecord],
     regions: SpongeRegions,
+    names: bool,
 ) -> Vec<ShardInputs> {
     let f = fingerprint_versions();
     // The literal rows are the files these builds contain, so the
@@ -328,11 +336,19 @@ pub(crate) fn shard_inputs(
             // time, so a store keyed edges/1 — exp152's — is re-merged
             // by an edges/2 index without one re-fingerprint.
             fingerprint: format!(
-                "{}+{}+{}+{}",
+                "{}+{}+{}+{}{}",
                 f.module,
                 f.units,
                 humanify_core::libindex::format::LIBRARY_EDGE_ROWS_VERSION,
-                regions.unit_rows_version()
+                regions.unit_rows_version(),
+                // the names pass changes the ROWS (each unit row carries
+                // the names the build's map recovers): its shard key spells
+                // it, so a names build never reuses a plain shard
+                if names {
+                    format!("+{}", humanify_core::libindex::format::NAMES_SHARD_STAMP)
+                } else {
+                    String::new()
+                }
             ),
         });
     }
@@ -376,7 +392,7 @@ pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, String> {
         }));
         for s in chosen.selected {
             let (mut missing, mut reused) = (Vec::new(), Vec::new());
-            for inputs in shard_inputs(&name, &s.version, &slices, cfg.sponge_regions) {
+            for inputs in shard_inputs(&name, &s.version, &slices, cfg.sponge_regions, cfg.names) {
                 match read_current(&cfg.store, &inputs) {
                     Some(_) => reused.push(inputs),
                     None => missing.push(inputs),
@@ -730,6 +746,7 @@ pub(crate) fn fingerprint_bundle(
     out: &Path,
     shard: &mut Shard,
     regions: SpongeRegions,
+    names: bool,
 ) -> Result<(), String> {
     let code = std::fs::read_to_string(out.join("out.js")).map_err(|e| e.to_string())?;
     let map_text = std::fs::read_to_string(out.join("out.js.map")).map_err(|e| e.to_string())?;
@@ -791,7 +808,7 @@ pub(crate) fn fingerprint_bundle(
             key: key.clone(),
         });
     }
-    let (units, notes) = unit_rows(recipe, &code, &map, out, regions);
+    let (units, notes) = unit_rows(recipe, &code, &map, out, regions, names);
     let (made, kept_before) = (units.len(), shard.units.len());
     shard.units.extend(
         units
@@ -821,6 +838,7 @@ pub fn unit_rows(
     map: &SourceMap,
     out: &Path,
     regions: SpongeRegions,
+    names: bool,
 ) -> (Vec<ShardUnit>, ShardNotes) {
     let mut notes = ShardNotes::default();
     let toolchain = humanify_core::toolchain::resolve_toolchain(
@@ -834,13 +852,23 @@ pub fn unit_rows(
         notes.unkeyed += 1;
         return (Vec::new(), notes);
     }
-    let bundle = humanify_core::libindex::units::bundle_unit_graph(
-        code,
-        &ingest,
-        toolchain.layout.piece,
-        toolchain.module_wrappers.piece,
-        toolchain.interop.piece,
-    );
+    let bundle = if names {
+        humanify_core::libindex::units::bundle_unit_named(
+            code,
+            &ingest,
+            toolchain.layout.piece,
+            toolchain.module_wrappers.piece,
+            toolchain.interop.piece,
+        )
+    } else {
+        humanify_core::libindex::units::bundle_unit_graph(
+            code,
+            &ingest,
+            toolchain.layout.piece,
+            toolchain.module_wrappers.piece,
+            toolchain.interop.piece,
+        )
+    };
     let printed: Vec<usize> = (0..bundle.units.len())
         .filter(|&i| bundle.prints[i].is_some())
         .collect();
@@ -851,8 +879,10 @@ pub fn unit_rows(
     let mut cache = HashMap::new();
     let mut sponges: HashMap<u32, Sponge> = HashMap::new();
     let mut sponge_files: BTreeSet<u32> = BTreeSet::new();
-    // per unit (graph order), its owner when it has one
+    // per unit (graph order), its owner when it has one — and the source
+    // index it was credited to (the names pass reads that source's file)
     let mut owner_of: Vec<Option<crate::sourcemap::Owner>> = vec![None; bundle.units.len()];
+    let mut src_of: Vec<Option<u32>> = vec![None; bundle.units.len()];
     for (&i, segs) in printed.iter().zip(map.span_segments(code, &spans)) {
         let tally = crate::sourcemap::tally_of(&segs);
         match unit_owner(map, out, &tally, &mut cache) {
@@ -869,6 +899,7 @@ pub fn unit_rows(
                     continue;
                 };
                 owner_of[i] = Some(owner);
+                src_of[i] = Some(src);
             }
             UnitOwner::Mixed => notes.mixed_spans += 1,
             UnitOwner::Unowned => notes.unowned += 1,
@@ -882,6 +913,21 @@ pub fn unit_rows(
                 .or_default() += u64::from(bundle.units[i].bytes);
         }
     }
+    // the names pass's inputs, once per bundle: the map as a byte-offset
+    // anchor table and the ORIGINAL sources' declared identifiers (the
+    // attributed sources only)
+    let (anchors, orig) = if names {
+        let anchors = crate::names::Anchors::new(code, map);
+        let mut wanted: Vec<u32> = src_of.iter().flatten().copied().collect();
+        wanted.sort_unstable();
+        wanted.dedup();
+        (
+            Some(anchors),
+            crate::names::original_decls(out, map, &wanted),
+        )
+    } else {
+        (None, HashMap::new())
+    };
     let mut rows = Vec::new();
     for (i, o) in owner_of.iter().enumerate() {
         let (Some(o), Some(prints)) = (o, &bundle.prints[i]) else {
@@ -889,8 +935,34 @@ pub fn unit_rows(
         };
         let (inside, out_of) = unit_edges(&bundle, &owner_of, i, &o.package, &mut notes);
         let size = module_bytes[&(o.package.clone(), o.file.clone())];
-        for p in std::iter::once(&prints.whole).chain(&prints.functions) {
+        let with_mappings: Vec<(
+            &humanify_core::libindex::units::UnitPrint,
+            Option<&humanify_core::libindex::units::Mapping>,
+        )> = match &bundle.named[i] {
+            Some(named) => {
+                let whole = &named.whole;
+                std::iter::once((&whole.print, Some(&whole.mapping)))
+                    .chain(named.functions.iter().map(|f| (&f.print, Some(&f.mapping))))
+                    .collect()
+            }
+            None => std::iter::once(&prints.whole)
+                .chain(&prints.functions)
+                .map(|p| (p, None))
+                .collect(),
+        };
+        for (p, mapping) in with_mappings {
             if p.nodes >= UNIT_ROW_MIN_NODES {
+                let restored = match (anchors.as_ref(), mapping) {
+                    (Some(anchors), Some(mapping)) => crate::names::print_names(
+                        mapping,
+                        p.span,
+                        src_of[i].expect("owned unit has its source"),
+                        ingest.semantic(),
+                        anchors,
+                        &orig,
+                    ),
+                    _ => Vec::new(),
+                };
                 rows.push(ShardUnit {
                     owner: o.package.clone(),
                     version: o.version.clone(),
@@ -901,6 +973,7 @@ pub fn unit_rows(
                     module_bytes: size,
                     inside: inside.clone(),
                     out_of: out_of.clone(),
+                    names: restored,
                 });
             }
         }
@@ -1272,6 +1345,7 @@ fn module_shard(
     recipe: &RecipeBuild,
     inputs: &ShardInputs,
     regions: SpongeRegions,
+    names: bool,
     trace: Trace<'_>,
 ) -> Shard {
     let mut shard = Shard::new(inputs);
@@ -1279,7 +1353,7 @@ fn module_shard(
         let out = dir.join("build").join(recipe.recipe.slice_name()).join(tag);
         let result = ensure_build(recipe, dir, entry, &out, trace).and_then(|()| {
             let _s = trace.stage("library.index.fingerprint");
-            fingerprint_bundle(recipe.recipe, &out, &mut shard, regions)
+            fingerprint_bundle(recipe.recipe, &out, &mut shard, regions, names)
         });
         let status = match result {
             Ok(()) => "ok".to_string(),
@@ -1321,7 +1395,7 @@ fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), Strin
                     .iter()
                     .find(|r| r.recipe == want)
                     .ok_or("no recipe for slice")?;
-                module_shard(&dir, recipe, inputs, cfg.sponge_regions, trace)
+                module_shard(&dir, recipe, inputs, cfg.sponge_regions, cfg.names, trace)
             }
         };
         write_shard(&cfg.store, &shard)?;
@@ -1429,9 +1503,15 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
         .iter()
         .enumerate()
         .flat_map(|(i, t)| {
-            shard_inputs(&t.name, &t.version, &plan.slices, cfg.sponge_regions)
-                .into_iter()
-                .map(move |s| (s.label(), i, s))
+            shard_inputs(
+                &t.name,
+                &t.version,
+                &plan.slices,
+                cfg.sponge_regions,
+                cfg.names,
+            )
+            .into_iter()
+            .map(move |s| (s.label(), i, s))
         })
         .collect();
     inputs.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));

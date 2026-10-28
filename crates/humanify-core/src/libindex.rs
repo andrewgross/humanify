@@ -26,6 +26,7 @@ pub mod format;
 pub mod literals;
 pub mod lookup;
 pub mod module_answers;
+pub mod names;
 pub mod recipe;
 pub mod table;
 pub mod units;
@@ -48,6 +49,9 @@ mod lookup_test;
 #[cfg(test)]
 #[path = "libindex/module_answers_test.rs"]
 mod module_answers_test;
+#[cfg(test)]
+#[path = "libindex/names_test.rs"]
+mod names_test;
 #[cfg(test)]
 #[path = "libindex/recipe_test.rs"]
 mod recipe_test;

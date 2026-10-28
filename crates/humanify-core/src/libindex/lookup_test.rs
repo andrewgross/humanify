@@ -50,6 +50,75 @@ fn whole(hash: &str, nodes: u32) -> StatementPrints {
     }
 }
 
+#[test]
+fn restore_names_answers_the_unit_row_the_hit_names() {
+    use crate::libindex::format::NameRow;
+    use crate::libindex::names::{NameKind, RestoredName};
+    use crate::libindex::table::RestoreAnswer;
+    let n = |slot: u32, name: &str| RestoredName {
+        slot,
+        name: name.into(),
+        kind: NameKind::Local,
+    };
+    let names = vec![
+        NameRow {
+            hash: hx("a"),
+            owner: "dep".into(),
+            file: "index.js".into(),
+            names: vec![n(0, "pLimit"), n(1, "concurrency")],
+            versions: vec![("1.0.0".into(), "1.0.0".into())],
+        },
+        // the same triple with a DIFFERENT list: ambiguous
+        NameRow {
+            hash: hx("b"),
+            owner: "dep".into(),
+            file: "index.js".into(),
+            names: vec![n(0, "one")],
+            versions: vec![("1.0.0".into(), "1.0.0".into())],
+        },
+        NameRow {
+            hash: hx("b"),
+            owner: "dep".into(),
+            file: "index.js".into(),
+            names: vec![n(0, "two")],
+            versions: vec![("2.0.0".into(), "2.0.0".into())],
+        },
+    ];
+    let index = LibraryIndex::from_rows_with_names(
+        vec![
+            row("a", "dep", 40, 100),
+            row("b", "dep", 40, 100),
+            row("c", "dep", 40, 100),
+        ],
+        names,
+        Vec::new(),
+    );
+    // one hit per (hash, owner), each its row
+    let hits = |hash: &str| index.unit_hits(&hx(hash));
+    assert_eq!(hits("a").len(), 1);
+    match index.restore_names(hits("a")[0]) {
+        RestoreAnswer::Single(names) => {
+            let spelled: Vec<&str> = names.iter().map(|n| n.name.as_str()).collect();
+            assert_eq!(spelled, vec!["pLimit", "concurrency"]);
+        }
+        other => panic!("{other:?}"),
+    }
+    match index.restore_names(hits("b")[0]) {
+        RestoreAnswer::Ambiguous(lists) => assert_eq!(lists.len(), 2, "{lists:?}"),
+        other => panic!("{other:?}"),
+    }
+    // a row the names table holds nothing of: absence, not an error
+    assert_eq!(index.restore_names(hits("c")[0]), RestoreAnswer::Absent);
+}
+
+#[test]
+fn an_index_without_names_tables_answers_restore_with_absence() {
+    use crate::libindex::table::RestoreAnswer;
+    let index = LibraryIndex::from_rows(vec![row("a", "dep", 40, 100)], Vec::new());
+    let hit = index.unit_hits(&hx("a"))[0];
+    assert_eq!(index.restore_names(hit), RestoreAnswer::Absent);
+}
+
 fn structural() -> LookupRules {
     LookupRules {
         agreement: false,

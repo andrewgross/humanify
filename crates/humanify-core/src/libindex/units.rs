@@ -47,24 +47,61 @@ pub struct StatementPrints {
 /// The fingerprints of one unit's ESTree JSON (the unit's own subtree;
 /// `tables` are the bundle's, so locals slot and globals stay verbatim).
 pub fn statement_prints(node: &Value, tables: &SymbolTables) -> StatementPrints {
+    let named = statement_named_prints(node, tables);
+    StatementPrints {
+        whole: named.whole.print,
+        functions: named.functions.into_iter().map(|f| f.print).collect(),
+    }
+}
+
+/// A print with the canonical walk's slot mapping beside it (`$slot` ->
+/// (symbol id, the name as the walked AST spells it)): the index's names
+/// table is built from it (exp159). One entry per slot, in slot order; the
+/// slot's first walk occurrence may be a reference — the DECLARATION is
+/// found through the symbol id, never this entry's position.
+pub type Mapping = Vec<(String, Option<oxc_syntax::symbol::SymbolId>, String)>;
+
+/// One print and its slot mapping.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamedPrint {
+    pub print: UnitPrint,
+    pub mapping: Mapping,
+}
+
+/// [`StatementPrints`] with every print's mapping.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamedStatementPrints {
+    pub whole: NamedPrint,
+    pub functions: Vec<NamedPrint>,
+}
+
+/// [`statement_prints`] with the mappings kept (the builder's `--names`
+/// path; the run side discards them).
+pub fn statement_named_prints(node: &Value, tables: &SymbolTables) -> NamedStatementPrints {
     let mut functions = Vec::new();
     collect_functions(node, tables, &mut functions, true);
-    StatementPrints {
-        whole: print(node, tables),
+    NamedStatementPrints {
+        whole: named_print(node, tables),
         functions,
     }
 }
 
-fn print(node: &Value, tables: &SymbolTables) -> UnitPrint {
+fn named_print(node: &Value, tables: &SymbolTables) -> NamedPrint {
     let mut content = BTreeSet::new();
     content_tokens(node, tables, &mut content);
-    UnitPrint {
-        span: span_of(node),
-        // Private names are the minifier's (`#e`), renamed per build: the
-        // form blinds them.
-        hash: canonical_serialize(node, tables, &LIBRARY_UNITS).hash,
-        nodes: count_nodes(node),
-        content: content.len() as u32,
+    // The mapping is built by the walk regardless; keeping it costs only
+    // the Vec the caller drops.
+    let out = canonical_serialize(node, tables, &LIBRARY_UNITS);
+    NamedPrint {
+        print: UnitPrint {
+            span: span_of(node),
+            // Private names are the minifier's (`#e`), renamed per build: the
+            // form blinds them.
+            hash: out.hash,
+            nodes: count_nodes(node),
+            content: content.len() as u32,
+        },
+        mapping: out.mapping,
     }
 }
 
@@ -85,11 +122,11 @@ fn is_function(node: &Value) -> bool {
 }
 
 /// Every function inside `node` (not `node` itself), preorder.
-fn collect_functions(node: &Value, tables: &SymbolTables, out: &mut Vec<UnitPrint>, root: bool) {
+fn collect_functions(node: &Value, tables: &SymbolTables, out: &mut Vec<NamedPrint>, root: bool) {
     match node {
         Value::Object(map) => {
             if !root && is_function(node) {
-                out.push(print(node, tables));
+                out.push(named_print(node, tables));
             }
             for v in map.values() {
                 collect_functions(v, tables, out, false);
@@ -192,12 +229,25 @@ pub fn bundle_unit_prints(
     grammar: crate::toolchain::ModuleWrapperGrammar,
     interop: crate::toolchain::InteropHelpers,
 ) -> Vec<(crate::cut::units::Unit, StatementPrints)> {
-    let b = bundle_units(code, ingest, layout, grammar, interop, false);
+    let b = bundle_units(code, ingest, layout, grammar, interop, false, false);
     b.units
         .into_iter()
         .zip(b.prints)
         .filter_map(|(u, p)| Some((u, p?)))
         .collect()
+}
+
+/// [`bundle_unit_graph`] with every print's slot mapping kept (the
+/// builder's `--names` path, exp159): the graph is still built (the rows
+/// carry edges) and `named` is Some wherever `prints` is.
+pub fn bundle_unit_named(
+    code: &str,
+    ingest: &crate::ingest::Ingest<'_>,
+    layout: crate::toolchain::BundleLayout,
+    grammar: crate::toolchain::ModuleWrapperGrammar,
+    interop: crate::toolchain::InteropHelpers,
+) -> BundleUnits {
+    bundle_units(code, ingest, layout, grammar, interop, true, true)
 }
 
 /// A RAW bundle's units (containers included), their prints (None for a
@@ -208,6 +258,9 @@ pub fn bundle_unit_prints(
 pub struct BundleUnits {
     pub units: Vec<crate::cut::units::Unit>,
     pub prints: Vec<Option<StatementPrints>>,
+    /// The mappings of every printed unit (Some exactly where `prints` is
+    /// Some) — `None` everywhere on the plain path.
+    pub named: Vec<Option<NamedStatementPrints>>,
     pub graph: Option<crate::graph::references::ReferenceGraph>,
 }
 
@@ -220,7 +273,7 @@ pub fn bundle_unit_graph(
     grammar: crate::toolchain::ModuleWrapperGrammar,
     interop: crate::toolchain::InteropHelpers,
 ) -> BundleUnits {
-    bundle_units(code, ingest, layout, grammar, interop, true)
+    bundle_units(code, ingest, layout, grammar, interop, true, false)
 }
 
 fn bundle_units(
@@ -230,6 +283,7 @@ fn bundle_units(
     grammar: crate::toolchain::ModuleWrapperGrammar,
     interop: crate::toolchain::InteropHelpers,
     with_graph: bool,
+    with_named: bool,
 ) -> BundleUnits {
     let semantic = ingest.semantic();
     let wrapper = layout.find_wrapper(ingest.program, semantic);
@@ -243,7 +297,16 @@ fn bundle_units(
     let facts = crate::cut::units::BundlerFacts::recognise(code, statements, grammar, interop);
     let units = crate::cut::units::container_units(statements, &factories, &facts, true);
     let blurred = grammar.blurred_literals(statements, semantic);
-    let prints = unit_prints(&units, &tables, &blurred);
+    let (prints, named) = if with_named {
+        let named = unit_named_prints(&units, &tables, &blurred);
+        let prints = named.iter().map(|n| n.as_ref().map(plain_of)).collect();
+        (prints, named)
+    } else {
+        (
+            unit_prints(&units, &tables, &blurred),
+            vec![None; units.units.len()],
+        )
+    };
     let graph = with_graph.then(|| {
         crate::graph::references::build_reference_graph_with(
             code, semantic, statements, &factories, &facts, true,
@@ -257,7 +320,16 @@ fn bundle_units(
     BundleUnits {
         units: units.units,
         prints,
+        named,
         graph,
+    }
+}
+
+/// [`NamedStatementPrints`] without the mappings.
+fn plain_of(named: &NamedStatementPrints) -> StatementPrints {
+    StatementPrints {
+        whole: named.whole.print.clone(),
+        functions: named.functions.iter().map(|f| f.print.clone()).collect(),
     }
 }
 
@@ -271,6 +343,18 @@ pub fn unit_prints(
     tables: &SymbolTables,
     blurred: &std::collections::HashSet<u32>,
 ) -> Vec<Option<StatementPrints>> {
+    unit_named_prints(units, tables, blurred)
+        .into_iter()
+        .map(|n| n.map(|n| plain_of(&n)))
+        .collect()
+}
+
+/// [`unit_prints`] with every print's slot mapping kept.
+pub fn unit_named_prints(
+    units: &crate::cut::units::ContainerUnits<'_>,
+    tables: &SymbolTables,
+    blurred: &std::collections::HashSet<u32>,
+) -> Vec<Option<NamedStatementPrints>> {
     use crate::cut::units::UnitNode;
     use oxc_estree::{CompactSerializer, ESTree};
     let texts: Vec<Option<String>> = units
@@ -291,7 +375,7 @@ pub fn unit_prints(
         if !blurred.is_empty() {
             blur_numbers(&mut json, blurred);
         }
-        Some(statement_prints(&json, tables))
+        Some(statement_named_prints(&json, tables))
     })
 }
 

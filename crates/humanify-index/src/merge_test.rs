@@ -184,6 +184,7 @@ fn unit_rows_merge_per_slice_with_the_smallest_module() {
         module_bytes,
         inside: vec![],
         out_of: vec![],
+        names: vec![],
     };
     let mut a = module_shard("1.0.0", &[]);
     a.units = vec![unit("1.0.0", H1, 900), unit("1.0.0", H2, 900)];
@@ -228,6 +229,81 @@ fn unit_rows_merge_per_slice_with_the_smallest_module() {
 }
 
 #[test]
+fn unit_names_merge_per_slice_and_their_versions() {
+    use super::shard::ShardUnit;
+    let unit = |v: &str, hash: &str, names: Vec<humanify_core::libindex::names::RestoredName>| {
+        let mut u = ShardUnit {
+            owner: "ms".into(),
+            version: v.into(),
+            file: "index.js".into(),
+            hash: hash.into(),
+            nodes: 40,
+            content: 5,
+            module_bytes: 900,
+            inside: vec![],
+            out_of: vec![],
+            names: vec![],
+        };
+        u.names = names;
+        u
+    };
+    let n = |slot: u32, name: &str| humanify_core::libindex::names::RestoredName {
+        slot,
+        name: name.into(),
+        kind: humanify_core::libindex::names::NameKind::Local,
+    };
+    // H1's sources agree across versions: one names row, both versions
+    let mut a = module_shard("1.0.0", &[]);
+    a.units = vec![unit("1.0.0", H1, vec![n(0, "alpha")])];
+    let mut b = module_shard("2.0.0", &[]);
+    b.units = vec![unit("2.0.0", H1, vec![n(0, "alpha")])];
+    // H2's disagree: two rows, each its versions
+    let mut c = module_shard("2.1.0", &[]);
+    c.units = vec![
+        unit("2.1.0", H2, vec![n(0, "beta")]),
+        unit("2.1.0", H1, vec![]),
+    ];
+    let files = merge(meta(), vec![a, b, c]).expect("merges").files;
+    let name_rows: Vec<humanify_core::libindex::format::NameRow> =
+        rows(&files["names.bun-node-cjs-min.jsonl"]);
+    type View<'r> = (&'r str, Vec<&'r str>, Vec<(String, String)>);
+    let view: Vec<View<'_>> = name_rows
+        .iter()
+        .map(|r| {
+            (
+                r.hash.as_str(),
+                r.names.iter().map(|n| n.name.as_str()).collect(),
+                r.versions.clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        view,
+        vec![
+            (H1, vec!["alpha"], vec![("1.0.0".into(), "2.0.0".into())]),
+            (H2, vec!["beta"], vec![("2.1.0".into(), "2.1.0".into())]),
+        ],
+        "{view:?}"
+    );
+    // the lookup tables beside them, and the strings file
+    assert!(files.contains_key("names.bun-node-cjs-min.bin"));
+    assert!(files.contains_key("names.json"));
+    // H1's 2.1.0 row carried NO names: it joins nothing (no empty row)
+}
+
+#[test]
+fn a_merge_without_names_writes_no_names_files() {
+    let files = merge(meta(), shards()).expect("merges").files;
+    assert!(
+        !files.keys().any(|k| k.starts_with("names.")),
+        "{:?}",
+        files.keys()
+    );
+    assert!(!files.contains_key("names.json"));
+    // and the manifest still reads (its names stamp is optional)
+}
+
+#[test]
 fn the_lookup_tables_answer_what_the_row_tables_say() {
     use humanify_core::libindex::table::{LiteralTable, Source, UnitTable};
     let mut shards = shards();
@@ -242,6 +318,7 @@ fn the_lookup_tables_answer_what_the_row_tables_say() {
         module_bytes: 900,
         inside: vec![],
         out_of: vec![],
+        names: vec![],
     }];
     shards.push(u);
     let files = merge(meta(), shards).expect("merges").files;
@@ -298,6 +375,7 @@ fn a_unit_group_keeps_the_first_shards_nodes_whatever_order_the_list_had() {
             module_bytes: 100,
             inside: vec![],
             out_of: vec![],
+            names: vec![],
         }];
         s
     };
@@ -329,6 +407,7 @@ fn helper_sources_leave_their_prints_in_the_helper_table() {
         module_bytes: 100,
         inside: vec![],
         out_of: vec![],
+        names: vec![],
     };
     const HB: &str = "00000000000000b0";
     const HC: &str = "00000000000000c0";
