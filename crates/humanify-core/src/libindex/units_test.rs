@@ -247,6 +247,77 @@ fn the_unit_model_cannot_change_under_a_constant_version() {
     );
 }
 
+/// exp159: a print's canonical mapping is recoverable beside its hash (the
+/// index's names table is built from it; the slots are the print's `$i`).
+#[test]
+fn a_named_print_carries_the_slot_mapping() {
+    use crate::libindex::units::statement_named_prints;
+    let code = "function h(e) { let t = e; return t; }\n";
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, code, "input.js");
+    assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
+    let tables = SymbolTables::build(ingest.semantic());
+    let mut ser = CompactSerializer::new(false, false);
+    ingest.program.body[0].serialize(&mut ser);
+    let json = crate::ingest::parse_estree_json(&ser.into_string());
+    let named = statement_named_prints(&json, &tables);
+    let plain = statement_prints(&json, &tables);
+    assert_eq!(
+        named.whole.print.hash, plain.whole.hash,
+        "the hash is unchanged"
+    );
+    assert_eq!(named.whole.print.span, plain.whole.span);
+    let slots: Vec<&str> = named
+        .whole
+        .mapping
+        .iter()
+        .map(|(slot, _, _)| slot.as_str())
+        .collect();
+    assert_eq!(slots, vec!["$0", "$1", "$2"], "{:?}", named.whole.mapping);
+    // the walk's order, not source order: the body's `t` before the id
+    // `h` and the param `e` — the names join pairs by declaration
+    // position, never by this order
+    let names: Vec<&str> = named
+        .whole
+        .mapping
+        .iter()
+        .map(|(_, _, n)| n.as_str())
+        .collect();
+    assert_eq!(names, vec!["t", "e", "h"]);
+    assert!(
+        named
+            .whole
+            .mapping
+            .iter()
+            .all(|(_, symbol, _)| symbol.is_some())
+    );
+    assert!(named.functions.is_empty());
+}
+
+/// The run's path is unchanged by the named layer: [`bundle_unit_prints`]
+/// still yields plain prints only.
+#[test]
+fn the_bundle_path_still_yields_plain_prints() {
+    use crate::libindex::units::bundle_unit_prints;
+    use crate::toolchain::{BundleLayout, InteropHelpers, ModuleWrapperGrammar};
+    let code = "var x=(e,t)=>()=>(t||e((t={exports:{}}).exports,t),t.exports);\nvar m=x((exports,module)=>{\n  function helper(u){return u+1}\n  module.exports=helper;\n});\n";
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, code, "input.js");
+    let units = bundle_unit_prints(
+        code,
+        &ingest,
+        BundleLayout::SingleWrapperFunction,
+        ModuleWrapperGrammar::BunAndEsbuild,
+        InteropHelpers::Bun,
+    );
+    assert!(!units.is_empty());
+    assert!(
+        units
+            .iter()
+            .all(|(_, p)| !p.functions.is_empty() || p.whole.nodes > 0)
+    );
+}
+
 /// exp105: the unit rows of a real bundle under the toolchain its bundler
 /// resolves (the builder's path): (first 12 chars, kind).
 fn bundler_unit_rows(

@@ -53,6 +53,17 @@ pub const LIBRARY_EDGE_ROWS_VERSION: &str = "edges/1";
 /// ([`check_manifest_stamps`]).
 pub const LIBRARY_EDGES_VERSION: &str = "edges/2";
 
+/// The unit names table's version (exp159): the restored identifier names
+/// beside a unit row. A manifest stamps it only through this build's
+/// fingerprints; the table's PRESENCE is the manifest's `tables` map
+/// listing `names.<slice>.bin`, never the stamp.
+pub const NAMES_VERSION: &str = "names/1";
+
+/// The names pass's shard stamp (exp159): a module shard built WITH names
+/// rows carries it in its key, so a names build never reuses a plain
+/// shard's rows (the rows differ — each unit row carries its names).
+pub const NAMES_SHARD_STAMP: &str = "unit-names/1";
+
 /// The build recipe's version (`humanify-index`'s `recipe` module: every
 /// rule of how a slice's bundles are made). Recorded per slice in the
 /// manifest and in every shard key; the loader refuses another.
@@ -202,6 +213,24 @@ pub struct UnitRow {
     pub versions: Vec<(String, String)>,
 }
 
+/// One row of `names.<slice>.jsonl` (exp159, `names/1`): one unit print's
+/// restored ORIGINAL identifier names ([`super::names::RestoredName`]) —
+/// what the package's own source declares where the minified print's
+/// declarations anchor — over the versions it was recovered in. Keyed like
+/// its [`UnitRow`] (hash, owner, file); a print whose source lines could
+/// not be paired has no row. Provenance for instruments; a run reads
+/// `names.<slice>.bin`. The same triple with DIFFERENT name lists (the
+/// sources disagree across versions) is several rows — an ambiguous answer.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NameRow {
+    pub hash: String,
+    pub owner: String,
+    pub file: String,
+    pub names: Vec<crate::libindex::names::RestoredName>,
+    pub versions: Vec<(String, String)>,
+}
+
 /// One row of `edges.<slice>.jsonl` (format `/4`, exp151): the callees a
 /// unit row records ([`LIBRARY_EDGES_VERSION`]), over every version the
 /// row was seen in (a union: an index edge a bundle lacks says nothing,
@@ -286,6 +315,12 @@ pub struct FingerprintVersions {
     /// [`INDEX_FORMAT_NO_EDGES`] index, which has none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edges: Option<String>,
+    /// The unit names table (exp159, [`NAMES_VERSION`]); absent in an
+    /// index built before it or without the names pass — a manifest that
+    /// carries the stamp MUST match it, but its absence is no refusal
+    /// ([`stamp_mismatches`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub names: Option<String>,
 }
 
 /// This build's stamp.
@@ -295,6 +330,7 @@ pub fn fingerprint_versions() -> FingerprintVersions {
         literals: format!("literals/{LIBRARY_LITERALS_VERSION}"),
         units: LIBRARY_UNITS.stamp(),
         edges: Some(LIBRARY_EDGES_VERSION.to_string()),
+        names: Some(NAMES_VERSION.to_string()),
     }
 }
 
@@ -310,6 +346,7 @@ fn readable_stamps(format: &str) -> Option<BTreeMap<&'static str, String>> {
     ]
     .into_iter()
     .collect();
+    out.insert("names", f.names.expect("this build stamps names"));
     match format {
         INDEX_FORMAT => {
             out.insert("edges", f.edges.expect("this build stamps edges"));
@@ -319,6 +356,10 @@ fn readable_stamps(format: &str) -> Option<BTreeMap<&'static str, String>> {
         _ => None,
     }
 }
+
+/// The stamps an index may leave out (this build's format version only):
+/// a manifest without one is readable, one with a DIFFERENT value is not.
+const OPTIONAL_STAMPS: [&str; 1] = ["names"];
 
 /// Why `theirs` (field → stamp) is not what a `format` index must carry,
 /// one entry per field that differs; a format this binary does not read
@@ -342,6 +383,11 @@ fn stamp_mismatches(format: &str, theirs: &BTreeMap<String, String>) -> Vec<Stri
             theirs.get(k).map(String::as_str),
             ours.get(k).map(String::as_str),
         );
+        // an OPTIONAL stamp's absence is fine (an index built before it);
+        // a value is not
+        if t.is_none() && OPTIONAL_STAMPS.contains(&k) {
+            return None;
+        }
         (t != o).then(|| format!("{k} {} (this binary reads {})", show(t), show(o)))
     }));
     wrong
@@ -456,6 +502,7 @@ impl Manifest {
             ("literals", Some(&f.literals)),
             ("units", Some(&f.units)),
             ("edges", f.edges.as_ref()),
+            ("names", f.names.as_ref()),
         ]
         .into_iter()
         .filter_map(|(k, v)| Some((k.to_string(), v?.clone())))

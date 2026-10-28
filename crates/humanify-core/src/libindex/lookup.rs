@@ -10,7 +10,8 @@ use std::path::Path;
 use super::format::{EdgeRow, HelperRow, LiteralRow, Manifest, UnitRow};
 use super::literals::{LiteralMode, code_literals};
 use super::table::{
-    self, CalleePrintTable, EdgeCallee, EdgeTable, LiteralTable, Source, UnitTable,
+    self, CalleePrintTable, EdgeCallee, EdgeTable, LiteralTable, NameRow, NameTable, Source,
+    UnitTable,
 };
 use super::units::{StatementPrints, UnitPrint};
 use crate::matching::store::ReferenceStore;
@@ -64,6 +65,14 @@ pub struct LibraryIndex {
     /// under the row's owner, OUT-OF under the callee's own — including
     /// prints with no unit row of their own. None for a `/3` index.
     callee_prints: Option<Vec<CalleePrintTable>>,
+    /// The names tables (exp159, `names/1`), parallel to the unit tables
+    /// (chosen slice first, then the terser-built ones), each Some when
+    /// the manifest lists that slice's `names.<slice>.bin`; empty for an
+    /// index with no names table at all.
+    names_tables: Vec<Option<NameTable>>,
+    /// [`table::NAMES_STRINGS_FILE`]'s strings, when any names table is
+    /// read; a names entry's `name` id indexes it.
+    name_strings: Vec<String>,
     /// Every package name the index knows: its owners, and (loaded) the
     /// packages its manifest records registry metadata or builds for.
     known: BTreeSet<String>,
@@ -76,7 +85,7 @@ impl LibraryIndex {
     /// An index from its rows, through the same tables a run reads (the
     /// tests' constructor).
     pub fn from_rows(units: Vec<UnitRow>, literals: Vec<LiteralRow>) -> LibraryIndex {
-        Self::rows(units, None, literals)
+        Self::rows(units, None, Vec::new(), literals)
     }
 
     /// [`LibraryIndex::from_rows`] with an edge table (a `/4` index; the
@@ -86,12 +95,23 @@ impl LibraryIndex {
         edges: Vec<EdgeRow>,
         literals: Vec<LiteralRow>,
     ) -> LibraryIndex {
-        Self::rows(units, Some(edges), literals)
+        Self::rows(units, Some(edges), Vec::new(), literals)
+    }
+
+    /// [`LibraryIndex::from_rows`] with the unit rows' restored names (the
+    /// tests' constructor for exp159's lookup).
+    pub fn from_rows_with_names(
+        units: Vec<UnitRow>,
+        names: Vec<NameRow>,
+        literals: Vec<LiteralRow>,
+    ) -> LibraryIndex {
+        Self::rows(units, None, names, literals)
     }
 
     fn rows(
         units: Vec<UnitRow>,
         edges: Option<Vec<EdgeRow>>,
+        names: Vec<NameRow>,
         literals: Vec<LiteralRow>,
     ) -> LibraryIndex {
         let edge_rows: &[EdgeRow] = edges.as_deref().unwrap_or(&[]);
@@ -106,6 +126,16 @@ impl LibraryIndex {
             let bytes = EdgeTable::encode(&units, &e, &packages).expect("edge rows encode");
             vec![EdgeTable::open(Source::Memory(bytes)).expect("an encoded edge table opens")]
         });
+        let (names_tables, name_strings) = if names.is_empty() {
+            (Vec::new(), Vec::new())
+        } else {
+            let mut interner = table::NameInterner::default();
+            let (bytes, ()) = NameTable::encode(&units, &names, &mut interner)
+                .expect("unit hashes are unit keys");
+            let bytes =
+                NameTable::open(Source::Memory(bytes)).expect("an encoded names table opens");
+            (vec![Some(bytes)], interner.into_strings())
+        };
         let units = UnitTable::encode(&units, &packages).expect("unit hashes are unit keys");
         LibraryIndex {
             id: String::new(),
@@ -122,6 +152,8 @@ impl LibraryIndex {
             .expect("an encoded literal table opens"),
             edges,
             callee_prints,
+            names_tables,
+            name_strings,
             known: packages.iter().cloned().collect(),
             packages,
             helpers: BTreeMap::new(),
@@ -291,6 +323,21 @@ impl LibraryIndex {
             .has_edges()
             .then(|| open_callee_prints(&slice).map(|t| vec![t]))
             .transpose()?;
+        // exp159: the names tables, parallel to the unit tables — a slice's
+        // is read when the manifest lists its `names.<slice>.bin` (the
+        // presence signal; the manifest's names STAMP is the format
+        // version, not presence). A listed table that does not open is a
+        // refusal, never an empty table.
+        let open_names = |slice: &str| {
+            let file = table::names_file(slice);
+            if !manifest.tables.contains_key(&file) {
+                return Ok(None);
+            }
+            NameTable::open(open(&file)?)
+                .map(Some)
+                .map_err(|e| format!("{file}: {e}"))
+        };
+        let mut names_tables = vec![open_names(&slice)?];
         let mut reason = reason.to_string();
         let mut terser_units = Vec::new();
         if terser != super::recipe::TerserSlices::Off {
@@ -306,6 +353,7 @@ impl LibraryIndex {
                 if let Some(tables) = callee_prints.as_mut() {
                     tables.push(open_callee_prints(name)?);
                 }
+                names_tables.push(open_names(name)?);
             }
             reason.push_str(&format!(
                 "; terser_slices = {}: also {}",
@@ -319,6 +367,13 @@ impl LibraryIndex {
         }
         let literals = LiteralTable::open(open(table::LITERALS_FILE)?)
             .map_err(|e| format!("{}: {e}", table::LITERALS_FILE))?;
+        let name_strings = if names_tables.iter().any(|t| t.is_some()) {
+            let text = read(table::NAMES_STRINGS_FILE)?;
+            serde_json::from_str(&text)
+                .map_err(|e| format!("{}: {e}", table::NAMES_STRINGS_FILE))?
+        } else {
+            Vec::new()
+        };
         let helpers = if manifest.tables.contains_key(table::HELPERS_FILE) {
             let text = read(table::HELPERS_FILE)?;
             let rows = text
@@ -347,6 +402,8 @@ impl LibraryIndex {
             literals,
             edges,
             callee_prints,
+            names_tables,
+            name_strings,
             helpers,
         })
     }
@@ -435,6 +492,32 @@ impl LibraryIndex {
                 .get(usize::from(hit.table))
                 .map_or_else(Vec::new, |t| t.callees(hit.row)),
         )
+    }
+
+    /// A unit hit's restored ORIGINAL names (exp159, `names/1`): what the
+    /// package's own source declares where the minified print's
+    /// declarations anchor. `RestoreAnswer::Absent` when the index holds
+    /// no names table for the hit's slice, the row no names, or nothing
+    /// was recovered — absence, never a guess; several lists when the
+    /// print's versions' sources disagree (an ambiguous answer, the
+    /// caller's to settle).
+    pub fn restore_names(&self, hit: UnitHit) -> table::RestoreAnswer {
+        use super::table::RestoreAnswer;
+        let Some(table) = self
+            .names_tables
+            .get(usize::from(hit.table))
+            .and_then(|t| t.as_ref())
+        else {
+            return RestoreAnswer::Absent;
+        };
+        let lists = table
+            .lists(hit.row, &self.name_strings)
+            .expect("the names table decodes");
+        match lists.len() {
+            0 => RestoreAnswer::Absent,
+            1 => RestoreAnswer::Single(lists.into_iter().next().expect("one list")),
+            _ => RestoreAnswer::Ambiguous(lists),
+        }
     }
 
     /// An owner id's package name.
@@ -903,7 +986,7 @@ fn is_wordy(literal: &str) -> bool {
 
 const WORDY_CAP: f64 = 2.0;
 
-fn hex_sha256(bytes: &[u8]) -> String {
+pub fn hex_sha256(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     Sha256::digest(bytes)
         .iter()

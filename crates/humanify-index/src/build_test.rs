@@ -22,6 +22,7 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
     )
     .expect("fixture");
     BuildConfig {
+        names: false,
         packages: vec!["ms".into()],
         as_of: as_of.into(),
         registry,
@@ -160,7 +161,7 @@ fn a_module_shard_key_spells_the_rows_edge_stamp_never_the_readable_one() {
         newest_at_as_of: None,
         bundler_after_as_of: false,
     }];
-    let inputs = shard_inputs("ms", "2.1.2", &slices, SpongeRegions::Drop);
+    let inputs = shard_inputs("ms", "2.1.2", &slices, SpongeRegions::Drop, false);
     let module = inputs
         .iter()
         .find(|i| matches!(i.kind, ShardKind::Modules(_)))
@@ -174,6 +175,28 @@ fn a_module_shard_key_spells_the_rows_edge_stamp_never_the_readable_one() {
         !module.fingerprint.contains("edges/2"),
         "the readable stamp never keys a shard: {}",
         module.fingerprint
+    );
+    // exp159: a names build's shard key spells it — the rows differ (each
+    // unit row carries its names) — and a plain build's does not
+    let plain = shard_inputs("ms", "2.1.2", &slices, SpongeRegions::Drop, false);
+    assert_eq!(plain, inputs, "names off is the old key");
+    let named = shard_inputs("ms", "2.1.2", &slices, SpongeRegions::Drop, true);
+    let module = named
+        .iter()
+        .find(|i| matches!(i.kind, ShardKind::Modules(_)))
+        .expect("a module shard");
+    assert!(
+        module.fingerprint.ends_with("+unit-names/1"),
+        "the names shard key: {}",
+        module.fingerprint
+    );
+    let literals = named
+        .iter()
+        .find(|i| i.kind == ShardKind::Literals)
+        .expect("the literals shard");
+    assert_eq!(
+        literals.fingerprint, inputs[0].fingerprint,
+        "the literal rows are untouched by the names pass"
     );
 }
 
@@ -213,6 +236,7 @@ fn unit_rows_are_attributed_through_the_sourcemap() {
         &map,
         &root.join("out"),
         SpongeRegions::Drop,
+        false,
     );
     assert_eq!(notes.unowned, 1, "the app entry's statement");
     assert!(!rows.is_empty());
@@ -263,6 +287,7 @@ fn a_unit_spanning_several_files_of_one_package_is_that_packages() {
         &map,
         &root.join("out"),
         SpongeRegions::Drop,
+        false,
     );
     assert_eq!(notes.mixed_spans, 0);
     assert!(
@@ -396,6 +421,7 @@ fn a_source_file_credited_to_two_modules_labels_neither() {
         &root.join("out"),
         &mut shard,
         SpongeRegions::Drop,
+        false,
     )
     .expect("fingerprint");
     let files: Vec<&str> = shard.modules.iter().map(|m| m.file.as_str()).collect();
@@ -531,6 +557,7 @@ fn unit_rows_of_a_pre_bundled_file_are_dropped_by_evidence() {
         &map,
         &root.join("out"),
         SpongeRegions::Drop,
+        false,
     );
     let files: std::collections::BTreeSet<&str> = rows.iter().map(|r| r.file.as_str()).collect();
     assert_eq!(
@@ -641,6 +668,7 @@ fn a_shard_records_the_sponge_files_its_units_were_dropped_for() {
         &root.join("out"),
         &mut shard,
         SpongeRegions::Drop,
+        false,
     )
     .expect("fingerprint");
     assert!(shard.units.is_empty(), "{:?}", shard.units);
@@ -720,7 +748,7 @@ fn region_chunk_rows(
             })
             .collect(),
     };
-    let out = unit_rows(bun_node(), &code, &map, &root.join("out"), mode);
+    let out = unit_rows(bun_node(), &code, &map, &root.join("out"), mode, false);
     std::fs::remove_dir_all(&root).ok();
     out
 }

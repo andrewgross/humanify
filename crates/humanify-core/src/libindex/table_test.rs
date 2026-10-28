@@ -4,10 +4,12 @@
 
 use std::collections::BTreeMap;
 
-use crate::libindex::format::{LiteralRow, UnitRow};
+use crate::libindex::format::{LiteralRow, NameRow, UnitRow};
+use crate::libindex::names::{NameKind, RestoredName};
 use crate::libindex::table::{
-    BLOCK, KeyColumnBytes, LITERALS_FILE, LiteralTable, PACKAGES_FILE, Source, UnitTable,
-    lookup_files, package_table, unit_key, units_file,
+    BLOCK, KeyColumnBytes, LITERALS_FILE, LiteralTable, NAMES_STRINGS_FILE, NameTable,
+    PACKAGES_FILE, Source, UnitTable, lookup_files, names_file, names_lookup_files, package_table,
+    unit_key, units_file,
 };
 
 fn unit(hash: u64, owner: &str, module_bytes: u64) -> UnitRow {
@@ -20,6 +22,120 @@ fn unit(hash: u64, owner: &str, module_bytes: u64) -> UnitRow {
         module_bytes,
         versions: vec![("1.0.0".into(), "1.0.0".into())],
     }
+}
+
+fn name(hash: &str, owner: &str, names: &[(&str, &str, &str)], v: &str) -> NameRow {
+    NameRow {
+        hash: hash.into(),
+        owner: owner.into(),
+        file: "index.js".into(),
+        names: names
+            .iter()
+            .map(|&(slot, name, kind)| RestoredName {
+                slot: slot.parse().unwrap(),
+                name: name.into(),
+                kind: serde_json::from_str::<NameKind>(&format!("\"{kind}\"")).unwrap(),
+            })
+            .collect(),
+        versions: vec![(v.into(), v.into())],
+    }
+}
+
+#[test]
+fn the_names_table_answers_each_unit_row_with_its_lists() {
+    let units = BTreeMap::from([(
+        "bun".to_string(),
+        vec![unit(0x11, "dep", 100), unit(0x22, "dep", 100)],
+    )]);
+    let names = BTreeMap::from([(
+        "bun".to_string(),
+        vec![
+            name(
+                &format!("{:016x}", 0x11),
+                "dep",
+                &[("0", "pLimit", "function")],
+                "1.0.0",
+            ),
+            // the same print under two versions whose sources disagree:
+            // both lists are kept, the lookup answers Ambiguous
+            name(
+                &format!("{:016x}", 0x22),
+                "dep",
+                &[("0", "a", "local")],
+                "1.0.0",
+            ),
+            name(
+                &format!("{:016x}", 0x22),
+                "dep",
+                &[("0", "b", "param")],
+                "2.0.0",
+            ),
+        ],
+    )]);
+    let files = names_lookup_files(&units, &names).expect("encode");
+    assert_eq!(
+        files.keys().cloned().collect::<Vec<_>>(),
+        vec![names_file("bun").as_str(), NAMES_STRINGS_FILE],
+        "{:?}",
+        files.keys()
+    );
+    let strings: Vec<String> =
+        serde_json::from_slice(&files[NAMES_STRINGS_FILE]).expect("names.json");
+    assert_eq!(strings, vec!["a", "b", "pLimit"]);
+    let table = NameTable::open(Source::Memory(files[names_file("bun").as_str()].clone()))
+        .expect("the encoded table opens");
+    let single = table.lists(0, &strings).expect("decode");
+    assert_eq!(single.len(), 1);
+    assert_eq!(single[0][0].slot, 0);
+    assert_eq!(single[0][0].name, "pLimit");
+    assert_eq!(single[0][0].kind, NameKind::Function);
+    let both = table.lists(1, &strings).expect("decode");
+    assert_eq!(both.len(), 2);
+    assert_eq!(both[0][0].name, "a");
+    assert_eq!(both[1][0].name, "b");
+    // a row with no names answers nothing (not an error, not a near row)
+    assert!(table.lists(2, &strings).expect("decode").is_empty());
+}
+
+#[test]
+fn a_names_row_whose_unit_key_is_absent_is_refused_at_encoding() {
+    let units = BTreeMap::from([("bun".to_string(), vec![unit(0x11, "dep", 100)])]);
+    let names = BTreeMap::from([(
+        "bun".to_string(),
+        vec![name(
+            &format!("{:016x}", 0x99),
+            "dep",
+            &[("0", "x", "local")],
+            "1.0.0",
+        )],
+    )]);
+    let err = names_lookup_files(&units, &names).expect_err("orphan names row");
+    assert!(err.contains("no unit row"), "{err}");
+}
+
+#[test]
+fn a_names_table_refuses_a_kind_ordinal_it_does_not_know() {
+    // corruption must be loud, never a silently wrong kind
+    let units = BTreeMap::from([("bun".to_string(), vec![unit(0x11, "dep", 100)])]);
+    let names = BTreeMap::from([(
+        "bun".to_string(),
+        vec![name(
+            &format!("{:016x}", 0x11),
+            "dep",
+            &[("0", "x", "local")],
+            "1.0.0",
+        )],
+    )]);
+    let files = names_lookup_files(&units, &names).expect("encode");
+    let mut bytes = files[names_file("bun").as_str()].clone();
+    let last = bytes.len() - 4; // the last entry's kind ordinal
+    bytes[last] = u32::MAX.to_le_bytes()[0];
+    let table = NameTable::open(Source::Memory(bytes)).expect("the table opens");
+    let strings = ["x".to_string()];
+    assert!(
+        table.lists(0, &strings).is_err(),
+        "an unknown kind is refused"
+    );
 }
 
 fn lits(owner: &str, file: &str, l: &[&str]) -> LiteralRow {

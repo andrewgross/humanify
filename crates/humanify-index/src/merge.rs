@@ -22,9 +22,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use humanify_core::libindex::format::{
     Callee, EdgeRow, HelperRow, INDEX_FORMAT, LiteralFileRow, LiteralRow, Manifest, ModuleRow,
-    PackageRecord, RefusedRecord, RegistrySnapshot, SliceRecord, UnitRow, fingerprint_versions,
-    sort_versions, version_ranges,
+    NameRow, PackageRecord, RefusedRecord, RegistrySnapshot, SliceRecord, UnitRow,
+    fingerprint_versions, sort_versions, version_ranges,
 };
+use humanify_core::libindex::names::RestoredName;
 use humanify_core::libindex::table::unit_key;
 use serde::Serialize;
 
@@ -147,6 +148,10 @@ struct UnitGroup {
     inside: BTreeSet<u64>,
     /// (owner, print) of each OUT-OF callee.
     out_of: BTreeSet<(u32, u64)>,
+    /// exp159: the restored names lists the group's versions were recovered
+    /// with, each with the version ids that named it (the sources disagree
+    /// across versions: several lists, an ambiguous answer).
+    names: BTreeMap<Vec<RestoredName>, Vec<u32>>,
 }
 
 /// One slice's groups.
@@ -279,11 +284,15 @@ impl Merger {
                 versions: Vec::new(),
                 inside: BTreeSet::new(),
                 out_of: BTreeSet::new(),
+                names: BTreeMap::new(),
             });
             e.module_bytes = e.module_bytes.min(u.module_bytes);
             e.versions.push(version);
             e.inside.extend(inside);
             e.out_of.extend(out_of);
+            if !u.names.is_empty() {
+                e.names.entry(u.names.clone()).or_default().push(version);
+            }
         }
         Ok(())
     }
@@ -380,6 +389,37 @@ impl Merger {
             .collect()
     }
 
+    /// `names.<slice>.jsonl` (exp159): the unit rows' restored names, in
+    /// unit row order and, within a row, by the names themselves — one row
+    /// per distinct list over the group's versions. A unit whose rows
+    /// recovered nothing has none.
+    fn name_rows(&self, g: &SliceGroups, indexed: &BTreeMap<String, Vec<String>>) -> Vec<NameRow> {
+        let s = &self.strings;
+        let mut keys: Vec<&(u64, u32, u32)> = g.units.keys().collect();
+        keys.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| s.cmp(a.1, b.1))
+                .then_with(|| s.cmp(a.2, b.2))
+        });
+        let mut rows = Vec::new();
+        for k in keys {
+            let u = &g.units[k];
+            for (names, versions) in &u.names {
+                let mut versions = versions.clone();
+                versions.sort_unstable();
+                versions.dedup();
+                rows.push(NameRow {
+                    hash: format!("{:016x}", k.0),
+                    owner: s.get(k.1).to_string(),
+                    file: s.get(k.2).to_string(),
+                    names: names.clone(),
+                    versions: self.ranges(indexed, k.1, &versions),
+                });
+            }
+        }
+        rows
+    }
+
     /// `edges.<slice>.jsonl`: the unit rows' recorded callees, in unit row
     /// order (a row with none has no edge row); OUT-OF callees sorted by
     /// (owner name, hash).
@@ -447,6 +487,7 @@ impl Merger {
         files.insert("versions.json".into(), pretty(&indexed));
         let mut units: BTreeMap<String, Vec<UnitRow>> = BTreeMap::new();
         let mut edges: BTreeMap<String, Vec<EdgeRow>> = BTreeMap::new();
+        let mut names: BTreeMap<String, Vec<NameRow>> = BTreeMap::new();
         for (kind, g) in &self.slices {
             files.insert(
                 format!("modules.{kind}.jsonl"),
@@ -462,8 +503,19 @@ impl Merger {
                     jsonl(&edge_rows),
                 );
                 edges.insert(kind.clone(), edge_rows);
+                let name_rows = self.name_rows(g, &indexed);
+                if !name_rows.is_empty() {
+                    files.insert(
+                        humanify_core::libindex::table::names_rows_file(kind),
+                        jsonl(&name_rows),
+                    );
+                    names.insert(kind.clone(), name_rows);
+                }
             }
         }
+        files.extend(humanify_core::libindex::table::names_lookup_files(
+            &units, &names,
+        )?);
         let literals = self.literal_rows(&indexed);
         files.extend(humanify_core::libindex::table::lookup_files(
             &units,

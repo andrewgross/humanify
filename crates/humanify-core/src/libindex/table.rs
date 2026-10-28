@@ -47,7 +47,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::Range;
 use std::path::Path;
 
+pub use super::format::NameRow;
 use super::format::{EdgeRow, LiteralRow, UnitRow};
+
 use super::lookup::UnitHit;
 
 /// Every owner package, sorted (a JSON array of names).
@@ -760,6 +762,292 @@ impl CalleePrintTable {
             self.recorders_at + ends[0] * 4,
             (ends[1] - ends[0]) as usize,
         )
+    }
+}
+
+// ---------------------------------------------------------- names table
+
+/// `names.<slice>.jsonl`: the unit rows' restored names (provenance,
+/// [`super::format::NameRow`], read by instruments); a run reads
+/// [`names_file`].
+pub fn names_rows_file(slice: &str) -> String {
+    format!("names.{slice}.jsonl")
+}
+
+/// `names.<slice>.bin`: a slice's names lookup table (exp159, `names/1`),
+/// keyed by unit row id ([`UnitHit::row`]).
+pub fn names_file(slice: &str) -> String {
+    format!("names.{slice}.bin")
+}
+
+/// `names.json`: every distinct restored name, once, an id its position
+/// (a [`NameTable`] entry carries the id). Written only when names rows
+/// are; an index that lists a names table and lacks this file is damaged.
+pub const NAMES_STRINGS_FILE: &str = "names.json";
+
+const NAMES_MAGIC: &[u8; 8] = b"HXNAME01";
+const NAMES_ENTRY: u64 = 12; // slot u32, name id u32, kind u32
+
+/// The strings a names table's entries point into (the tests' constructor
+/// and `humanify-index`'s merge share it: one interning across slices).
+#[derive(Default)]
+pub struct NameInterner {
+    strings: Vec<String>,
+    ids: std::collections::HashMap<String, u32>,
+}
+
+impl NameInterner {
+    pub fn id(&mut self, s: &str) -> u32 {
+        let next = self.strings.len() as u32;
+        *self.ids.entry(s.to_string()).or_insert_with(|| {
+            self.strings.push(s.to_string());
+            next
+        })
+    }
+
+    fn is_empty(&self) -> bool {
+        self.strings.is_empty()
+    }
+
+    /// The interned strings, in id order ([`NAMES_STRINGS_FILE`]'s rows).
+    pub fn into_strings(self) -> Vec<String> {
+        self.strings
+    }
+}
+
+/// The names lookup tables of an index whose manifest lists them: one
+/// `names.<slice>.bin` per slice with rows, and the shared
+/// [`NAMES_STRINGS_FILE`]. No names rows, no names files (an index built
+/// without the names pass carries neither).
+pub fn names_lookup_files(
+    units: &BTreeMap<String, Vec<UnitRow>>,
+    names: &BTreeMap<String, Vec<NameRow>>,
+) -> Result<BTreeMap<String, Vec<u8>>, String> {
+    let mut interner = NameInterner::default();
+    // every distinct name first, sorted: the strings file is a sorted
+    // table (every table is), and the ids are its positions
+    let mut every: BTreeSet<&str> = BTreeSet::new();
+    for rows in names.values() {
+        for r in rows {
+            every.extend(r.names.iter().map(|n| n.name.as_str()));
+        }
+    }
+    for n in every {
+        interner.id(n);
+    }
+    let mut bins: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    for (slice, rows) in names {
+        if rows.is_empty() {
+            continue;
+        }
+        let unit_rows = units
+            .get(slice)
+            .ok_or_else(|| format!("names rows for slice {slice}: the slice has no unit rows"))?;
+        let (bytes, ()) = NameTable::encode(unit_rows, rows, &mut interner)?;
+        bins.insert(names_file(slice), bytes);
+    }
+    let mut files = BTreeMap::new();
+    if !interner.is_empty() {
+        let mut strings = serde_json::to_vec(&interner.strings).map_err(|e| e.to_string())?;
+        strings.push(b'\n');
+        files.insert(NAMES_STRINGS_FILE.to_string(), strings);
+        files.extend(bins);
+    }
+    Ok(files)
+}
+
+/// A decoded entry before its strings are resolved: the slot of the
+/// unit print's canonical mapping, the name's id and the kind's
+/// ([`super::names::NameKind::ordinal`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RawName {
+    pub slot: u32,
+    pub name: u32,
+    pub kind: u32,
+}
+
+/// What a unit print's restore lookup answers (exp159): nothing — no
+/// names table, no row, nothing recovered — or the names its versions
+/// were recovered with, one list when they agree, several (an ambiguous
+/// answer) when the sources disagree.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RestoreAnswer {
+    Absent,
+    Single(Vec<super::names::RestoredName>),
+    Ambiguous(Vec<Vec<super::names::RestoredName>>),
+}
+
+/// `names.<slice>.bin`: header (magic, unit rows, lists, entries), the
+/// unit rows' list starts (rows + 1), the lists' entry starts (lists + 1),
+/// entries (slot, name id, kind). A row's lists are the name lists its
+/// (hash, owner, file) was recovered with over its versions — one when
+/// they agree, several when the sources disagree (an ambiguous answer).
+pub struct NameTable {
+    src: Source,
+    n_rows: u64,
+    n_entries: u64,
+    lists_at: u64,
+    entries_at: u64,
+}
+
+impl NameTable {
+    /// `unit_rows` in the same order ([`UnitTable::encode`]'s) the run
+    /// reads: a names entry's key is the unit row id that order assigns.
+    pub fn encode(
+        unit_rows: &[UnitRow],
+        name_rows: &[NameRow],
+        interner: &mut NameInterner,
+    ) -> Result<(Vec<u8>, ()), String> {
+        let ids = unit_row_ids(unit_rows)?;
+        let mut row_of: HashMap<(String, String, String), u32> = HashMap::new();
+        for (r, id) in unit_rows.iter().zip(&ids) {
+            row_of.insert((r.hash.clone(), r.owner.clone(), r.file.clone()), *id);
+        }
+        // row id -> its lists, each list's versions kept for the row order
+        let mut by_row: BTreeMap<u32, BTreeMap<Vec<super::names::RestoredName>, ()>> =
+            BTreeMap::new();
+        for r in name_rows {
+            let key = unit_key(&r.hash)
+                .ok_or_else(|| format!("name row hash {:?} is not a unit key", r.hash))?;
+            let _ = key;
+            let id = *row_of
+                .get(&(r.hash.clone(), r.owner.clone(), r.file.clone()))
+                .ok_or_else(|| {
+                    format!(
+                        "name row {:?}/{}/{:?}: no unit row holds it",
+                        r.hash, r.owner, r.file
+                    )
+                })?;
+            by_row.entry(id).or_default().insert(r.names.clone(), ());
+        }
+        let n_rows = unit_rows.len() as u64;
+        let n_lists: u64 = by_row.values().map(|l| l.len() as u64).sum();
+        let mut row_starts: Vec<u64> = Vec::with_capacity(by_row.len() + 1);
+        let mut lists: Vec<&Vec<super::names::RestoredName>> = Vec::new();
+        row_starts.push(0);
+        let mut last_row = 0u32;
+        for (row, map) in &by_row {
+            // rows with no names keep an empty range: row_starts is dense
+            for _ in last_row..*row {
+                row_starts.push(lists.len() as u64);
+            }
+            last_row = *row + 1;
+            for names in map.keys() {
+                lists.push(names);
+            }
+            row_starts.push(lists.len() as u64);
+        }
+        for _ in last_row..n_rows as u32 {
+            row_starts.push(lists.len() as u64);
+        }
+        let mut list_starts: Vec<u64> = Vec::with_capacity(lists.len() + 1);
+        let mut entries: Vec<RawName> = Vec::new();
+        list_starts.push(0);
+        for names in &lists {
+            for n in names.iter() {
+                entries.push(RawName {
+                    slot: n.slot,
+                    name: interner.id(&n.name),
+                    kind: n.kind.ordinal(),
+                });
+            }
+            list_starts.push(entries.len() as u64);
+        }
+        let n_entries = entries.len() as u64;
+        let mut out = Out::default();
+        out.0.extend_from_slice(NAMES_MAGIC);
+        out.u64s([n_rows, n_lists, n_entries]);
+        out.u64s(row_starts.iter().copied());
+        out.u64s(list_starts.iter().copied());
+        for e in &entries {
+            out.u32(e.slot);
+            out.u32(e.name);
+            out.u32(e.kind);
+        }
+        Ok((out.0, ()))
+    }
+
+    pub fn open(src: Source) -> Result<NameTable, String> {
+        let h = header(&src, NAMES_MAGIC, "names table", 3)?;
+        let (n_rows, n_lists, n_entries) = (h[0], h[1], h[2]);
+        let lists_at = 8 + 24;
+        let entries_at = lists_at + (n_rows + 1) * 8 + (n_lists + 1) * 8;
+        check_size("names table", &src, entries_at + n_entries * NAMES_ENTRY)?;
+        Ok(NameTable {
+            src,
+            n_rows,
+            n_entries,
+            lists_at,
+            entries_at,
+        })
+    }
+
+    /// A unit row's name lists, in row order ([`NameTable::encode`]'s):
+    /// empty for a row the table holds no names of — and for a row id past
+    /// the table's rows (silence, never an error, like the unit table's).
+    pub fn lists(
+        &self,
+        row: u32,
+        strings: &[String],
+    ) -> Result<Vec<Vec<super::names::RestoredName>>, String> {
+        if row as u64 >= self.n_rows {
+            return Ok(Vec::new());
+        }
+        let bounds = self.src.u64s(self.lists_at + row as u64 * 8, 2);
+        let lists = (bounds[0]..bounds[1])
+            .map(|l| {
+                let eb = self
+                    .src
+                    .u64s(self.lists_at + self.n_rows_plus() * 8 + l * 8, 2);
+                self.entries(eb[0], eb[1], strings)
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        Ok(lists)
+    }
+
+    fn n_rows_plus(&self) -> u64 {
+        self.n_rows + 1
+    }
+
+    fn entries(
+        &self,
+        from: u64,
+        to: u64,
+        strings: &[String],
+    ) -> Result<Vec<super::names::RestoredName>, String> {
+        if to < from || to > self.n_entries {
+            return Err(format!(
+                "names entries {from}..{to} run past the table's {}",
+                self.n_entries
+            ));
+        }
+        let bytes = self.src.bytes(
+            self.entries_at + from * NAMES_ENTRY,
+            ((to - from) * NAMES_ENTRY) as usize,
+        );
+        bytes
+            .as_chunks::<12>()
+            .0
+            .iter()
+            .map(|c| {
+                let slot = u32::from_le_bytes(c[0..4].try_into().expect("4 bytes"));
+                let name = u32::from_le_bytes(c[4..8].try_into().expect("4 bytes")) as usize;
+                let kind = u32::from_le_bytes(c[8..12].try_into().expect("4 bytes"));
+                let spelled = strings.get(name).ok_or_else(|| {
+                    format!(
+                        "names entry's name id {name} past the {} strings",
+                        strings.len()
+                    )
+                })?;
+                let kind = super::names::NameKind::from_ordinal(kind)
+                    .ok_or_else(|| format!("names entry's kind ordinal {kind} is no kind"))?;
+                Ok(super::names::RestoredName {
+                    slot,
+                    name: spelled.clone(),
+                    kind,
+                })
+            })
+            .collect()
     }
 }
 

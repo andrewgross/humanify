@@ -127,6 +127,28 @@ fn the_edge_stamps_split_between_the_shard_rows_and_the_readable_contract() {
     );
 }
 
+#[test]
+fn the_names_stamp_is_optional_but_must_match_when_present() {
+    // exp159: an index built before the names pass (no `names` stamp) is
+    // readable — it answers a restore lookup with absence, never names. A
+    // names TABLE format this binary does not read is refused.
+    let mut old = manifest_for(&[BUN]);
+    old.fingerprints.names = None;
+    assert_eq!(old.check_compatible(), Ok(()));
+    assert!(
+        super::format::check_manifest_stamps(&serde_json::to_string(&old).unwrap()).is_ok(),
+        "the stamp check accepts an index without the stamp"
+    );
+    let mut newer = manifest_for(&[BUN]);
+    newer.fingerprints.names = Some("names/2".into());
+    let err = newer.check_compatible().expect_err("a names/2 index");
+    assert!(err.contains("names/1") && err.contains("names/2"), "{err}");
+    assert!(
+        super::format::check_manifest_stamps(&serde_json::to_string(&newer).unwrap()).is_err(),
+        "the stamp check refuses before the parse"
+    );
+}
+
 fn manifest_for(recipes: &[&str]) -> super::format::Manifest {
     use super::format::{INDEX_FORMAT, Manifest, RECIPE_VERSION, SliceRecord};
     use super::recipe::Recipe;

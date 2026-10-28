@@ -423,6 +423,7 @@ pub fn plan_runtime(
         pinned,
         merge_only: false,
         sponge_regions: Default::default(),
+        names: false,
         quiet: true,
     };
     Ok((cfg, planned))

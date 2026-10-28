@@ -70,6 +70,7 @@ fn rows_of(root: &Path, code: &str, map: &SourceMap) -> (Vec<ShardUnit>, ShardNo
         map,
         &root.join("out"),
         SpongeRegions::Drop,
+        false,
     )
 }
 
