@@ -219,6 +219,74 @@ statement's rename-invariant hash>`), not from the bundle's composition; arrival
     pair: 86% of vendor bytes at index paths on BOTH sides (1,220 index / 358 fallback / 11 declared /
     3 asset factories per tree).
 
+### 6. The era's synthetic names and its join (exp158)
+
+Two mechanical blockers on the way to identifier restoration (step 7): the era's synthetic names
+renamed on composition changes, and the strict region-to-module join was suspected of flipping
+wholesale on content drift. Branch `exp158-naming-stability`.
+
+- **Fix 1 — the synthetic key is the module's whole statement set.** The era's synthetic
+  `module-<hash8>.js` names keyed the module's HEAD statement only; short generic wrappers (the same
+  blurred `var m = W(() => …)` shape) tie across different modules, and the tie fell to arrival
+  order — so a version that discovered one more region renamed every survivor (the eval pair's
+  `trulyAdded` bucket held the `lodash/module-df83ae16{,-2,-3}` and `lodash-es/module-df83ae16{,-2}`
+  tie family and the `2374bc3b` collision shared by `@azure/core-tracing` and `@smithy/types`). The
+  era's key (`module_content_key`, `naming/module_names.rs`) is now the module's per-statement
+  rename-invariant hashes SORTED and hashed together — order-independent, content-derived — with
+  arrival order only breaking an exact content tie (`module-<key8>-2.js`). The unpack side
+  (`place_factories_from_index`) is untouched: its per-factory text keys were never the disease.
+  Owner note: the task pointed at `place/vendor_names.rs`, which does not exist — the measured
+  disease is the era's key in `naming/module_names.rs`; `modules/vendor_names.rs`'s
+  `FileNameChooser` `lib_<hash8>-N` uniquifier is default-reachable but ties only byte-identical
+  bodies (no measured churn on the pair) and was left alone.
+- **Fix 2 — the drift-tolerant join relaxation is REFUTED by measurement.** The strict join (a
+  region joins the module whose statement set is exactly its own) was suspected of flipping
+  wholesale on content drift. The statement-level census (exp157's join census) put the two-sided
+  overlap bar at 0.55 — the lowest symmetric bar with zero conflicting candidates. The OUTCOME
+  census says otherwise: dumping the join's inputs from the binary on the 2.1.85→2.1.86 pair and
+  replaying the join offline (the replay reproduces the strict join counts, 75/52, AND the pair's
+  bucket counts, trulyRemoved 34 / trulyAdded 13, exactly), every bar from 0.5 to 0.95 in all three
+  forms — two-sided, region-side only, module-side only — INCREASED the era's one-sided placed
+  paths (strict 34/13 → 0.55 two-sided 99/59 → 0.55 region-side 156/146); the near-miss
+  relationships themselves do not replicate across versions, because the claims flip packages
+  wholesale (matching's territory). The relaxation shipped nowhere; the strict join stays, with
+  exp158's PACKAGE GUARD (a module two packages claim never moves, whichever pass — a safety
+  property; on the pair it refused 0 exact and 4–5 fuzzy candidates).
+- **Reachability.** Both fixes are names-mode-only: `humanify-cli/src/config.rs` sets
+  `module_answers`/`placement_groups` only when `matching == names`, `place_names_modules`
+  early-returns without them, and `plan_library_modules` returns immediately on empty regions. No
+  default flip; `library.names_unlocked` stays measurement-only.
+- **Gates.** On the quiet pair's stub trees (the tree-compare buckets, the instrument the join
+  disease was measured with): the final design reproduces exp157's placement exactly — trulyAdded
+  13 / trulyRemoved 34 / movedPath 0 / nameOnly 1,588 / realChange 3, before AND after (the stub
+  pair's `nameOnly` mass is the stub namer's raw-spelling drift, not placement); re-placing the
+  era's synthetic files costs 35 `movedPath` on 2.1.85 and 15 on 2.1.86 and nothing else
+  (identical 1,589, nameOnly 0, realChange 0). The rejected 0.55 relaxation, measured on the same
+  instrument: trulyAdded 13 → 59, trulyRemoved 34 → 99.
+  034 eval (names mode, one cold run, scratch base, vs the names-mode label `exp157-vendstab-names`;
+  the default-mode reference `ref-scratch-0f338ffa-r1` is a different regime — names mode charges
+  vendor content change the default regime leaves in `src/`, so every names-mode bar is exp157's):
+  novel 4,188 / realLn 416,377 **byte-equal** (zero band); vendorReal 3,693 → 3,699 (~0±32);
+  vendorLn 1,491 **=**; mints 1,769 → 1,754; treeLn 150,551 → 149,557 (−994, the quiet pair −729);
+  cleanReal 85,671 → 84,924 (−747 — path churn leaving the real bucket with `fileAddRemove` −489;
+  `realLn` byte-equal says no real change moved with it). The eval pair's buckets: identical 1,585 /
+  nameOnly 19 / movedPath 0 / realChange 19 / trulyAdded 13 / trulyRemoved 2 — the counts equal
+  exp157's, but the trulyAdded LIST changed: the old key's tie family (`lodash[/df83ae16×3]`,
+  `lodash-es/b28cc807`) and the `2374bc3b` two-package collision are gone; what remains is two
+  cross-package claim flips (`lodash-es/module-0581b523{.js}` → `lodash/…` and same for
+  `5b5305a7` — matching's territory) and content one-sided on one version. Every pair exits 0 with
+  cache +0; warm self-hop byte-identical, 0 cache writes; the COLD self-hop on 2.1.216 reads
+  1,288 lines — outside the naming-locked reference range, the same names-mode regime as the
+  exp156 (1,294) and exp157 (1,264) baselines.
+  Library scorer (structural rule, the edges/2 index, `matching=names` + `names_unlocked`):
+  byte-identical to the exp157 baselines on all three corpora — cc P 1.0 / R 0.819 / F0.5 0.958,
+  app claimed 0; bun-dev per-bundle lines byte-identical (90 bundles, app 0); bun-held 30 bundles,
+  verdict block identical (app claimed 0).
+  Default-mode neutrality (vs main `6c8cde934`, pair 85→86, warm standing cache
+  `/work/neutrality-cache`): **NEUTRAL** — 0 differing files / 0 differing lines, cache writes
+  +0/+0 (the baseline leg's 0 is the load-bearing one), exit 0/0. Both fixes are byte-inert with
+  `names` off.
+
 ## Not in this plan
 
 - Identifier restore from package source.
