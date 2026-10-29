@@ -1565,6 +1565,7 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
         slices: plan.slices.clone(),
         packages,
         refused: plan.refused.clone(),
+        staging: cfg.out.clone(),
     })?;
     if let Some(out) = &cfg.out {
         write_index(out, &index.files)?;

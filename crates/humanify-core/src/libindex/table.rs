@@ -805,36 +805,112 @@ impl NameInterner {
         })
     }
 
-    fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.strings.is_empty()
     }
 
     /// The interned strings, in id order ([`NAMES_STRINGS_FILE`]'s rows).
+    pub fn strings(&self) -> &[String] {
+        &self.strings
+    }
+
+    /// The interned strings, in id order ([`NAMES_STRINGS_FILE`]'s rows),
+    /// consuming the interner.
     pub fn into_strings(self) -> Vec<String> {
         self.strings
     }
+}
+
+/// One names row in the merger's interned form (exp161): the unit row id
+/// ([`unit_row_ids`]'s order, the bin's keys) and the row's name lists —
+/// each entry (slot, name id, kind ordinal) in the interner's id space,
+/// the lists in ([`super::names::RestoredName`])'s order (slot, name
+/// string, kind) and unique. [`super::format::NameRow`] is the same row's
+/// provenance form, with the strings spelled; the merger streams that
+/// table off these rows so no Strings ride the merge path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NameRowCompact {
+    pub row: u32,
+    pub lists: Vec<Vec<RawName>>,
+}
+
+/// A provenance names table's rows ([`NameRow`], the strings spelled) as
+/// the compact form [`NameTable::encode`] takes: the rows in row-id order,
+/// each row's lists in [`super::names::RestoredName`]'s order and unique,
+/// with the interner holding every distinct name sorted (the ids are its
+/// positions). The tests' constructor's path ([`super::lookup`]); the
+/// merge builds its compact rows straight off its interned group keys.
+pub fn compact_name_rows(
+    units: &[UnitRow],
+    rows: &[NameRow],
+) -> Result<(Vec<NameRowCompact>, NameInterner), String> {
+    let ids = unit_row_ids(units)?;
+    let mut id_of: HashMap<(String, String, String), u32> = HashMap::new();
+    for (r, id) in units.iter().zip(&ids) {
+        id_of.insert((r.hash.clone(), r.owner.clone(), r.file.clone()), *id);
+    }
+    // every distinct name first, sorted: the strings file is a sorted
+    // table (every table is), and the ids are its positions
+    let mut every: BTreeSet<&str> = BTreeSet::new();
+    for r in rows {
+        for n in &r.names {
+            every.insert(n.name.as_str());
+        }
+    }
+    let mut interner = NameInterner::default();
+    for n in every {
+        interner.id(n);
+    }
+    // row id -> its lists (the sources disagree across versions: several
+    // lists, an ambiguous answer)
+    let mut by_row: BTreeMap<u32, BTreeSet<&Vec<super::names::RestoredName>>> = BTreeMap::new();
+    for r in rows {
+        let id = *id_of
+            .get(&(r.hash.clone(), r.owner.clone(), r.file.clone()))
+            .ok_or_else(|| {
+                format!(
+                    "name row {:?}/{}/{:?}: no unit row holds it",
+                    r.hash, r.owner, r.file
+                )
+            })?;
+        by_row.entry(id).or_default().insert(&r.names);
+    }
+    let mut compact: Vec<NameRowCompact> = Vec::new();
+    for (row, lists) in by_row {
+        compact.push(NameRowCompact {
+            row,
+            lists: lists
+                .into_iter()
+                .map(|names| {
+                    names
+                        .iter()
+                        .map(|n| RawName {
+                            slot: n.slot,
+                            name: interner.id(&n.name),
+                            kind: n.kind.ordinal(),
+                        })
+                        .collect()
+                })
+                .collect(),
+        });
+    }
+    Ok((compact, interner))
 }
 
 /// The names lookup tables of an index whose manifest lists them: one
 /// `names.<slice>.bin` per slice with rows, and the shared
 /// [`NAMES_STRINGS_FILE`]. No names rows, no names files (an index built
 /// without the names pass carries neither).
+///
+/// The rows come in the merger's interned form ([`NameRowCompact`], exp161
+/// — the full merge holds millions of them, so no Strings ride the merge
+/// path); the interner is already populated (every distinct name, sorted —
+/// the ids are its positions) and is read here, never grown.
 pub fn names_lookup_files(
     units: &BTreeMap<String, Vec<UnitRow>>,
-    names: &BTreeMap<String, Vec<NameRow>>,
+    names: &BTreeMap<String, Vec<NameRowCompact>>,
+    interner: &NameInterner,
 ) -> Result<BTreeMap<String, Vec<u8>>, String> {
-    let mut interner = NameInterner::default();
-    // every distinct name first, sorted: the strings file is a sorted
-    // table (every table is), and the ids are its positions
-    let mut every: BTreeSet<&str> = BTreeSet::new();
-    for rows in names.values() {
-        for r in rows {
-            every.extend(r.names.iter().map(|n| n.name.as_str()));
-        }
-    }
-    for n in every {
-        interner.id(n);
-    }
     let mut bins: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     for (slice, rows) in names {
         if rows.is_empty() {
@@ -843,12 +919,11 @@ pub fn names_lookup_files(
         let unit_rows = units
             .get(slice)
             .ok_or_else(|| format!("names rows for slice {slice}: the slice has no unit rows"))?;
-        let (bytes, ()) = NameTable::encode(unit_rows, rows, &mut interner)?;
-        bins.insert(names_file(slice), bytes);
+        bins.insert(names_file(slice), NameTable::encode(unit_rows, rows)?);
     }
     let mut files = BTreeMap::new();
     if !interner.is_empty() {
-        let mut strings = serde_json::to_vec(&interner.strings).map_err(|e| e.to_string())?;
+        let mut strings = serde_json::to_vec(interner.strings()).map_err(|e| e.to_string())?;
         strings.push(b'\n');
         files.insert(NAMES_STRINGS_FILE.to_string(), strings);
         files.extend(bins);
@@ -902,68 +977,43 @@ pub struct NameTable {
 }
 
 impl NameTable {
-    /// `unit_rows` in the same order ([`UnitTable::encode`]'s) the run
-    /// reads: a names entry's key is the unit row id that order assigns.
-    pub fn encode(
-        unit_rows: &[UnitRow],
-        name_rows: &[NameRow],
-        interner: &mut NameInterner,
-    ) -> Result<(Vec<u8>, ()), String> {
-        let ids = unit_row_ids(unit_rows)?;
-        let mut row_of: HashMap<(String, String, String), u32> = HashMap::new();
-        for (r, id) in unit_rows.iter().zip(&ids) {
-            row_of.insert((r.hash.clone(), r.owner.clone(), r.file.clone()), *id);
-        }
-        // row id -> its lists, each list's versions kept for the row order
-        let mut by_row: BTreeMap<u32, BTreeMap<Vec<super::names::RestoredName>, ()>> =
-            BTreeMap::new();
-        for r in name_rows {
-            let key = unit_key(&r.hash)
-                .ok_or_else(|| format!("name row hash {:?} is not a unit key", r.hash))?;
-            let _ = key;
-            let id = *row_of
-                .get(&(r.hash.clone(), r.owner.clone(), r.file.clone()))
-                .ok_or_else(|| {
-                    format!(
-                        "name row {:?}/{}/{:?}: no unit row holds it",
-                        r.hash, r.owner, r.file
-                    )
-                })?;
-            by_row.entry(id).or_default().insert(r.names.clone(), ());
-        }
+    /// `unit_rows` supply the row count and the ids' order
+    /// ([`unit_row_ids`]'s, the order the run reads); `rows` are already
+    /// in row-id order, each row's lists in ([`super::names::RestoredName`]'s)
+    /// order and unique — the merger's guarantee (exp161), checked here.
+    pub fn encode(unit_rows: &[UnitRow], rows: &[NameRowCompact]) -> Result<Vec<u8>, String> {
         let n_rows = unit_rows.len() as u64;
-        let n_lists: u64 = by_row.values().map(|l| l.len() as u64).sum();
-        let mut row_starts: Vec<u64> = Vec::with_capacity(by_row.len() + 1);
-        let mut lists: Vec<&Vec<super::names::RestoredName>> = Vec::new();
-        row_starts.push(0);
-        let mut last_row = 0u32;
-        for (row, map) in &by_row {
-            // rows with no names keep an empty range: row_starts is dense
-            for _ in last_row..*row {
-                row_starts.push(lists.len() as u64);
-            }
-            last_row = *row + 1;
-            for names in map.keys() {
-                lists.push(names);
-            }
-            row_starts.push(lists.len() as u64);
-        }
-        for _ in last_row..n_rows as u32 {
-            row_starts.push(lists.len() as u64);
-        }
-        let mut list_starts: Vec<u64> = Vec::with_capacity(lists.len() + 1);
+        let mut row_starts: Vec<u64> = Vec::with_capacity(rows.len() + 1);
+        let mut list_starts: Vec<u64> = Vec::with_capacity(rows.len() + 1);
         let mut entries: Vec<RawName> = Vec::new();
+        row_starts.push(0);
         list_starts.push(0);
-        for names in &lists {
-            for n in names.iter() {
-                entries.push(RawName {
-                    slot: n.slot,
-                    name: interner.id(&n.name),
-                    kind: n.kind.ordinal(),
-                });
+        let mut prev: Option<u32> = None;
+        for r in rows {
+            let start = prev.map_or(0, |p| p + 1);
+            if let Some(p) = prev
+                && r.row <= p
+            {
+                return Err(format!(
+                    "names row {} follows {} — the rows must be in row-id order, one per row",
+                    r.row, p
+                ));
             }
-            list_starts.push(entries.len() as u64);
+            prev = Some(r.row);
+            // rows with no names keep an empty range: row_starts is dense
+            for _ in start..r.row {
+                row_starts.push((list_starts.len() - 1) as u64);
+            }
+            for names in &r.lists {
+                entries.extend(names.iter().copied());
+                list_starts.push(entries.len() as u64);
+            }
+            row_starts.push((list_starts.len() - 1) as u64);
         }
+        for _ in prev.map_or(0, |p| p + 1)..n_rows as u32 {
+            row_starts.push((list_starts.len() - 1) as u64);
+        }
+        let n_lists = list_starts.len() as u64 - 1;
         let n_entries = entries.len() as u64;
         let mut out = Out::default();
         out.0.extend_from_slice(NAMES_MAGIC);
@@ -975,7 +1025,7 @@ impl NameTable {
             out.u32(e.name);
             out.u32(e.kind);
         }
-        Ok((out.0, ()))
+        Ok(out.0)
     }
 
     pub fn open(src: Source) -> Result<NameTable, String> {

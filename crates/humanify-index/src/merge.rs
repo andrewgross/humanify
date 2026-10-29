@@ -25,9 +25,10 @@ use humanify_core::libindex::format::{
     NameRow, PackageRecord, RefusedRecord, RegistrySnapshot, SliceRecord, UnitRow,
     fingerprint_versions, sort_versions, version_ranges,
 };
-use humanify_core::libindex::names::RestoredName;
-use humanify_core::libindex::table::unit_key;
+use humanify_core::libindex::names::{NameKind, RestoredName};
+use humanify_core::libindex::table::{NameInterner, NameRowCompact, RawName, unit_key};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 use crate::shard::{Shard, hex_sha256};
 
@@ -49,6 +50,12 @@ pub struct MergeMeta {
     pub slices: Vec<SliceRecord>,
     pub packages: Vec<PackageRecord>,
     pub refused: Vec<RefusedRecord>,
+    /// exp161: when set, the names jsonl tables are STREAMED here (they
+    /// are the merge's one table too big to buffer: the full corpus's
+    /// merged rows) instead of held in the files map; their sha256 is
+    /// computed while streaming and recorded in the manifest either way.
+    /// None — the tests' path — buffers them in RAM as every other table.
+    pub staging: Option<std::path::PathBuf>,
 }
 
 /// The index directory's files and its id.
@@ -98,6 +105,31 @@ fn pretty<T: Serialize>(v: &T) -> Vec<u8> {
     out
 }
 
+/// Two interned names lists in the restored names' order (slot, name
+/// STRING, kind): [`RestoredName`]'s derive order, elementwise, then by
+/// length — the order the names jsonl and bin hold a row's lists in.
+fn cmp_name_lists(a: &NameList, b: &NameList, s: &Interner) -> Ordering {
+    for (x, y) in a.iter().zip(b) {
+        let ord =
+            x.0.cmp(&y.0)
+                .then_with(|| s.cmp(x.1, y.1))
+                .then_with(|| x.2.cmp(&y.2));
+        if ord != Ordering::Equal {
+            return ord;
+        }
+    }
+    a.len().cmp(&b.len())
+}
+
+/// A streamed table's sha256, hex — [`hex_sha256`]'s spelling.
+fn hex_digest(hasher: Sha256) -> String {
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 /// Every string of the merge, once.
 #[derive(Default)]
 struct Interner {
@@ -114,6 +146,11 @@ impl Interner {
         self.strings.push(s.into());
         self.ids.insert(s.into(), id);
         id
+    }
+
+    /// An already-interned string's id (None when absent — never inserts).
+    fn lookup(&self, s: &str) -> Option<u32> {
+        self.ids.get(s).copied()
     }
 
     fn get(&self, id: u32) -> &str {
@@ -136,6 +173,15 @@ impl Interner {
     }
 }
 
+/// A restored names list, interned (exp161): (slot, name string id, kind
+/// ordinal). The full merge holds millions of distinct lists, so the
+/// spellings live once in [`Merger`]'s interner, never per list; the
+/// restored-name order (slot, name STRING, kind —
+/// [`RestoredName`]'s derive order, and the kinds' ordinals number the
+/// variants in that same order) is rebuilt from the interner at write
+/// time.
+type NameList = Vec<(u32, u32, u32)>;
+
 /// A unit group: the FIRST shard's nodes and content (shards come in
 /// label order), the smallest module, the versions it was seen in, and
 /// the callees any of its occurrences recorded (a union: an index edge a
@@ -151,7 +197,7 @@ struct UnitGroup {
     /// exp159: the restored names lists the group's versions were recovered
     /// with, each with the version ids that named it (the sources disagree
     /// across versions: several lists, an ambiguous answer).
-    names: BTreeMap<Vec<RestoredName>, Vec<u32>>,
+    names: BTreeMap<NameList, Vec<u32>>,
 }
 
 /// One slice's groups.
@@ -291,7 +337,12 @@ impl Merger {
             e.inside.extend(inside);
             e.out_of.extend(out_of);
             if !u.names.is_empty() {
-                e.names.entry(u.names.clone()).or_default().push(version);
+                let list: NameList = u
+                    .names
+                    .iter()
+                    .map(|n| (n.slot, self.strings.id(&n.name), n.kind.ordinal()))
+                    .collect();
+                e.names.entry(list).or_default().push(version);
             }
         }
         Ok(())
@@ -389,35 +440,86 @@ impl Merger {
             .collect()
     }
 
-    /// `names.<slice>.jsonl` (exp159): the unit rows' restored names, in
-    /// unit row order and, within a row, by the names themselves — one row
-    /// per distinct list over the group's versions. A unit whose rows
-    /// recovered nothing has none.
-    fn name_rows(&self, g: &SliceGroups, indexed: &BTreeMap<String, Vec<String>>) -> Vec<NameRow> {
+    /// `names.<slice>.jsonl` (exp159), both forms at once (exp161): the
+    /// unit rows' restored names, in unit row order and, within a row, the
+    /// restored-name order — one row per distinct list over the group's
+    /// versions; a unit whose rows recovered nothing has none. The row's
+    /// jsonl bytes go to `sink` (the provenance table: streamed, never
+    /// buffered whole); the row comes back interned ([`NameRowCompact`])
+    /// for the bin encode, its lists already in the restored-name order.
+    /// `id_of` is the unit row id each group key holds.
+    fn name_rows_into(
+        &self,
+        g: &SliceGroups,
+        indexed: &BTreeMap<String, Vec<String>>,
+        id_of: &HashMap<(u64, u32, u32), u32>,
+        remap: &HashMap<u32, u32>,
+        sink: &mut dyn FnMut(&[u8]) -> Result<(), String>,
+    ) -> Result<Vec<NameRowCompact>, String> {
         let s = &self.strings;
-        let mut keys: Vec<&(u64, u32, u32)> = g.units.keys().collect();
+        let mut keys: Vec<&(u64, u32, u32)> = g
+            .units
+            .iter()
+            .filter(|(_, u)| !u.names.is_empty())
+            .map(|(k, _)| k)
+            .collect();
         keys.sort_by(|a, b| {
             a.0.cmp(&b.0)
                 .then_with(|| s.cmp(a.1, b.1))
                 .then_with(|| s.cmp(a.2, b.2))
         });
-        let mut rows = Vec::new();
-        for k in keys {
+        let mut compact = Vec::new();
+        for &k in &keys {
             let u = &g.units[k];
-            for (names, versions) in &u.names {
-                let mut versions = versions.clone();
+            let mut lists: Vec<(&NameList, &Vec<u32>)> = u.names.iter().collect();
+            lists.sort_by(|a, b| cmp_name_lists(a.0, b.0, s));
+            let mut compact_lists: Vec<Vec<RawName>> = Vec::with_capacity(lists.len());
+            for &(l, _) in &lists {
+                let mut out = Vec::with_capacity(l.len());
+                for &(slot, name, kind) in l {
+                    let mapped = *remap
+                        .get(&name)
+                        .ok_or_else(|| format!("names list: name id {name} is not interned"))?;
+                    out.push(RawName {
+                        slot,
+                        name: mapped,
+                        kind,
+                    });
+                }
+                compact_lists.push(out);
+            }
+            // one provenance row per distinct list, in the restored-name
+            // order
+            for &(l, vs) in &lists {
+                let mut versions = vs.clone();
                 versions.sort_unstable();
                 versions.dedup();
-                rows.push(NameRow {
+                let row = NameRow {
                     hash: format!("{:016x}", k.0),
                     owner: s.get(k.1).to_string(),
                     file: s.get(k.2).to_string(),
-                    names: names.clone(),
+                    names: l
+                        .iter()
+                        .map(|&(slot, name, kind)| RestoredName {
+                            slot,
+                            name: s.get(name).to_string(),
+                            kind: NameKind::from_ordinal(kind)
+                                .expect("a kind ordinal the interner wrote"),
+                        })
+                        .collect(),
                     versions: self.ranges(indexed, k.1, &versions),
-                });
+                };
+                sink(&serde_json::to_vec(&row).map_err(|e| e.to_string())?)?;
+                sink(b"\n")?;
             }
+            compact.push(NameRowCompact {
+                row: *id_of.get(k).ok_or_else(|| {
+                    format!("names row {:016x}: no unit row of the slice holds it", k.0)
+                })?,
+                lists: compact_lists,
+            });
         }
-        rows
+        Ok(compact)
     }
 
     /// `edges.<slice>.jsonl`: the unit rows' recorded callees, in unit row
@@ -487,7 +589,6 @@ impl Merger {
         files.insert("versions.json".into(), pretty(&indexed));
         let mut units: BTreeMap<String, Vec<UnitRow>> = BTreeMap::new();
         let mut edges: BTreeMap<String, Vec<EdgeRow>> = BTreeMap::new();
-        let mut names: BTreeMap<String, Vec<NameRow>> = BTreeMap::new();
         for (kind, g) in &self.slices {
             files.insert(
                 format!("modules.{kind}.jsonl"),
@@ -503,18 +604,112 @@ impl Merger {
                     jsonl(&edge_rows),
                 );
                 edges.insert(kind.clone(), edge_rows);
-                let name_rows = self.name_rows(g, &indexed);
-                if !name_rows.is_empty() {
-                    files.insert(
-                        humanify_core::libindex::table::names_rows_file(kind),
-                        jsonl(&name_rows),
-                    );
-                    names.insert(kind.clone(), name_rows);
-                }
             }
         }
+        // The names tables (exp159, exp161): the distinct names first —
+        // sorted, the strings file's ids are its positions — then the
+        // rows, the jsonl streamed to `meta.staging` when it is set (the
+        // one table too big to buffer on the full corpus), the bin encoded
+        // from the interned compact rows.
+        let mut interner = NameInterner::default();
+        let mut remap: HashMap<u32, u32> = HashMap::new();
+        {
+            let mut distinct: BTreeSet<u32> = BTreeSet::new();
+            for g in self.slices.values() {
+                // The group map is a HashMap and its order is nondeterministic,
+                // but the destination is a SET that is sorted by string right
+                // below — iteration order cannot reach the output.
+                #[allow(clippy::iter_over_hash_type)]
+                for u in g.units.values() {
+                    for list in u.names.keys() {
+                        for &(_, name, _) in list {
+                            distinct.insert(name);
+                        }
+                    }
+                }
+            }
+            let mut ordered: Vec<u32> = distinct.into_iter().collect();
+            ordered.sort_by(|a, b| self.strings.cmp(*a, *b));
+            for id in ordered {
+                remap.insert(id, interner.id(self.strings.get(id)));
+            }
+        }
+        let mut names: BTreeMap<String, Vec<NameRowCompact>> = BTreeMap::new();
+        let mut staged: BTreeMap<String, String> = BTreeMap::new();
+        for (kind, g) in &self.slices {
+            if g.units.values().all(|u| u.names.is_empty()) {
+                continue;
+            }
+            let unit_rows = units.get(kind).ok_or_else(|| {
+                format!("names rows for slice {kind}: the slice has no unit rows")
+            })?;
+            let ids = humanify_core::libindex::table::unit_row_ids(unit_rows)?;
+            let mut id_of: HashMap<(u64, u32, u32), u32> = HashMap::with_capacity(ids.len());
+            for (r, id) in unit_rows.iter().zip(&ids) {
+                let key = unit_key(&r.hash).ok_or_else(|| {
+                    format!("unit row hash {:?} is not 16 lowercase hex digits", r.hash)
+                })?;
+                let owner = self
+                    .strings
+                    .lookup(&r.owner)
+                    .ok_or_else(|| format!("unit row owner {r:?}: the merge never interned it"))?;
+                let file = self
+                    .strings
+                    .lookup(&r.file)
+                    .ok_or_else(|| format!("unit row file {r:?}: the merge never interned it"))?;
+                id_of.insert((key, owner, file), *id);
+            }
+            let compact = {
+                let mut buffer: Vec<u8> = Vec::new();
+                let mut hasher = Sha256::new();
+                let mut file = match &meta.staging {
+                    Some(dir) => {
+                        std::fs::create_dir_all(dir)
+                            .map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+                        Some(std::io::BufWriter::new(
+                            std::fs::File::create(
+                                dir.join(humanify_core::libindex::table::names_rows_file(kind)),
+                            )
+                            .map_err(|e| format!("create the names jsonl: {e}"))?,
+                        ))
+                    }
+                    None => None,
+                };
+                let mut sink = |bytes: &[u8]| -> Result<(), String> {
+                    hasher.update(bytes);
+                    match &mut file {
+                        Some(f) => std::io::Write::write_all(f, bytes)
+                            .map_err(|e| format!("write the names jsonl: {e}")),
+                        None => {
+                            buffer.extend_from_slice(bytes);
+                            Ok(())
+                        }
+                    }
+                };
+                let compact = self.name_rows_into(g, &indexed, &id_of, &remap, &mut sink)?;
+                // the block ends the sink's borrows of hasher/file/buffer
+                match file {
+                    Some(mut f) => {
+                        std::io::Write::flush(&mut f)
+                            .map_err(|e| format!("flush the names jsonl: {e}"))?;
+                        staged.insert(
+                            humanify_core::libindex::table::names_rows_file(kind),
+                            hex_digest(hasher),
+                        );
+                    }
+                    None => {
+                        files.insert(
+                            humanify_core::libindex::table::names_rows_file(kind),
+                            buffer,
+                        );
+                    }
+                }
+                compact
+            };
+            names.insert(kind.clone(), compact);
+        }
         files.extend(humanify_core::libindex::table::names_lookup_files(
-            &units, &names,
+            &units, &names, &interner,
         )?);
         let literals = self.literal_rows(&indexed);
         files.extend(humanify_core::libindex::table::lookup_files(
@@ -565,6 +760,7 @@ impl Merger {
             tables: files
                 .iter()
                 .map(|(name, bytes)| (name.clone(), hex_sha256(bytes)))
+                .chain(staged.iter().map(|(name, sha)| (name.clone(), sha.clone())))
                 .collect(),
             data: data
                 .iter()
