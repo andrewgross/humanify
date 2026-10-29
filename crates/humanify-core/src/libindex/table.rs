@@ -805,6 +805,11 @@ impl NameInterner {
         })
     }
 
+    /// An already-interned string's id (None when absent — never inserts).
+    pub fn lookup(&self, s: &str) -> Option<u32> {
+        self.ids.get(s).copied()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.strings.is_empty()
     }

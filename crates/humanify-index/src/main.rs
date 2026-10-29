@@ -88,6 +88,13 @@ enum Command {
         /// Parallel package builds (at most 4).
         #[arg(long, default_value_t = 2)]
         jobs: usize,
+        /// Parallel merge workers (exp162): the merge partitions the
+        /// unit-key space into N contiguous ranges, one worker each; every
+        /// worker streams all shards in label order and keeps its range's
+        /// rows, and the segments concatenate in range order — the same
+        /// bytes the serial merge writes, which is the default (1).
+        #[arg(long, default_value_t = 1)]
+        merge_jobs: usize,
         /// Which versions to index: `as-of` (latest, previous patch, the
         /// two previous majors) or `year-all+minor` (every release of the
         /// last 12 months + the latest patch of every older minor).
@@ -191,6 +198,7 @@ fn main() {
         webpack,
         rollup,
         jobs,
+        merge_jobs,
         policy,
         offline,
         merge_only,
@@ -241,6 +249,7 @@ fn main() {
             out: out.map(abs).transpose()?,
             recipes: builds,
             jobs,
+            merge_jobs,
             offline,
             merge_only,
             refuse,
