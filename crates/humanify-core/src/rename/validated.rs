@@ -818,12 +818,36 @@ impl RenameState {
         spec: TrailSpec,
     ) -> RenameAttempt {
         let trail_binding = self.binding_in(request.scope, request.old_name);
-        let attempt = self.validate_and_apply(request);
+        let attempt = self.validate_and_apply(request, false);
         self.record_standard(spec, trail_binding, request, attempt);
         attempt
     }
 
-    fn validate_and_apply(&mut self, request: RenameRequest<'_>) -> RenameAttempt {
+    /// [`Self::attempt_validated_rename`] for the restoration capture's
+    /// own answers (`naming::restore`, exp160): the ONE writer the library
+    /// hold lets through. The hold protects a placed module's names from
+    /// every route that GUESSES (the transfer, the waves, the reconcile,
+    /// the sweep); restoration names them from the index's own answer —
+    /// the thing the hold protects the module FOR — so it applies through
+    /// the same validation with the hold's rejection lifted. Every other
+    /// guard (capture, collisions, eligibility, exports) applies.
+    pub fn attempt_restored_rename(&mut self, request: RenameRequest<'_>) -> RenameAttempt {
+        let trail_binding = self.binding_in(request.scope, request.old_name);
+        let attempt = self.validate_and_apply(request, true);
+        self.record_standard(
+            TrailSpec::settling(Tier::Restoration),
+            trail_binding,
+            request,
+            attempt,
+        );
+        attempt
+    }
+
+    fn validate_and_apply(
+        &mut self,
+        request: RenameRequest<'_>,
+        allow_library_held: bool,
+    ) -> RenameAttempt {
         let RenameRequest {
             scope,
             old_name,
@@ -832,8 +856,10 @@ impl RenameState {
         } = request;
         // The names mode's placed modules stay exactly as the minifier
         // left them (the guard's single choke point: every route —
-        // transfer, waves, reconcile, votes — applies through here).
-        if let Some(binding) = self.binding_in(scope, old_name)
+        // transfer, waves, reconcile, votes — applies through here);
+        // the restoration answer is the one writer it lets through.
+        if !allow_library_held
+            && let Some(binding) = self.binding_in(scope, old_name)
             && self.library_held.contains(&binding)
         {
             return RenameAttempt::rejected(RejectionReason::LibraryPlaced);

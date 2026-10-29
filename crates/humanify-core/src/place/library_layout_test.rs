@@ -299,8 +299,13 @@ fn a_synthetic_name_tie_keeps_its_members_distinct_by_arrival_order() {
     );
 }
 
+// D1 (library-names plan step 7): a package's regions ALL coalesce under
+// its folder. A file path two regions claim moves the best claimant only;
+// the loser re-paths to its OWN synthetic in-package name instead of
+// staying put — a `vendor/ms/index.js` beside a stayed region is exactly
+// the split Andrew ruled out.
 #[test]
-fn a_duplicate_file_moves_only_once() {
+fn a_duplicate_file_s_loser_repaths_inside_the_package() {
     let answers = BTreeMap::from([
         ("key1".to_string(), answer(&["ms"], &["index.js"])),
         ("key2".to_string(), answer(&["ms"], &["index.js"])),
@@ -315,10 +320,64 @@ fn a_duplicate_file_moves_only_once() {
     let out = plan(&input);
     assert_eq!(out.regions[0].move_path(), Some("vendor/ms/index.js"));
     assert_eq!(
-        out.regions[1].leave_reason(),
-        Some("duplicate-file"),
-        "two claimed groups of one package answering to the same source file: \
-         the first by sort key moves, the other stays"
+        out.regions[1].move_path(),
+        Some("vendor/ms/module-sort-b.js"),
+        "the loser of the file race still moves — under the same package, \
+         named by its own content key"
+    );
+}
+
+#[test]
+fn an_equal_key_duplicate_takes_the_tie_suffix() {
+    // Equal sort keys are identical bodies: whichever region takes the
+    // index path and whichever takes the synthetic tie path, the tree is
+    // byte-identical — the tie suffix keeps the two files distinct.
+    let answers = BTreeMap::from([
+        ("key1".to_string(), answer(&["ms"], &["index.js"])),
+        ("key2".to_string(), answer(&["ms"], &["index.js"])),
+    ]);
+    let input = LayoutInput {
+        regions: vec![
+            module_region(&[Some("ms")], "key1", "sort-a"),
+            module_region(&[Some("ms")], "key2", "sort-a"),
+        ],
+        module_answers: &answers,
+    };
+    let out = plan(&input);
+    let paths: Vec<_> = out.regions.iter().map(|r| r.move_path()).collect();
+    assert_eq!(
+        paths,
+        vec![
+            Some("vendor/ms/index.js"),
+            Some("vendor/ms/module-sort-a.js")
+        ]
+    );
+}
+
+#[test]
+fn a_three_way_race_sets_every_loser_behind_the_winner() {
+    let answers = BTreeMap::from([
+        ("key1".to_string(), answer(&["ms"], &["index.js"])),
+        ("key2".to_string(), answer(&["ms"], &["index.js"])),
+        ("key3".to_string(), answer(&["ms"], &["index.js"])),
+    ]);
+    let input = LayoutInput {
+        regions: vec![
+            module_region(&[Some("ms")], "key1", "sort-a"),
+            module_region(&[Some("ms")], "key2", "sort-a"),
+            module_region(&[Some("ms")], "key3", "sort-a"),
+        ],
+        module_answers: &answers,
+    };
+    let out = plan(&input);
+    let paths: Vec<_> = out.regions.iter().map(|r| r.move_path()).collect();
+    assert_eq!(
+        paths,
+        vec![
+            Some("vendor/ms/index.js"),
+            Some("vendor/ms/module-sort-a.js"),
+            Some("vendor/ms/module-sort-a-2.js")
+        ]
     );
 }
 
@@ -335,6 +394,30 @@ fn an_index_answer_for_another_package_leaves_the_region() {
         Some("index-disagrees"),
         "the whole-module key names another package: the claim and the index \
          disagree, the region does not move"
+    );
+}
+
+// D1: a package-level answer with one owner and several files prefers the
+// index's MAIN file (basename `index`) when the answer has one; the
+// content-hash synthetic form is the else branch.
+#[test]
+fn a_package_level_answer_prefers_the_index_s_main_file() {
+    let answers = BTreeMap::from([(
+        "key1".to_string(),
+        answer(
+            &["@otel/exporter-metrics"],
+            &["build/src/hooks.js", "build/src/index.js"],
+        ),
+    )]);
+    let input = LayoutInput {
+        regions: vec![module_region(&[None, None], "key1", "sort-a")],
+        module_answers: &answers,
+    };
+    let out = plan(&input);
+    assert_eq!(
+        out.regions[0].move_path(),
+        Some("vendor/@otel/exporter-metrics/build/src/index.js"),
+        "the main file is the region's sensible in-package name"
     );
 }
 

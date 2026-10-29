@@ -380,6 +380,7 @@ fn discover_with(
                 ..rules
             }),
             census,
+            restoration: false,
         }),
         DiscoveryOptions::recommended(),
     );

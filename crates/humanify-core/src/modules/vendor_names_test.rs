@@ -51,6 +51,16 @@ fn rec(structural_hash: &str, name: &str, source: NameSource) -> FactoryRecord {
     }
 }
 
+/// A names-mode record (library-names plan step 4): the placement pass
+/// stamped it — `index_leave` when it was claimed but stayed put, the
+/// discriminator the chooser reads. Path answers carry `index_path`
+/// instead and take the index branch, never this one.
+fn names_rec(structural_hash: &str, name: &str, source: NameSource) -> FactoryRecord {
+    let mut record = rec(structural_hash, name, source);
+    record.index_leave = Some("partial");
+    record
+}
+
 fn fallback_rec(structural_hash: &str) -> FactoryRecord {
     rec(
         structural_hash,
@@ -190,6 +200,65 @@ fn grouped_package_uses_a_folder_with_stable_stems() {
             "axios@1.0.0/lib_eeeeffff"
         ]
     );
+}
+
+// D2 (library-names plan step 7): in names mode EVERY named module lives
+// inside a package folder, however few modules the package identified —
+// `vendor/<package>/<stable-stem>.js`. The flat spelling at the vendor
+// root (`vendor/@aws-sdk__client-sts.js` beside `vendor/@aws-sdk/…`) is
+// the split Andrew ruled out. Default mode is byte-inert: the gate is the
+// names-mode placement stamp on the record.
+
+/// A named module the placement pass stamped (claimed but unmoved) gets a
+/// folder even when it is the package's only module.
+#[test]
+fn names_mode_gives_a_single_named_module_a_folder() {
+    let factories = vec![names_rec(
+        "ccccdddd00000000",
+        "highlight.js",
+        NameSource::Declared,
+    )];
+    let lookups = choose_file_names(&factories);
+    assert_eq!(lookups[0].file_name, "highlight/lib_ccccdddd");
+}
+
+/// A package-named module (the ladder's Index rung names it) goes INSIDE
+/// the package's own folder — never flat at the vendor root.
+#[test]
+fn names_mode_package_named_module_goes_inside_its_folder() {
+    let factories = vec![names_rec(
+        "aaaabbbb00000000",
+        "@aws-sdk/client-sts",
+        NameSource::Index,
+    )];
+    let lookups = choose_file_names(&factories);
+    assert_eq!(lookups[0].file_name, "@aws-sdk/client-sts/lib_aaaabbbb");
+}
+
+/// The same names-mode record WITHOUT the stamp (default mode) stays flat
+/// — the change is gated on the placement stamp, byte-inert elsewhere.
+#[test]
+fn default_mode_stays_flat_beside_the_names_mode_folder() {
+    let factories = vec![
+        rec("ccccdddd00000000", "highlight.js", NameSource::Declared),
+        names_rec("aaaabbbb00000000", "axios", NameSource::Declared),
+    ];
+    let lookups = choose_file_names(&factories);
+    assert_eq!(lookups[0].file_name, "highlight");
+    assert_eq!(lookups[1].file_name, "axios/lib_aaaabbbb");
+}
+
+/// A hash-fallback name identifies no package: it stays flat at the root
+/// in names mode too — content-hash names are never package names.
+#[test]
+fn names_mode_fallback_names_stay_flat() {
+    let factories = vec![{
+        let mut record = names_rec("aaaabbbb00000000", "lib_aaaabbbb", NameSource::Fallback);
+        record.index_leave = Some("partial");
+        record
+    }];
+    let lookups = choose_file_names(&factories);
+    assert_eq!(lookups[0].file_name, "lib_aaaabbbb");
 }
 
 /// A carried-over HASH name stays flat, like a freshly minted one — the

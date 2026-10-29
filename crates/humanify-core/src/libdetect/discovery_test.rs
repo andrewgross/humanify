@@ -377,6 +377,7 @@ fn index_seeds_and_targeted_queue_lookups_claim_through_the_index() {
                 ..rules
             }),
             census: false,
+            restoration: false,
         }),
         DiscoveryOptions::default(),
     );
@@ -678,6 +679,7 @@ fn run_indexed_factories(
             rules,
             targeted: None,
             census: false,
+            restoration: false,
         }),
         options,
     );
@@ -1756,6 +1758,7 @@ fn call_context_can_support_an_ambiguous_seed_against_the_isolation_veto() {
                 rules,
                 targeted: None,
                 census: false,
+                restoration: false,
             }),
             DiscoveryOptions::default(),
         );

@@ -9,6 +9,7 @@ use std::sync::Mutex;
 
 use humanify_model::llm::{BatchRenameResponse, LlmCall, LlmError, NameProvider, Renames};
 
+use crate::libindex::table::RestorationRow;
 use crate::naming::driver::{NamingConfig, NamingInput, NamingOutcome, run_naming};
 use crate::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
 use crate::place::assign::namer::{MODULE_NAMER_SYSTEM_PROMPT, SplitNamerBudget};
@@ -140,6 +141,7 @@ fn run(fresh: &str, prior: Option<&str>, provider: &ModuleProvider) -> NamingOut
             prior,
             library: None,
             claimed_regions: &[],
+            restorations: crate::naming::driver::no_restorations(),
         },
         &config(),
         provider,
@@ -457,12 +459,110 @@ fn run_with_regions(
             prior,
             library: None,
             claimed_regions: regions,
+            restorations: crate::naming::driver::no_restorations(),
         },
         &config(),
         provider,
         &mut log,
     )
     .expect("the stage runs")
+}
+
+/// `run_with_regions` with captured restoration answers (exp160).
+fn run_with_restorations(
+    fresh: &str,
+    prior: Option<&str>,
+    provider: &ModuleProvider,
+    regions: &[ClaimedRegion],
+    restorations: &std::collections::BTreeMap<String, RestorationRow>,
+) -> NamingOutcome {
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(config().params);
+    run_naming(
+        &NamingInput {
+            fresh,
+            prior,
+            library: None,
+            claimed_regions: regions,
+            restorations,
+        },
+        &config(),
+        provider,
+        &mut log,
+    )
+    .expect("the stage runs")
+}
+
+/// The era's canonical facts for the program body's `statement`: its
+/// whole-print hash and the slot of the mapping entry spelled `declares`
+/// — the same walk the era's restoration runs, so the key the test
+/// plants is the key the era looks up.
+fn era_print_facts(fresh: &str, statement: usize, declares: &str) -> (String, u32) {
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, fresh, "input.js");
+    assert!(ingest.errors.is_empty(), "fixture must parse");
+    let tables = crate::hash::serialize::SymbolTables::build(ingest.semantic());
+    let json = crate::ingest::program_estree_json(ingest.program);
+    let body = crate::cut::container_statement_values(&json, None).expect("program body");
+    let prints = crate::libindex::units::statement_named_prints(&body[statement], &tables);
+    let slot = prints
+        .whole
+        .mapping
+        .iter()
+        .position(|(_, _, name)| name == declares)
+        .unwrap_or_else(|| panic!("{declares} is not a slot of statement {statement}"))
+        as u32;
+    (prints.whole.print.hash, slot)
+}
+
+/// exp160: a claimed statement whose index answer is a single name list is
+/// named by the INDEX, before the model is ever asked — the restored
+/// identifier never appears in a wave prompt, its name ships, and a slot
+/// the answer does NOT cover falls back to the era's own naming (the
+/// model mints it, exactly as before).
+#[test]
+fn restoration_names_a_claimed_statement_before_the_model_is_ever_asked() {
+    use crate::libindex::names::{NameKind, RestoredName};
+    use crate::libindex::table::{RestorationRow, RestoreAnswer};
+    // Statement 1 is `function a1(x) { return Math.round(x); }` — m0's
+    // second statement, claimed here but NOT moved (lazy_regions leaves
+    // m0's statements to the waves).
+    let (hash, a1_slot) = era_print_facts(BUNDLE, 1, "a1");
+    let _ = era_print_facts(BUNDLE, 1, "x");
+    let n = |slot: u32, name: &str| RestoredName {
+        slot,
+        name: name.into(),
+        kind: NameKind::Local,
+    };
+    let mut restorations = std::collections::BTreeMap::new();
+    restorations.insert(
+        hash,
+        RestorationRow {
+            package: "dep".into(),
+            // The answer covers a1's slot only: x's slot is missing —
+            // the model still names it.
+            answer: RestoreAnswer::Single(vec![n(a1_slot, "roundTo")]),
+        },
+    );
+    let regions = [ClaimedRegion {
+        statements: vec![1],
+        claims: vec![None],
+    }];
+    let provider = ModuleProvider::new(by_purpose);
+    let out = run_with_restorations(BUNDLE, None, &provider, &regions, &restorations);
+    let code = out.code.expect("shipped");
+    assert!(
+        code.contains("function roundTo("),
+        "the index's name ships: {code}"
+    );
+    assert!(!code.contains("a1"), "no crawl name left: {code}");
+    assert!(
+        !asked_by_waves(&provider, "a1"),
+        "the restored identifier is never asked"
+    );
+    assert!(
+        asked_by_waves(&provider, "x"),
+        "the missing slot falls back to the model"
+    );
 }
 
 #[test]

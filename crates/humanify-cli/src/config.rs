@@ -395,6 +395,10 @@ impl Library {
             unit_prints: false,
             call_context: false,
             placement_groups: self.matching == LibraryMatching::Names,
+            // The claimed units' restoration answers (exp160): a names run
+            // captures them beside the claims, the naming side applies
+            // them.
+            restoration: self.matching == LibraryMatching::Names,
             // A names run reads the index's whole-module answers out of the
             // same directory the index was loaded from (plan step 4,
             // exp156): ONE builder decides this for the pipeline and the

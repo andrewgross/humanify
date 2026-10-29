@@ -446,6 +446,19 @@ pub struct Discovery {
     /// DOWN-CLASS: unit → the package whose claim's closure reached it.
     pub library_class: BTreeMap<u32, String>,
     pub queue: Vec<QueueEntry>,
+    /// The claimed units' restoration answers (exp160), keyed by unit
+    /// print hash: the index's own claims only (evidence `Index` /
+    /// `QueueIndex`), each hash's answer under the package that claimed
+    /// it — a hash two different packages claim is contested evidence and
+    /// carries nothing. Empty unless the lookup asked for it, and empty
+    /// for an index without names tables (absence, never a guess).
+    pub restorations: BTreeMap<String, crate::libindex::table::RestorationRow>,
+    /// The same answers with their application coordinates (exp160 Site
+    /// B): the bundle span of the print whose hash was captured and its
+    /// slots' symbols — the unpack applies these to the vendored bodies.
+    /// One row per (unit, captured print); empty whenever [`Self::restorations`]
+    /// is.
+    pub restoration_applications: Vec<RestorationApplication>,
     /// The boundary check, after the claims: per package, the INTO edges
     /// landing on its claims and how many of its units they land on (a
     /// package's callers should land on its entry points). Read, never
@@ -2560,6 +2573,8 @@ pub fn discover_with(
         queue: candidate_queue(&st, &groups, options.queue_cap),
         boundary: boundary(&st, &groups),
         call_context: Vec::new(),
+        restorations: BTreeMap::new(),
+        restoration_applications: Vec::new(),
     }
 }
 
@@ -2602,6 +2617,9 @@ pub struct DiscoveryRequest<'x> {
     /// (`placementGroups`, library-names plan step 4, exp156). The FIRST
     /// thing the pipeline asks for — a names-mode run only.
     pub placement_groups: bool,
+    /// The claimed units' restoration answers (exp160,
+    /// [`Discovery::restorations`]) — a names-mode run only.
+    pub restoration: bool,
     /// Where the index's whole-module answers live (library-names plan
     /// step 4): a names-mode run reads `modules.<slice>.jsonl` out of the
     /// loaded index's directory and lets the placement planner move wholly
@@ -2637,6 +2655,7 @@ impl<'x> DiscoveryRequest<'x> {
                 ..rules
             }),
             census: self.call_context,
+            restoration: self.restoration,
         })
     }
 }
@@ -2652,6 +2671,9 @@ pub struct IndexLookup<'x> {
     /// Also take the call-context census ([`Discovery::call_context`];
     /// an instrument, the `discover` verb's `--call-context`).
     pub census: bool,
+    /// Also capture the claimed units' restoration answers
+    /// ([`Discovery::restorations`], exp160) — a names-mode run only.
+    pub restoration: bool,
 }
 
 /// Library discovery over a RAW bundle (comments still in it): the
@@ -2851,7 +2873,20 @@ fn discover_unscoped(
         crate::cut::units::container_units(statements, factories, &facts, options.factory_bodies);
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
     let blurred = facts.grammar.blurred_literals(statements, semantic);
-    let prints = crate::libindex::units::unit_prints(&units, &tables, &blurred);
+    // exp160: the restoration capture keeps each matched print's slot
+    // mapping beside it (Site B's application coordinates) — built only
+    // in names mode (`restoration`); every other mode drops the mappings
+    // exactly as before.
+    let named = lookup
+        .restoration
+        .then(|| crate::libindex::units::unit_named_prints(&units, &tables, &blurred));
+    let prints = match &named {
+        Some(named) => named
+            .iter()
+            .map(|n| n.as_ref().map(crate::libindex::units::plain_of))
+            .collect(),
+        None => crate::libindex::units::unit_prints(&units, &tables, &blurred),
+    };
     // exp127: `terser_slices = "auto"` reads the bundle's prints once,
     // before any lookup
     lookup.index.decide_terser_slices(&prints, &lookup.rules);
@@ -2859,6 +2894,7 @@ fn discover_unscoped(
         code,
         graph: &graph,
         prints: &prints,
+        named: named.as_deref().unwrap_or(&[]),
         module_bytes: module_bytes(&graph),
         callees: crate::libindex::callctx::bundle_callees(&graph, &prints),
         same: &|a: &str, b: &str| families.same(a, b),
@@ -2912,6 +2948,12 @@ fn discover_unscoped(
     let census = |mut found: Discovery| {
         if lookup.census {
             found.call_context = looker.call_context_rows(lookup.index, &lookup.rules);
+        }
+        if lookup.restoration {
+            let (restorations, applications) =
+                capture_restorations(&looker, lookup.index, &lookup.rules, &found.claims);
+            found.restorations = restorations;
+            found.restoration_applications = applications;
         }
         found
     };
@@ -2969,6 +3011,123 @@ fn known_banner_names(
             _ => Some(s),
         })
         .collect()
+}
+
+/// The restoration capture (exp160, library-names plan step 7): per unit
+/// the index ITSELF claimed (a seed with evidence `Index` or
+/// `QueueIndex`), the structural route's matched rows' restore answers,
+/// folded by print hash. Two rules of the fold:
+///
+/// - a hash two DIFFERENT packages claim is contested evidence and
+///   carries nothing — the map never guesses which package's names are
+///   the right ones for shared code;
+/// - propagated claims (Down / Module / Glue) and text-seeded units carry
+///   no restoration even when the structural route finds a row: their
+///   claim is not the index's own reading of the print, and the row it
+///   would name is below the claim floor.
+///
+/// Empty for an index without names tables (every answer is `Absent`,
+/// dropped) — the standing full index restores nothing, which is what
+/// makes the mode safe to ship turned off.
+fn capture_restorations(
+    looker: &Looker<'_>,
+    index: &crate::libindex::lookup::LibraryIndex,
+    rules: &crate::libindex::lookup::LookupRules,
+    claims: &BTreeMap<u32, Claim>,
+) -> (
+    BTreeMap<String, crate::libindex::table::RestorationRow>,
+    Vec<RestorationApplication>,
+) {
+    use crate::libindex::table::RestorationRow;
+    let mut out: BTreeMap<String, RestorationRow> = BTreeMap::new();
+    let mut applications: Vec<RestorationApplication> = Vec::new();
+    let mut contested: BTreeSet<String> = BTreeSet::new();
+    let claimed: Vec<u32> = claims
+        .iter()
+        .filter(|(_, claim)| {
+            claim.rule == Rule::Seed
+                && matches!(claim.evidence, Some(Evidence::Index | Evidence::QueueIndex))
+        })
+        .map(|(&u, _)| u)
+        .collect();
+    for q in looker.queries(&claimed) {
+        let Some(claim) = claims.get(&q.unit) else {
+            continue;
+        };
+        for (hash, answer) in index.restoration_answers(&q, rules, looker.same, &claim.package) {
+            // Site B's application row: the bundle span of the print whose
+            // hash was captured — the run's own whole or function print —
+            // and its slots' symbols. Every captured key is the run's own
+            // print (the structural route keys its hits so), so the match
+            // is by construction; the applications list is empty without
+            // it (no names mode, no mappings kept).
+            let application = looker
+                .named
+                .get(q.unit as usize)
+                .and_then(|n| n.as_ref())
+                .and_then(|named| restoration_application(named, &hash, claim, &answer));
+            if contested.contains(&hash) {
+                continue;
+            }
+            match out.get(&hash) {
+                None => {
+                    out.insert(
+                        hash.clone(),
+                        RestorationRow {
+                            package: claim.package.clone(),
+                            answer,
+                        },
+                    );
+                    if let Some(application) = application {
+                        applications.push(application);
+                    }
+                }
+                Some(row) if row.package == claim.package => {
+                    // The same answer from a second unit with the same
+                    // print: the map keeps the first (Site A joins by
+                    // hash), Site B applies BOTH — each unit's own slots.
+                    if let Some(application) = application {
+                        applications.push(application);
+                    }
+                }
+                Some(_) => {
+                    out.remove(&hash);
+                    contested.insert(hash.clone());
+                    // The contested answer is silence for both readers.
+                    applications.retain(|a| a.hash != hash);
+                }
+            }
+        }
+    }
+    (out, applications)
+}
+
+/// Site B's application coordinates for one captured answer: the span and
+/// slot symbols of the print whose hash the capture keyed (`None` when
+/// that print is not among the unit's kept mappings — no names mode).
+fn restoration_application(
+    named: &crate::libindex::units::NamedStatementPrints,
+    hash: &str,
+    claim: &Claim,
+    answer: &crate::libindex::table::RestoreAnswer,
+) -> Option<RestorationApplication> {
+    let matched = if named.whole.print.hash == hash {
+        &named.whole
+    } else {
+        named.functions.iter().find(|f| f.print.hash == hash)?
+    };
+    Some(RestorationApplication {
+        hash: hash.to_string(),
+        package: claim.package.clone(),
+        answer: answer.clone(),
+        start: matched.print.span.start,
+        end: matched.print.span.end,
+        slots: matched
+            .mapping
+            .iter()
+            .map(|(_, symbol, _)| symbol.map(|s| s.index() as u32))
+            .collect(),
+    })
 }
 
 /// The container statements, bundler facts and statement reference graph
@@ -3118,6 +3277,9 @@ struct Looker<'l> {
     code: &'l str,
     graph: &'l ReferenceGraph,
     prints: &'l [Option<crate::libindex::units::StatementPrints>],
+    /// The same prints with the slot mappings kept — names mode only
+    /// (exp160: the restoration capture's application coordinates).
+    named: &'l [Option<crate::libindex::units::NamedStatementPrints>],
     module_bytes: Vec<u64>,
     /// Per unit, its own callees ([`crate::libindex::callctx::bundle_callees`]).
     callees: Vec<Vec<crate::libindex::callctx::Callee>>,
@@ -3622,6 +3784,44 @@ pub struct DiscoveryReport {
     /// ([`DiscoveryRequest::placement_groups`]; matching level `names`).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub placement_groups: Vec<PlacementGroupRow>,
+    /// The captured restoration answers (exp160), one per print hash in
+    /// hash order, only when the lookup asked for them
+    /// ([`IndexLookup::restoration`]; matching level `names`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub restorations: Vec<RestorationRowReport>,
+    /// The same answers with their application coordinates (exp160 Site
+    /// B): the unpack applies these to the vendored bodies — empty for a
+    /// run that captured none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub restoration_applications: Vec<RestorationApplication>,
+}
+
+/// One captured restoration row (exp160): the print hash, the package
+/// that claimed it, and the index's answer for it (`Absent` never
+/// appears — absence carries no row).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestorationRowReport {
+    pub hash: String,
+    pub package: String,
+    pub answer: crate::libindex::table::RestoreAnswer,
+}
+
+/// One captured answer's application coordinates (exp160 Site B): the
+/// bundle span of the print whose hash was captured (the run's own whole
+/// or function print — every captured key is one) and its slots' symbols,
+/// slot ordinal → symbol id (`None` = a free identifier, never renamed).
+/// The unpack's Site B applies the answer's names to those symbols and
+/// carries the edits into the sliced vendored body.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestorationApplication {
+    pub hash: String,
+    pub package: String,
+    pub answer: crate::libindex::table::RestoreAnswer,
+    pub start: u32,
+    pub end: u32,
+    pub slots: Vec<Option<u32>>,
 }
 
 impl DiscoveryReport {
@@ -3680,10 +3880,38 @@ impl DiscoveryReport {
         }
         r.packages = packages.into_values().collect();
         r.profile = LibraryProfile::standard().rules().describe();
+        r.restorations = found
+            .restorations
+            .iter()
+            .map(|(hash, row)| RestorationRowReport {
+                hash: hash.clone(),
+                package: row.package.clone(),
+                answer: row.answer.clone(),
+            })
+            .collect();
+        r.restoration_applications = found.restoration_applications.clone();
         if units {
             r.list_units(graph, found);
         }
         r
+    }
+
+    /// The captured answers as the application's lookup map (exp160):
+    /// the report's rows are the single carried artifact — both readers
+    /// (the naming era's CLI thread and the vendored bodies) rebuild this.
+    pub fn restoration_map(&self) -> BTreeMap<String, crate::libindex::table::RestorationRow> {
+        self.restorations
+            .iter()
+            .map(|row| {
+                (
+                    row.hash.clone(),
+                    crate::libindex::table::RestorationRow {
+                        package: row.package.clone(),
+                        answer: row.answer.clone(),
+                    },
+                )
+            })
+            .collect()
     }
 
     fn list_units(&mut self, graph: &ReferenceGraph, found: &Discovery) {

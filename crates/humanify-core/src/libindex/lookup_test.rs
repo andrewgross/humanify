@@ -976,3 +976,152 @@ fn the_down_scoped_tie_break_resolves_a_tie_the_plain_fit_cannot() {
     assert!(!no_table.has_callee_prints());
     assert_eq!(pick(&no_table, down).as_deref(), Some("alpha"));
 }
+
+// -- restoration capture (exp160) ------------------------------------------
+
+fn query<'q>(i: u32, p: &'q StatementPrints) -> UnitQuery<'q> {
+    UnitQuery {
+        unit: i,
+        prints: p,
+        module_bytes: 1000,
+        text: "",
+        callees: &[],
+    }
+}
+
+fn named(slot: u32, name: &str) -> crate::libindex::names::RestoredName {
+    crate::libindex::names::RestoredName {
+        slot,
+        name: name.into(),
+        kind: crate::libindex::names::NameKind::Local,
+    }
+}
+
+#[test]
+fn restoration_answers_answers_a_claimed_units_whole_print() {
+    use crate::libindex::table::RestoreAnswer;
+    let index = LibraryIndex::from_rows_with_names(
+        vec![row("a", "dep", 40, 100)],
+        vec![crate::libindex::format::NameRow {
+            hash: hx("a"),
+            owner: "dep".into(),
+            file: "index.js".into(),
+            names: vec![named(0, "pLimit"), named(1, "concurrency")],
+            versions: vec![("1.0.0".into(), "1.0.0".into())],
+        }],
+        Vec::new(),
+    );
+    let p = whole("a", 40);
+    let q = query(0, &p);
+    let answers = index.restoration_answers(&q, &structural(), &same, "dep");
+    assert_eq!(answers.len(), 1);
+    assert_eq!(answers[0].0, hx("a"));
+    match &answers[0].1 {
+        RestoreAnswer::Single(names) => {
+            assert_eq!(names[0].name, "pLimit");
+            assert_eq!(names[1].slot, 1);
+        }
+        other => panic!("{other:?}"),
+    }
+    // a package the index does not know carries no restoration
+    assert!(
+        index
+            .restoration_answers(&q, &structural(), &same, "other")
+            .is_empty()
+    );
+}
+
+#[test]
+fn restoration_answers_covers_the_function_route_per_contributing_print() {
+    use crate::libindex::table::RestoreAnswer;
+    let index = LibraryIndex::from_rows_with_names(
+        vec![row("f1", "dep", 40, 100), row("f2", "dep", 30, 100)],
+        vec![
+            crate::libindex::format::NameRow {
+                hash: hx("f1"),
+                owner: "dep".into(),
+                file: "index.js".into(),
+                names: vec![named(0, "alpha")],
+                versions: vec![("1.0.0".into(), "1.0.0".into())],
+            },
+            crate::libindex::format::NameRow {
+                hash: hx("f2"),
+                owner: "dep".into(),
+                file: "index.js".into(),
+                names: vec![named(0, "beta")],
+                versions: vec![("1.0.0".into(), "1.0.0".into())],
+            },
+        ],
+        Vec::new(),
+    );
+    // the whole print matches nothing; two functions do (largest first)
+    let p = StatementPrints {
+        whole: print("w", 60, 0),
+        functions: vec![print("f2", 30, 50), print("f1", 40, 0)],
+    };
+    let q = query(0, &p);
+    let answers = index.restoration_answers(&q, &structural(), &same, "dep");
+    // the largest function contributes first
+    assert_eq!(
+        answers.iter().map(|(h, _)| h.as_str()).collect::<Vec<_>>(),
+        vec![hx("f1"), hx("f2")]
+    );
+    assert!(
+        answers
+            .iter()
+            .all(|(_, a)| matches!(a, RestoreAnswer::Single(_)))
+    );
+}
+
+#[test]
+fn restoration_answers_passes_an_ambiguous_answer_through_for_the_callers_policy() {
+    use crate::libindex::table::RestoreAnswer;
+    let index = LibraryIndex::from_rows_with_names(
+        vec![row("b", "dep", 40, 100)],
+        vec![
+            crate::libindex::format::NameRow {
+                hash: hx("b"),
+                owner: "dep".into(),
+                file: "index.js".into(),
+                names: vec![named(0, "one")],
+                versions: vec![("1.0.0".into(), "1.0.0".into())],
+            },
+            crate::libindex::format::NameRow {
+                hash: hx("b"),
+                owner: "dep".into(),
+                file: "index.js".into(),
+                names: vec![named(0, "two")],
+                versions: vec![("2.0.0".into(), "2.0.0".into())],
+            },
+        ],
+        Vec::new(),
+    );
+    let p = whole("b", 40);
+    let q = query(0, &p);
+    match &index.restoration_answers(&q, &structural(), &same, "dep")[0].1 {
+        RestoreAnswer::Ambiguous(lists) => assert_eq!(lists.len(), 2),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn look_hits_picks_one_row_per_owner_at_the_smallest_module_bytes() {
+    // two rows of the same print under one owner: the pick is the smallest
+    // module bytes, then the lowest row
+    let index = LibraryIndex::from_rows(
+        vec![
+            row("a", "dep", 40, 100),
+            UnitRow {
+                module_bytes: 50,
+                ..row("a", "dep", 40, 100)
+            },
+        ],
+        Vec::new(),
+    );
+    let hits = index
+        .look_hits(&hx("a"), 1000, &structural(), &same)
+        .expect("owners");
+    assert_eq!(hits.len(), 1, "one owner");
+    let hit = hits.values().next().expect("one hit");
+    assert_eq!(hit.module_bytes, 50, "the smallest module bytes wins");
+}

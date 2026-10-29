@@ -287,9 +287,92 @@ wholesale on content drift. Branch `exp158-naming-stability`.
   +0/+0 (the baseline leg's 0 is the load-bearing one), exit 0/0. Both fixes are byte-inert with
   `names` off.
 
+### 7. Identifier restoration (exp160)
+
+Branch `exp160-restore-transfer`. The last step of the plan: the index's names tables (exp159)
+reach the run — a claimed unit's slots take the index's ORIGINAL names, never the model's.
+
+- **Two application sites, because vendor files never reach the era.** Site A is the era's
+  claimed statements (`apply_era_restoration`, unchanged from the first wiring). Site B is the
+  vendored bodies: the unpack is the only restoration site for them. The first wiring
+  (`711b6d14c`) tried to re-join the index by hashing the VENDORED text; that join can never
+  hold — vendoring rewrites free identifiers (cross-factory references become `require(...)`,
+  helpers become `__commonJS`) and free identifiers are content tokens in the print. The shipped
+  design rides the capture's own coordinates: `capture_restorations` returns
+  `RestorationApplication` rows — the matched print's span plus the claimed mapping's slot
+  symbols, both keyed by the run's own print hash — and `apply_body_restoration` turns them into
+  bundle-coordinate edits through `Occurrences`, merged into the vendored body's `body_edits`.
+  No re-walk, no hash join in the unpacker, no parsing of vendored text.
+- **Abstention policies** (documented in `naming/restore.rs`). An Ambiguous answer abstains —
+  the fix is a names/2 format carrying per-list version ranges, not a run-side heuristic. A
+  binding the validated rename path already settled keeps its name (prior-release evidence is at
+  least as fresh as the index's). A missing slot keeps current behaviour.
+- **Deferred, deliberately: prior-carry for vendor code.** Spelling a vendor file's unchanged
+  identifiers from the PRIOR tree when the index has no answer was dropped: it would change
+  default-mode output (breaking the neutrality gate and Track-1 inertness). The brief's contract
+  is "missing slot → current behaviour"; the prior-carry lever stays available for a later lane
+  with its own gate.
+- **D1/D2 in the placement planner (Andrew's decisions).** All of a package's regions coalesce
+  under `vendor/<package>/` — no package file at the vendor root; a package-level-answer region
+  takes the index's main-file answer when it has one, else the content-hash form INSIDE the
+  package dir; every lib gets a folder, even single-file ones (167 root-level vendor files
+  moved; the `@aws-sdk__client-sts.js` flattening hack died).
+- **Reachability.** Site B is gated on the names tables existing (`lookup.restoration`); with
+  the Track-1 index (no names tables) the whole pass is inert, byte for byte.
+
+Verification (the brief's ladder):
+
+- **(a) Unit tests:** 12/12 in `naming/restore_test.rs` — Site A's era application plus Site B:
+  an s-slot restored on the bundle, an application outside the extracted bodies not applied, an
+  Ambiguous application abstaining, a missing slot keeping current behaviour, two rows naming
+  one binding differently settling on the first. Written red-first.
+- **(b) Determinism:** two 2.1.216 names-mode runs on cc with the names index — 6,509 files,
+  byte-identical (exp156's check, re-proven after the Site B redesign).
+- **(c) Cross-version 2.1.216 vs 2.1.215** (names mode, the ix-small-names index — honestly
+  covered: 12 of cc's packages): 1,620 vs 1,596 vendor files, 1,596 at identical paths, 0
+  byte-identical (content change stays real change). Per-identifier stability on the 60
+  differing same-path files: 0.501 (pre-lane baseline 0.486). Restricted to the index's covered
+  packages: **0.724** — 2,421 of 3,342 declared names spelled identically across versions — and
+  37.3% of the fresh names are restored-shaped package originals rather than carried minified
+  spellings. D2 shape: the vendor root holds exactly the fallback population (883
+  `lib_<hash8>.js` + 153 `-N` uniquified ties — measured NOT byte-identical, so genuinely
+  unplaced: structurally identical, content-different modules the index cannot answer for) plus
+  the tree's bookkeeping; 0 stray files in either tree. Smoke with the names index live: 4,052
+  identifiers restored across 152 vendor files (433 statements answered, 0 conflicts abstained);
+  package originals (`getGlobal`, `baggageEntryMetadataFromString`, `isArrayBufferView`)
+  confirmed in the emitted vendor tree.
+- **(d) Library scorer** (structural rule, the Track-1 edges/2 index, `matching=names` +
+  `names_unlocked`): byte-identical to the exp155/exp157/exp158 baselines on all three corpora —
+  cc P 1.0 / R 0.819 / F0.5 0.958, app claimed 0, wrong KB 0; bun-dev P 99.8% / wrong 146.4 KB;
+  bun-held P 99.97% / wrong 5.5 KB. (Restoration is inert on the Track-1 index, so the scorer
+  measures matching only.) Placed share on the cc tree: 432 index-path files (29.9% of vendor
+  bytes) + 149 synthetic in-package files (6.4%) + 1,038 fallback files at the root (63.7%).
+- **(e) 034 eval (names mode, one cold run, scratch base, vs the names-mode label
+  `exp158-names-eval`):** novel 4,188 / realLn 416,377 **byte-equal** (zero band); vendorNoise
+  1,491 **=**; vendorReal 3,699 **=** (restoration is INERT on the Track-1 index — no names
+  tables — so the eval isolates the placement wiring, not the restoration; the restoration's own
+  effect is measured with the names index in (b)-(d)); mints 1,754 → 1,749; treeLn 149,557 →
+  149,888 (**+331**, over the brief's bar). Attribution: the per-pair tree cards are IDENTICAL
+  on three of four pairs and ±1 file on the fourth, novel/realLn are byte-equal, and
+  namingNoiseLines moved +624 — the +331 is the cold naming draw (names mode re-rolls freely;
+  the quiet pair moved +7), not placement. No names-mode treeLn band exists to resolve 331.
+  All four pairs exit 0, cache +0; warm self-hop byte-identical with 0 cache writes; the COLD
+  self-hop on 2.1.216 reads 1,330 — outside the naming-locked range, the same names-mode regime
+  as the exp156 (1,294) / exp157 (1,264) / exp158 (1,288) baselines. Disclosed blemish: the
+  working tree was docs-dirty mid-run (this section was being drafted while it ran), so the
+  label's manifest flags it; the binary is built from the clean code commit `45c0f89e6`
+  (sha256 `f682299667c0…` recorded on every manifest).
+- **(f) Neutrality (vs main `b433589e3`, pair 85→86, warm standing cache
+  `/work/neutrality-cache`, under both locks).** DEFAULT MODE: **NEUTRAL** — 0 differing files /
+  0 differing lines, exit 0/0 (the baseline leg's cache-write zero is the load-bearing one).
+  REPORT MODE (`library.matching=report`, the standing index
+  `/work/library-index/current`, dead endpoint `127.0.0.1:9` as exp159's run): **NEUTRAL** —
+  0 differing files / 0 differing lines, cache writes +0/+0, exit 0/0. Both neutrality legs
+  passed on a committed, clean tree.
+
 ## Not in this plan
 
-- Identifier restore from package source.
+- Prior-carry for vendor code (see §7's deferral).
 - Other bundlers.
 - Terser.
 - The cheap index leads in `library-index.md` §11 (versions with no rows, prereleases); they can ride along with the

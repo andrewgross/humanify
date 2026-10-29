@@ -870,11 +870,22 @@ pub struct RawName {
 /// names table, no row, nothing recovered — or the names its versions
 /// were recovered with, one list when they agree, several (an ambiguous
 /// answer) when the sources disagree.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum RestoreAnswer {
     Absent,
     Single(Vec<super::names::RestoredName>),
     Ambiguous(Vec<Vec<super::names::RestoredName>>),
+}
+
+/// One print hash's captured restoration (exp160): the package that
+/// claimed the print and the index's answer for it. Keyed by print hash
+/// — the discovery capture builds the map; the naming side looks its
+/// units up in it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RestorationRow {
+    pub package: String,
+    pub answer: RestoreAnswer,
 }
 
 /// `names.<slice>.bin`: header (magic, unit rows, lists, entries), the

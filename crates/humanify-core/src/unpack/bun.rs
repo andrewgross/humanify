@@ -306,6 +306,9 @@ pub struct BunUnpackOutcome {
     /// Library discovery over the app code (exp095), when asked for —
     /// report-only: nothing is named, moved or renamed by it.
     pub library_discovery: Option<crate::libdetect::discovery::DiscoveryReport>,
+    /// The vendored bodies' restoration (exp160 Site B), when the capture
+    /// found answers — the totals for the run's restored-identifier line.
+    pub body_restoration: Option<crate::naming::restore::BodyRestorationReport>,
     /// The names mode's claimed placement groups (library-names plan step
     /// 4, exp156), already converted to the naming era's wrapper-body
     /// ordinals — the CLI threads them into the naming stage, whose
@@ -420,6 +423,7 @@ pub fn unpack_bun(
             app_declarations: Vec::new(),
             library_discovery: discover_raw(code, floor_pieces, floor_request),
             claimed_module_regions: Vec::new(),
+            body_restoration: None,
         })
     };
 
@@ -605,6 +609,30 @@ pub fn unpack_bun(
     // the bundle's own.
     let mut body_edits = plan.ref_edits.clone();
     body_edits.extend(helper_edits.iter().cloned());
+    // Site B (exp160): the vendored bodies' names, applied on the BUNDLE
+    // (the capture's own coordinates — the vendored text cannot join, its
+    // free identifiers are rewritten) and carried into the sliced bodies
+    // by the edit list. Empty unless a names-mode run captured answers,
+    // so every other run is byte-inert here.
+    let restoration = library_discovery
+        .as_ref()
+        .map(|r| {
+            let spans: Vec<(usize, usize)> =
+                modules.iter().map(|m| (m.body_start, m.body_end)).collect();
+            crate::naming::restore::apply_body_restoration(
+                ingest.semantic(),
+                &r.restoration_applications,
+                &spans,
+            )
+        })
+        .unwrap_or_default();
+    body_edits.extend(restoration.edits.iter().cloned());
+    let body_restoration = (!restoration.outcome.applied.is_empty()).then_some(
+        crate::naming::restore::BodyRestorationReport {
+            files: restoration.files,
+            totals: restoration.outcome,
+        },
+    );
     let mut file_of_record: HashMap<usize, String> = HashMap::new();
     for (module_index, (module, module_plan)) in modules.iter().zip(&plan.plans).enumerate() {
         let body = vendored_body(
@@ -725,6 +753,7 @@ pub fn unpack_bun(
         app_declarations,
         library_discovery,
         claimed_module_regions,
+        body_restoration,
     })
 }
 

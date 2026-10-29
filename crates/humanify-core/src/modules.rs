@@ -439,9 +439,10 @@ pub struct FactoryRecord {
     /// names mode is on.
     pub index_path: Option<String>,
     /// Why the names-mode planner left the module in place, when it did
-    /// (`unclaimed`, `partial`, `contested`, `index-disagrees`,
-    /// `duplicate-file`): the diagnostic side of [`Self::index_path`], read
-    /// by the `discover` verb's dump (exp157). None on a move.
+    /// (`unclaimed`, `partial`, `contested`, `index-disagrees`): the
+    /// diagnostic side of [`Self::index_path`], read by the `discover`
+    /// verb's dump (exp157). None on a move — a file race's loser re-paths
+    /// inside its package (D1, plan step 7), it does not stay.
     pub index_leave: Option<&'static str>,
     /// The whole-module vendor content key (`modules::vendor_content`) the
     /// names-mode planner read the index by — the diagnostic side of the
