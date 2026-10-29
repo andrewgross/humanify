@@ -347,8 +347,26 @@ Verification (the brief's ladder):
   bun-held P 99.97% / wrong 5.5 KB. (Restoration is inert on the Track-1 index, so the scorer
   measures matching only.) Placed share on the cc tree: 432 index-path files (29.9% of vendor
   bytes) + 149 synthetic in-package files (6.4%) + 1,038 fallback files at the root (63.7%).
-- **(e) 034 eval (names mode, one cold run, scratch base).** TBD-EXP160-EVAL
-- **(f) Neutrality (vs main `b433589e3`, pair 85→86, warm standing cache).** TBD-EXP160-NEUTRALITY
+- **(e) 034 eval (names mode, one cold run, scratch base, vs the names-mode label
+  `exp158-names-eval`):** novel 4,188 / realLn 416,377 **byte-equal** (zero band); vendorNoise
+  1,491 **=**; vendorReal 3,699 **=** (restoration is INERT on the Track-1 index — no names
+  tables — so the eval isolates the placement wiring, not the restoration; the restoration's own
+  effect is measured with the names index in (b)-(d)); mints 1,754 → 1,749; treeLn 149,557 →
+  149,888 (**+331**, over the brief's bar). Attribution: the per-pair tree cards are IDENTICAL
+  on three of four pairs and ±1 file on the fourth, novel/realLn are byte-equal, and
+  namingNoiseLines moved +624 — the +331 is the cold naming draw (names mode re-rolls freely;
+  the quiet pair moved +7), not placement. No names-mode treeLn band exists to resolve 331.
+  All four pairs exit 0, cache +0; warm self-hop byte-identical with 0 cache writes; the COLD
+  self-hop on 2.1.216 reads 1,330 — outside the naming-locked range, the same names-mode regime
+  as the exp156 (1,294) / exp157 (1,264) / exp158 (1,288) baselines. Disclosed blemish: the
+  working tree was docs-dirty mid-run (this section was being drafted while it ran), so the
+  label's manifest flags it; the binary is built from the clean code commit `45c0f89e6`
+  (sha256 `f682299667c0…` recorded on every manifest).
+- **(f) Neutrality (vs main `b433589e3`, pair 85→86, warm standing cache
+  `/work/neutrality-cache`, under both locks).** DEFAULT MODE: **NEUTRAL** — 0 differing files /
+  0 differing lines, exit 0/0 (the baseline leg's cache-write zero is the load-bearing one).
+  REPORT MODE (`library.matching=report`): PENDING-EXP160-REPORT (the first attempt was refused
+  — the candidate leg is the working tree, and the tree was docs-dirty; re-run committed).
 
 ## Not in this plan
 
