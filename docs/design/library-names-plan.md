@@ -365,8 +365,10 @@ Verification (the brief's ladder):
 - **(f) Neutrality (vs main `b433589e3`, pair 85→86, warm standing cache
   `/work/neutrality-cache`, under both locks).** DEFAULT MODE: **NEUTRAL** — 0 differing files /
   0 differing lines, exit 0/0 (the baseline leg's cache-write zero is the load-bearing one).
-  REPORT MODE (`library.matching=report`): PENDING-EXP160-REPORT (the first attempt was refused
-  — the candidate leg is the working tree, and the tree was docs-dirty; re-run committed).
+  REPORT MODE (`library.matching=report`, the standing index
+  `/work/library-index/current`, dead endpoint `127.0.0.1:9` as exp159's run): **NEUTRAL** —
+  0 differing files / 0 differing lines, cache writes +0/+0, exit 0/0. Both neutrality legs
+  passed on a committed, clean tree.
 
 ## Not in this plan
 
