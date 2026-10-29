@@ -966,6 +966,7 @@ fn exp162_config(
         merge_only: true,
         sponge_regions: SpongeRegions::Drop,
         quiet: true,
+        refuse: Vec::new(),
     }
 }
 

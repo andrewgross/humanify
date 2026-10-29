@@ -31,7 +31,7 @@ use humanify_core::libindex::table::{NameInterner, NameRowCompact, RawName, unit
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::shard::{Shard, ShardInputs, hex_sha256, read_current};
+use crate::shard::{Shard, ShardInputs, hex_sha256, read_current, shard_path};
 
 /// The stop-lists shipped with every index.
 pub const STOPLISTS_JSON: &str = include_str!("../data/stoplists.json");
@@ -1111,8 +1111,28 @@ pub enum ShardFlow<'a> {
         /// (label, task, inputs), in label order (a build's sorted list).
         refs: &'a [(String, usize, ShardInputs)],
         n_tasks: usize,
+        /// The giant-shard gate's threshold: a shard this size or bigger
+        /// is read, parsed and added ONE worker at a time (a shard of
+        /// [`GIANT_SHARD_BYTES`]). 0 forces the gate on for every shard
+        /// (the test's); [`u64::MAX`] turns it off.
+        giant: u64,
     },
 }
+
+/// A shard this size or bigger goes through [`GIANT_GATE`] one worker at
+/// a time: every worker streams every shard in the same order, so on
+/// exp152's store (4 react-icons shards of 7.7-7.8GB, ~25GB of parse
+/// each) all N workers would parse the same giant together — an OOM at
+/// any real job count. One at a time: the peak is the workers' rows plus
+/// ONE giant.
+pub(crate) const GIANT_SHARD_BYTES: u64 = 1024 * 1024 * 1024;
+
+/// The giant shards' read+parse+add, one worker at a time. A scheduling
+/// detail only: no output decision reads it, the rows go to the same
+/// workers in the same order gated or not, and the lock's hold is the
+/// parse of one shard (minutes on a giant) — the tradeoff that keeps the
+/// parallel merge's memory at rows-plus-one-giant instead of rows-times-N.
+static GIANT_GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// One worker's shard stream: the same shards every worker sees, in the
 /// same (label, key) order — the order the rows' contents depend on (a
@@ -1123,25 +1143,60 @@ enum WorkerStream<'a> {
         store: &'a Path,
         refs: std::slice::Iter<'a, (String, usize, ShardInputs)>,
         found: Vec<bool>,
+        giant: u64,
     },
 }
 
 impl WorkerStream<'_> {
-    /// The next shard in label order (None: done). A store stream records
-    /// the task of every shard it reads.
-    fn next_shard(&mut self) -> Option<Shard> {
+    /// The next shard in label order, read into `merger` (true: a shard
+    /// was added; false: done). A store stream records the task of every
+    /// shard it reads, and takes the [`GIANT_GATE`] across a giant
+    /// shard's read+parse+add so one worker at a time holds a giant.
+    fn next_into(&mut self, merger: &mut Merger) -> Result<bool, String> {
         match self {
-            WorkerStream::Owned(iter) => iter.next(),
-            WorkerStream::Store { store, refs, found } => {
-                for (_, task, inputs) in refs.by_ref() {
-                    if let Some(shard) = read_current(store, inputs) {
-                        if let Some(seen) = found.get_mut(*task) {
-                            *seen = true;
-                        }
-                        return Some(shard);
-                    }
+            WorkerStream::Owned(iter) => match iter.next() {
+                Some(shard) => {
+                    merger.add(shard)?;
+                    Ok(true)
                 }
-                None
+                None => Ok(false),
+            },
+            WorkerStream::Store {
+                store,
+                refs,
+                found,
+                giant,
+            } => {
+                for (_, task, inputs) in refs.by_ref() {
+                    // the gate is taken on the shard's SIZE, before its
+                    // read, and held across the add — the guard lives to
+                    // the return, after `merger.add`
+                    let gate = (*giant > 0
+                        && std::fs::metadata(shard_path(
+                            store,
+                            &inputs.kind.name(),
+                            &inputs.package,
+                            &inputs.version,
+                        ))
+                        .is_ok_and(|m| m.len() >= *giant))
+                    .then(|| {
+                        GIANT_GATE
+                            .lock()
+                            .map_err(|_| "the giant-shard gate lock is poisoned".to_string())
+                    })
+                    .transpose()?;
+                    let Some(shard) = read_current(store, inputs) else {
+                        drop(gate);
+                        continue;
+                    };
+                    if let Some(seen) = found.get_mut(*task) {
+                        *seen = true;
+                    }
+                    merger.add(shard)?;
+                    drop(gate);
+                    return Ok(true);
+                }
+                Ok(false)
             }
         }
     }
@@ -1166,10 +1221,12 @@ impl ShardFlow<'_> {
                 store,
                 refs,
                 n_tasks,
+                giant,
             } => WorkerStream::Store {
                 store,
                 refs: refs.iter(),
                 found: vec![false; *n_tasks],
+                giant: *giant,
             },
         }
     }
@@ -1187,9 +1244,7 @@ pub fn stream_parallel(flow: &ShardFlow, jobs: usize) -> Result<Vec<WorkerMerge>
     let workers = humanify_core::par::map_ordered(&key_ranges(jobs), |range| {
         let mut merger = Merger::filtered(*range);
         let mut stream = flow.worker();
-        while let Some(shard) = stream.next_shard() {
-            merger.add(shard)?;
-        }
+        while stream.next_into(&mut merger)? {}
         Ok(WorkerMerge {
             found: stream.into_found(),
             segment: merger.segment(),

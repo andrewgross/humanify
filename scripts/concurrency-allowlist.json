@@ -583,6 +583,13 @@
       "construct": "lock",
       "pattern": "short-lock",
       "reason": "exp154: the stage guard takes the stage-name Mutex on drop to write one string; a RAII boundary write, nothing else"
+    },
+    {
+      "file": "crates/humanify-index/src/merge.rs",
+      "scope": "static GIANT_GATE",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "exp162 giant-shard gate: every worker streams every shard in the same order, so on a store with a giant shard (exp152's react-icons@5.6.0/5.7.0, 7.7-7.8GB, ~25GB of parse each) all N workers would parse the same giant together \u2014 an OOM at any real job count. The lock is taken on the shard's FILE SIZE before the read and held across one shard's read+parse+add (minutes on a giant), so the peak is the workers' rows plus ONE giant instead of rows-times-N. A scheduling detail only: no output decision reads it, the rows go to the same workers in the same order gated or not (byte-identity tested with the gate forced on for every shard)."
     }
   ]
 }

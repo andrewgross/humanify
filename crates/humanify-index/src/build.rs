@@ -23,7 +23,7 @@ use humanify_core::libindex::literals::{LiteralMode, code_literals, json_literal
 use humanify_core::libindex::recipe::Recipe;
 
 use crate::asof::{VersionPolicy, normalize_time, select_versions};
-use crate::merge::{MergeMeta, ShardFlow, finish_workers, stream_parallel};
+use crate::merge::{GIANT_SHARD_BYTES, MergeMeta, ShardFlow, finish_workers, stream_parallel};
 use crate::recipe::{
     MAX_SOURCE_BYTES, RECIPE_VERSION, RecipeBuild, bundler_package, entry_specifiers,
     is_source_file, is_sponge_file, unresolved_specifiers,
@@ -1578,6 +1578,7 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
             store: &cfg.store,
             refs: &inputs,
             n_tasks: plan.tasks.len(),
+            giant: GIANT_SHARD_BYTES,
         };
         let mut workers = stream_parallel(&flow, cfg.merge_jobs)?;
         found = std::mem::take(&mut workers[0].found);
