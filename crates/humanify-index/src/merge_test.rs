@@ -622,3 +622,103 @@ fn the_key_ranges_partition_the_whole_key_space() {
         }
     }
 }
+
+/// The giant-shard gate (exp162): every worker streams every shard, so on
+/// a store with a giant shard all N workers would parse the same giant
+/// together — N × ~25GB is an OOM at any real job count. The gate holds
+/// ONE worker's read+parse+add of a giant at a time. The contract: the
+/// gate is a scheduling detail only — forcing it on for EVERY shard
+/// leaves the bytes alone.
+#[test]
+fn the_giant_shard_gate_serialises_a_store_merge_without_changing_a_byte() {
+    fn store_shards(store: &std::path::Path) -> (Vec<Shard>, Vec<(String, usize, ShardInputs)>) {
+        let module = |version: &str, rows: &[(&str, &str, &str, &str)]| {
+            let inputs = ShardInputs {
+                kind: ShardKind::Modules(bun_node()),
+                package: "ms".into(),
+                version: version.into(),
+                bundler: Some("bun@1.4.0".into()),
+                recipe: "recipe/1".into(),
+                fingerprint: "vendor-content-key/4".into(),
+            };
+            let mut s = Shard::new(&inputs);
+            for (owner, v, file, key) in rows {
+                s.modules.push(ShardModule {
+                    owner: (*owner).into(),
+                    version: (*v).into(),
+                    file: (*file).into(),
+                    key: (*key).into(),
+                });
+            }
+            (s, inputs)
+        };
+        let literal = |version: &str, lits: &[&str]| {
+            let inputs = ShardInputs {
+                kind: ShardKind::Literals,
+                package: "ms".into(),
+                version: version.into(),
+                bundler: None,
+                recipe: "recipe/1".into(),
+                fingerprint: "literals/1".into(),
+            };
+            let mut s = Shard::new(&inputs);
+            s.literals.push(ShardLiteral {
+                owner: "ms".into(),
+                version: version.into(),
+                file: "index.js".into(),
+                lits: lits.iter().map(|l| (*l).to_string()).collect(),
+            });
+            (s, inputs)
+        };
+        let pairs = vec![
+            module("1.0.0", &[("ms", "1.0.0", "index.js", "0000000000000001")]),
+            module(
+                "2.0.0",
+                &[
+                    ("ms", "2.0.0", "index.js", "8000000000000001"),
+                    ("other", "1.0.0", "x.js", "0000000000000002"),
+                ],
+            ),
+            literal("1.0.0", &["S:a"]),
+            literal("2.0.0", &["S:b"]),
+        ];
+        let mut refs = Vec::new();
+        for (shard, inputs) in &pairs {
+            super::shard::write_shard(store, shard).expect("writes the shard");
+            refs.push((shard.label(), 0usize, inputs.clone()));
+        }
+        refs.sort_by(|a, b| a.0.cmp(&b.0));
+        (pairs.into_iter().map(|(s, _)| s).collect(), refs)
+    }
+
+    let root = std::env::temp_dir().join(format!("humanify-index-giant-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("root");
+    let store = root.join("store");
+    let (shards_written, refs) = store_shards(&store);
+
+    let gated: super::merge::IndexFiles = {
+        let flow = super::merge::ShardFlow::Store {
+            store: &store,
+            refs: &refs,
+            n_tasks: 1,
+            giant: 1, // the gate ON for EVERY shard — fully serialized
+        };
+        let workers = super::merge::stream_parallel(&flow, 4).expect("workers");
+        super::merge::finish_workers(meta(), workers).expect("gated finish")
+    };
+    let ungated: super::merge::IndexFiles = {
+        let flow = super::merge::ShardFlow::Store {
+            store: &store,
+            refs: &refs,
+            n_tasks: 1,
+            giant: u64::MAX, // the gate off
+        };
+        let workers = super::merge::stream_parallel(&flow, 4).expect("workers");
+        super::merge::finish_workers(meta(), workers).expect("ungated finish")
+    };
+    let serial = merge(meta(), shards_written).expect("serial");
+    assert_eq!(gated.files, serial.files, "gated == serial");
+    assert_eq!(ungated.files, serial.files, "ungated == serial");
+    let _ = std::fs::remove_dir_all(&root);
+}

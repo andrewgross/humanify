@@ -317,7 +317,13 @@ bundler@version, recipe version, fingerprint version}`. Every input that
   which routes through the SAME path over one whole-space range: the
   default is byte-identical to the serial merge, proven against main's
   binary (`build_test::exp162_anchor`, the fixture store's index id) and
-  in `merge_test` at 1/4/8/30 workers.
+  in `merge_test` at 1/4/8/30 workers. One guard on the streaming shape:
+  a store with a GIANT shard (exp152's react-icons@5.6.0/5.7.0, 7.7-7.8GB
+  of rows, ~25GB of parse each) would have all N workers parse the same
+  giant together — the giant-shard gate holds ONE worker's read+parse+add
+  of a giant at a time. It is a scheduling detail only: the bytes are
+  unchanged, tested with the gate forced on for every shard
+  (`merge_test::the_giant_shard_gate_serialises_a_store_merge_without_changing_a_byte`).
 - **What is not deterministic, and is therefore recorded instead:** the
   registry snapshot (fetch time; packument hashes), the bundler binaries
   (name, version). npm's dependency resolution is pinned by `--before`.
