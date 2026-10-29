@@ -609,13 +609,31 @@ pub fn unpack_bun(
     // the bundle's own.
     let mut body_edits = plan.ref_edits.clone();
     body_edits.extend(helper_edits.iter().cloned());
+    // Site B (exp160): the vendored bodies' names, applied on the BUNDLE
+    // (the capture's own coordinates — the vendored text cannot join, its
+    // free identifiers are rewritten) and carried into the sliced bodies
+    // by the edit list. Empty unless a names-mode run captured answers,
+    // so every other run is byte-inert here.
+    let restoration = library_discovery
+        .as_ref()
+        .map(|r| {
+            let spans: Vec<(usize, usize)> =
+                modules.iter().map(|m| (m.body_start, m.body_end)).collect();
+            crate::naming::restore::apply_body_restoration(
+                ingest.semantic(),
+                &r.restoration_applications,
+                &spans,
+            )
+        })
+        .unwrap_or_default();
+    body_edits.extend(restoration.edits.iter().cloned());
+    let body_restoration = (!restoration.outcome.applied.is_empty()).then_some(
+        crate::naming::restore::BodyRestorationReport {
+            files: restoration.files,
+            totals: restoration.outcome,
+        },
+    );
     let mut file_of_record: HashMap<usize, String> = HashMap::new();
-    // Site B (exp160): the vendored bodies' names — the index's own
-    // answers first, then the prior release's same-path spellings. The
-    // map is captured in names mode only, so default runs see an empty
-    // map and this is byte-inert.
-    let restorations = restoration_capture_map(&library_discovery);
-    let mut body_restoration = crate::naming::restore::BodyRestorationReport::default();
     for (module_index, (module, module_plan)) in modules.iter().zip(&plan.plans).enumerate() {
         let body = vendored_body(
             code,
@@ -629,16 +647,6 @@ pub fn unpack_bun(
         let rel_path = format!(
             "{}/{}.js",
             module_plan.naming.dir, module_plan.naming.file_name
-        );
-        // The restoration pass over this body: the index's answers for its
-        // captured statements, then the prior's spellings for the slots the
-        // index did not answer. A body without answers comes back verbatim.
-        let body = restored_body(
-            &body,
-            &rel_path,
-            &restorations,
-            prior.root.as_deref(),
-            &mut body_restoration,
         );
         if let Some(i) = record_index {
             file_of_record.insert(i, rel_path.clone());
@@ -745,42 +753,8 @@ pub fn unpack_bun(
         app_declarations,
         library_discovery,
         claimed_module_regions,
-        body_restoration: (!restorations.is_empty()).then_some(body_restoration),
+        body_restoration,
     })
-}
-
-/// Site B's capture, as the lookup map the write loop applies (exp160):
-/// the discovery report's restoration rows. Empty outside names mode.
-fn restoration_capture_map(
-    library_discovery: &Option<crate::libdetect::discovery::DiscoveryReport>,
-) -> std::collections::BTreeMap<String, crate::libindex::table::RestorationRow> {
-    library_discovery
-        .as_ref()
-        .map(|r| r.restoration_map())
-        .unwrap_or_default()
-}
-
-/// Site B's per-body restoration (exp160, library-names plan step 7): the
-/// index's answers for the body's captured statements, then the prior
-/// release's same-path spellings for the slots the index did not answer
-/// ([`crate::naming::restore::restore_body_text`]). An empty capture —
-/// every non-names run — answers nothing: the body ships verbatim and no
-/// prior file is read.
-fn restored_body(
-    body: &str,
-    rel_path: &str,
-    restorations: &std::collections::BTreeMap<String, crate::libindex::table::RestorationRow>,
-    prior_root: Option<&Path>,
-    report: &mut crate::naming::restore::BodyRestorationReport,
-) -> String {
-    if restorations.is_empty() {
-        return body.to_string();
-    }
-    let prior_body = prior_root.and_then(|root| fs::read_to_string(root.join(rel_path)).ok());
-    let restored =
-        crate::naming::restore::restore_body_text(body, restorations, prior_body.as_deref());
-    report.record(&restored.outcome);
-    restored.text
 }
 
 /// The names-mode block of [`unpack_bun`] (library-names plan step 4,

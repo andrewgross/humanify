@@ -326,7 +326,7 @@ fn bundle_units(
 }
 
 /// [`NamedStatementPrints`] without the mappings.
-fn plain_of(named: &NamedStatementPrints) -> StatementPrints {
+pub(crate) fn plain_of(named: &NamedStatementPrints) -> StatementPrints {
     StatementPrints {
         whole: named.whole.print.clone(),
         functions: named.functions.iter().map(|f| f.print.clone()).collect(),

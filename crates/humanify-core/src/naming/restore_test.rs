@@ -274,108 +274,176 @@ fn a_mappings_slots_are_only_locals() {
 }
 
 // ---------------------------------------------------------------------------
-// Site B: the vendored bodies (the unpack writes them; the naming era's
-// statements never cover a moved module)
+// Site B: the vendored bodies' restoration, applied on the bundle
+// (`naming::restore::apply_body_restoration`) — the capture's coordinates,
+// carried into the bodies' slices by the edit list.
 // ---------------------------------------------------------------------------
 
-use crate::naming::restore::restore_body_text;
+use crate::libdetect::discovery::RestorationApplication;
+use crate::naming::restore::{RestorationEdits, apply_body_restoration};
 
-/// A body's statement print hash, keyed the same way the capture keyed it —
-/// the wrapped parse is the pass's own, so the test plants the key it will
-/// be looked up by.
-fn body_whole_hash(body: &str, statement: usize) -> String {
+/// A bundle-shaped fixture: the parsed semantic plus the span of the
+/// binding declared as `declares` (the slot's symbol, as the capture
+/// carried it).
+fn with_bundle<R>(code: &str, f: impl FnOnce(&Semantic<'_>, &[(usize, usize)]) -> R) -> R {
     let allocator = oxc_allocator::Allocator::default();
-    let wrapped = format!("function restoreWrap() {{\n{body}\n}}");
-    let ingest = Ingest::parse(&allocator, &wrapped, "vendor.js");
-    assert!(ingest.errors.is_empty(), "body must parse: {body:?}");
-    let tables = SymbolTables::build(ingest.semantic());
-    let json = crate::ingest::program_estree_json(ingest.program);
-    let statements = json["body"][0]["body"]["body"]
-        .as_array()
-        .expect("statements");
-    statement_named_prints(&statements[statement], &tables)
-        .whole
-        .print
-        .hash
-}
-
-#[test]
-fn a_vendored_body_s_slots_come_from_the_index_s_answer() {
-    let body = "var foo = function (bar) {\n  return bar * 2;\n};\nuse(foo);\n";
-    let hash = body_whole_hash(body, 0);
-    let allocator = oxc_allocator::Allocator::default();
-    let wrapped = format!("function restoreWrap() {{\n{body}\n}}");
-    let ingest = Ingest::parse(&allocator, &wrapped, "vendor.js");
-    let tables = SymbolTables::build(ingest.semantic());
-    let json = crate::ingest::program_estree_json(ingest.program);
-    let statements = json["body"][0]["body"]["body"]
-        .as_array()
-        .expect("statements");
-    let prints = statement_named_prints(&statements[0], &tables);
-    let slot = prints
-        .whole
-        .mapping
-        .iter()
-        .position(|(_, _, name)| name == "foo")
-        .expect("foo is a slot") as u32;
-    let mut restorations = std::collections::BTreeMap::new();
-    restorations.insert(
-        hash,
-        row(RestoreAnswer::Single(vec![named(slot, "pLimit")])),
-    );
-    let out = restore_body_text(body, &restorations, None).text;
+    let ingest = Ingest::parse(&allocator, code, "input.js");
     assert!(
-        out.contains("var pLimit ="),
-        "the restored name ships: {out}"
+        ingest.errors.is_empty(),
+        "fixture must parse: {:?}",
+        ingest.errors
     );
-    assert!(!out.contains("foo"), "no crawl name left: {out}");
-    // Everything else is verbatim — the body is never beautified.
-    assert!(out.contains("bar * 2"), "untouched code stays: {out}");
+    f(ingest.semantic(), &[(0, code.len())])
+}
+
+/// The captured answer's application row for `declares`' binding: slot 0
+/// (the test plants the ordinal the capture would carry), span = the
+/// binding's own span (inside the module body).
+fn application(
+    semantic: &Semantic<'_>,
+    declares: &str,
+    answer: RestoreAnswer,
+    modules: &[(usize, usize)],
+) -> RestorationApplication {
+    let scoping = semantic.scoping();
+    let symbol = scoping
+        .symbol_ids()
+        .find(|&s| scoping.symbol_name(s) == declares)
+        .unwrap_or_else(|| panic!("{declares} has no symbol"));
+    let span = scoping.symbol_span(symbol);
+    assert!(
+        modules
+            .iter()
+            .any(|&(s, e)| s <= span.start as usize && span.end as usize <= e),
+        "the fixture's binding must sit inside a module body"
+    );
+    RestorationApplication {
+        hash: "captured".into(),
+        package: "dep".into(),
+        answer,
+        start: span.start,
+        end: span.end,
+        slots: vec![Some(symbol.index() as u32)],
+    }
+}
+
+/// The edits' effect on the bundle's text (the bodies' slices apply them).
+fn applied_text(code: &str, edits: &RestorationEdits) -> String {
+    let text_edits: Vec<crate::unpack::bun::TextEdit> = edits
+        .edits
+        .iter()
+        .map(|e| crate::unpack::bun::TextEdit {
+            start: e.start,
+            end: e.end,
+            replacement: e.replacement.clone(),
+        })
+        .collect();
+    crate::unpack::bun::slice_with_edits(code, &text_edits, 0, code.len())
 }
 
 #[test]
-fn a_vendored_body_without_answers_is_verbatim() {
-    let body = "var foo = function (bar) {\n  return bar * 2;\n};\n";
-    assert_eq!(
-        restore_body_text(body, &std::collections::BTreeMap::new(), None).text,
-        body
-    );
+fn a_vendored_body_s_slot_is_restored_on_the_bundle() {
+    let code = "var m = helper(function () {\n  var foo = 1;\n  use(foo);\n});\n";
+    with_bundle(code, |semantic, modules| {
+        let app = application(
+            semantic,
+            "foo",
+            RestoreAnswer::Single(vec![named(0, "pLimit")]),
+            modules,
+        );
+        let edits = apply_body_restoration(semantic, &[app], modules);
+        assert_eq!(edits.outcome.bindings, 1, "the slot is restored");
+        assert_eq!(edits.files, 1, "one module's bytes changed");
+        assert_eq!(edits.outcome.applied[0].1, "pLimit");
+        let text = applied_text(code, &edits);
+        assert!(text.contains("var pLimit = 1;"), "restored: {text}");
+        assert!(!text.contains("foo"), "no crawl name left: {text}");
+    });
 }
 
 #[test]
-fn a_vendored_body_s_prior_release_carries_its_names() {
-    // The prior release shipped the same file RESTORED (or renamed); the
-    // fresh body's identical statement carries the prior's spellings for
-    // the slots the index does not answer.
-    let body = "var foo = function (bar) {\n  return bar * 2;\n};\n";
-    let prior_body = "var pLimit = function (factor) {\n  return factor * 2;\n};\n";
-    // The bodies hash EQUAL only when the normalized statements match; a
-    // renamed identifier slots blind (name-blind walk), so the prior's
-    // names join by slot. But `pLimit` vs `foo` differ in the CONTENT
-    // tokens? Identifiers are content tokens? The content tokens are
-    // strings/templates/property names/free identifiers — locals are
-    // slotted, so the two bodies hash equal.
-    let hash = body_whole_hash(body, 0);
-    let prior_hash = body_whole_hash(prior_body, 0);
-    assert_eq!(hash, prior_hash, "the walk is name-blind for locals");
-    // Slot 0 is `foo`/`pLimit` (the declared var), slot 1 the param.
-    let mut restorations = std::collections::BTreeMap::new();
-    restorations.insert(
-        hash.clone(),
-        row(RestoreAnswer::Single(vec![named(1, "factor")])),
-    );
-    let out = restore_body_text(body, &restorations, Some(prior_body)).text;
-    // The index answered the param slot; the prior carried the var's name.
-    assert!(out.contains("var pLimit = function (factor)"), "{out}");
+fn an_application_outside_the_extracted_bodies_is_not_applied() {
+    // A container statement's answer is the era's (Site A): the unpack
+    // applies only rows inside the bodies it slices out.
+    let code = "var m = helper(function () {\n  var foo = 1;\n  use(foo);\n});\n";
+    with_bundle(code, |semantic, _| {
+        let mut app = application(
+            semantic,
+            "foo",
+            RestoreAnswer::Single(vec![named(0, "pLimit")]),
+            &[(0, code.len())],
+        );
+        // The row's span outside every extracted body — nothing applies.
+        app.start = 0;
+        app.end = 0;
+        let edits = apply_body_restoration(semantic, &[app], &[(1, 2)]);
+        assert_eq!(edits.outcome, RestorationOutcome::default());
+        assert!(edits.edits.is_empty());
+    });
 }
 
 #[test]
-fn the_index_s_answer_outranks_the_prior_s_spelling() {
-    let body = "var foo = 1;\n";
-    let prior_body = "var stale = 1;\n";
-    let hash = body_whole_hash(body, 0);
-    let mut restorations = std::collections::BTreeMap::new();
-    restorations.insert(hash, row(RestoreAnswer::Single(vec![named(0, "fresh")])));
-    let out = restore_body_text(body, &restorations, Some(prior_body)).text;
-    assert!(out.contains("var fresh = 1;"), "the index wins: {out}");
+fn an_ambiguous_application_abstains() {
+    let code = "var m = helper(function () {\n  var foo = 1;\n  use(foo);\n});\n";
+    with_bundle(code, |semantic, modules| {
+        let app = application(
+            semantic,
+            "foo",
+            RestoreAnswer::Ambiguous(vec![vec![named(0, "one")], vec![named(0, "two")]]),
+            modules,
+        );
+        let edits = apply_body_restoration(semantic, &[app], modules);
+        assert_eq!(edits.outcome, RestorationOutcome::default());
+        assert!(edits.edits.is_empty());
+    });
+}
+
+#[test]
+fn a_missing_slot_keeps_current_behaviour_on_the_bundle() {
+    // The answer names a slot the row does not carry — nothing applies,
+    // and nothing else in the body is touched.
+    let code = "var m = helper(function () {\n  var foo = 1;\n  use(foo);\n});\n";
+    with_bundle(code, |semantic, modules| {
+        let app = application(
+            semantic,
+            "foo",
+            RestoreAnswer::Single(vec![named(7, "pLimit")]),
+            modules,
+        );
+        let edits = apply_body_restoration(semantic, &[app], modules);
+        // The row was consulted (counted answered, like Site A's) but its
+        // only name targets a slot this statement's mapping does not
+        // carry: nothing applies.
+        assert_eq!(
+            edits.outcome,
+            RestorationOutcome {
+                statements: 1,
+                ..RestorationOutcome::default()
+            }
+        );
+        assert!(edits.edits.is_empty());
+    });
+}
+
+#[test]
+fn two_rows_naming_one_binding_differently_settle_on_the_first() {
+    // The index's own two answers disagree for one binding (two units
+    // sharing it): the first applied name wins — the validated path never
+    // re-rolls a settled binding.
+    let code = "var m = helper(function () {\n  var foo = 1;\n  use(foo);\n});\n";
+    with_bundle(code, |semantic, modules| {
+        let first = application(
+            semantic,
+            "foo",
+            RestoreAnswer::Single(vec![named(0, "alpha")]),
+            modules,
+        );
+        let mut second = first.clone();
+        second.answer = RestoreAnswer::Single(vec![named(0, "beta")]);
+        let edits = apply_body_restoration(semantic, &[first, second], modules);
+        assert_eq!(edits.outcome.bindings, 1, "one binding, one name");
+        assert_eq!(edits.outcome.applied[0].1, "alpha");
+        let text = applied_text(code, &edits);
+        assert!(text.contains("var alpha = 1;"), "first wins: {text}");
+    });
 }
