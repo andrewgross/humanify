@@ -418,6 +418,7 @@ pub fn plan_runtime(
         out: None,
         recipes,
         jobs: 4,
+        merge_jobs: 1,
         offline,
         policy: VersionPolicy::PinsOnly,
         pinned,
