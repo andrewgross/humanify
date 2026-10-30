@@ -1074,6 +1074,54 @@ fn restoration_answers_covers_the_function_route_per_contributing_print() {
 }
 
 #[test]
+fn restoration_answers_answers_the_function_prints_beside_a_whole_hit() {
+    // exp164: the capture's depth gap. A whole-print hit short-circuits
+    // the structural route before the nested functions are consulted, so
+    // a wrapper's nested locals were never captured — the mint premium's
+    // other half. The capture needs BOTH: the whole's answer names the
+    // wrapper's own slots, the functions' name theirs.
+    use crate::libindex::table::RestoreAnswer;
+    let index = LibraryIndex::from_rows_with_names(
+        vec![row("w", "dep", 40, 100), row("f", "dep", 30, 100)],
+        vec![
+            crate::libindex::format::NameRow {
+                hash: hx("w"),
+                owner: "dep".into(),
+                file: "index.js".into(),
+                names: vec![named(0, "outer")],
+                versions: vec![("1.0.0".into(), "1.0.0".into())],
+            },
+            crate::libindex::format::NameRow {
+                hash: hx("f"),
+                owner: "dep".into(),
+                file: "index.js".into(),
+                names: vec![named(0, "inner")],
+                versions: vec![("1.0.0".into(), "1.0.0".into())],
+            },
+        ],
+        Vec::new(),
+    );
+    // The whole print MATCHES (a captured answer exists for it) and a
+    // nested function matches beside it.
+    let p = StatementPrints {
+        whole: print("w", 40, 0),
+        functions: vec![print("f", 30, 10)],
+    };
+    let q = query(0, &p);
+    let answers = index.restoration_answers(&q, &structural(), &same, "dep");
+    assert_eq!(
+        answers.iter().map(|(h, _)| h.as_str()).collect::<Vec<_>>(),
+        vec![hx("w"), hx("f")],
+        "the whole's answer first, the function's beside it"
+    );
+    assert!(
+        answers
+            .iter()
+            .all(|(_, a)| matches!(a, RestoreAnswer::Single(_)))
+    );
+}
+
+#[test]
 fn restoration_answers_passes_an_ambiguous_answer_through_for_the_callers_policy() {
     use crate::libindex::table::RestoreAnswer;
     let index = LibraryIndex::from_rows_with_names(

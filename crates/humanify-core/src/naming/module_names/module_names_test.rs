@@ -438,10 +438,12 @@ fn lazy_regions() -> Vec<ClaimedRegion> {
         ClaimedRegion {
             statements: vec![5],
             claims: vec![Some("ms".to_string())],
+            raw_spans: Vec::new(),
         },
         ClaimedRegion {
             statements: vec![6, 7, 8],
             claims: vec![None, None, Some("ms".to_string())],
+            raw_spans: Vec::new(),
         },
     ]
 }
@@ -546,6 +548,7 @@ fn restoration_names_a_claimed_statement_before_the_model_is_ever_asked() {
     let regions = [ClaimedRegion {
         statements: vec![1],
         claims: vec![None],
+        raw_spans: Vec::new(),
     }];
     let provider = ModuleProvider::new(by_purpose);
     let out = run_with_restorations(BUNDLE, None, &provider, &regions, &restorations);
@@ -644,6 +647,7 @@ fn an_unjoinable_region_moves_nothing() {
     let regions = vec![ClaimedRegion {
         statements: vec![5, 7],
         claims: vec![Some("ms".to_string()), Some("ms".to_string())],
+        raw_spans: Vec::new(),
     }];
     let out = run_with_regions(BUNDLE, None, &provider, &regions);
     assert!(
@@ -685,6 +689,7 @@ fn claimed_all(statements: &[usize], package: &str) -> ClaimedRegion {
             .iter()
             .map(|_| Some(package.to_string()))
             .collect(),
+        raw_spans: Vec::new(),
     }
 }
 

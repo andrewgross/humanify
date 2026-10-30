@@ -224,6 +224,9 @@ pub struct NamingOutcome {
     /// moved modules' vendor paths (the split reads them) and their
     /// spans (already applied as a freeze). Empty when nothing moved.
     pub library_layout: crate::naming::module_names::LibraryLayout,
+    /// The restoration's measurement evidence (exp164; diagnostics only,
+    /// never a decision input). None outside the names mode's claims.
+    pub era_dump: Option<crate::naming::restore::EraDump>,
 }
 
 /// Run the naming stage.
@@ -296,6 +299,7 @@ pub fn run_naming<P: NameProvider>(
     let era = era?;
     let NamingEra {
         generated,
+        era_dump,
         trail,
         waves,
         processor,
@@ -366,6 +370,7 @@ pub fn run_naming<P: NameProvider>(
         library_imports,
         module_names,
         library_layout,
+        era_dump,
     };
     // `buildLedgerPostStages`: (input text, the pass's ledger) per pass
     // that produced code — reconcile over the generated text, the sweep

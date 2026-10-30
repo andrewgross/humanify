@@ -684,6 +684,11 @@ pub fn unpack_bun(
 
     let mut all_edits = plan.decl_edits.clone();
     all_edits.extend(plan.ref_edits.iter().cloned());
+    // Site B (exp164) also owns the container statements: the restoration
+    // edits ride this list too, where a body-range edit sits under the
+    // declaration splice and is dropped by the slice's overlap rule — the
+    // container's own edits (the unspliced wrappers' renames) apply.
+    all_edits.extend(restoration.edits.iter().cloned());
     let runtime = slice_with_edits(code, &all_edits, 0, code.len());
     let mut runtime_file = None;
     if !runtime.trim_matches(is_js_space).is_empty() {
@@ -924,6 +929,11 @@ fn claimed_regions(
                 .statements
                 .iter()
                 .map(|row| row.package.clone())
+                .collect(),
+            raw_spans: group
+                .statements
+                .iter()
+                .map(|row| (row.start, row.end))
                 .collect(),
         });
     }

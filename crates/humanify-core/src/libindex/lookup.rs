@@ -538,18 +538,27 @@ impl LibraryIndex {
             return Vec::new();
         };
         let route = self.structural_scores_relaxed(q, rules, same);
-        route
-            .hits
-            .get(&(owner as u32))
-            .map(|hits| {
-                hits.iter()
-                    .filter_map(|(hash, hit)| {
-                        let answer = self.restore_names(*hit);
-                        (answer != table::RestoreAnswer::Absent).then(|| (hash.clone(), answer))
-                    })
-                    .collect()
+        let mut hits = route.hits.get(&(owner as u32)).cloned().unwrap_or_default();
+        // exp164: a whole-print hit short-circuits the route before the
+        // nested functions are consulted — the capture needs their answers
+        // too (the wrapper's slots and its functions' are different
+        // questions). Merging is idempotent: the no-whole-hit route already
+        // holds these, deduplicated by hash below.
+        for (f, owners) in self.selected_function_hits(q, rules, same) {
+            let Some(hit) = owners.get(&(owner as u32)) else {
+                continue;
+            };
+            if hits.iter().any(|(hash, _)| *hash == f.hash) {
+                continue;
+            }
+            hits.push((f.hash.clone(), *hit));
+        }
+        hits.iter()
+            .filter_map(|(hash, hit)| {
+                let answer = self.restore_names(*hit);
+                (answer != table::RestoreAnswer::Absent).then(|| (hash.clone(), answer))
             })
-            .unwrap_or_default()
+            .collect()
     }
 
     /// An owner id's package name.
@@ -1001,21 +1010,7 @@ impl LibraryIndex {
             return route;
         }
         if route.score.is_empty() {
-            let mut hits: Vec<(&UnitPrint, BTreeMap<u32, UnitHit>)> = q
-                .prints
-                .functions
-                .iter()
-                .filter(|f| usable(f, rules.min_function_content))
-                .filter_map(|f| Some((f, self.look_hits(&f.hash, q.module_bytes, rules, same)?)))
-                .collect();
-            hits.sort_by_key(|(f, _)| std::cmp::Reverse(f.nodes));
-            let mut taken: Vec<(u32, u32)> = Vec::new();
-            for (f, owners) in hits {
-                let (s, e) = (f.span.start, f.span.end);
-                if taken.iter().any(|&(a, b)| !(e <= a || s >= b)) {
-                    continue;
-                }
-                taken.push((s, e));
+            for (f, owners) in self.selected_function_hits(q, rules, same) {
                 for (p, hit) in owners {
                     *route.score.entry(p).or_default() += f.nodes;
                     route.hits.entry(p).or_default().push((f.hash.clone(), hit));
@@ -1023,6 +1018,38 @@ impl LibraryIndex {
             }
         }
         route
+    }
+
+    /// The route's function branch: the usable function prints whose hash
+    /// matches, largest first, non-overlapping by span. Callers fold the
+    /// result their own way — the claim route adds the node counts to its
+    /// score, the restoration capture (exp164) takes the rows as they are.
+    fn selected_function_hits<'q>(
+        &self,
+        q: &UnitQuery<'q>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> Vec<(&'q UnitPrint, BTreeMap<u32, UnitHit>)> {
+        let usable =
+            |p: &UnitPrint, content: u32| p.nodes >= rules.min_nodes && p.content >= content;
+        let mut hits: Vec<(&UnitPrint, BTreeMap<u32, UnitHit>)> = q
+            .prints
+            .functions
+            .iter()
+            .filter(|f| usable(f, rules.min_function_content))
+            .filter_map(|f| Some((f, self.look_hits(&f.hash, q.module_bytes, rules, same)?)))
+            .collect();
+        hits.sort_by_key(|(f, _)| std::cmp::Reverse(f.nodes));
+        let mut taken: Vec<(u32, u32)> = Vec::new();
+        hits.retain(|(f, _)| {
+            let (s, e) = (f.span.start, f.span.end);
+            if taken.iter().any(|&(a, b)| !(e <= a || s >= b)) {
+                return false;
+            }
+            taken.push((s, e));
+            true
+        });
+        hits
     }
 }
 
