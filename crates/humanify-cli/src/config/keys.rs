@@ -52,6 +52,9 @@ fn efforts() -> Vec<String> {
 fn schedules() -> Vec<String> {
     ["relaxed", "sequential"].map(String::from).to_vec()
 }
+fn orders() -> Vec<String> {
+    ["throughput", "ordered"].map(String::from).to_vec()
+}
 fn levers() -> Vec<String> {
     Lever::ALL.iter().map(|l| l.name().to_string()).collect()
 }
@@ -183,6 +186,22 @@ const fn unset_text(
 
 /// Every setting, in the order the example file lists them.
 pub static KEYS: &[Key] = &[
+    // [run]
+    Key {
+        section: "run",
+        name: "order",
+        kind: Kind::Choice(orders),
+        flag: None,
+        default: || text("throughput"),
+        unset: "",
+        doc: "\"throughput\" (the default: work through items as fast as the pool and \
+              the semaphore allow; results land in canonical order where they are \
+              consumed) or \"ordered\" (the TEST MODE: the waves' turn driver, the \
+              parallel helpers sequential, one-call dispatch windows). Ordered forces \
+              the conservative naming schedule and refuses naming.relaxed_levers. \
+              Determinism-sensitive tests opt in; regular runs never pay for it \
+              (docs/concurrency.md, rule 9).",
+    },
     // [io]
     Key {
         section: "io",

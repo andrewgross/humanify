@@ -663,6 +663,14 @@ fn parse_enum<T: serde::de::DeserializeOwned>(v: Option<String>) -> Option<T> {
     v.and_then(|s| serde_json::from_value(serde_json::Value::String(s)).ok())
 }
 
+/// `run.order = "ordered"` — the ONE reader of the key (the config rule:
+/// one parse point per decision). Everything the mode forces derives from
+/// the schedule it selects: the turn driver, sequential `par`, one-call
+/// dispatch windows.
+fn ordered_mode(r: &Resolved) -> bool {
+    r.text("run.order").as_deref() == Some("ordered")
+}
+
 /// The operational flags' values, keyed by the setting each also is (the
 /// rest of the run's settings live only in the `--config` file).
 fn flag_values(opts: &CommandOptions) -> Vec<FlagValue> {
@@ -862,6 +870,16 @@ pub fn cross_key_violations(r: &Resolved) -> Vec<String> {
         out.push("split.ledger requires split.enabled".to_string());
     }
     let sequential = r.text("naming.schedule").as_deref() == Some("sequential");
+    if ordered_mode(r)
+        && r.list("naming.relaxed_levers")
+            .is_some_and(|l| !l.is_empty())
+    {
+        out.push(
+            "run.order = \"ordered\" forces the conservative naming schedule; \
+             naming.relaxed_levers has nothing to select"
+                .to_string(),
+        );
+    }
     out.extend(schedule(sequential, r.list("naming.relaxed_levers")).err());
     let context = r
         .int("llm.context_tokens")
@@ -914,8 +932,18 @@ impl Config {
             return Err(errors);
         }
         let sequential = r.text("naming.schedule").as_deref() == Some("sequential");
-        let schedule =
-            schedule(sequential, r.list("naming.relaxed_levers")).expect("validated above");
+        // The ordered TEST mode (run.order = "ordered"; docs/concurrency.md
+        // rule 9): it FORCES the turn-driver schedule — the mode admits
+        // proven byte-identical territory only (a relaxed tier + turn
+        // driver asks different questions than the pipelined driver, so it
+        // is not the same bytes; the replay test holds the proof). The
+        // relaxed levers are refused in validation: under the forced
+        // schedule they have nothing to select.
+        let schedule = if ordered_mode(&r) {
+            FastTier::Off
+        } else {
+            schedule(sequential, r.list("naming.relaxed_levers")).expect("validated above")
+        };
         Ok(Config {
             io: Io {
                 input: input.to_string(),

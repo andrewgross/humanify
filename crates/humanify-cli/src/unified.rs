@@ -81,6 +81,13 @@ fn read_utf8(path: &str) -> Result<String, Crash> {
 /// The action: `humanify <input> [options]`, on the run's validated
 /// configuration. Returns the process exit code.
 pub fn run(config: &Config) -> i32 {
+    // The ordered mode (rule 9, docs/concurrency.md): ONE switch, set once
+    // here before any stage runs. It schedules work only — the trees and
+    // the cache-KEY SET are byte-identical to the conservative schedule's
+    // (the replay pin proves it; the ask count is dispatch detail) — so a
+    // regular run never pays for it and the tests that want ordered
+    // operation opt in through the config file.
+    humanify_core::par::set_ordered_mode(config.naming.schedule.is_turn_driver());
     let input = config.io.input.as_str();
     // ensureFileExists → err(): red message, exit 1 — now before anything
     // is created.
@@ -1575,8 +1582,17 @@ fn naming_config(config: &Config, toolchain: &Toolchain) -> NamingConfig {
         // The rendered-prompt window (finding #65): every in-flight call
         // plus a backfill headroom over the provider stack's outer
         // concurrency bound (build_provider's), never the whole round.
-        prompt_window: DEFAULT_PROMPT_WINDOW
-            .max(config.llm.outer_concurrency() + PROMPT_WINDOW_HEADROOM),
+        // The rendered-prompt window (finding #65): every in-flight call
+        // plus a backfill headroom over the provider stack's outer
+        // concurrency bound (build_provider's), never the whole round.
+        // The ordered mode (rule 9) forces 1: every chunked dispatch window
+        // flows from this one point, so the mode's dispatch is one call at
+        // a time, in canonical order.
+        prompt_window: if config.naming.schedule.is_turn_driver() {
+            1
+        } else {
+            DEFAULT_PROMPT_WINDOW.max(config.llm.outer_concurrency() + PROMPT_WINDOW_HEADROOM)
+        },
         tunables: config.naming.tunables(),
         // Set by the caller from the toolchain's marker offer.
         module_naming: None,

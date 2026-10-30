@@ -11,6 +11,10 @@
 # command line; a flag and this file that DISAGREE are refused, naming
 # both. The API key is never a setting: it is read from HUMANIFY_API_KEY.
 
+[run]
+# "throughput" (the default: work through items as fast as the pool and the semaphore allow; results land in canonical order where they are consumed) or "ordered" (the TEST MODE: the waves' turn driver, the parallel helpers sequential, one-call dispatch windows). Ordered forces the conservative naming schedule and refuses naming.relaxed_levers. Determinism-sensitive tests opt in; regular runs never pay for it (docs/concurrency.md, rule 9).
+order = "throughput"
+
 [io]
 # Output directory.
 # output_dir = "output"   (usually the flag --output-dir)
