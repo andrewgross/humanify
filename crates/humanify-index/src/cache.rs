@@ -424,6 +424,7 @@ pub fn plan_runtime(
         merge_only: false,
         sponge_regions: Default::default(),
         names: false,
+        refuse: Vec::new(),
         quiet: true,
     };
     Ok((cfg, planned))

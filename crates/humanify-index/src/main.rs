@@ -101,6 +101,12 @@ enum Command {
         /// build, without retrying the builds that failed.
         #[arg(long)]
         merge_only: bool,
+        /// Refuse `name@version:reason` (repeatable): the version leaves
+        /// the plan and the refusal is recorded like the plan's own
+        /// (exp161: a package whose build OOMs workers solo gets one
+        /// refusal entry, never a special-case retry path).
+        #[arg(long)]
+        refuse: Vec<String>,
         /// What the units inside a pre-bundled file's FOREIGN regions (a
         /// module marker naming another package) become: `drop` (no rows)
         /// or `origin` (rows of the package the marker names, at its pnpm
@@ -188,6 +194,7 @@ fn main() {
         policy,
         offline,
         merge_only,
+        refuse,
         sponge_regions,
         names,
         dry_run,
@@ -236,6 +243,7 @@ fn main() {
             jobs,
             offline,
             merge_only,
+            refuse,
             quiet: false,
             names,
             sponge_regions: match sponge_regions.as_str() {

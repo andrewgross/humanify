@@ -117,6 +117,11 @@ pub struct BuildConfig {
     /// byte-identical without it (a `names/1` stamp marks an index built
     /// with it).
     pub names: bool,
+    /// `name@version:reason` specs (exp161): the version leaves the plan
+    /// and the refusal is recorded like the plan's own. A package whose
+    /// build OOMs workers solo gets one refusal entry, never a
+    /// special-case retry path.
+    pub refuse: Vec<String>,
 }
 
 /// What the run-time build records into the run's profiler, and the two
@@ -360,11 +365,33 @@ pub(crate) fn shard_inputs(
 /// Every registry read is a `library.index.registry` stage when the
 /// run-time caller passed a [`Trace`]; the `library.index.plan` stage that
 /// wraps the whole plan belongs to [`build`].
+/// `--refuse` specs (`name@version:reason`): the version leaves the plan
+/// and the refusal is recorded like the plan's own (exp161: a package whose
+/// build OOMs workers solo gets one refusal entry, never a retry path).
+fn refusal_specs(specs: &[String]) -> Result<Vec<(String, String, String)>, String> {
+    specs
+        .iter()
+        .map(|s| {
+            let (nv, reason) = s
+                .split_once(':')
+                .ok_or_else(|| format!("--refuse {s}: expected name@version:reason"))?;
+            let (name, version) = nv
+                .split_once('@')
+                .ok_or_else(|| format!("--refuse {s}: expected name@version:reason"))?;
+            if name.is_empty() || version.is_empty() || reason.is_empty() {
+                return Err(format!("--refuse {s}: expected name@version:reason"));
+            }
+            Ok((name.to_string(), version.to_string(), reason.to_string()))
+        })
+        .collect()
+}
+
 pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, String> {
     let mut snapshot = RegistrySnapshot::default();
     let slices = slice_records(cfg, &mut snapshot, trace)?;
     let mut tasks = Vec::new();
     let mut refused = Vec::new();
+    let refusals = refusal_specs(&cfg.refuse)?;
     // `--pinned` specs join a listed package's pins, or are indexed at
     // their pins alone
     let mut groups: Vec<(String, Vec<String>, VersionPolicy)> = group_specs(&cfg.packages)
@@ -390,7 +417,26 @@ pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, String> {
             version: r.version,
             reason: r.reason,
         }));
-        for s in chosen.selected {
+        // an explicit --refuse removes the version from the plan; a version
+        // the plan already refused keeps its first reason (no duplicate rows)
+        let mut selected = chosen.selected;
+        for (rn, rv, reason) in &refusals {
+            if rn != &name {
+                continue;
+            }
+            if refused.iter().any(|r| r.name == name && r.version == *rv) {
+                continue;
+            }
+            if let Some(i) = selected.iter().position(|s| &s.version == rv) {
+                selected.remove(i);
+                refused.push(RefusedRecord {
+                    name: name.clone(),
+                    version: rv.clone(),
+                    reason: reason.clone(),
+                });
+            }
+        }
+        for s in selected {
             let (mut missing, mut reused) = (Vec::new(), Vec::new());
             for inputs in shard_inputs(&name, &s.version, &slices, cfg.sponge_regions, cfg.names) {
                 match read_current(&cfg.store, &inputs) {
