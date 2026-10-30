@@ -53,6 +53,18 @@ then the full shard phase ran with the exp152 chunk driver under
   post-change binaries (`diff -r` clean), covering both the buffered and the
   streamed paths.
 - Result (TBD: id, times, size, coverage).
+- Pinyin is REFUSED, not retried (Andrew, 2026-10-29): the three failed
+  chunks and the two solo attempts are the whole story — `--refuse
+  name@version:reason` (this branch) records one refusal entry per version
+  in the merged manifest's refused rows, exactly like the unpublished
+  refusals, and no chain ever retries it again.
+- The parallel merger (exp162, `--merge-jobs N`, rebased onto this branch)
+  was wired in as the PREFERRED path behind its own proof gate: the chain
+  self-runs the 60-package pilot names replay with the parallel binary and
+  only proceeds on manifest-id equality. Its current binary does not
+  accept the flag yet (clap usage error at the proof), so the chain fell
+  back to serial — the deliverable below is the serial merge, the
+  byte-proven path.
 
 ## The merge fix (the branch's only code change)
 
@@ -62,9 +74,29 @@ then the full shard phase ran with the exp152 chunk driver under
 `NameTable::encode` rewritten over compact rows; `lookup.rs` and the tests
 routed through the adapter; `build.rs` passes `staging = out`.
 
-## The hop (TBD)
+## The hop
 
-## The line-diff breakdown (TBD)
+One pair only — `npm run eval -- score exp161-names-hop --pairs 215->216`
+(the dispatcher prints PARTIAL for a single-pair label; the full 4-pair set
+is not re-run). The pair is 2.1.215→2.1.216, SCRATCH base (the default:
+the base 2.1.215 is rebuilt by the current pipeline with no prior, so both
+sides of every comparison are pure current-pipeline output). Names mode:
+`--pipeline-set library.matching=names --pipeline-set
+library.names_unlocked=true --pipeline-set library.index=<the new index dir>
+--pipeline-set library.lookup.agreement=false`. The same pair is recorded
+again with names OFF under `exp161-names-hop-default` for the contrast.
+Cold run, no LLM cache (rule 10); alone under `flock /work/heavy.lock`;
+endpoint the :8000 default.
+
+Result (TBD: exit codes, KPIs, the two trees' paths).
+
+## The line-diff breakdown
+
+The exp157 buckets on the hop's two trees (prior vs fresh), vendor and src
+separately — identical / nameOnly / movedPath / realChange / trulyAdded /
+trulyRemoved, with files and lines each (`bucket-trees.ts` reads the one
+sided line counts from the side the file lives on; the per-file rows stay
+in /work/exp161-data). (TBD: the two mode tables, examples by package path.)
 
 ## Restoration's measured effect (TBD)
 
