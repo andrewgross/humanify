@@ -1,0 +1,122 @@
+bundles 89
+--- bun-dev composition (aggregated) ---
+  ('factory', 'moved', 'clean'): 29062
+  ('factory', 'moved', 'clean', 'cross-claim'): 11315
+  ('factory', 'moved', 'clean', 'cross-claim_b'): 3268945
+  ('factory', 'moved', 'clean', 'cross-claim_library'): 11241
+  ('factory', 'moved', 'clean', 'cross-claim_library_b'): 3259761
+  ('factory', 'moved', 'clean', 'cross-claim_other'): 74
+  ('factory', 'moved', 'clean', 'cross-claim_other_b'): 9184
+  ('factory', 'moved', 'clean', 'held'): 154231
+  ('factory', 'moved', 'clean', 'held_b'): 143623597
+  ('factory', 'moved', 'clean', 'held_library'): 153672
+  ('factory', 'moved', 'clean', 'held_library_b'): 143382913
+  ('factory', 'moved', 'clean', 'held_other'): 559
+  ('factory', 'moved', 'clean', 'held_other_b'): 240684
+  ('factory', 'moved', 'clean', 'no-family'): 110
+  ('factory', 'moved', 'clean', 'no-family_b'): 205466
+  ('factory', 'moved', 'clean', 'no-family_library'): 107
+  ('factory', 'moved', 'clean', 'no-family_library_b'): 200510
+  ('factory', 'moved', 'clean', 'no-family_other'): 3
+  ('factory', 'moved', 'clean', 'no-family_other_b'): 4956
+  ('factory', 'moved', 'clean', 'sub-floor'): 172209
+  ('factory', 'moved', 'clean', 'sub-floor_b'): 5907866
+  ('factory', 'moved', 'clean', 'sub-floor_library'): 170655
+  ('factory', 'moved', 'clean', 'sub-floor_library_b'): 5856193
+  ('factory', 'moved', 'clean', 'sub-floor_other'): 1554
+  ('factory', 'moved', 'clean', 'sub-floor_other_b'): 51673
+  ('factory', 'moved', 'clean', 'unclaimed'): 4861
+  ('factory', 'moved', 'clean', 'unclaimed_b'): 938363
+  ('factory', 'moved', 'clean', 'unclaimed_library'): 4855
+  ('factory', 'moved', 'clean', 'unclaimed_library_b'): 937766
+  ('factory', 'moved', 'clean', 'unclaimed_other'): 6
+  ('factory', 'moved', 'clean', 'unclaimed_other_b'): 597
+  ('factory', 'moved', 'unclaimed'): 13833
+  ('factory', 'moved', 'unclaimed', 'unclaimed'): 83320
+  ('factory', 'moved', 'unclaimed', 'unclaimed_b'): 13590872
+  ('factory', 'moved', 'unclaimed', 'unclaimed_library'): 83057
+  ('factory', 'moved', 'unclaimed', 'unclaimed_library_b'): 13581626
+  ('factory', 'moved', 'unclaimed', 'unclaimed_other'): 263
+  ('factory', 'moved', 'unclaimed', 'unclaimed_other_b'): 9246
+  ('factory', 'stay', 'clean'): 1171
+  ('factory', 'stay', 'contested'): 91
+  ('factory', 'stay', 'stay', 'cross-claim'): 3834
+  ('factory', 'stay', 'stay', 'cross-claim_b'): 1687662
+  ('factory', 'stay', 'stay', 'cross-claim_library'): 3834
+  ('factory', 'stay', 'stay', 'cross-claim_library_b'): 1687662
+  ('factory', 'stay', 'stay', 'held'): 6121
+  ('factory', 'stay', 'stay', 'held_b'): 4453216
+  ('factory', 'stay', 'stay', 'held_library'): 6121
+  ('factory', 'stay', 'stay', 'held_library_b'): 4453216
+  ('factory', 'stay', 'stay', 'sub-floor'): 8127
+  ('factory', 'stay', 'stay', 'sub-floor_b'): 270821
+  ('factory', 'stay', 'stay', 'sub-floor_library'): 8127
+  ('factory', 'stay', 'stay', 'sub-floor_library_b'): 270821
+  ('factory', 'stay', 'stay', 'unclaimed'): 58462
+  ('factory', 'stay', 'stay', 'unclaimed_b'): 35767835
+  ('factory', 'stay', 'stay', 'unclaimed_library'): 58068
+  ('factory', 'stay', 'stay', 'unclaimed_library_b'): 35554559
+  ('factory', 'stay', 'stay', 'unclaimed_other'): 394
+  ('factory', 'stay', 'stay', 'unclaimed_other_b'): 213276
+  ('factory', 'stay', 'unclaimed'): 4153
+  ('group', 'clean'): 2376
+  ('group', 'clean', 'cross-claim'): 675
+  ('group', 'clean', 'cross-claim_b'): 161803
+  ('group', 'clean', 'cross-claim_library'): 675
+  ('group', 'clean', 'cross-claim_library_b'): 161803
+  ('group', 'clean', 'held'): 6635
+  ('group', 'clean', 'held_b'): 3264594
+  ('group', 'clean', 'held_library'): 6635
+  ('group', 'clean', 'held_library_b'): 3264594
+  ('group', 'clean', 'sub-floor'): 17822
+  ('group', 'clean', 'sub-floor_b'): 2162413
+  ('group', 'clean', 'sub-floor_library'): 17822
+  ('group', 'clean', 'sub-floor_library_b'): 2162413
+  ('group', 'contested'): 261
+  ('group', 'contested', 'no-claim'): 23044
+  ('group', 'contested', 'no-claim_b'): 3685741
+  ('group', 'contested', 'no-claim_library'): 20834
+  ('group', 'contested', 'no-claim_library_b'): 3125500
+  ('group', 'contested', 'no-claim_other'): 2210
+  ('group', 'contested', 'no-claim_other_b'): 560241
+  ('group', 'partial'): 684
+  ('group', 'partial', 'cross-claim'): 410
+  ('group', 'partial', 'cross-claim_b'): 109712
+  ('group', 'partial', 'cross-claim_library'): 410
+  ('group', 'partial', 'cross-claim_library_b'): 109712
+  ('group', 'partial', 'held'): 2177
+  ('group', 'partial', 'held_b'): 830244
+  ('group', 'partial', 'held_library'): 2025
+  ('group', 'partial', 'held_library_b'): 659088
+  ('group', 'partial', 'held_other'): 152
+  ('group', 'partial', 'held_other_b'): 171156
+  ('group', 'partial', 'no-family'): 382
+  ('group', 'partial', 'no-family_b'): 216506
+  ('group', 'partial', 'no-family_library'): 63
+  ('group', 'partial', 'no-family_library_b'): 34384
+  ('group', 'partial', 'no-family_other'): 319
+  ('group', 'partial', 'no-family_other_b'): 182122
+  ('group', 'partial', 'sub-floor'): 4323
+  ('group', 'partial', 'sub-floor_b'): 69308
+  ('group', 'partial', 'sub-floor_library'): 3958
+  ('group', 'partial', 'sub-floor_library_b'): 64289
+  ('group', 'partial', 'sub-floor_other'): 365
+  ('group', 'partial', 'sub-floor_other_b'): 5019
+  ('group', 'unclaimed'): 1787
+--- bun-dev trade (aggregated) ---
+  ('R-composition', 'family_library'): 146647507
+  ('R-composition', 'family_other'): 240684
+  ('R-composition', 'stranger_library'): 12578446
+  ('R-composition', 'stranger_other'): 66410
+  ('R-eject', 'family_library'): 146647507
+  ('R-eject', 'family_other'): 240684
+  ('R-eject', 'stranger_library'): 26160072
+  ('R-eject', 'stranger_other'): 75656
+  ('R-eject-claim', 'family_library'): 146647507
+  ('R-eject-claim', 'family_other'): 240684
+  ('R-eject-claim', 'stranger_library'): 26160072
+  ('R-eject-claim', 'stranger_other'): 75656
+  ('R-fold-min', 'family_library'): 143382913
+  ('R-fold-min', 'family_other'): 240684
+  ('R-fold-min', 'stranger_library'): 10254230
+  ('R-fold-min', 'stranger_other'): 66410
