@@ -23,7 +23,7 @@ use humanify_core::libindex::literals::{LiteralMode, code_literals, json_literal
 use humanify_core::libindex::recipe::Recipe;
 
 use crate::asof::{VersionPolicy, normalize_time, select_versions};
-use crate::merge::{MergeMeta, Merger};
+use crate::merge::{GIANT_SHARD_BYTES, MergeMeta, ShardFlow, finish_workers, stream_parallel};
 use crate::recipe::{
     MAX_SOURCE_BYTES, RECIPE_VERSION, RecipeBuild, bundler_package, entry_specifiers,
     is_source_file, is_sponge_file, unresolved_specifiers,
@@ -94,6 +94,10 @@ pub struct BuildConfig {
     /// of each bundler is its default slice).
     pub recipes: Vec<RecipeBuild>,
     pub jobs: usize,
+    /// Parallel merge workers (exp162): the merge partitions the key
+    /// space into this many contiguous ranges, one worker each; 1 (the
+    /// default) is the streaming merge's own path, byte-identical.
+    pub merge_jobs: usize,
     pub offline: bool,
     /// Which versions of each package to index.
     pub policy: VersionPolicy,
@@ -117,6 +121,11 @@ pub struct BuildConfig {
     /// byte-identical without it (a `names/1` stamp marks an index built
     /// with it).
     pub names: bool,
+    /// `name@version:reason` specs (exp161): the version leaves the plan
+    /// and the refusal is recorded like the plan's own. A package whose
+    /// build OOMs workers solo gets one refusal entry, never a
+    /// special-case retry path.
+    pub refuse: Vec<String>,
 }
 
 /// What the run-time build records into the run's profiler, and the two
@@ -360,11 +369,33 @@ pub(crate) fn shard_inputs(
 /// Every registry read is a `library.index.registry` stage when the
 /// run-time caller passed a [`Trace`]; the `library.index.plan` stage that
 /// wraps the whole plan belongs to [`build`].
+/// `--refuse` specs (`name@version:reason`): the version leaves the plan
+/// and the refusal is recorded like the plan's own (exp161: a package whose
+/// build OOMs workers solo gets one refusal entry, never a retry path).
+fn refusal_specs(specs: &[String]) -> Result<Vec<(String, String, String)>, String> {
+    specs
+        .iter()
+        .map(|s| {
+            let (nv, reason) = s
+                .split_once(':')
+                .ok_or_else(|| format!("--refuse {s}: expected name@version:reason"))?;
+            let (name, version) = nv
+                .split_once('@')
+                .ok_or_else(|| format!("--refuse {s}: expected name@version:reason"))?;
+            if name.is_empty() || version.is_empty() || reason.is_empty() {
+                return Err(format!("--refuse {s}: expected name@version:reason"));
+            }
+            Ok((name.to_string(), version.to_string(), reason.to_string()))
+        })
+        .collect()
+}
+
 pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, String> {
     let mut snapshot = RegistrySnapshot::default();
     let slices = slice_records(cfg, &mut snapshot, trace)?;
     let mut tasks = Vec::new();
     let mut refused = Vec::new();
+    let refusals = refusal_specs(&cfg.refuse)?;
     // `--pinned` specs join a listed package's pins, or are indexed at
     // their pins alone
     let mut groups: Vec<(String, Vec<String>, VersionPolicy)> = group_specs(&cfg.packages)
@@ -390,7 +421,26 @@ pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, String> {
             version: r.version,
             reason: r.reason,
         }));
-        for s in chosen.selected {
+        // an explicit --refuse removes the version from the plan; a version
+        // the plan already refused keeps its first reason (no duplicate rows)
+        let mut selected = chosen.selected;
+        for (rn, rv, reason) in &refusals {
+            if rn != &name {
+                continue;
+            }
+            if refused.iter().any(|r| r.name == name && r.version == *rv) {
+                continue;
+            }
+            if let Some(i) = selected.iter().position(|s| &s.version == rv) {
+                selected.remove(i);
+                refused.push(RefusedRecord {
+                    name: name.clone(),
+                    version: rv.clone(),
+                    reason: reason.clone(),
+                });
+            }
+        }
+        for s in selected {
             let (mut missing, mut reused) = (Vec::new(), Vec::new());
             for inputs in shard_inputs(&name, &s.version, &slices, cfg.sponge_regions, cfg.names) {
                 match read_current(&cfg.store, &inputs) {
@@ -1465,7 +1515,10 @@ pub struct BuildOutcome {
 /// (returns an empty id).
 ///
 /// The merge streams: every task's shards are read from the store one at
-/// a time, in label order, into the [`Merger`] — never all at once.
+/// a time, in label order — never all at once. With `cfg.merge_jobs > 1`
+/// (exp162) the workers partition the key space into contiguous ranges,
+/// each streaming EVERY shard in label order and keeping its range's
+/// rows; the segments concatenate in range order into the same bytes.
 pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
     build(cfg, dry_run, Trace::default()).map(|o| o.index_id)
 }
@@ -1515,17 +1568,22 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
         })
         .collect();
     inputs.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
-    let mut found = vec![false; plan.tasks.len()];
-    let mut merger = Merger::default();
-    {
-        let _s = trace.stage("library.index.merge");
-        for (_, i, s) in &inputs {
-            if let Some(shard) = read_current(&cfg.store, s) {
-                found[*i] = true;
-                merger.add(shard)?;
-            }
-        }
+    if cfg.merge_jobs == 0 {
+        return Err("--merge-jobs 0: the merge takes at least one worker".into());
     }
+    let found;
+    let workers = {
+        let _s = trace.stage("library.index.merge");
+        let flow = ShardFlow::Store {
+            store: &cfg.store,
+            refs: &inputs,
+            n_tasks: plan.tasks.len(),
+            giant: GIANT_SHARD_BYTES,
+        };
+        let mut workers = stream_parallel(&flow, cfg.merge_jobs)?;
+        found = std::mem::take(&mut workers[0].found);
+        workers
+    };
     let mut packages = Vec::new();
     let (mut built, mut reused) = (0usize, 0usize);
     for (t, found) in plan.tasks.iter().zip(found) {
@@ -1559,13 +1617,17 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
             .cmp(&b.name)
             .then(compare_versions(&a.version, &b.version))
     });
-    let index = merger.finish(MergeMeta {
-        as_of: plan.as_of.clone(),
-        registry: plan.registry.clone(),
-        slices: plan.slices.clone(),
-        packages,
-        refused: plan.refused.clone(),
-    })?;
+    let index = finish_workers(
+        MergeMeta {
+            as_of: plan.as_of.clone(),
+            registry: plan.registry.clone(),
+            slices: plan.slices.clone(),
+            packages,
+            refused: plan.refused.clone(),
+            staging: cfg.out.clone(),
+        },
+        workers,
+    )?;
     if let Some(out) = &cfg.out {
         write_index(out, &index.files)?;
     }

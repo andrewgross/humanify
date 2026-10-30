@@ -447,3 +447,278 @@ fn helper_sources_leave_their_prints_in_the_helper_table() {
     let plain = merge(meta(), shards()).expect("merges").files;
     assert!(!plain.contains_key("helpers.jsonl"));
 }
+
+// ------------------------------------------------------------------ exp162
+
+use super::merge::{key_ranges, merge_parallel};
+use humanify_core::libindex::table::{EdgeTable, Source};
+
+/// `--merge-jobs N`: the parallel merge over the SAME shards is
+/// byte-identical to the streaming merge, at every worker count.
+#[test]
+fn the_parallel_merge_gives_the_streaming_merges_bytes_at_every_job_count() {
+    let serial = merge(meta(), shards()).expect("merges");
+    for jobs in [1usize, 4, 8, 30] {
+        let parallel = merge_parallel(meta(), shards(), jobs).expect("merges");
+        assert_eq!(parallel.files, serial.files, "jobs {jobs}");
+        assert_eq!(parallel.id, serial.id, "jobs {jobs}");
+    }
+}
+
+/// A package whose unit prints straddle a range split: both prints' rows
+/// keep their version ranges (each worker recomputes the owner's indexed
+/// versions from the WHOLE stream, so no row's ranges depend on which
+/// worker held it).
+#[test]
+fn a_print_straddling_a_range_split_keeps_its_version_ranges() {
+    use super::shard::ShardUnit;
+    // four ranges split the key space at 2^62 multiples; one print in the
+    // first range, one just past the second split
+    const LOW: &str = "0000000000000001";
+    const HIGH: &str = "5000000000000000";
+    let unit = |v: &str, hash: &str| ShardUnit {
+        owner: "ms".into(),
+        version: v.into(),
+        file: "index.js".into(),
+        hash: hash.into(),
+        nodes: 40,
+        content: 5,
+        module_bytes: 900,
+        inside: vec![],
+        out_of: vec![],
+        names: vec![],
+    };
+    let shard = |v: &str| {
+        let mut s = module_shard(v, &[]);
+        s.units = vec![unit(v, LOW), unit(v, HIGH)];
+        s
+    };
+    let shards = vec![shard("1.0.0"), shard("2.0.0"), shard("2.1.0")];
+    let serial = merge(meta(), shards.clone()).expect("merges");
+    let parallel = merge_parallel(meta(), shards, 4).expect("merges");
+    assert_eq!(parallel.files, serial.files);
+    for slice in ["units.bun-node-cjs-min.jsonl", "units.bun-node-cjs-min.bin"] {
+        assert_eq!(
+            parallel.files.get(slice).map(Vec::len),
+            serial.files.get(slice).map(Vec::len),
+            "{slice}"
+        );
+    }
+}
+
+/// The interning contract across ranges: two unit rows in DIFFERENT key
+/// ranges whose callees agree store that callee list ONCE in the final
+/// edge table (the table's lists are interned over the whole slice, not
+/// per segment).
+#[test]
+fn a_callee_list_shared_by_rows_in_different_ranges_is_stored_once() {
+    use super::shard::ShardUnit;
+    const A: &str = "0000000000000001";
+    const B: &str = "9000000000000000";
+    const CALLEE: &str = "00000000000000cc";
+    let unit = |hash: &str| ShardUnit {
+        owner: "ms".into(),
+        version: "1.0.0".into(),
+        file: "index.js".into(),
+        hash: hash.into(),
+        nodes: 40,
+        content: 5,
+        module_bytes: 900,
+        inside: vec![CALLEE.into()],
+        out_of: vec![],
+        names: vec![],
+    };
+    let mut shards = vec![module_shard("1.0.0", &[]); 1];
+    shards[0].units = vec![unit(A), unit(B)];
+    let files = merge_parallel(meta(), shards, 4).expect("merges").files;
+    let src = Source::Memory(files["edges.bun-node-cjs-min.bin"].clone());
+    let table = EdgeTable::open(src).expect("opens");
+    // one keyed row per unit row, ONE list
+    assert_eq!(table.callees(0).len(), 1);
+    assert_eq!(table.callees(1).len(), 1);
+    // both rows answer the same callees, and the table stored one list
+    // (its callees column is one list of one: read the header)
+    assert_eq!(table.callees(0), table.callees(1));
+    assert_eq!(table.callees(0)[0].key, 0xcc);
+}
+
+/// The prefix a non-hash table partitions on is order-preserving: strings
+/// in different ranges compare as their strings do, so segments
+/// concatenate in sorted order (a fuzz: two strings out of order that
+/// land in reversed ranges would fail).
+#[test]
+fn the_partition_prefix_is_monotone_in_the_string_order() {
+    let mut all: Vec<String> = vec![
+        "".into(),
+        "a".into(),
+        "ab".into(),
+        "abc".into(),
+        "abcdefgh".into(),
+        "abcdefghi".into(),
+        "abcdefgh0".into(),
+        "z".into(),
+        "zzzzzzzz".into(),
+        "\u{0}a".into(),
+        "abc\u{0}def".into(),
+        "\u{fffd}".into(),
+        "\u{10ffff}x".into(),
+        "00000000000000a1".into(),
+        "ffffffffffffffff".into(),
+        "ABCDEFGH".into(),
+    ];
+    // a fuzz of short random byte strings (NUL and multi-byte starts included)
+    let mut pseudo = 0x2463_4c9d_u64;
+    for _ in 0..2000 {
+        pseudo = pseudo
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let len = (pseudo >> 33) as usize % 12;
+        all.push(
+            (0..len)
+                .map(|i| {
+                    let byte = (pseudo.wrapping_mul(1 + i as u64) >> 24) as u8;
+                    char::from_u32(u32::from(byte % 0xff)).unwrap_or('x')
+                })
+                .collect(),
+        );
+    }
+    all.sort();
+    all.dedup();
+    for jobs in [2usize, 4, 30] {
+        let ranges = key_ranges(jobs);
+        let bucket = |s: &str| {
+            ranges
+                .iter()
+                .position(|r| r.holds_str(s))
+                .unwrap_or_else(|| panic!("{s:?} is in no range of {jobs}"))
+        };
+        for w in all.windows(2) {
+            let (a, b) = (w[0].as_str(), w[1].as_str());
+            assert!(
+                bucket(a) <= bucket(b),
+                "{a:?} < {b:?} but buckets reversed at jobs {jobs}"
+            );
+        }
+        // and every string is in exactly one range
+        for s in &all {
+            let n = ranges.iter().filter(|r| r.holds_str(s)).count();
+            assert_eq!(n, 1, "{s:?} in {n} ranges at jobs {jobs}");
+        }
+    }
+}
+
+/// A hash is in exactly one range, and the ranges cover the whole key
+/// space (a split boundary itself is in the range above it).
+#[test]
+fn the_key_ranges_partition_the_whole_key_space() {
+    for jobs in [1usize, 2, 4, 30] {
+        let ranges = key_ranges(jobs);
+        for h in [0u64, 1, u64::MAX, u64::MAX - 1, 0x4000_0000_0000_0000] {
+            assert_eq!(
+                ranges.iter().filter(|r| r.holds(h)).count(),
+                1,
+                "{h:016x} at jobs {jobs}"
+            );
+        }
+    }
+}
+
+/// The giant-shard gate (exp162): every worker streams every shard, so on
+/// a store with a giant shard all N workers would parse the same giant
+/// together — N × ~25GB is an OOM at any real job count. The gate holds
+/// ONE worker's read+parse+add of a giant at a time. The contract: the
+/// gate is a scheduling detail only — forcing it on for EVERY shard
+/// leaves the bytes alone.
+#[test]
+fn the_giant_shard_gate_serialises_a_store_merge_without_changing_a_byte() {
+    fn store_shards(store: &std::path::Path) -> (Vec<Shard>, Vec<(String, usize, ShardInputs)>) {
+        let module = |version: &str, rows: &[(&str, &str, &str, &str)]| {
+            let inputs = ShardInputs {
+                kind: ShardKind::Modules(bun_node()),
+                package: "ms".into(),
+                version: version.into(),
+                bundler: Some("bun@1.4.0".into()),
+                recipe: "recipe/1".into(),
+                fingerprint: "vendor-content-key/4".into(),
+            };
+            let mut s = Shard::new(&inputs);
+            for (owner, v, file, key) in rows {
+                s.modules.push(ShardModule {
+                    owner: (*owner).into(),
+                    version: (*v).into(),
+                    file: (*file).into(),
+                    key: (*key).into(),
+                });
+            }
+            (s, inputs)
+        };
+        let literal = |version: &str, lits: &[&str]| {
+            let inputs = ShardInputs {
+                kind: ShardKind::Literals,
+                package: "ms".into(),
+                version: version.into(),
+                bundler: None,
+                recipe: "recipe/1".into(),
+                fingerprint: "literals/1".into(),
+            };
+            let mut s = Shard::new(&inputs);
+            s.literals.push(ShardLiteral {
+                owner: "ms".into(),
+                version: version.into(),
+                file: "index.js".into(),
+                lits: lits.iter().map(|l| (*l).to_string()).collect(),
+            });
+            (s, inputs)
+        };
+        let pairs = vec![
+            module("1.0.0", &[("ms", "1.0.0", "index.js", "0000000000000001")]),
+            module(
+                "2.0.0",
+                &[
+                    ("ms", "2.0.0", "index.js", "8000000000000001"),
+                    ("other", "1.0.0", "x.js", "0000000000000002"),
+                ],
+            ),
+            literal("1.0.0", &["S:a"]),
+            literal("2.0.0", &["S:b"]),
+        ];
+        let mut refs = Vec::new();
+        for (shard, inputs) in &pairs {
+            super::shard::write_shard(store, shard).expect("writes the shard");
+            refs.push((shard.label(), 0usize, inputs.clone()));
+        }
+        refs.sort_by(|a, b| a.0.cmp(&b.0));
+        (pairs.into_iter().map(|(s, _)| s).collect(), refs)
+    }
+
+    let root = std::env::temp_dir().join(format!("humanify-index-giant-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("root");
+    let store = root.join("store");
+    let (shards_written, refs) = store_shards(&store);
+
+    let gated: super::merge::IndexFiles = {
+        let flow = super::merge::ShardFlow::Store {
+            store: &store,
+            refs: &refs,
+            n_tasks: 1,
+            giant: 1, // the gate ON for EVERY shard — fully serialized
+        };
+        let workers = super::merge::stream_parallel(&flow, 4).expect("workers");
+        super::merge::finish_workers(meta(), workers).expect("gated finish")
+    };
+    let ungated: super::merge::IndexFiles = {
+        let flow = super::merge::ShardFlow::Store {
+            store: &store,
+            refs: &refs,
+            n_tasks: 1,
+            giant: u64::MAX, // the gate off
+        };
+        let workers = super::merge::stream_parallel(&flow, 4).expect("workers");
+        super::merge::finish_workers(meta(), workers).expect("ungated finish")
+    };
+    let serial = merge(meta(), shards_written).expect("serial");
+    assert_eq!(gated.files, serial.files, "gated == serial");
+    assert_eq!(ungated.files, serial.files, "ungated == serial");
+    let _ = std::fs::remove_dir_all(&root);
+}

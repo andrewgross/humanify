@@ -129,9 +129,9 @@ impl LibraryIndex {
         let (names_tables, name_strings) = if names.is_empty() {
             (Vec::new(), Vec::new())
         } else {
-            let mut interner = table::NameInterner::default();
-            let (bytes, ()) = NameTable::encode(&units, &names, &mut interner)
-                .expect("unit hashes are unit keys");
+            let (compact, interner) =
+                table::compact_name_rows(&units, &names).expect("unit hashes are unit keys");
+            let bytes = NameTable::encode(&units, &compact).expect("unit hashes are unit keys");
             let bytes =
                 NameTable::open(Source::Memory(bytes)).expect("an encoded names table opens");
             (vec![Some(bytes)], interner.into_strings())
