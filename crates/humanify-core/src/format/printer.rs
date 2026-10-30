@@ -62,6 +62,11 @@ struct Buffer {
     queued: i32,
     /// `_position.line`.
     line: u32,
+    /// Statement provenance (exp166): while set, the next visible
+    /// character a TOKEN appends (never a flushed queued char — that is
+    /// the previous statement's tail) records its output offset in `hit`.
+    watch: bool,
+    hit: Option<u32>,
 }
 
 fn push_code(out: &mut String, code: i32) {
@@ -75,6 +80,20 @@ impl Buffer {
             last: 0,
             queued: 0,
             line: 1,
+            watch: false,
+            hit: None,
+        }
+    }
+
+    /// A token's text is about to be pushed: record where its first
+    /// visible character lands when a statement mark is watching.
+    fn observe(&mut self, s: &str) {
+        if !self.watch {
+            return;
+        }
+        if let Some(i) = s.find(|c: char| !humanify_model::js::is_js_whitespace(c)) {
+            self.hit = Some((self.out.len() + i) as u32);
+            self.watch = false;
         }
     }
 
@@ -96,6 +115,7 @@ impl Buffer {
     fn append(&mut self, s: &str, maybe_newline: bool) {
         self.flush();
         self.last = -1;
+        self.observe(s);
         self.out.push_str(s);
         // Map-less: lines advance only for a token that may carry newlines.
         if maybe_newline {
@@ -105,6 +125,10 @@ impl Buffer {
 
     fn append_char(&mut self, code: i32) {
         self.flush();
+        if self.watch {
+            let c = char::from_u32(code as u32).expect("an ASCII code");
+            self.observe(c.encode_utf8(&mut [0u8; 4]));
+        }
         self.append_char_raw(code);
     }
 
@@ -211,6 +235,22 @@ pub struct Printer<'t> {
     nltan: Option<NodeId>,
     /// Plant (gate red runs): synthesized numbers through Rust's `{}`.
     rust_numbers: bool,
+    /// Statement provenance (exp166), when asked for: see [`Marks`].
+    marks: Option<Marks>,
+}
+
+/// Statement provenance (exp166): for every statement printed in a
+/// statement list, the output offset of its first character and the
+/// INPUT offset of the first source-spanned node printed inside it — so a
+/// statement the beautify synthesized (a declarator split, `a,b;` →
+/// `a;b;`) still names the input statement its contents came from.
+#[derive(Default)]
+struct Marks {
+    /// The statements being printed, outermost first: (output start,
+    /// input origin), each filled by the first event after it opened.
+    open: Vec<(Option<u32>, Option<u32>)>,
+    /// Closed marks: (output start, depth, input origin).
+    done: Vec<(u32, u32, u32)>,
 }
 
 impl<'t> Printer<'t> {
@@ -227,6 +267,89 @@ impl<'t> Printer<'t> {
             no_line_terminator: false,
             nltan: None,
             rust_numbers: false,
+            marks: None,
+        }
+    }
+
+    /// Record statement provenance while printing (exp166): read it back
+    /// with [`Printer::generate_with_origins`].
+    pub fn record_statement_origins(&mut self) {
+        self.marks = Some(Marks::default());
+    }
+
+    /// [`Printer::generate`] plus the statement provenance: `(output
+    /// start, input origin)` per printed statement, sorted by output start
+    /// (an enclosing statement before one that starts at the same byte).
+    /// Empty unless [`Printer::record_statement_origins`] was called.
+    pub fn generate_with_origins(mut self, root: NodeId) -> (String, Vec<(u32, u32)>) {
+        let program = match self.kind(root) {
+            Kind::File { program } => *program,
+            _ => root,
+        };
+        self.print_program(program);
+        let mut done = self.marks.take().map(|m| m.done).unwrap_or_default();
+        done.sort_unstable();
+        let origins = done
+            .into_iter()
+            .map(|(out, _, origin)| (out, origin))
+            .collect();
+        (self.buf.get(), origins)
+    }
+
+    /// The pending output hit fills every open mark still without a start.
+    fn resolve_hit(&mut self) {
+        let Some(marks) = self.marks.as_mut() else {
+            return;
+        };
+        if let Some(hit) = self.buf.hit.take() {
+            for mark in &mut marks.open {
+                if mark.0.is_none() {
+                    mark.0 = Some(hit);
+                }
+            }
+        }
+        self.buf.watch = marks.open.iter().any(|m| m.0.is_none());
+    }
+
+    fn open_mark(&mut self) {
+        if self.marks.is_none() {
+            return;
+        }
+        self.resolve_hit();
+        if let Some(marks) = self.marks.as_mut() {
+            marks.open.push((None, None));
+        }
+        self.buf.watch = true;
+    }
+
+    fn close_mark(&mut self) {
+        if self.marks.is_none() {
+            return;
+        }
+        self.resolve_hit();
+        let Some(marks) = self.marks.as_mut() else {
+            return;
+        };
+        let depth = marks.open.len() as u32;
+        if let Some((Some(out), Some(origin))) = marks.open.pop() {
+            marks.done.push((out, depth, origin));
+        }
+        self.buf.watch = marks.open.iter().any(|m| m.0.is_none());
+    }
+
+    /// The first source-spanned node printed inside an open statement is
+    /// its origin.
+    fn note_origin(&mut self, node: NodeId) {
+        let Some(marks) = self.marks.as_mut() else {
+            return;
+        };
+        let Some((start, _)) = self.tree.node(node).span else {
+            return;
+        };
+        for mark in &mut marks.open {
+            if mark.1.is_none() {
+                mark.1 = Some(start);
+            }
         }
     }
 
@@ -251,6 +374,12 @@ impl<'t> Printer<'t> {
             Kind::File { program } => *program,
             _ => root,
         };
+        self.print_program(program);
+        self.buf.get()
+    }
+
+    /// The Program under its interpreter directive.
+    fn print_program(&mut self, program: NodeId) {
         if let Kind::Program {
             interpreter: Some(value),
             ..
@@ -262,7 +391,6 @@ impl<'t> Printer<'t> {
             self.hard_newline();
         }
         self.print(program, PrintOpts::default());
-        self.buf.get()
     }
 
     // -- the token layer (printer.ts) -------------------------------------------
@@ -568,6 +696,9 @@ impl<'t> Printer<'t> {
             reset_tc,
         } = opts;
         let flags = self.flags;
+        if self.marks.is_some() {
+            self.note_origin(node);
+        }
         if self.tree.node(node).compact {
             self.flags |= F_CONCISE;
         }
@@ -658,6 +789,9 @@ impl<'t> Printer<'t> {
             if statement && i == 0 && self.buf.has_content() {
                 self.newline_with(1, flags);
             }
+            if statement {
+                self.open_mark();
+            }
             self.print(
                 node,
                 PrintOpts {
@@ -666,6 +800,9 @@ impl<'t> Printer<'t> {
                     reset_tc,
                 },
             );
+            if statement {
+                self.close_mark();
+            }
             if let Some(sep) = separator {
                 if i < len - 1 {
                     sep(self, false);

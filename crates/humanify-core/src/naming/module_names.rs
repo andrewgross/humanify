@@ -91,13 +91,13 @@ use evidence::EvidenceSource;
 #[cfg(test)]
 mod module_names_test;
 
-/// One names-mode placement group reaching the naming era
-/// (library-names plan step 4, exp156): the discovery report's
-/// `placementGroups` row for one lazy module, converted by the unpack —
-/// its statements as the naming era's wrapper-body indices (the raw
-/// container ordinal minus every extracted factory statement before it,
-/// the standing vendor-bridge invariant), its claims the row's folded
-/// packages in the report's row order (pendings first, head last).
+/// One names-mode placement group (library-names plan step 4, exp156):
+/// the discovery report's `placementGroups` row for one lazy module. The
+/// unpack reports it by RAW statement spans (`statements` empty); the era
+/// converts it onto its own wrapper-body indices through the exact bridge
+/// ([`convert_regions`], exp166), one entry per era statement — a raw
+/// statement the formatter split repeats its claim and span. Claims are
+/// the row's folded packages (pendings first, head last).
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaimedRegion {
@@ -109,17 +109,157 @@ pub struct ClaimedRegion {
     pub raw_spans: Vec<(u32, u32)>,
 }
 
+/// The exact bridge from RAW bundle coordinates to the naming era's
+/// statements (exp166). The unpack knows each retained container
+/// statement's raw span and where the edit list puts it in the runtime
+/// text; the formatter knows which runtime statement each of ITS printed
+/// statements came from ([`crate::format::Formatted::statement_origins`]).
+/// Together they say, for every era statement, which raw statement it
+/// holds — a split statement included — where the ordinal arithmetic
+/// (`i - removed_before`) assumed one era statement per raw one.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct EraBridge {
+    /// Every retained container statement: (raw span, runtime span), in
+    /// bundle order (runtime order too — the edits never reorder).
+    pub container: Vec<((u32, u32), (u32, u32))>,
+    /// Every vendored factory: (raw declaration span, written path).
+    pub factories: Vec<((u32, u32), String)>,
+    /// The unpacked file the container is written to.
+    pub runtime_file: String,
+    /// Site B's restorations (exp164/exp166): `(raw offset, restored
+    /// name)` per edit, raw order — the identifiers the index actually
+    /// answered, which names mode alone keeps the model off.
+    pub restored: Vec<(u32, String)>,
+}
+
+impl EraBridge {
+    /// The names Site B restored inside raw span `(start, end)`.
+    pub fn restored_in(&self, (start, end): (u32, u32)) -> impl Iterator<Item = &str> {
+        let at = self.restored.partition_point(|(o, _)| *o < start);
+        self.restored[at..]
+            .iter()
+            .take_while(move |(o, _)| *o < end)
+            .map(|(_, name)| name.as_str())
+    }
+
+    /// The raw span of the container statement whose runtime span holds
+    /// runtime offset `at`.
+    pub fn raw_of_runtime(&self, at: u32) -> Option<(u32, u32)> {
+        let k = self
+            .container
+            .partition_point(|&(_, (start, _))| start <= at)
+            .checked_sub(1)?;
+        let (raw, (_, end)) = self.container[k];
+        (at < end).then_some(raw)
+    }
+
+    /// Per era body statement (its span in the formatted text), the raw
+    /// span of the container statement it came from: the first
+    /// provenance mark at or after the previous statement's end and
+    /// before this one's end is this statement's (a nested statement's
+    /// mark always starts later than its enclosing one). A statement with
+    /// no mark of its own (wholly synthesized) inherits its predecessor's.
+    pub fn era_raw_spans(
+        &self,
+        body_spans: &[(u32, u32)],
+        origins: &[(u32, u32)],
+    ) -> Vec<Option<(u32, u32)>> {
+        let mut out = Vec::with_capacity(body_spans.len());
+        let mut prev_end = 0;
+        let mut prev: Option<(u32, u32)> = None;
+        for &(start, end) in body_spans {
+            let k = origins.partition_point(|&(o, _)| o < prev_end.min(start));
+            let raw = origins[k..]
+                .iter()
+                .take_while(|&&(o, _)| o < end)
+                .next()
+                .and_then(|&(_, origin)| self.raw_of_runtime(origin))
+                .or(prev);
+            out.push(raw);
+            prev = raw;
+            prev_end = end;
+        }
+        out
+    }
+}
+
+/// What [`convert_regions`] did (exp166): the claimed groups the unpack
+/// reported, how many reached this era's statements whole, and how many
+/// era statements they now cover (a split raw statement covers several).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegionConversion {
+    pub groups: usize,
+    pub converted: usize,
+    pub dropped: usize,
+    pub era_statements: usize,
+}
+
+/// The claimed groups (raw spans + claims, from the unpack) onto THIS
+/// era's statements, through the exact bridge (exp166): an era statement
+/// belongs to a group's raw statement when the bridge says it came from
+/// it, so a raw statement the formatter split into several era statements
+/// takes all of them (each with the raw statement's claim and span), and
+/// nothing is ever joined to a statement it did not come from. The ordinal
+/// arithmetic this replaces (`i - removed_before`) assumed one era
+/// statement per raw one and was content-correct for 118 of 7,628
+/// statements on cc (exp164) — it moved Claude Code's plugin installer to
+/// `vendor/jose/` on jose's claims. A group with a raw statement no era
+/// statement came from is dropped whole: a partial join would move part
+/// of a module.
+pub fn convert_regions(
+    groups: &[ClaimedRegion],
+    era_raw: &[Option<(u32, u32)>],
+) -> (Vec<ClaimedRegion>, RegionConversion) {
+    let mut era_of: HashMap<(u32, u32), Vec<usize>> = HashMap::new();
+    for (i, raw) in era_raw.iter().enumerate() {
+        if let Some(raw) = raw {
+            era_of.entry(*raw).or_default().push(i);
+        }
+    }
+    let mut stats = RegionConversion {
+        groups: groups.len(),
+        ..Default::default()
+    };
+    let mut out = Vec::with_capacity(groups.len());
+    'group: for group in groups {
+        let mut region = ClaimedRegion {
+            statements: Vec::new(),
+            claims: Vec::new(),
+            raw_spans: Vec::new(),
+        };
+        for (raw, claim) in group.raw_spans.iter().zip(&group.claims) {
+            let Some(era) = era_of.get(raw) else {
+                stats.dropped += 1;
+                continue 'group;
+            };
+            for &i in era {
+                region.statements.push(i);
+                region.claims.push(claim.clone());
+                region.raw_spans.push(*raw);
+            }
+        }
+        stats.converted += 1;
+        stats.era_statements += region.statements.len();
+        out.push(region);
+    }
+    (out, stats)
+}
+
 /// What the names-mode placement decided for the era's modules
 /// (library-names plan step 4, exp156): the wholly claimed lazy modules
 /// that MOVE to `vendor/<package>/<file>` (with the module's index in the
-/// era's own extraction), and the moved statements' spans — the
-/// model-exclusion set, applied as a freeze BEFORE the transfer and the
-/// waves in both eras.
+/// era's own extraction), the moved statements' spans, and the freeze —
+/// since exp166 only the restored bindings, applied BEFORE the transfer
+/// and the waves in both eras.
 #[derive(Default, Debug)]
 pub struct LibraryLayout {
     /// `(module index, vendor path)` per moved module, module order.
     pub moved: Vec<(usize, String)>,
-    /// The moved statements' spans, statement order.
+    /// The FREEZE (exp166): the declaration spans of the bindings the
+    /// index restored — every hold over the run (the transfer, the waves,
+    /// the reconcile, the sweep) reads these. Not the moved statements
+    /// any more: see `moved_spans`.
     pub spans: Vec<(u32, u32)>,
     /// The same spans in the GENERATED text's coordinates (the render's
     /// substitutions folded in; written by the naming era after it
@@ -134,6 +274,18 @@ pub struct LibraryLayout {
     /// the index's.
     pub restored_spans: Vec<(u32, u32)>,
     pub restored_generated_spans: Vec<(u32, u32)>,
+    /// The moved modules' statement spans (era coordinates) — where the
+    /// split puts library files. Names mode's freeze (`spans`) is NOT this
+    /// any more (exp166, "restore or ask, never freeze"): it holds only
+    /// the bindings the index restored; every other identifier in a moved
+    /// module goes through the normal naming flow.
+    pub moved_spans: Vec<(u32, u32)>,
+    /// The claimed regions as this era sees them (exp166: converted
+    /// through the exact bridge) and what the conversion did.
+    pub regions: Vec<ClaimedRegion>,
+    pub conversion: Option<RegionConversion>,
+    /// Each era statement's raw bundle span (the bridge; empty without).
+    pub era_raw: Vec<Option<(u32, u32)>>,
 }
 
 /// The names-mode placement plan over the claimed regions (the planner
@@ -205,6 +357,7 @@ pub fn plan_library_modules(source: &ModuleSource<'_>, regions: &[ClaimedRegion]
             for &statement in &extract.modules[*module].statements {
                 if let Some(span) = spans.get(statement) {
                     layout.spans.push(*span);
+                    layout.moved_spans.push(*span);
                 }
             }
         }
@@ -409,16 +562,16 @@ fn is_barrel(module: &FossilModule) -> bool {
 /// wrappers. Empty (the step does not run) when the markers do not
 /// describe the bundle. `helper_names` are the lazy-init helpers' names
 /// in the text (`naming::plumbing::lazy_init_helpers_of`).
-/// `library_moved` are the module indexes the names mode placed at vendor
-/// paths (exp156): they are neither asked (`asked`/`barrels`) nor counted
-/// as `carried` — the library freeze already skipped their rows.
+/// A module names mode placed at a vendor path takes the same step
+/// (exp166, "restore or ask, never freeze"): its wrapper is asked unless
+/// the index restored it (a restored wrapper's row is already settled, so
+/// it counts as `carried`); its FILE path stays the placement's.
 pub fn plan_module_naming(
     source: &ModuleSource<'_>,
     graph: &UnifiedGraph,
     state: &RenameState,
     occ: &Occurrences,
     helper_names: &HashSet<String>,
-    library_moved: &[(usize, String)],
     binding_state: &mut [Lifecycle],
 ) -> ModulePlan {
     let body = source.body;
@@ -449,15 +602,11 @@ pub fn plan_module_naming(
             .collect(),
         ..ModulePlan::default()
     };
-    let moved: HashSet<usize> = library_moved.iter().map(|(i, _)| *i).collect();
     for (i, module) in extract.modules.iter().enumerate() {
         let wrapper = wrapper_ident(&body[module.init_index], &module.init_name)
             .and_then(span_of)
             .and_then(|(start, _)| occ.binding_at(start));
         plan.wrappers.push(wrapper);
-        if moved.contains(&i) {
-            continue;
-        }
         let Some(row) = wrapper.and_then(|b| row_of.get(&b).copied()) else {
             continue;
         };

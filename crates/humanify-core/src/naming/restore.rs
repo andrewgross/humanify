@@ -154,11 +154,20 @@ pub struct EraDump {
     /// freeze time)` — a frozen binding is never renamed after this, so
     /// the name is the shipped one.
     pub frozen: Vec<(usize, u32, String)>,
-    /// The claimed regions as the unpack converted them (with the
-    /// statements' raw bundle spans).
+    /// The claimed regions as the era converted them (exp166: through the
+    /// exact bridge), with the statements' raw bundle spans.
     pub regions: Vec<ClaimedRegion>,
     /// Site A's rows.
     pub sites: Vec<RestorationSite>,
+    /// exp166's placement-precision inputs, from the exact raw-to-era
+    /// bridge: each era statement's RAW bundle span (`body_spans` order;
+    /// None when the run had no bridge), the moved statements' era spans
+    /// (the freeze), and every vendored factory's raw span and file.
+    pub body_raw_spans: Vec<Option<(u32, u32)>>,
+    pub moved_spans: Vec<(u32, u32)>,
+    pub factory_files: Vec<((u32, u32), String)>,
+    /// What the exact conversion did (None without a bridge).
+    pub conversion: Option<crate::naming::module_names::RegionConversion>,
 }
 
 /// The era's restoration over its claimed statements: per statement, the

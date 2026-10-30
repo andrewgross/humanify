@@ -462,6 +462,7 @@ fn pipeline_body(
         mixed_files: &mixed_files,
         failed_calls: Default::default(),
         claimed_regions: &unpacked.claimed_module_regions,
+        era_bridge: unpacked.era_bridge.as_ref(),
         restorations: &restorations,
     };
     drop(ph);
@@ -1068,6 +1069,11 @@ impl RunReports<'_> {
                 "regions": dump.regions,
                 "sites": dump.sites,
                 "permuteMoves": out.permute.as_ref().map_or(0, |p| p.moves.len()),
+                // exp166: the exact raw-to-era bridge's placement inputs.
+                "bodyRawSpans": dump.body_raw_spans,
+                "movedSpans": dump.moved_spans,
+                "factoryFiles": dump.factory_files,
+                "conversion": dump.conversion,
             });
             with_placement.insert(
                 "eraRestoration",
@@ -1254,6 +1260,9 @@ struct NamingRun<'a> {
     /// era's wrapper-body ordinals for the bundle's runtime file. Empty
     /// in every other mode.
     claimed_regions: &'a [humanify_core::naming::module_names::ClaimedRegion],
+    /// The raw-to-era bridge (exp166): the file it names is formatted
+    /// with statement provenance and handed both.
+    era_bridge: Option<&'a humanify_core::naming::module_names::EraBridge>,
     /// The claimed units' captured restoration answers (exp160), keyed by
     /// unit print hash — the discovery capture's map, empty for an index
     /// without names tables.
@@ -1283,11 +1292,18 @@ impl NamingRun<'_> {
             }
             // Stage 6, the formatter (createBabelPlugin), with the library
             // carry when the file has banner regions (finding #32).
-            let formatted = self.format_one(&code, &file.path)?;
+            let bridge = self
+                .era_bridge
+                .filter(|b| file.path.ends_with(&b.runtime_file));
+            let formatted = self.format_one(&code, &file.path, bridge.is_some())?;
             let library = formatted
                 .library_carry
                 .map(humanify_core::libdetect::function_carry::LibraryClassification::Carried);
-            let outcome = self.name_one(&formatted.text, library.as_ref(), renderer)?;
+            let era_bridge = bridge.map(|bridge| humanify_core::naming::driver::EraBridgeInput {
+                bridge,
+                origins: &formatted.statement_origins,
+            });
+            let outcome = self.name_one(&formatted.text, library.as_ref(), era_bridge, renderer)?;
             log_input_output(&code, outcome.code.as_deref().unwrap_or_default());
             if !self.split
                 && let Some(shipped) = &outcome.code
@@ -1316,6 +1332,7 @@ impl NamingRun<'_> {
         &self,
         code: &str,
         file: &Path,
+        origins: bool,
     ) -> Result<humanify_core::format::Formatted, Crash> {
         let regions = self
             .mixed_files
@@ -1323,7 +1340,12 @@ impl NamingRun<'_> {
             .find(|(p, _)| p == file)
             .map_or(&[][..], |(_, m)| m.regions.as_slice());
         let span = self.profiler.pipeline_span("babel-transforms");
-        let formatted = humanify_core::format::format_file(
+        let format = if origins {
+            humanify_core::format::format_file_with_origins
+        } else {
+            humanify_core::format::format_file
+        };
+        let formatted = format(
             code,
             &humanify_core::format::FormatOptions::default(),
             regions,
@@ -1336,6 +1358,7 @@ impl NamingRun<'_> {
         &mut self,
         formatted: &str,
         library: Option<&humanify_core::libdetect::function_carry::LibraryClassification>,
+        era_bridge: Option<humanify_core::naming::driver::EraBridgeInput<'_>>,
         renderer: &mut dyn ProgressRenderer,
     ) -> Result<NamingOutcome, Crash> {
         // Every file's naming rows start a fresh dump section (the TS
@@ -1347,6 +1370,7 @@ impl NamingRun<'_> {
                 prior: self.prior,
                 library,
                 claimed_regions: self.claimed_regions,
+                era_bridge,
                 restorations: self.restorations,
             },
             &self.config,

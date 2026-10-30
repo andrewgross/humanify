@@ -136,15 +136,28 @@ pub struct NamingInput<'t> {
     /// The file's library classification (None: no banner regions) —
     /// `libdetect::function_carry`, the one owner.
     pub library: Option<&'t crate::libdetect::function_carry::LibraryClassification>,
-    /// The names mode's claimed placement groups in the fresh text's
-    /// wrapper-body ordinals (the unpack converts them; `library.matching
-    /// = "names"` only, exp156). Empty = nothing was claimed.
+    /// The names mode's claimed placement groups (`library.matching =
+    /// "names"` only, exp156): raw statement spans from the unpack, which
+    /// the era converts through `era_bridge` (exp166); with no bridge
+    /// (unit tests) their `statements` are taken as era ordinals. Empty =
+    /// nothing was claimed.
     pub claimed_regions: &'t [crate::naming::module_names::ClaimedRegion],
+    /// The raw-to-era bridge (exp166) and the formatter's statement
+    /// provenance for THIS file — names mode's app file only.
+    pub era_bridge: Option<EraBridgeInput<'t>>,
     /// The claimed units' captured restoration answers (exp160), keyed by
     /// unit print hash. Empty = nothing was claimed, or the index holds
     /// no names tables.
     pub restorations:
         &'t std::collections::BTreeMap<String, crate::libindex::table::RestorationRow>,
+}
+
+/// The raw-to-era bridge (exp166, [`crate::naming::module_names::EraBridge`])
+/// with the formatter's statement provenance for the file being named.
+#[derive(Clone, Copy)]
+pub struct EraBridgeInput<'t> {
+    pub bridge: &'t crate::naming::module_names::EraBridge,
+    pub origins: &'t [(u32, u32)],
 }
 
 /// The empty restorations map — every call site with no captured answers
@@ -257,6 +270,7 @@ pub fn run_naming<P: NameProvider>(
         prompt_window: config.prompt_window,
         module_naming: config.module_naming,
         claimed_regions: input.claimed_regions,
+        era_bridge: input.era_bridge,
         restorations: input.restorations,
     };
     let mut run_era = || match input.prior {

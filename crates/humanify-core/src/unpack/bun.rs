@@ -314,6 +314,9 @@ pub struct BunUnpackOutcome {
     /// ordinals — the CLI threads them into the naming stage, whose
     /// layout the split reads. Empty in every other mode.
     pub claimed_module_regions: Vec<crate::naming::module_names::ClaimedRegion>,
+    /// The raw-to-era bridge (exp166) — names mode only (None whenever no
+    /// claimed region was asked for), so every other run is inert.
+    pub era_bridge: Option<crate::naming::module_names::EraBridge>,
 }
 
 /// What the content carry did: how many modules it could pair, against
@@ -423,6 +426,7 @@ pub fn unpack_bun(
             app_declarations: Vec::new(),
             library_discovery: discover_raw(code, floor_pieces, floor_request),
             claimed_module_regions: Vec::new(),
+            era_bridge: None,
             body_restoration: None,
         })
     };
@@ -634,6 +638,7 @@ pub fn unpack_bun(
         },
     );
     let mut file_of_record: HashMap<usize, String> = HashMap::new();
+    let mut factory_files: Vec<((u32, u32), String)> = Vec::new();
     for (module_index, (module, module_plan)) in modules.iter().zip(&plan.plans).enumerate() {
         let body = vendored_body(
             code,
@@ -651,6 +656,10 @@ pub fn unpack_bun(
         if let Some(i) = record_index {
             file_of_record.insert(i, rel_path.clone());
         }
+        factory_files.push((
+            (module.decl_start as u32, module.decl_end as u32),
+            rel_path.clone(),
+        ));
         files.push(UnpackedFile {
             path: write_vendor_file(out_dir, &rel_path, &body)?,
             metadata: None,
@@ -690,6 +699,37 @@ pub fn unpack_bun(
     // container's own edits (the unspliced wrappers' renames) apply.
     all_edits.extend(restoration.edits.iter().cloned());
     let runtime = slice_with_edits(code, &all_edits, 0, code.len());
+    let era_bridge = classification
+        .as_ref()
+        .filter(|_| {
+            options
+                .library_discovery
+                .is_some_and(|r| r.module_answers.is_some())
+        })
+        .map(|c| {
+            let map = EditMap::new(&all_edits);
+            crate::naming::module_names::EraBridge {
+                container: c
+                    .container
+                    .iter()
+                    .map(|span| {
+                        let raw = (span.start, span.end);
+                        (raw, map.map_span(raw))
+                    })
+                    .collect(),
+                factories: factory_files,
+                runtime_file: RUNTIME_FILE.to_string(),
+                restored: {
+                    let mut restored: Vec<(u32, String)> = restoration
+                        .edits
+                        .iter()
+                        .map(|e| (e.start as u32, e.replacement.clone()))
+                        .collect();
+                    restored.sort();
+                    restored
+                },
+            }
+        });
     let mut runtime_file = None;
     if !runtime.trim_matches(is_js_space).is_empty() {
         let path = out_dir.join(RUNTIME_FILE);
@@ -758,6 +798,7 @@ pub fn unpack_bun(
         app_declarations,
         library_discovery,
         claimed_module_regions,
+        era_bridge,
         body_restoration,
     })
 }
@@ -788,12 +829,7 @@ fn place_names_modules(
     }
     let report = discovery.ok_or("library-matching names ran no discovery")?;
     place_factories_from_index(c, code, ingest, report, source, require_var)?;
-    Ok(claimed_regions(
-        ingest,
-        &c.container,
-        &c.factories,
-        &report.placement_groups,
-    ))
+    Ok(claimed_regions(&c.container, &report.placement_groups))
 }
 
 /// The names-mode placement consumer (library-names plan step 4, exp156).
@@ -868,63 +904,30 @@ fn place_factories_from_index(
     Ok(())
 }
 
-/// The claimed placement groups as the naming era will see them
-/// (library-names plan step 4, exp156): each group statement's RAW
-/// container ordinal minus every container statement the unpack
-/// spliced out before it — the vendor-bridge invariant, since the
-/// naming era's wrapper body is the container AFTER the factory
-/// extraction. A statement is gone exactly when it is one declaration
-/// whose every declarator is an extracted factory (a joined declaration
-/// that keeps a declarator survives, minus its factories); a group row
-/// the container does not hold exactly cannot be joined on the naming
-/// side and is dropped whole — a wrong ordinal would move the wrong
-/// statements.
+/// The claimed placement groups for the naming era (library-names plan
+/// step 4, exp156): each group's statements as RAW bundle spans with
+/// their claims. The era maps them onto its own statements through the
+/// exact raw-to-era bridge (exp166, [`crate::naming::module_names::EraBridge`]);
+/// the ordinal arithmetic that used to run here (`i - removed_before`)
+/// ignored the formatter's statement splits and joined claims to the
+/// wrong modules. A group row the container does not hold exactly cannot
+/// be joined on the naming side and is dropped whole.
 fn claimed_regions(
-    ingest: &Ingest<'_>,
     container: &[oxc_span::Span],
-    factories: &[FactoryRecord],
     groups: &[crate::libdetect::discovery::PlacementGroupRow],
 ) -> Vec<crate::naming::module_names::ClaimedRegion> {
-    let extracted: std::collections::HashSet<(u32, u32)> = factories
+    let held: std::collections::HashSet<(u32, u32)> =
+        container.iter().map(|s| (s.start, s.end)).collect();
+    groups
         .iter()
-        .map(|f| (f.span.start, f.span.end))
-        .collect();
-    let mut removed: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
-    for node in ingest.semantic().nodes().iter() {
-        let oxc_ast::AstKind::VariableDeclaration(declaration) = node.kind() else {
-            continue;
-        };
-        if !declaration.declarations.is_empty()
-            && declaration
-                .declarations
+        .filter(|group| {
+            group
+                .statements
                 .iter()
-                .all(|d| extracted.contains(&(d.span.start, d.span.end)))
-        {
-            let span = oxc_span::GetSpan::span(node);
-            removed.insert((span.start, span.end));
-        }
-    }
-    let mut era_of: std::collections::HashMap<(u32, u32), usize> =
-        std::collections::HashMap::with_capacity(container.len());
-    let mut removed_before = 0;
-    for (i, span) in container.iter().enumerate() {
-        era_of.insert((span.start, span.end), i - removed_before);
-        if removed.contains(&(span.start, span.end)) {
-            removed_before += 1;
-        }
-    }
-    let mut out = Vec::with_capacity(groups.len());
-    for group in groups {
-        let Some(statements) = group
-            .statements
-            .iter()
-            .map(|row| era_of.get(&(row.start, row.end)).copied())
-            .collect::<Option<Vec<usize>>>()
-        else {
-            continue;
-        };
-        out.push(crate::naming::module_names::ClaimedRegion {
-            statements,
+                .all(|row| held.contains(&(row.start, row.end)))
+        })
+        .map(|group| crate::naming::module_names::ClaimedRegion {
+            statements: Vec::new(),
             claims: group
                 .statements
                 .iter()
@@ -935,9 +938,8 @@ fn claimed_regions(
                 .iter()
                 .map(|row| (row.start, row.end))
                 .collect(),
-        });
-    }
-    out
+        })
+        .collect()
 }
 
 /// Library discovery over the app code (exp095), report-only, when the run
@@ -1363,6 +1365,61 @@ pub fn slice_with_edits(
     }
     out.push_str(&code[cursor..slice_end]);
     out
+}
+
+/// Where raw offsets land in a WHOLE-text [`slice_with_edits`] output
+/// (exp166): the applied edits exactly as the slice consumes them (start
+/// ascending, end descending, an edit inside a consumed range dropped),
+/// with the byte delta each accumulates. A statement's raw span maps to
+/// its span in the runtime text the naming stage formats.
+pub struct EditMap {
+    /// (start, end, replacement length) per applied edit, start order.
+    applied: Vec<(usize, usize, usize)>,
+    /// The output delta BEFORE edit k (output = raw + delta).
+    delta: Vec<i64>,
+}
+
+impl EditMap {
+    pub fn new(edits: &[TextEdit]) -> EditMap {
+        let mut sorted: Vec<&TextEdit> = edits.iter().collect();
+        sorted.sort_by(|a, b| a.start.cmp(&b.start).then(b.end.cmp(&a.end)));
+        let mut applied = Vec::with_capacity(sorted.len());
+        let mut delta = Vec::with_capacity(sorted.len() + 1);
+        let mut cursor = 0;
+        let mut d: i64 = 0;
+        for edit in sorted {
+            if edit.start < cursor {
+                continue;
+            }
+            applied.push((edit.start, edit.end, edit.replacement.len()));
+            delta.push(d);
+            d += edit.replacement.len() as i64 - (edit.end - edit.start) as i64;
+            cursor = edit.end;
+        }
+        delta.push(d);
+        EditMap { applied, delta }
+    }
+
+    /// The output offset of raw offset `p`. An offset strictly inside a
+    /// replaced range lands at the replacement's start (`end = false`) or
+    /// its end (`end = true`).
+    pub fn map(&self, p: usize, end: bool) -> usize {
+        let k = self.applied.partition_point(|&(_, e, _)| e <= p);
+        if let Some(&(start, _, len)) = self.applied.get(k)
+            && start < p
+        {
+            let at = (start as i64 + self.delta[k]) as usize;
+            return if end { at + len } else { at };
+        }
+        (p as i64 + self.delta[k]) as usize
+    }
+
+    pub fn map_span(&self, span: (u32, u32)) -> (u32, u32) {
+        (
+            self.map(span.0 as usize, false) as u32,
+            self.map(span.1 as usize, true) as u32,
+        )
+    }
 }
 
 /// `extractFactoryBodiesFromAst`: one module per classified factory whose
