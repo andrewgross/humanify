@@ -23,6 +23,7 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
     .expect("fixture");
     BuildConfig {
         names: false,
+        refuse: Vec::new(),
         packages: vec!["ms".into()],
         as_of: as_of.into(),
         registry,
@@ -38,7 +39,6 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
         merge_only: false,
         sponge_regions: SpongeRegions::Drop,
         quiet: true,
-        refuse: Vec::new(),
     }
 }
 
@@ -948,6 +948,7 @@ fn exp162_config(
 ) -> BuildConfig {
     BuildConfig {
         names: false,
+        refuse: Vec::new(),
         packages: vec!["ms".into()],
         as_of: "2020-12-01T23:59:59.999Z".into(),
         registry: root.join("registry"),
