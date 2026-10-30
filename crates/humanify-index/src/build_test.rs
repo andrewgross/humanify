@@ -38,6 +38,7 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
         merge_only: false,
         sponge_regions: SpongeRegions::Drop,
         quiet: true,
+        refuse: Vec::new(),
     }
 }
 
@@ -84,6 +85,56 @@ fn an_offline_plan_refuses_a_package_it_has_no_snapshot_of() {
     cfg.packages.push("left-pad".into());
     let err = plan(&cfg, Default::default()).expect_err("no snapshot");
     assert!(err.contains("left-pad"), "{err}");
+}
+
+#[test]
+fn a_refuse_spec_removes_the_version_and_records_the_reason() {
+    let mut cfg = config("refuse", "2020-12-01T23:59:59.999Z");
+    cfg.refuse = vec![
+        // exp161: a package whose build OOMs workers solo gets one refusal
+        // entry, never a special-case retry path (Andrew, 2026-10-29)
+        "ms@2.1.1:memory-hog per Andrew 2026-10-29: unpopular, OOMs workers at 64GB".into(),
+    ];
+    let p = plan(&cfg, Default::default()).expect("plan");
+    let tasks: Vec<String> = p
+        .tasks
+        .iter()
+        .map(|t| format!("{}@{}", t.name, t.version))
+        .collect();
+    assert_eq!(tasks, ["ms@2.1.2", "ms@1.0.0", "ms@0.7.3"], "{tasks:?}");
+    assert!(
+        p.refused
+            .iter()
+            .any(|r| r.version == "2.1.1" && r.reason.contains("memory-hog")),
+        "{:?}",
+        p.refused
+    );
+}
+
+#[test]
+fn a_refuse_spec_for_a_version_the_plan_refuses_anyway_stays_single() {
+    let mut cfg = config("refuse-double", "2020-12-01T23:59:59.999Z");
+    cfg.refuse = vec![
+        // 2.1.3 is published after the as-of; the plan refuses it already
+        "ms@2.1.3:memory-hog".into(),
+    ];
+    let p = plan(&cfg, Default::default()).expect("plan");
+    let hits: Vec<&str> = p
+        .refused
+        .iter()
+        .filter(|r| r.version == "2.1.3")
+        .map(|r| r.reason.as_str())
+        .collect();
+    assert_eq!(hits.len(), 1, "{hits:?}");
+    assert_eq!(hits[0], "published-after-as-of");
+}
+
+#[test]
+fn a_malformed_refuse_spec_is_an_error() {
+    let mut cfg = config("refuse-bad", "2020-12-01T23:59:59.999Z");
+    cfg.refuse = vec!["ms@2.1.1".into()]; // no :reason
+    let err = plan(&cfg, Default::default()).expect_err("no reason");
+    assert!(err.contains("--refuse"), "{err}");
 }
 
 #[test]
