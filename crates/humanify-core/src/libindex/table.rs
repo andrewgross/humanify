@@ -138,35 +138,52 @@ pub fn lookup_files(
     edges: Option<&BTreeMap<String, Vec<EdgeRow>>>,
     literals: &[LiteralRow],
 ) -> Result<BTreeMap<String, Vec<u8>>, String> {
+    let mut files = BTreeMap::new();
+    lookup_files_into(units, edges, literals, &mut |name, bytes| {
+        files.insert(name, bytes);
+        Ok(())
+    })?;
+    Ok(files)
+}
+
+/// [`lookup_files`]'s writer form: each table's bytes go to `put`
+/// (name, bytes) as the table is produced — a streaming finish writes and
+/// drops them one at a time instead of holding them all. The same tables,
+/// the same bytes.
+pub fn lookup_files_into(
+    units: &BTreeMap<String, Vec<UnitRow>>,
+    edges: Option<&BTreeMap<String, Vec<EdgeRow>>>,
+    literals: &[LiteralRow],
+    put: &mut dyn FnMut(String, Vec<u8>) -> Result<(), String>,
+) -> Result<(), String> {
     let slices: Vec<&[UnitRow]> = units.values().map(Vec::as_slice).collect();
     let edge_slices: Vec<&[EdgeRow]> = edges
         .into_iter()
         .flat_map(|e| e.values().map(Vec::as_slice))
         .collect();
     let packages = package_table(&slices, &edge_slices, literals);
-    let mut files = BTreeMap::new();
     for (slice, rows) in units {
-        files.insert(units_file(slice), UnitTable::encode(rows, &packages)?);
+        put(units_file(slice), UnitTable::encode(rows, &packages)?)?;
         if let Some(edges) = edges {
             let edge_rows = edges.get(slice).map_or(&[][..], Vec::as_slice);
-            files.insert(
+            put(
                 edges_file(slice),
                 EdgeTable::encode(rows, edge_rows, &packages)?,
-            );
-            files.insert(
+            )?;
+            put(
                 callee_prints_file(slice),
                 CalleePrintTable::encode(edge_rows, &packages)?,
-            );
+            )?;
         }
     }
-    files.insert(
+    put(
         LITERALS_FILE.to_string(),
         LiteralTable::encode(literals, &packages),
-    );
+    )?;
     let mut names = serde_json::to_vec(&packages).map_err(|e| e.to_string())?;
     names.push(b'\n');
-    files.insert(PACKAGES_FILE.to_string(), names);
-    Ok(files)
+    put(PACKAGES_FILE.to_string(), names)?;
+    Ok(())
 }
 
 fn owner_id(packages: &[String], owner: &str) -> u32 {
@@ -916,7 +933,21 @@ pub fn names_lookup_files(
     names: &BTreeMap<String, Vec<NameRowCompact>>,
     interner: &NameInterner,
 ) -> Result<BTreeMap<String, Vec<u8>>, String> {
-    let mut bins: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    let mut files = BTreeMap::new();
+    names_lookup_files_into(units, names, interner, &mut |name, bytes| {
+        files.insert(name, bytes);
+        Ok(())
+    })?;
+    Ok(files)
+}
+
+/// [`names_lookup_files`]'s writer form — see [`lookup_files_into`].
+pub fn names_lookup_files_into(
+    units: &BTreeMap<String, Vec<UnitRow>>,
+    names: &BTreeMap<String, Vec<NameRowCompact>>,
+    interner: &NameInterner,
+    put: &mut dyn FnMut(String, Vec<u8>) -> Result<(), String>,
+) -> Result<(), String> {
     for (slice, rows) in names {
         if rows.is_empty() {
             continue;
@@ -924,16 +955,14 @@ pub fn names_lookup_files(
         let unit_rows = units
             .get(slice)
             .ok_or_else(|| format!("names rows for slice {slice}: the slice has no unit rows"))?;
-        bins.insert(names_file(slice), NameTable::encode(unit_rows, rows)?);
+        put(names_file(slice), NameTable::encode(unit_rows, rows)?)?;
     }
-    let mut files = BTreeMap::new();
     if !interner.is_empty() {
         let mut strings = serde_json::to_vec(interner.strings()).map_err(|e| e.to_string())?;
         strings.push(b'\n');
-        files.insert(NAMES_STRINGS_FILE.to_string(), strings);
-        files.extend(bins);
+        put(NAMES_STRINGS_FILE.to_string(), strings)?;
     }
-    Ok(files)
+    Ok(())
 }
 
 /// A decoded entry before its strings are resolved: the slot of the

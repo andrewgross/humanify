@@ -542,6 +542,60 @@ fn a_callee_list_shared_by_rows_in_different_ranges_is_stored_once() {
     assert_eq!(table.callees(0)[0].key, 0xcc);
 }
 
+/// The streamed finish (exp162): with `staging` set, EVERY table is
+/// written into the staging dir as the finish produces it and recorded by
+/// sha — the buffered finish's `files` map (the tests' path) is what a
+/// caller would have held. The contract: the same bytes either way, the
+/// same id, and nothing on disk the buffered path would not have held.
+#[test]
+fn the_streamed_finish_writes_the_same_bytes_the_buffered_finish_holds() {
+    let buffered = merge(meta(), shards()).expect("merges");
+    let dir = std::env::temp_dir().join(format!("humanify-index-stage-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("dir");
+    let mut staged_meta = meta();
+    staged_meta.staging = Some(dir.clone());
+    let streamed = merge(staged_meta, shards()).expect("merges");
+    assert_eq!(streamed.id, buffered.id, "same manifest, same id");
+    // the manifest and the static data files stay buffered (the caller's
+    // write); every PRODUCED table streamed
+    assert_eq!(
+        streamed.files.keys().collect::<Vec<_>>(),
+        ["families.json", "manifest.json", "stoplists.json"],
+        "the manifest + data stay buffered; every produced table streamed"
+    );
+    let names: Vec<String> = std::fs::read_dir(&dir)
+        .expect("dir")
+        .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(
+        names.len(),
+        buffered.files.len() - streamed.files.len(),
+        "every produced table on disk: {names:?}"
+    );
+    for (name, bytes) in &buffered.files {
+        if streamed.files.contains_key(name) {
+            continue;
+        }
+        let on_disk = std::fs::read(dir.join(name)).unwrap_or_else(|e| panic!("read {name}: {e}"));
+        assert_eq!(&on_disk, bytes, "{name} differs on disk");
+    }
+    // the manifest's tables name the streamed files with their shas — the
+    // buffered manifest's bytes
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&streamed.files["manifest.json"]).expect("json");
+    for name in buffered.files.keys() {
+        if streamed.files.contains_key(name) {
+            continue;
+        }
+        assert!(
+            manifest["tables"].get(name.as_str()).is_some(),
+            "{name} sha'd in the streamed manifest"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The prefix a non-hash table partitions on is order-preserving: strings
 /// in different ranges compare as their strings do, so segments
 /// concatenate in sorted order (a fuzz: two strings out of order that
