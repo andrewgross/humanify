@@ -280,7 +280,7 @@ fn on_disk_named(
         crate::libindex::table::lookup_files(&units, with_edges.then_some(&edges), &[]).unwrap();
     wrote.extend(files);
     if with_names {
-        let names = [(
+        let names: std::collections::BTreeMap<String, Vec<crate::libindex::format::NameRow>> = [(
             "bun-bun-cjs-min".to_string(),
             vec![crate::libindex::format::NameRow {
                 hash: hx("aa"),
@@ -296,7 +296,15 @@ fn on_disk_named(
         )]
         .into_iter()
         .collect();
-        wrote.extend(crate::libindex::table::names_lookup_files(&units, &names).unwrap());
+        let (compact, interner) = crate::libindex::table::compact_name_rows(
+            &units["bun-bun-cjs-min"],
+            &names["bun-bun-cjs-min"],
+        )
+        .unwrap();
+        let compact = std::collections::BTreeMap::from([("bun-bun-cjs-min".to_string(), compact)]);
+        wrote.extend(
+            crate::libindex::table::names_lookup_files(&units, &compact, &interner).unwrap(),
+        );
     }
     m.tables = wrote
         .iter()

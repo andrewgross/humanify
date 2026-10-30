@@ -8,8 +8,8 @@ use crate::libindex::format::{LiteralRow, NameRow, UnitRow};
 use crate::libindex::names::{NameKind, RestoredName};
 use crate::libindex::table::{
     BLOCK, KeyColumnBytes, LITERALS_FILE, LiteralTable, NAMES_STRINGS_FILE, NameTable,
-    PACKAGES_FILE, Source, UnitTable, lookup_files, names_file, names_lookup_files, package_table,
-    unit_key, units_file,
+    PACKAGES_FILE, Source, UnitTable, compact_name_rows, lookup_files, names_file,
+    names_lookup_files, package_table, unit_key, units_file,
 };
 
 fn unit(hash: u64, owner: &str, module_bytes: u64) -> UnitRow {
@@ -72,7 +72,9 @@ fn the_names_table_answers_each_unit_row_with_its_lists() {
             ),
         ],
     )]);
-    let files = names_lookup_files(&units, &names).expect("encode");
+    let (compact, interner) = compact_name_rows(&units["bun"], &names["bun"]).expect("compact");
+    let compact = BTreeMap::from([("bun".to_string(), compact)]);
+    let files = names_lookup_files(&units, &compact, &interner).expect("encode");
     assert_eq!(
         files.keys().cloned().collect::<Vec<_>>(),
         vec![names_file("bun").as_str(), NAMES_STRINGS_FILE],
@@ -109,7 +111,10 @@ fn a_names_row_whose_unit_key_is_absent_is_refused_at_encoding() {
             "1.0.0",
         )],
     )]);
-    let err = names_lookup_files(&units, &names).expect_err("orphan names row");
+    let err = match compact_name_rows(&units["bun"], &names["bun"]) {
+        Ok(_) => panic!("an orphan names row must be refused"),
+        Err(err) => err,
+    };
     assert!(err.contains("no unit row"), "{err}");
 }
 
@@ -126,7 +131,9 @@ fn a_names_table_refuses_a_kind_ordinal_it_does_not_know() {
             "1.0.0",
         )],
     )]);
-    let files = names_lookup_files(&units, &names).expect("encode");
+    let (compact, interner) = compact_name_rows(&units["bun"], &names["bun"]).expect("compact");
+    let compact = BTreeMap::from([("bun".to_string(), compact)]);
+    let files = names_lookup_files(&units, &compact, &interner).expect("encode");
     let mut bytes = files[names_file("bun").as_str()].clone();
     let last = bytes.len() - 4; // the last entry's kind ordinal
     bytes[last] = u32::MAX.to_le_bytes()[0];

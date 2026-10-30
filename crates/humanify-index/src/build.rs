@@ -23,7 +23,7 @@ use humanify_core::libindex::literals::{LiteralMode, code_literals, json_literal
 use humanify_core::libindex::recipe::Recipe;
 
 use crate::asof::{VersionPolicy, normalize_time, select_versions};
-use crate::merge::{MergeMeta, Merger};
+use crate::merge::{GIANT_SHARD_BYTES, MergeMeta, ShardFlow, finish_workers, stream_parallel};
 use crate::recipe::{
     MAX_SOURCE_BYTES, RECIPE_VERSION, RecipeBuild, bundler_package, entry_specifiers,
     is_source_file, is_sponge_file, unresolved_specifiers,
@@ -94,6 +94,10 @@ pub struct BuildConfig {
     /// of each bundler is its default slice).
     pub recipes: Vec<RecipeBuild>,
     pub jobs: usize,
+    /// Parallel merge workers (exp162): the merge partitions the key
+    /// space into this many contiguous ranges, one worker each; 1 (the
+    /// default) is the streaming merge's own path, byte-identical.
+    pub merge_jobs: usize,
     pub offline: bool,
     /// Which versions of each package to index.
     pub policy: VersionPolicy,
@@ -1465,7 +1469,10 @@ pub struct BuildOutcome {
 /// (returns an empty id).
 ///
 /// The merge streams: every task's shards are read from the store one at
-/// a time, in label order, into the [`Merger`] — never all at once.
+/// a time, in label order — never all at once. With `cfg.merge_jobs > 1`
+/// (exp162) the workers partition the key space into contiguous ranges,
+/// each streaming EVERY shard in label order and keeping its range's
+/// rows; the segments concatenate in range order into the same bytes.
 pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
     build(cfg, dry_run, Trace::default()).map(|o| o.index_id)
 }
@@ -1515,17 +1522,22 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
         })
         .collect();
     inputs.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
-    let mut found = vec![false; plan.tasks.len()];
-    let mut merger = Merger::default();
-    {
-        let _s = trace.stage("library.index.merge");
-        for (_, i, s) in &inputs {
-            if let Some(shard) = read_current(&cfg.store, s) {
-                found[*i] = true;
-                merger.add(shard)?;
-            }
-        }
+    if cfg.merge_jobs == 0 {
+        return Err("--merge-jobs 0: the merge takes at least one worker".into());
     }
+    let found;
+    let workers = {
+        let _s = trace.stage("library.index.merge");
+        let flow = ShardFlow::Store {
+            store: &cfg.store,
+            refs: &inputs,
+            n_tasks: plan.tasks.len(),
+            giant: GIANT_SHARD_BYTES,
+        };
+        let mut workers = stream_parallel(&flow, cfg.merge_jobs)?;
+        found = std::mem::take(&mut workers[0].found);
+        workers
+    };
     let mut packages = Vec::new();
     let (mut built, mut reused) = (0usize, 0usize);
     for (t, found) in plan.tasks.iter().zip(found) {
@@ -1559,13 +1571,17 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
             .cmp(&b.name)
             .then(compare_versions(&a.version, &b.version))
     });
-    let index = merger.finish(MergeMeta {
-        as_of: plan.as_of.clone(),
-        registry: plan.registry.clone(),
-        slices: plan.slices.clone(),
-        packages,
-        refused: plan.refused.clone(),
-    })?;
+    let index = finish_workers(
+        MergeMeta {
+            as_of: plan.as_of.clone(),
+            registry: plan.registry.clone(),
+            slices: plan.slices.clone(),
+            packages,
+            refused: plan.refused.clone(),
+            staging: cfg.out.clone(),
+        },
+        workers,
+    )?;
     if let Some(out) = &cfg.out {
         write_index(out, &index.files)?;
     }

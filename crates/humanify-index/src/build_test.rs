@@ -31,6 +31,7 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
         out: None,
         recipes: Vec::new(),
         jobs: 1,
+        merge_jobs: 1,
         offline: true,
         policy: Default::default(),
         pinned: Vec::new(),
@@ -807,4 +808,214 @@ fn a_foreign_region_can_be_credited_to_the_package_its_marker_names() {
         notes.sponge_unit_rows, 2,
         "lazy-pkg's two units: no version"
     );
+}
+
+/// exp162's fixture: two packages (ms's committed packument plus an
+/// inline second one), and every planned shard filled with rows whose
+/// unit prints straddle the four-way range split (2^62 multiples) and
+/// share one callee list across ranges.
+fn exp162_fixture(root: &std::path::Path) -> (std::path::PathBuf, std::path::PathBuf) {
+    use super::shard::{ShardLiteral, ShardModule, ShardUnit, write_shard};
+    use humanify_core::libindex::format::Callee;
+
+    let registry = root.join("registry");
+    std::fs::create_dir_all(&registry).expect("mkdir");
+    std::fs::write(
+        registry.join("ms.json"),
+        include_str!("../testdata/ms.packument.json"),
+    )
+    .expect("fixture");
+    // a second package, two versions (pins, the readers' own list)
+    std::fs::write(
+        registry.join("aa-exp162.json"),
+        r#"{"name":"aa-exp162","fetchedAt":"2026-10-11T00:00:00.000Z",
+            "time":{"1.0.0":"2018-01-01T00:00:00.000Z","1.1.0":"2019-01-01T00:00:00.000Z"},
+            "versions":["1.0.0","1.1.0"]}"#,
+    )
+    .expect("fixture");
+
+    let cfg = exp162_config(root, 1, root.join("unused"));
+    let p = plan(&cfg, Default::default()).expect("plan");
+    assert!(p.tasks.len() >= 6, "{} tasks", p.tasks.len());
+    let store = root.join("store");
+    let splits = [
+        "0000000000000001",
+        "4000000000000001",
+        "8000000000000001",
+        "c000000000000001",
+    ];
+    for (i, task) in p.tasks.iter().enumerate() {
+        for inputs in &task.missing {
+            let mut shard = Shard::new(inputs);
+            if shard.kind != "literals" {
+                for (j, hash) in splits.iter().enumerate() {
+                    shard.units.push(ShardUnit {
+                        owner: format!("{}-{}", task.name, task.version),
+                        version: task.version.clone(),
+                        file: format!("file{j}.js"),
+                        hash: (*hash).into(),
+                        nodes: 40,
+                        content: 5,
+                        module_bytes: 900,
+                        // the SAME callee list everywhere: stored once
+                        inside: vec!["00000000000000cc".into()],
+                        out_of: vec![Callee {
+                            owner: "aa-exp162@1.0.0".into(),
+                            hash: "00000000000000dd".into(),
+                        }],
+                        names: vec![],
+                    });
+                    shard.modules.push(ShardModule {
+                        owner: task.name.clone(),
+                        version: task.version.clone(),
+                        file: format!("file{j}.js"),
+                        key: format!("{:016x}", i * 7 + j),
+                    });
+                }
+            } else {
+                shard.literals.push(ShardLiteral {
+                    owner: task.name.clone(),
+                    version: task.version.clone(),
+                    file: "index.js".into(),
+                    lits: vec!["S:a".into(), "S:b".into()],
+                });
+            }
+            write_shard(&store, &shard).expect("write");
+        }
+    }
+    // the CLI spelling of the same plan (the anchor's other binary reads it)
+    std::fs::write(root.join("packages.txt"), "ms\n").expect("packages");
+    std::fs::write(root.join("pins.txt"), "aa-exp162@1.0.0\naa-exp162@1.1.0\n").expect("pins");
+    (registry, store)
+}
+
+/// exp162's merge-only config over the fixture.
+fn exp162_config(
+    root: &std::path::Path,
+    merge_jobs: usize,
+    out: std::path::PathBuf,
+) -> BuildConfig {
+    BuildConfig {
+        names: false,
+        packages: vec!["ms".into()],
+        as_of: "2020-12-01T23:59:59.999Z".into(),
+        registry: root.join("registry"),
+        store: root.join("store"),
+        work: root.join("work"),
+        out: Some(out),
+        recipes: vec![super::recipe::RecipeBuild {
+            recipe: bun_node(),
+            bin: "bun".into(),
+        }],
+        jobs: 1,
+        merge_jobs,
+        offline: true,
+        policy: Default::default(),
+        pinned: vec!["aa-exp162@1.0.0".into(), "aa-exp162@1.1.0".into()],
+        merge_only: true,
+        sponge_regions: SpongeRegions::Drop,
+        quiet: true,
+    }
+}
+
+/// Every file of a merged index directory, by name.
+fn index_bytes(out: &std::path::Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+    std::fs::read_dir(out)
+        .expect("dir")
+        .map(|e| e.expect("entry").path())
+        .map(|p| {
+            (
+                p.file_name().expect("name").to_string_lossy().into_owned(),
+                std::fs::read(&p).expect("read"),
+            )
+        })
+        .collect()
+}
+
+/// exp162: `--merge-jobs N` over the fixture store — merges into
+/// BYTE-IDENTICAL index directories at 1, 4 and 8 workers.
+#[test]
+fn merge_jobs_partitions_merge_into_the_same_index_dir() {
+    let root = temp("merge-jobs");
+    exp162_fixture(&root);
+    let dirs: Vec<_> = [1usize, 4, 8]
+        .iter()
+        .map(|&jobs| {
+            let out = root.join(format!("ix-{jobs}"));
+            super::build::run(&exp162_config(&root, jobs, out.clone()), false).expect("merges");
+            index_bytes(&out)
+        })
+        .collect();
+    assert_eq!(dirs[0], dirs[1], "1 vs 4 workers");
+    assert_eq!(dirs[0], dirs[2], "1 vs 8 workers");
+    // and rows of one owner share their callee list even across ranges: an
+    // inside callee inherits its row's owner, so one list per owner, not
+    // one per row (24 rows would otherwise hold 24 lists)
+    let edges = &dirs[0]["edges.bun-node-cjs-min.bin"];
+    let h: [u64; 3] = std::array::from_fn(|i| {
+        u64::from_le_bytes(edges[8 + i * 8..16 + i * 8].try_into().expect("header"))
+    });
+    assert_eq!(h[0], 24, "one edge row per unit print: 6 tasks x 4 prints");
+    assert_eq!(h[1], 6, "one callee list per owner, shared across ranges");
+}
+
+/// exp162's byte-identity anchor, run by hand (`cargo test -p
+/// humanify-index -- --ignored exp162_anchor`): writes the fixture store
+/// under `EXP162_ANCHOR_DIR` and merges it with THIS build at
+/// `--merge-jobs` 1/4/8 — and, when `EXP162_ANCHOR_OTHER_BIN` names
+/// another `humanify-index` binary (main's, today's serial merge), with
+/// that at its default — every pair of index dirs byte-identical.
+#[test]
+#[ignore = "fixture anchor: EXP162_ANCHOR_DIR=<dir> cargo test -p humanify-index -- --ignored exp162_anchor"]
+// env: a hand-run anchor takes its paths from the environment (a
+// fixture generator, never a pipeline switch; WP1.1 reads env once)
+#[allow(clippy::disallowed_methods)]
+fn exp162_anchor() {
+    let dir = match std::env::var("EXP162_ANCHOR_DIR") {
+        Ok(d) if !d.is_empty() => std::path::PathBuf::from(d),
+        _ => return,
+    };
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    exp162_fixture(&dir);
+    let mut dirs = vec![index_bytes(&{
+        let out = dir.join("ix-lib-1");
+        super::build::run(&exp162_config(&dir, 1, out.clone()), false).expect("merges");
+        out
+    })];
+    for jobs in [4usize, 8] {
+        let out = dir.join(format!("ix-lib-{jobs}"));
+        super::build::run(&exp162_config(&dir, jobs, out.clone()), false).expect("merges");
+        dirs.push(index_bytes(&out));
+    }
+    if let Ok(other) = std::env::var("EXP162_ANCHOR_OTHER_BIN") {
+        if other.is_empty() {
+            return;
+        }
+        let out = dir.join("ix-other");
+        let status = std::process::Command::new(&other)
+            .args(["build"])
+            .arg("--packages")
+            .arg(dir.join("packages.txt"))
+            .arg("--pinned")
+            .arg(dir.join("pins.txt"))
+            .args(["--as-of", "2020-12-01T23:59:59.999Z"])
+            .args(["--registry"])
+            .arg(dir.join("registry"))
+            .args(["--store"])
+            .arg(dir.join("store"))
+            .args(["--work"])
+            .arg(dir.join("work"))
+            .args(["--out"])
+            .arg(&out)
+            .args(["--recipe", "bun:target=node,format=cjs,minify"])
+            .args(["--bun", "bun"])
+            .args(["--merge-only", "--offline"])
+            .status()
+            .expect("runs the other binary");
+        assert!(status.success(), "the other binary failed");
+        dirs.push(index_bytes(&out));
+    }
+    for (i, d) in dirs.iter().enumerate().skip(1) {
+        assert_eq!(&dirs[0], d, "dir {i} differs from the serial merge");
+    }
 }
