@@ -227,6 +227,8 @@ pub struct FloorCounts {
 pub struct NamingEra {
     /// The generated text (None when stopped after the waves).
     pub generated: Option<String>,
+    /// The restoration's measurement evidence (exp164; diagnostics only).
+    pub era_dump: Option<crate::naming::restore::EraDump>,
     pub trail: StrategyTrail,
     pub claims: RenameClaimStats,
     pub waves: WaveRecords,
@@ -586,6 +588,13 @@ fn run_era<P: NameProvider>(
     // "settled below the floor without a rename" mark — keeps the naming
     // floor's sweep off them too, or their still-minified names would be
     // re-asked there.
+    let body_spans: Vec<(u32, u32)> = modules.map_or(Vec::new(), |m| {
+        m.body
+            .iter()
+            .map(|s| crate::naming::module_names::span_of(s).unwrap_or((0, 0)))
+            .collect()
+    });
+    let mut frozen: Vec<(usize, u32, String)> = Vec::new();
     if !library_layout.spans.is_empty() {
         let inside: Vec<u32> = start
             .rename
@@ -602,6 +611,18 @@ fn run_era<P: NameProvider>(
             .map(|(i, _)| i as u32)
             .collect();
         for i in inside {
+            let binding = start
+                .rename
+                .view()
+                .binding(crate::rename::validated::scopes::BindingId(i));
+            let statement = statement_of_span(&body_spans, binding.id_span);
+            let name = start
+                .rename
+                .name_of(crate::rename::validated::scopes::BindingId(i))
+                .to_string();
+            if let Some(statement) = statement {
+                frozen.push((statement, binding.symbol.index() as u32, name));
+            }
             start
                 .rename
                 .record_carried(crate::rename::validated::scopes::BindingId(i));
@@ -614,11 +635,12 @@ fn run_era<P: NameProvider>(
     // names join the waves' transferred sets (a module-level one skips
     // its row), so no wave, sweep or reconcile re-asks or re-rolls them;
     // their statements' spans join the layout's protected spans.
+    let mut era_sites: Vec<crate::naming::restore::RestorationSite> = Vec::new();
     if !opts.restorations.is_empty()
         && let Some(source) = modules
         && !opts.claimed_regions.is_empty()
     {
-        let outcome = crate::naming::restore::apply_era_restoration(
+        let mut outcome = crate::naming::restore::apply_era_restoration(
             &mut start.rename,
             semantic,
             source,
@@ -651,7 +673,20 @@ fn run_era<P: NameProvider>(
             }
         }
         library_layout.restored_spans = outcome.spans;
+        era_sites = std::mem::take(&mut outcome.sites);
     }
+    // The exp164 measurement dump: the era's statement coordinates, the
+    // freeze's bindings, the converted regions and Site A's rows —
+    // diagnostics only (serialized by the CLI's `--diagnostics`).
+    let era_dump = (!opts.restorations.is_empty() || !library_layout.spans.is_empty()).then(|| {
+        crate::naming::restore::EraDump {
+            body_len: modules.map_or(0, |m| m.body.len()),
+            body_spans,
+            frozen,
+            regions: opts.claimed_regions.to_vec(),
+            sites: era_sites,
+        }
+    });
     // The plumbing the pipeline names itself, before any prompt shows it
     // (and over whatever name the transfer carried).
     let plumbing = crate::naming::plumbing::name_lazy_init_helper(
@@ -806,6 +841,7 @@ fn run_era<P: NameProvider>(
         // Filled after `era:generate` (the moved modules' spans are
         // folded into the generated text's coordinates first).
         library_layout: Default::default(),
+        era_dump,
     };
     drop(ph);
     let ph = crate::profiling::phase("era:naming-floor");
@@ -905,6 +941,27 @@ fn run_era<P: NameProvider>(
     era.stems = stems;
     era
 }
+/// The wrapper-body statement whose span holds `span` (exp164's dump
+/// only): the spans are statement order and do not overlap, so the last
+/// statement starting at or before the binding's identifier is its
+/// statement. `None` when the spans are unknown (no module source).
+fn statement_of_span(body_spans: &[(u32, u32)], span: oxc_span::Span) -> Option<usize> {
+    if body_spans.is_empty() {
+        return None;
+    }
+    let mut lo = 0usize;
+    let mut hi = body_spans.len();
+    while lo + 1 < hi {
+        let mid = (lo + hi) / 2;
+        if body_spans[mid].0 <= span.start {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    Some(lo)
+}
+
 /// The pending close-matched functions' prior-version context: the prior
 /// function's code (`generate(priorFn.path.node)` on the PRIOR text), its
 /// placeholder names (unique, first 40), and the pair's folded hints/snaps.

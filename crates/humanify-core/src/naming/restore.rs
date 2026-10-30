@@ -6,8 +6,10 @@
 //! a guess.
 //!
 //! The rule's shape, everywhere it applies (the naming era's claimed
-//! statements here — Site A — and the vendored factory bodies in the
-//! unpack — Site B):
+//! statements here — Site A, a re-derivation over the era's own walk —
+//! and in the unpack — Site B: the vendored factory bodies AND the
+//! container statements, applied from the capture's carried coordinates
+//! before the format can reshape anything):
 //!
 //! 1. the slots are read from the canonical walk's slot mapping
 //!    ([`crate::libindex::units::statement_named_prints`]): Site A walks
@@ -67,6 +69,96 @@ pub struct RestorationOutcome {
     /// that re-parse the generated text (the prior-diff reconcile: the
     /// prior's names must not overwrite the index's).
     pub spans: Vec<(u32, u32)>,
+    /// Per visited statement, what the pass saw and decided (exp164) —
+    /// the diagnostics dump's evidence, never a decision input.
+    pub sites: Vec<RestorationSite>,
+}
+
+/// Why a wanted name was not applied, as the diagnostics spell it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SiteSkip {
+    /// A binding the validated path already settled (the transfer, or the
+    /// library freeze's carried mark) keeps its name.
+    Renamed,
+    /// Two prints name the binding differently — abstained.
+    Conflict,
+    /// The validated path refused the rename.
+    Failed,
+}
+
+impl SiteSkip {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SiteSkip::Renamed => "renamed",
+            SiteSkip::Conflict => "conflict",
+            SiteSkip::Failed => "failed",
+        }
+    }
+}
+
+impl serde::Serialize for SiteSkip {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+/// One print's answer state at a visited statement (exp164).
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SitePrint {
+    pub hash: String,
+    /// The walk's slot mapping, one entry per slot in slot order:
+    /// `(the walk's `$slot` spelling, the symbol id, the name as the
+    /// walked AST spells it)` — how an answered slot joins the binding.
+    pub slots: Vec<(String, Option<u32>, String)>,
+    /// The hash is one of the run's captured answers.
+    pub captured: bool,
+    /// The captured answer is ambiguous (abstain by policy).
+    pub ambiguous: bool,
+    /// `(slot, name)` per entry a `Single` answer names.
+    pub answered: Vec<(u32, String)>,
+}
+
+/// One visited statement's restoration evidence (exp164, diagnostics
+/// only): every print's answer state and every apply decision. A
+/// statement visited with no captured print is itself a finding — the
+/// claim existed, the index's answer did not.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestorationSite {
+    /// The statement's ordinal in the era's wrapper body.
+    pub statement: usize,
+    /// The statement's span (the whole print's), era coordinates.
+    pub span: (u32, u32),
+    pub prints: Vec<SitePrint>,
+    /// `(symbol, name)` per applied rename.
+    pub applied: Vec<(u32, String)>,
+    /// `(symbol, name, cause)` per wanted name not applied.
+    pub skipped: Vec<(u32, String, SiteSkip)>,
+}
+
+/// The naming era's restoration evidence for the diagnostics dump
+/// (exp164, measurement only — no decision reads it): the era's own
+/// statement coordinates, the library freeze's bindings, the claimed
+/// regions as converted, and Site A's per-statement rows. The offline
+/// census joins the shipped minted bindings against this by statement
+/// ordinal.
+#[derive(Clone, Debug, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EraDump {
+    /// The era's wrapper-body statement count.
+    pub body_len: usize,
+    /// Each statement's span, era coordinates, statement order.
+    pub body_spans: Vec<(u32, u32)>,
+    /// The library freeze's bindings: `(statement, symbol, name at
+    /// freeze time)` — a frozen binding is never renamed after this, so
+    /// the name is the shipped one.
+    pub frozen: Vec<(usize, u32, String)>,
+    /// The claimed regions as the unpack converted them (with the
+    /// statements' raw bundle spans).
+    pub regions: Vec<ClaimedRegion>,
+    /// Site A's rows.
+    pub sites: Vec<RestorationSite>,
 }
 
 /// The era's restoration over its claimed statements: per statement, the
@@ -97,8 +189,14 @@ pub fn apply_era_restoration(
             };
             let prints = statement_named_prints(node, &tables);
             let before = outcome.bindings;
-            let (wants, _) = fold_answers(&prints, restorations, &mut outcome);
-            apply_wants(state, wants, &mut outcome);
+            let mut site = RestorationSite {
+                statement: s,
+                span: (prints.whole.print.span.start, prints.whole.print.span.end),
+                ..RestorationSite::default()
+            };
+            let (wants, _) = fold_answers(&prints, restorations, &mut outcome, &mut site);
+            apply_wants(state, wants, &mut outcome, Some(&mut site));
+            outcome.sites.push(site);
             if outcome.bindings > before {
                 let span = prints.whole.print.span;
                 outcome.spans.push((span.start, span.end));
@@ -114,41 +212,70 @@ type Want = (SymbolId, String);
 
 /// Fold a statement's prints' answers into per-symbol wanted names;
 /// conflicts abstain. Only `RestoreAnswer::Single` answers — an
-/// ambiguous one is silence (see the module docs).
+/// ambiguous one is silence (see the module docs). `site` collects the
+/// per-print evidence (exp164).
 fn fold_answers(
     prints: &crate::libindex::units::NamedStatementPrints,
     restorations: &BTreeMap<String, RestorationRow>,
     outcome: &mut RestorationOutcome,
+    site: &mut RestorationSite,
 ) -> (Vec<Want>, BTreeSet<SymbolId>) {
     let mut wants: BTreeMap<SymbolId, String> = BTreeMap::new();
     let mut conflicted: BTreeSet<SymbolId> = BTreeSet::new();
     let mut answered = false;
     let prints_of = std::iter::once(&prints.whole).chain(prints.functions.iter());
     for named in prints_of {
-        let Some(row) = restorations.get(&named.print.hash) else {
-            continue;
+        let mut row = SitePrint {
+            hash: named.print.hash.clone(),
+            slots: named
+                .mapping
+                .iter()
+                .map(|(spelling, symbol, name)| {
+                    (
+                        spelling.clone(),
+                        symbol.map(|s| s.index() as u32),
+                        name.clone(),
+                    )
+                })
+                .collect(),
+            ..SitePrint::default()
         };
-        let RestoreAnswer::Single(names) = &row.answer else {
-            continue; // ambiguous: the caller's policy is to abstain
-        };
-        answered = true;
-        for restored in names {
-            let Some((_, Some(symbol), _)) = named.mapping.get(restored.slot as usize) else {
-                continue; // a free identifier: never renamed
-            };
-            match wants.entry(*symbol) {
-                std::collections::btree_map::Entry::Vacant(e) => {
-                    e.insert(restored.name.clone());
-                }
-                std::collections::btree_map::Entry::Occupied(e) => {
-                    if e.get() != &restored.name {
-                        conflicted.insert(*symbol);
-                        e.remove();
-                        outcome.conflicts += 1;
+        if let Some(captured) = restorations.get(&named.print.hash) {
+            row.captured = true;
+            if let RestoreAnswer::Single(names) = &captured.answer {
+                answered = true;
+                row.answered = names
+                    .iter()
+                    .map(|restored| (restored.slot, restored.name.clone()))
+                    .collect();
+                for restored in names {
+                    let Some((_, Some(symbol), _)) = named.mapping.get(restored.slot as usize)
+                    else {
+                        continue; // a free identifier: never renamed
+                    };
+                    match wants.entry(*symbol) {
+                        std::collections::btree_map::Entry::Vacant(e) => {
+                            e.insert(restored.name.clone());
+                        }
+                        std::collections::btree_map::Entry::Occupied(e) => {
+                            if e.get() != &restored.name {
+                                conflicted.insert(*symbol);
+                                site.skipped.push((
+                                    symbol.index() as u32,
+                                    e.get().clone(),
+                                    SiteSkip::Conflict,
+                                ));
+                                e.remove();
+                                outcome.conflicts += 1;
+                            }
+                        }
                     }
                 }
+            } else {
+                row.ambiguous = true;
             }
         }
+        site.prints.push(row);
     }
     if answered {
         outcome.statements += 1;
@@ -163,13 +290,23 @@ fn fold_answers(
 }
 
 /// Apply the wanted names through the validated path; the settled and the
-/// already-restored keep what they have.
-fn apply_wants(state: &mut RenameState, wants: Vec<Want>, outcome: &mut RestorationOutcome) {
+/// already-restored keep what they have. `site` (Site A only) records the
+/// per-decision evidence (exp164).
+fn apply_wants(
+    state: &mut RenameState,
+    wants: Vec<Want>,
+    outcome: &mut RestorationOutcome,
+    mut site: Option<&mut RestorationSite>,
+) {
     for (symbol, name) in wants {
         let Some(binding) = state.view().binding_of_symbol(symbol) else {
             continue;
         };
         if state.is_renamed(binding) {
+            if let Some(site) = site.as_deref_mut() {
+                site.skipped
+                    .push((symbol.index() as u32, name, SiteSkip::Renamed));
+            }
             continue; // the validated path settled this binding already
         }
         if state.name_of(binding) == name {
@@ -185,7 +322,13 @@ fn apply_wants(state: &mut RenameState, wants: Vec<Want>, outcome: &mut Restorat
         };
         if state.attempt_restored_rename(request).applied {
             outcome.bindings += 1;
-            outcome.applied.push((binding, name));
+            outcome.applied.push((binding, name.clone()));
+            if let Some(site) = site.as_deref_mut() {
+                site.applied.push((symbol.index() as u32, name));
+            }
+        } else if let Some(site) = site.as_deref_mut() {
+            site.skipped
+                .push((symbol.index() as u32, name, SiteSkip::Failed));
         }
     }
 }
@@ -210,28 +353,34 @@ pub struct RestorationEdits {
     pub outcome: RestorationOutcome,
 }
 
-/// Site B: the vendored bodies' identifiers restored from the index's own
-/// answers — the era never sees a moved module (the vendor-record detector
-/// takes those files out of the per-file naming loop), so the unpack is
-/// the only site that can name them.
+/// Site B: the vendored bodies' AND the container statements' identifiers
+/// restored from the index's own answers — the era never sees a moved
+/// module (the vendor-record detector takes those files out of the
+/// per-file naming loop), so the unpack is the only site that can name
+/// them. The container statements (the unspliced lazy-init wrappers) are
+/// the same question: the library layout freezes their bindings and the
+/// waves never ask them, so the unpack names them too (exp164 — the mint
+/// premium).
 ///
 /// The application runs on the BUNDLE, not on the vendored text: the
 /// capture joined the index by print hash, and the prints are the
-/// bundle's factory-body statements — the vendored TEXT's statements
-/// cannot join, because the vendor rewrite touches free identifiers
-/// (cross-factory references become `require` calls, the factory helper
-/// becomes the shim's import) and free identifiers are content tokens.
-/// The application rows carry each captured print's span and slots, so
-/// this never re-walks: the names go through the validated path on the
+/// bundle's statements — the vendored TEXT's statements cannot join,
+/// because the vendor rewrite touches free identifiers (cross-factory
+/// references become `require` calls, the factory helper becomes the
+/// shim's import) and free identifiers are content tokens. The
+/// application rows carry each captured print's span and slots, so this
+/// never re-walks: the names go through the validated path on the
 /// bundle's own ingest, and the resulting edits ride the bodies' edit
-/// list into the sliced text verbatim.
+/// list into the sliced bodies verbatim — the caller also extends them
+/// into the container's edit list, where a body-range edit sits under the
+/// declaration splice and is dropped by the slice's overlap rule.
 ///
 /// Renaming a slot binding cannot disturb the capture's own joins — a
-/// local is slotted in the print, so the hash is rename-invariant — and a
-/// slot's scope never leaves its factory body, so every edit lands inside
-/// the body the row was captured in. `modules` are the extracted bodies'
-/// spans (bundle coordinates): only applications inside one are applied;
-/// the rest are the container statements' answers, the era's (Site A). A
+/// local is slotted in the print, so the hash is rename-invariant — and
+/// the validated path settles every rename, so a container binding's
+/// occurrences inside the bodies are renamed by the same edit list (the
+/// bodies' slices carry it, the container's drops it). `modules` are the
+/// extracted bodies' spans (bundle coordinates), counted into `files`. A
 /// missing slot keeps current behaviour — the minified name stays.
 pub fn apply_body_restoration(
     semantic: &Semantic<'_>,
@@ -246,23 +395,15 @@ pub fn apply_body_restoration(
             outcome,
         };
     }
-    let in_a_module = |start: u32, end: u32| {
-        modules
-            .iter()
-            .any(|&(s, e)| s as u32 <= start && end <= e as u32)
-    };
     let mut state = RenameState::new(semantic, crate::trail::Anchor::Fresh, NameProfile::Bun);
     for row in applications {
-        if !in_a_module(row.start, row.end) {
-            continue; // a container statement's answer: the era's (Site A)
-        }
         let crate::libindex::table::RestoreAnswer::Single(names) = &row.answer else {
             continue; // ambiguous: the caller's policy is to abstain
         };
         outcome.statements += 1;
         let before = outcome.bindings;
         let (wants, _) = fold_row(names, &row.slots, &mut outcome);
-        apply_wants(&mut state, wants, &mut outcome);
+        apply_wants(&mut state, wants, &mut outcome, None);
         if outcome.bindings > before {
             outcome.spans.push((row.start, row.end));
         }

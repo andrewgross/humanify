@@ -1056,6 +1056,25 @@ impl RunReports<'_> {
                 JsValue::parse(&json).expect("serde_json writes JSON"),
             );
         }
+        if let Some(dump) = out.era_dump.as_ref() {
+            // exp164: the restoration's measurement evidence — the era's
+            // statement coordinates, the library freeze's bindings, the
+            // converted claimed regions and Site A's per-statement rows.
+            // Diagnostics only; no decision reads it.
+            let json = serde_json::json!({
+                "bodyLen": dump.body_len,
+                "bodySpans": dump.body_spans,
+                "frozen": dump.frozen,
+                "regions": dump.regions,
+                "sites": dump.sites,
+                "permuteMoves": out.permute.as_ref().map_or(0, |p| p.moves.len()),
+            });
+            with_placement.insert(
+                "eraRestoration",
+                JsValue::parse(&serde_json::to_string(&json).expect("serde_json writes JSON"))
+                    .expect("serde_json writes JSON"),
+            );
+        }
         if self.config.library.matching == LibraryMatching::Report {
             let block = self.library_matching_block().to_string();
             with_placement.insert(

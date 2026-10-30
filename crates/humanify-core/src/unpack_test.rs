@@ -2373,11 +2373,17 @@ fn names_mode_claims_the_lazy_module_regions_in_era_ordinals() {
         },
     )
     .unwrap();
+    // The region's raw spans: the helper's own statement, then the head's
+    // (the group's rows in bundle coordinates, statements order; each
+    // span ends before the separating newline).
+    let head_start = bundle.find("var Gq").expect("head starts") as u32;
+    let next = bundle.find("var x = (I, A)").expect("next statement") as u32;
     assert_eq!(
         out.claimed_module_regions,
         vec![crate::naming::module_names::ClaimedRegion {
             statements: vec![0, 1],
             claims: vec![None, Some("ms".to_string())],
+            raw_spans: vec![(0, head_start - 1), (head_start, next - 1)],
         }],
         "the helper is the group's unclaimed pending, the claimed init its head: {:?}",
         out.claimed_module_regions
@@ -2424,14 +2430,48 @@ fn a_names_region_after_an_extracted_factory_shifts_to_era_ordinals() {
     )
     .unwrap();
     // mod_a is extracted; var W was raw ordinal 2, var Gq 3 — one lower
-    // in the era body the split will see.
+    // in the era body the split will see. The RAW spans do not shift:
+    // they are the same statements' bundle coordinates.
+    let w_start = bundle.find("var W =").expect("helper starts") as u32;
+    let gq_start = bundle.find("var Gq").expect("head starts") as u32;
+    let next = bundle.find("var app").expect("next statement") as u32;
     assert_eq!(
         out.claimed_module_regions,
         vec![crate::naming::module_names::ClaimedRegion {
             statements: vec![1, 2],
             claims: vec![None, Some("ms".to_string())],
+            raw_spans: vec![(w_start, gq_start - 1), (gq_start, next - 1)],
         }],
         "{:?}",
         out.claimed_module_regions
+    );
+}
+
+#[test]
+fn a_body_range_edit_under_a_declaration_splice_is_dropped_from_the_container_slice() {
+    // Site B's routing (exp164): the restoration edits ride the
+    // container's edit list too; a body-range edit sits under the
+    // declaration splice and is dropped by the slice's overlap rule, so
+    // the container's text never carries a body's rename.
+    use crate::unpack::bun::{TextEdit, slice_with_edits};
+    let code = "var m = helper(function () {\n  var foo = 1;\n});\n";
+    // the declaration splice removes the whole declarator (the trailing
+    // newline stays)
+    let decl = TextEdit {
+        start: 0,
+        end: code.len() - 1,
+        replacement: String::new(),
+    };
+    // the body-range rename: `var foo` inside the extracted body
+    let at = code.find("var foo").expect("the body's declaration");
+    let rename = TextEdit {
+        start: at,
+        end: at + "var foo".len(),
+        replacement: "var pLimit".into(),
+    };
+    let out = slice_with_edits(code, &[decl, rename], 0, code.len());
+    assert!(
+        !out.contains("pLimit"),
+        "the body's edit is under the splice: {out}"
     );
 }

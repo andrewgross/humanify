@@ -98,10 +98,15 @@ mod module_names_test;
 /// container ordinal minus every extracted factory statement before it,
 /// the standing vendor-bridge invariant), its claims the row's folded
 /// packages in the report's row order (pendings first, head last).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClaimedRegion {
     pub statements: Vec<usize>,
     pub claims: Vec<Option<String>>,
+    /// The statements' RAW bundle spans, `statements` order — the diag's
+    /// claims and restoration applications are in raw coordinates; the
+    /// conversion (unpack) is the only place that knows both (exp164).
+    pub raw_spans: Vec<(u32, u32)>,
 }
 
 /// What the names-mode placement decided for the era's modules
@@ -378,7 +383,7 @@ pub struct ModuleSource<'j> {
     pub grammar: crate::toolchain::ModuleWrapperGrammar,
 }
 
-fn span_of(v: &Value) -> Option<(u32, u32)> {
+pub(crate) fn span_of(v: &Value) -> Option<(u32, u32)> {
     Some((
         u32::try_from(v.get("start")?.as_u64()?).ok()?,
         u32::try_from(v.get("end")?.as_u64()?).ok()?,

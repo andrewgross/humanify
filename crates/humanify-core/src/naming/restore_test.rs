@@ -30,6 +30,7 @@ fn region(statements: &[usize]) -> Vec<ClaimedRegion> {
     vec![ClaimedRegion {
         statements: statements.to_vec(),
         claims: statements.iter().map(|_| None).collect(),
+        raw_spans: Vec::new(),
     }]
 }
 
@@ -248,7 +249,169 @@ fn an_unanswered_hash_is_silence() {
             row(RestoreAnswer::Single(vec![named(slot, "pLimit")])),
         );
         let outcome = apply_era_restoration(state, semantic, source, &region(&[0]), &restorations);
-        assert_eq!(outcome, RestorationOutcome::default());
+        assert_eq!(outcome.bindings, 0);
+        assert!(outcome.applied.is_empty());
+    });
+}
+
+// ---------------------------------------------------------------------------
+// The per-statement site rows (exp164): what the restoration SAW at each
+// claimed statement — every print's answer state, every apply decision —
+// the measurement the minted-premium census reads.
+// ---------------------------------------------------------------------------
+
+use crate::naming::restore::SiteSkip;
+
+#[test]
+fn sites_record_the_captured_print_and_its_answer() {
+    let code = "var foo = function (bar) {\n  return bar * 2;\n};\nuse(foo);\n";
+    with_fixture(code, |semantic, state, source, tables| {
+        let (hash, _, slot) = facts(source, 0, tables, "foo");
+        let mut restorations = std::collections::BTreeMap::new();
+        restorations.insert(
+            hash.clone(),
+            row(RestoreAnswer::Single(vec![named(slot, "pLimit")])),
+        );
+        let outcome = apply_era_restoration(state, semantic, source, &region(&[0]), &restorations);
+        assert_eq!(outcome.sites.len(), 1, "one visited statement, one row");
+        let site = &outcome.sites[0];
+        assert_eq!(site.statement, 0);
+        assert_eq!(site.prints.len(), 2, "the whole print, then the function's");
+        let print = &site.prints[0];
+        assert_eq!(print.hash, hash);
+        assert!(print.captured, "the hash is in the captured answers");
+        assert!(!print.ambiguous);
+        assert_eq!(print.answered, vec![(slot, "pLimit".to_string())]);
+        assert!(
+            print
+                .slots
+                .iter()
+                .any(|(_, symbol, name)| name == "foo" && symbol.is_some()),
+            "the mapping carries every slot: {:?}",
+            print.slots
+        );
+        assert_eq!(site.applied.len(), 1);
+        assert!(site.skipped.is_empty());
+    });
+}
+
+#[test]
+fn sites_record_an_uncaptured_statement() {
+    let code = "var foo = function (bar) {\n  return bar * 2;\n};\nuse(foo);\n";
+    with_fixture(code, |semantic, state, source, tables| {
+        let (hash, _, _) = facts(source, 0, tables, "foo");
+        let mut restorations = std::collections::BTreeMap::new();
+        // A key nothing in this fixture hashes to.
+        restorations.insert(
+            "0123456789abcdef0123456789abcdef".into(),
+            row(RestoreAnswer::Single(vec![named(0, "pLimit")])),
+        );
+        let outcome = apply_era_restoration(state, semantic, source, &region(&[0]), &restorations);
+        assert_eq!(outcome.sites.len(), 1);
+        let print = &outcome.sites[0].prints[0];
+        assert_eq!(print.hash, hash);
+        assert!(
+            !print.captured,
+            "no answer: the site still records the print"
+        );
+        assert!(!print.ambiguous);
+        assert!(print.answered.is_empty());
+        assert!(outcome.sites[0].applied.is_empty());
+        assert!(outcome.sites[0].skipped.is_empty());
+    });
+}
+
+#[test]
+fn sites_record_an_ambiguous_print() {
+    let code = "var foo = function (bar) {\n  return bar * 2;\n};\nuse(foo);\n";
+    with_fixture(code, |semantic, state, source, tables| {
+        let (hash, _, slot) = facts(source, 0, tables, "foo");
+        let mut restorations = std::collections::BTreeMap::new();
+        restorations.insert(
+            hash,
+            row(RestoreAnswer::Ambiguous(vec![
+                vec![named(slot, "one")],
+                vec![named(slot, "two")],
+            ])),
+        );
+        let outcome = apply_era_restoration(state, semantic, source, &region(&[0]), &restorations);
+        let print = &outcome.sites[0].prints[0];
+        assert!(print.captured);
+        assert!(print.ambiguous, "the ambiguity is the row's own finding");
+        assert!(print.answered.is_empty());
+    });
+}
+
+#[test]
+fn sites_record_a_conflict_as_a_skipped_want() {
+    let code = "var foo = function () {\n  return foo;\n};\nuse(foo);\n";
+    with_fixture(code, |semantic, state, source, tables| {
+        let (hash, functions, slot) = facts(source, 0, tables, "foo");
+        let mut restorations = std::collections::BTreeMap::new();
+        restorations.insert(hash, row(RestoreAnswer::Single(vec![named(slot, "alpha")])));
+        restorations.insert(
+            functions[0].clone(),
+            row(RestoreAnswer::Single(vec![named(slot, "beta")])),
+        );
+        let outcome = apply_era_restoration(state, semantic, source, &region(&[0]), &restorations);
+        assert_eq!(outcome.sites.len(), 1);
+        let site = &outcome.sites[0];
+        assert!(site.applied.is_empty());
+        assert_eq!(site.skipped.len(), 1, "the conflicted want is recorded");
+        assert_eq!(site.skipped[0].2, SiteSkip::Conflict);
+    });
+}
+
+#[test]
+fn sites_record_a_settled_skip() {
+    let code = "var foo = function (bar) {\n  return bar * 2;\n};\nuse(foo);\n";
+    with_fixture(code, |semantic, state, source, tables| {
+        let prints = statement_named_prints(&source.body[0], tables);
+        let (_, symbol, _) = prints.whole.mapping[0];
+        let symbol = symbol.expect("foo has a symbol");
+        let binding = state.view().binding_of_symbol(symbol).expect("foo binding");
+        let attempt = state.attempt_validated_rename(
+            RenameRequest {
+                scope: state.scope_of_binding(binding),
+                old_name: "foo",
+                new_name: "carried",
+                expected: Some(binding),
+            },
+            TrailSpec::settling(Tier::ExactMatch),
+        );
+        assert!(attempt.applied);
+        let (hash, _, slot) = facts(source, 0, tables, "foo");
+        let mut restorations = std::collections::BTreeMap::new();
+        restorations.insert(
+            hash,
+            row(RestoreAnswer::Single(vec![named(slot, "pLimit")])),
+        );
+        let outcome = apply_era_restoration(state, semantic, source, &region(&[0]), &restorations);
+        let site = &outcome.sites[0];
+        assert!(site.applied.is_empty());
+        assert_eq!(site.skipped.len(), 1);
+        assert_eq!(
+            site.skipped[0].2,
+            SiteSkip::Renamed,
+            "a carried binding's skip cause is the freeze/transfer's"
+        );
+    });
+}
+
+#[test]
+fn sites_record_a_failed_rename() {
+    let code = "var foo = function (bar) {\n  return bar * 2;\n};\nvar baz = 1;\nuse(foo, baz);\n";
+    with_fixture(code, |semantic, state, source, tables| {
+        let (hash, _, slot) = facts(source, 0, tables, "foo");
+        let mut restorations = std::collections::BTreeMap::new();
+        // `baz` is a sibling binding in the same scope: restoring `foo` to
+        // it would capture — the validated path refuses.
+        restorations.insert(hash, row(RestoreAnswer::Single(vec![named(slot, "baz")])));
+        let outcome = apply_era_restoration(state, semantic, source, &region(&[0]), &restorations);
+        assert_eq!(outcome.bindings, 0);
+        let site = &outcome.sites[0];
+        assert_eq!(site.skipped.len(), 1);
+        assert_eq!(site.skipped[0].2, SiteSkip::Failed);
     });
 }
 
@@ -362,24 +525,63 @@ fn a_vendored_body_s_slot_is_restored_on_the_bundle() {
 }
 
 #[test]
-fn an_application_outside_the_extracted_bodies_is_not_applied() {
-    // A container statement's answer is the era's (Site A): the unpack
-    // applies only rows inside the bodies it slices out.
-    let code = "var m = helper(function () {\n  var foo = 1;\n  use(foo);\n});\n";
-    with_bundle(code, |semantic, _| {
-        let mut app = application(
-            semantic,
-            "foo",
-            RestoreAnswer::Single(vec![named(0, "pLimit")]),
-            &[(0, code.len())],
-        );
-        // The row's span outside every extracted body — nothing applies.
-        app.start = 0;
-        app.end = 0;
-        let edits = apply_body_restoration(semantic, &[app], &[(1, 2)]);
-        assert_eq!(edits.outcome, RestorationOutcome::default());
-        assert!(edits.edits.is_empty());
-    });
+fn a_container_statement_s_answer_is_restored_on_the_bundle() {
+    // exp164: the mint premium. The claimed CONTAINER statements (the
+    // unspliced lazy-init wrappers) were Site B's blind spot — their
+    // bindings are frozen by the library layout and never asked, so they
+    // minted. The capture carries their answers too; the unpack applies
+    // them like any other row, and the body's reference to the container
+    // binding is renamed with it.
+    let code = "var foo = 1;\nvar m = helper(function () {\n  use(foo);\n});\n";
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = Ingest::parse(&allocator, code, "input.js");
+    assert!(
+        ingest.errors.is_empty(),
+        "fixture must parse: {:?}",
+        ingest.errors
+    );
+    let semantic = ingest.semantic();
+    let scoping = semantic.scoping();
+    let symbol = scoping
+        .symbol_ids()
+        .find(|&s| scoping.symbol_name(s) == "foo")
+        .expect("foo has a symbol");
+    let span = scoping.symbol_span(symbol);
+    // The extracted body: the factory's statement, NOT the container
+    // declaration the binding sits in.
+    let at = code.find("use(foo);").expect("the body's statement");
+    let modules = [(at, at + "use(foo);".len())];
+    assert!(
+        !(modules[0].0 <= span.start as usize && span.end as usize <= modules[0].1),
+        "the fixture's binding must sit OUTSIDE the module bodies"
+    );
+    let app = RestorationApplication {
+        hash: "captured".into(),
+        package: "dep".into(),
+        answer: RestoreAnswer::Single(vec![named(0, "pLimit")]),
+        start: span.start,
+        end: span.end,
+        slots: vec![Some(symbol.index() as u32)],
+    };
+    let edits = apply_body_restoration(semantic, &[app], &modules);
+    assert_eq!(edits.outcome.bindings, 1, "the container slot is restored");
+    // The declaration's edit is outside every extracted body: it is the
+    // container slice's to apply (the call site extends the runtime's
+    // edit list), not the bodies'.
+    assert!(
+        edits
+            .edits
+            .iter()
+            .any(|e| e.end <= modules[0].0 || e.start >= modules[0].1),
+        "a container-range edit must exist: {:?}",
+        edits.edits
+    );
+    let text = applied_text(code, &edits);
+    assert!(text.contains("var pLimit = 1;"), "restored: {text}");
+    assert!(
+        text.contains("use(pLimit);"),
+        "the body's reference renamed with it: {text}"
+    );
 }
 
 #[test]
