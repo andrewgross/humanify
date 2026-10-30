@@ -116,17 +116,21 @@ pub struct MergeMeta {
     pub slices: Vec<SliceRecord>,
     pub packages: Vec<PackageRecord>,
     pub refused: Vec<RefusedRecord>,
-    /// exp161: when set, the names jsonl tables are STREAMED here (they
-    /// are the merge's one table too big to buffer: the full corpus's
-    /// merged rows) instead of held in the files map; their sha256 is
-    /// computed while streaming and recorded in the manifest either way.
-    /// None — the tests' path — buffers them in RAM as every other table.
+    /// exp161, generalized by exp162: when set (a build's `--out` dir),
+    /// EVERY table the finish produces is STREAMED into it as its rows
+    /// finish, recorded by sha256 in the manifest's `tables`, and never
+    /// held whole — only one table's bytes are alive at a time. None — the
+    /// tests' path — buffers every table in RAM for the caller to write.
     pub staging: Option<std::path::PathBuf>,
 }
 
-/// The index directory's files and its id.
+/// The index directory's files and its id. `written` names the tables the
+/// finish already STREAMED into the staging dir (name → sha256): they are
+/// on disk, `write_index` must not write them again; the staging-less
+/// finish (the tests) leaves it empty and holds every table in `files`.
 pub struct IndexFiles {
     pub files: BTreeMap<String, Vec<u8>>,
+    pub written: BTreeMap<String, String>,
     pub id: String,
 }
 
@@ -156,13 +160,119 @@ fn is_helper_source(owner: &str, stop: &serde_json::Value) -> bool {
     stop_list(stop, "helperSources").iter().any(|p| p == owner)
 }
 
-fn jsonl<T: Serialize>(rows: &[T]) -> Vec<u8> {
-    let mut out = Vec::new();
-    for r in rows {
-        out.extend(serde_json::to_vec(r).unwrap_or_default());
-        out.push(b'\n');
+/// Where the finish's tables go as it produces them: buffered into the
+/// files map (staging unset — the tests' path, every table held), or
+/// written into the staging dir and recorded by sha (staging set — a
+/// build's out dir; only one table's bytes are ever alive at once).
+enum TableSink<'a> {
+    Buffer(&'a mut BTreeMap<String, Vec<u8>>),
+    Stream(&'a std::path::Path, &'a mut BTreeMap<String, String>),
+}
+
+/// One streamed table's bytes: hashed as they pass, and either buffered or
+/// written through a BufWriter to the staging dir's file.
+struct JsonlStream {
+    hasher: Sha256,
+    out: StreamOut,
+}
+
+enum StreamOut {
+    Buffer(Vec<u8>),
+    File(std::io::BufWriter<std::fs::File>),
+}
+
+impl JsonlStream {
+    fn take(&mut self, bytes: &[u8]) -> Result<(), String> {
+        self.hasher.update(bytes);
+        match &mut self.out {
+            StreamOut::Buffer(b) => {
+                b.extend_from_slice(bytes);
+                Ok(())
+            }
+            StreamOut::File(f) => {
+                std::io::Write::write_all(f, bytes).map_err(|e| format!("write the table: {e}"))
+            }
+        }
     }
-    out
+
+    /// One row: serde's writer path — the bytes [`jsonl`] would build.
+    fn row<T: Serialize>(&mut self, r: &T) -> Result<(), String> {
+        let mut line = Vec::new();
+        serde_json::to_writer(&mut line, r).map_err(|e| e.to_string())?;
+        line.push(b'\n');
+        self.take(&line)
+    }
+
+    /// Flush; the table's sha256 and, buffered only, its bytes.
+    fn done(self) -> Result<(String, Option<Vec<u8>>), String> {
+        match self.out {
+            StreamOut::Buffer(b) => Ok((hex_digest(self.hasher), Some(b))),
+            StreamOut::File(mut f) => {
+                std::io::Write::flush(&mut f).map_err(|e| format!("flush the table: {e}"))?;
+                Ok((hex_digest(self.hasher), None))
+            }
+        }
+    }
+}
+
+impl TableSink<'_> {
+    /// A WHOLE table's bytes (the bin tables, versions.json): buffered, or
+    /// written out and recorded by sha.
+    fn whole(&mut self, name: &str, bytes: Vec<u8>) -> Result<(), String> {
+        match self {
+            TableSink::Buffer(files) => {
+                files.insert(name.to_string(), bytes);
+                Ok(())
+            }
+            TableSink::Stream(dir, written) => {
+                let sha = hex_sha256(&bytes);
+                std::fs::write(dir.join(name), &bytes).map_err(|e| format!("write {name}: {e}"))?;
+                written.insert(name.to_string(), sha);
+                Ok(())
+            }
+        }
+    }
+
+    /// A streamed table opened for its rows: the sink's mode picks where
+    /// the bytes land.
+    fn stream(&mut self, name: &str) -> Result<JsonlStream, String> {
+        let out = match self {
+            TableSink::Buffer(_) => StreamOut::Buffer(Vec::new()),
+            TableSink::Stream(dir, _) => StreamOut::File(std::io::BufWriter::new(
+                std::fs::File::create(dir.join(name)).map_err(|e| format!("create {name}: {e}"))?,
+            )),
+        };
+        Ok(JsonlStream {
+            hasher: Sha256::new(),
+            out,
+        })
+    }
+
+    /// A jsonl table from its rows, recorded whole once they are through.
+    fn jsonl<T: Serialize>(
+        &mut self,
+        name: &str,
+        rows: impl Iterator<Item = T>,
+    ) -> Result<(), String> {
+        let mut s = self.stream(name)?;
+        for r in rows {
+            s.row(&r)?;
+        }
+        self.record(name, s)
+    }
+
+    fn record(&mut self, name: &str, s: JsonlStream) -> Result<(), String> {
+        let (sha, bytes) = s.done()?;
+        match self {
+            TableSink::Buffer(files) => {
+                files.insert(name.to_string(), bytes.expect("a buffered stream's bytes"));
+            }
+            TableSink::Stream(_, written) => {
+                written.insert(name.to_string(), sha);
+            }
+        }
+        Ok(())
+    }
 }
 
 fn pretty<T: Serialize>(v: &T) -> Vec<u8> {
@@ -766,14 +876,6 @@ pub struct Segment {
     helpers: Vec<HelperRow>,
 }
 
-/// The rows `get` selects from every segment, in segment (range) order.
-fn concat<'a, T: Clone + 'a>(
-    segments: &'a [Segment],
-    get: impl Fn(&'a Segment) -> Option<&'a Vec<T>>,
-) -> Vec<T> {
-    segments.iter().filter_map(get).flatten().cloned().collect()
-}
-
 /// The index's files from the workers' segments (exp162). The segments'
 /// rows concatenate in range order — each segment's rows are sorted and
 /// the ranges are order-preserving ([`key_prefix`]), so the concatenation
@@ -781,14 +883,6 @@ fn concat<'a, T: Clone + 'a>(
 /// interning stays here, on the concatenated rows: the edge tables'
 /// shared callee lists and the names' strings are interned over the WHOLE
 /// index once, whatever partitioned the rows.
-/// How one slice kind's names table reaches the caller: staged into the
-/// index dir with its sha recorded (the full corpus), or buffered in
-/// memory (the tests and small runs).
-enum NamesEmit {
-    Staged(String),
-    Buffered(Vec<u8>),
-}
-
 /// One segment's distinct name ids, its LOCAL string order.
 fn distinct_local_names(seg: &Segment) -> Vec<u32> {
     let mut ids: Vec<u32> = Vec::new();
@@ -840,16 +934,22 @@ fn merge_distinct_names(segments: &[Segment]) -> NameInterner {
     interner
 }
 
-/// One slice kind's per-segment unit-row lookup: the segment's rows are a
-/// contiguous run of the concatenated table, so its group keys resolve to
-/// the global row ids through its own interner.
+/// One slice kind's per-segment unit-row lookup: each segment's rows are a
+/// contiguous run of the kind's concatenated `rows` (the segments appended
+/// in range order; `counts` are the runs' lengths, in segment order), so
+/// its group keys resolve to the global row ids through its own interner.
 type RowIdOf = HashMap<(u64, u32, u32), u32>;
 
-fn unit_row_id_ofs(segments: &[Segment], kind: &str, ids: &[u32]) -> Result<Vec<RowIdOf>, String> {
+fn unit_row_id_ofs(
+    segments: &[Segment],
+    rows: &[UnitRow],
+    counts: &[usize],
+    ids: &[u32],
+) -> Result<Vec<RowIdOf>, String> {
     let mut id_ofs: Vec<RowIdOf> = Vec::with_capacity(segments.len());
     let mut off = 0usize;
-    for seg in segments {
-        let rows = seg.units.get(kind).map_or(&[][..], |r| r.as_slice());
+    for (seg, &n) in segments.iter().zip(counts) {
+        let rows = &rows[off..off + n];
         let mut id_of: RowIdOf = HashMap::with_capacity(rows.len());
         for (j, r) in rows.iter().enumerate() {
             let key = unit_key(&r.hash).ok_or_else(|| {
@@ -865,7 +965,7 @@ fn unit_row_id_ofs(segments: &[Segment], kind: &str, ids: &[u32]) -> Result<Vec<
                 .ok_or_else(|| format!("unit row file {r:?}: the merge never interned it"))?;
             id_of.insert((key, owner, file), ids[off + j]);
         }
-        off += rows.len();
+        off += n;
         id_ofs.push(id_of);
     }
     Ok(id_ofs)
@@ -873,43 +973,15 @@ fn unit_row_id_ofs(segments: &[Segment], kind: &str, ids: &[u32]) -> Result<Vec<
 
 /// One slice kind's names rows: every name id resolved into the GLOBAL
 /// interner by string, the segments appended in range order to ONE stream
-/// (the staging dir's jsonl when `meta.staging` is set, else a buffer) —
-/// the serial merge's exact byte sequence.
+/// (`out`) — the serial merge's exact byte sequence.
 fn stream_names_rows(
-    meta: &MergeMeta,
     segments: &[Segment],
     kind: &str,
     indexed: &BTreeMap<String, Vec<String>>,
     id_ofs: &[RowIdOf],
     interner: &NameInterner,
-) -> Result<(Vec<NameRowCompact>, NamesEmit), String> {
-    let mut buffer: Vec<u8> = Vec::new();
-    let mut hasher = Sha256::new();
-    let mut file = match &meta.staging {
-        Some(dir) => {
-            std::fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
-            Some(std::io::BufWriter::new(
-                std::fs::File::create(
-                    dir.join(humanify_core::libindex::table::names_rows_file(kind)),
-                )
-                .map_err(|e| format!("create the names jsonl: {e}"))?,
-            ))
-        }
-        None => None,
-    };
-    // the sink outlives the segment loop: the segments append to the SAME
-    // stream in range order — the serial merge's exact byte sequence
-    let mut sink = |bytes: &[u8]| -> Result<(), String> {
-        hasher.update(bytes);
-        match &mut file {
-            Some(f) => std::io::Write::write_all(f, bytes)
-                .map_err(|e| format!("write the names jsonl: {e}")),
-            None => {
-                buffer.extend_from_slice(bytes);
-                Ok(())
-            }
-        }
-    };
+    out: &mut JsonlStream,
+) -> Result<Vec<NameRowCompact>, String> {
     let mut compact: Vec<NameRowCompact> = Vec::new();
     for (i, seg) in segments.iter().enumerate() {
         let Some(groups) = seg.names_groups.get(kind) else {
@@ -931,118 +1003,19 @@ fn stream_names_rows(
                     )
                 })
             },
-            &mut sink,
+            &mut |bytes| out.take(bytes),
         )?);
     }
-    // the sink's borrows end at its last use (NLL)
-    match file {
-        Some(mut f) => {
-            std::io::Write::flush(&mut f).map_err(|e| format!("flush the names jsonl: {e}"))?;
-            Ok((compact, NamesEmit::Staged(hex_digest(hasher))))
-        }
-        None => Ok((compact, NamesEmit::Buffered(buffer))),
-    }
+    Ok(compact)
 }
 
-pub fn finish_segments(meta: MergeMeta, segments: Vec<Segment>) -> Result<IndexFiles, String> {
+pub fn finish_segments(meta: MergeMeta, mut segments: Vec<Segment>) -> Result<IndexFiles, String> {
     let first = segments.first();
     let indexed = first.map_or(BTreeMap::new(), |s| s.indexed.clone());
     let shard_keys = first.map_or(BTreeMap::new(), |s| s.shard_keys.clone());
     let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-    files.insert("versions.json".into(), pretty(&indexed));
-    let mut units: BTreeMap<String, Vec<UnitRow>> = BTreeMap::new();
-    let mut edges: BTreeMap<String, Vec<EdgeRow>> = BTreeMap::new();
-    let mut kinds: Vec<String> = segments
-        .iter()
-        .flat_map(|s| s.units.keys().cloned())
-        .collect();
-    kinds.sort();
-    kinds.dedup();
-    for kind in &kinds {
-        files.insert(
-            format!("modules.{kind}.jsonl"),
-            jsonl(&concat(&segments, |s| s.modules.get(kind))),
-        );
-        let rows: Vec<UnitRow> = concat(&segments, |s| s.units.get(kind));
-        if !rows.is_empty() {
-            files.insert(format!("units.{kind}.jsonl"), jsonl(&rows));
-            units.insert(kind.clone(), rows);
-            let edge_rows: Vec<EdgeRow> = concat(&segments, |s| s.edges.get(kind));
-            files.insert(
-                humanify_core::libindex::table::edge_rows_file(kind),
-                jsonl(&edge_rows),
-            );
-            edges.insert(kind.clone(), edge_rows);
-        }
-    }
-    // The names tables (exp159, exp161; exp162 carries them per segment):
-    // the DISTINCT names first — the segments' own interners k-way-merged
-    // by string, the strings file's ids its positions, the serial merge's
-    // exact assignment — then each segment's rows in range order, every
-    // name id resolved by string into the global interner, the jsonl
-    // streamed to `meta.staging` when it is set (the one table too big to
-    // buffer on the full corpus), the bin encoded from the interned
-    // compact rows.
-    let interner = merge_distinct_names(&segments);
-    let mut names: BTreeMap<String, Vec<NameRowCompact>> = BTreeMap::new();
-    let mut staged: BTreeMap<String, String> = BTreeMap::new();
-    for kind in &kinds {
-        if segments
-            .iter()
-            .all(|s| s.names_groups.get(kind).is_none_or(|g| g.is_empty()))
-        {
-            continue;
-        }
-        let unit_rows = units
-            .get(kind)
-            .ok_or_else(|| format!("names rows for slice {kind}: the slice has no unit rows"))?;
-        let ids = humanify_core::libindex::table::unit_row_ids(unit_rows)?;
-        let id_ofs = unit_row_id_ofs(&segments, kind, &ids)?;
-        let (compact, emit) =
-            stream_names_rows(&meta, &segments, kind, &indexed, &id_ofs, &interner)?;
-        match emit {
-            NamesEmit::Staged(sha) => {
-                staged.insert(humanify_core::libindex::table::names_rows_file(kind), sha);
-            }
-            NamesEmit::Buffered(bytes) => {
-                files.insert(humanify_core::libindex::table::names_rows_file(kind), bytes);
-            }
-        }
-        names.insert(kind.clone(), compact);
-    }
-    files.extend(humanify_core::libindex::table::names_lookup_files(
-        &units, &names, &interner,
-    )?);
-    let literals: Vec<LiteralRow> = segments
-        .iter()
-        .flat_map(|s| s.literals.iter().cloned())
-        .collect();
-    files.extend(humanify_core::libindex::table::lookup_files(
-        &units,
-        Some(&edges),
-        &literals,
-    )?);
-    drop(units);
-    drop(edges);
-    let provenance: Vec<LiteralFileRow> = literals
-        .into_iter()
-        .map(|r| LiteralFileRow {
-            owner: r.owner,
-            file: r.file,
-            versions: r.versions,
-        })
-        .collect();
-    files.insert(LITERAL_FILES.into(), jsonl(&provenance));
-    let helpers: Vec<HelperRow> = segments
-        .iter()
-        .flat_map(|s| s.helpers.iter().cloned())
-        .collect();
-    if !helpers.is_empty() {
-        files.insert(
-            humanify_core::libindex::table::HELPERS_FILE.into(),
-            jsonl(&helpers),
-        );
-    }
+    let mut written: BTreeMap<String, String> = BTreeMap::new();
+    stream_tables(&meta, &mut segments, &indexed, &mut files, &mut written)?;
     let data: BTreeMap<String, &str> = [
         ("families.json".to_string(), FAMILIES_JSON),
         ("stoplists.json".to_string(), STOPLISTS_JSON),
@@ -1061,7 +1034,11 @@ pub fn finish_segments(meta: MergeMeta, segments: Vec<Segment>) -> Result<IndexF
         tables: files
             .iter()
             .map(|(name, bytes)| (name.clone(), hex_sha256(bytes)))
-            .chain(staged.iter().map(|(name, sha)| (name.clone(), sha.clone())))
+            .chain(
+                written
+                    .iter()
+                    .map(|(name, sha)| (name.clone(), sha.clone())),
+            )
             .collect(),
         data: data
             .iter()
@@ -1074,7 +1051,199 @@ pub fn finish_segments(meta: MergeMeta, segments: Vec<Segment>) -> Result<IndexF
     let manifest_bytes = pretty(&manifest);
     let id = hex_sha256(&manifest_bytes);
     files.insert("manifest.json".into(), manifest_bytes);
-    Ok(IndexFiles { files, id })
+    Ok(IndexFiles { files, written, id })
+}
+
+/// The finish's tables, produced into the sink as they come: with
+/// `meta.staging` set, every table is written to disk as its rows finish
+/// and recorded by sha (`written`) — only one table's bytes are alive at a
+/// time; without it, every table is buffered in `files` for the caller to
+/// write (the tests' path, today's shape). The row tables leave the
+/// segments as each use takes them (`remove`/`mem::take` — the concat's
+/// clone is gone) and the lookup tables are encoded one at a time through
+/// the same sink. Same tables, same bytes, either way.
+fn stream_tables(
+    meta: &MergeMeta,
+    segments: &mut [Segment],
+    indexed: &BTreeMap<String, Vec<String>>,
+    files: &mut BTreeMap<String, Vec<u8>>,
+    written: &mut BTreeMap<String, String>,
+) -> Result<(), String> {
+    let mut sink = match &meta.staging {
+        Some(dir) => {
+            std::fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+            TableSink::Stream(dir, written)
+        }
+        None => TableSink::Buffer(files),
+    };
+    sink.whole("versions.json", pretty(indexed))?;
+    let mut kinds: Vec<String> = segments
+        .iter()
+        .flat_map(|s| s.units.keys().cloned())
+        .collect();
+    kinds.sort();
+    kinds.dedup();
+    let (units, edges, unit_counts) = stream_row_tables(&mut sink, segments, &kinds)?;
+    stream_names_tables(&mut sink, segments, &kinds, indexed, &units, &unit_counts)?;
+    let literals: Vec<LiteralRow> = segments
+        .iter_mut()
+        .flat_map(|s| std::mem::take(&mut s.literals))
+        .collect();
+    {
+        let mut put = |name: String, bytes: Vec<u8>| sink.whole(&name, bytes);
+        humanify_core::libindex::table::lookup_files_into(
+            &units,
+            Some(&edges),
+            &literals,
+            &mut put,
+        )?;
+    }
+    drop(units);
+    drop(edges);
+    // the provenance rows are the literals' last use: consumed row by row
+    let mut s = sink.stream(LITERAL_FILES)?;
+    for r in literals {
+        s.row(&LiteralFileRow {
+            owner: r.owner,
+            file: r.file,
+            versions: r.versions,
+        })?;
+    }
+    sink.record(LITERAL_FILES, s)?;
+    let helpers: Vec<HelperRow> = segments
+        .iter_mut()
+        .flat_map(|s| std::mem::take(&mut s.helpers))
+        .collect();
+    if !helpers.is_empty() {
+        sink.jsonl(
+            humanify_core::libindex::table::HELPERS_FILE,
+            helpers.into_iter(),
+        )?;
+    }
+    Ok(())
+}
+
+/// The row tables (units, edges) and the modules jsonl, per kind, streamed
+/// through the sink as each kind's rows MOVE out of the segments. Returns
+/// the concatenated unit and edge rows (the bin tables' and the names
+/// phase's inputs) and, per kind, how many unit rows each segment held —
+/// captured as the rows move, the names phase's per-segment runs in the
+/// concatenated table. Edge rows of a kind with no unit rows are not
+/// carried (today's shape).
+type RowTables = (
+    BTreeMap<String, Vec<UnitRow>>,
+    BTreeMap<String, Vec<EdgeRow>>,
+    BTreeMap<String, Vec<usize>>,
+);
+
+fn stream_row_tables(
+    sink: &mut TableSink<'_>,
+    segments: &mut [Segment],
+    kinds: &[String],
+) -> Result<RowTables, String> {
+    let mut units: BTreeMap<String, Vec<UnitRow>> = BTreeMap::new();
+    let mut edges: BTreeMap<String, Vec<EdgeRow>> = BTreeMap::new();
+    let mut unit_counts: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    for kind in kinds {
+        // the modules table is provenance only: streamed straight out of
+        // the segments, row by row, never concatenated
+        let name = format!("modules.{kind}.jsonl");
+        let mut s = sink.stream(&name)?;
+        for seg in segments.iter_mut() {
+            for r in seg.modules.remove(kind).unwrap_or_default() {
+                s.row(&r)?;
+            }
+        }
+        sink.record(&name, s)?;
+        // the unit and edge rows MOVE out of the segments (each segment's
+        // run of rows is contiguous); nothing is cloned
+        let mut counts: Vec<usize> = Vec::with_capacity(segments.len());
+        let mut urows: Vec<UnitRow> = Vec::new();
+        for seg in segments.iter_mut() {
+            let n = seg.units.get_mut(kind).map_or(0, |v| v.len());
+            counts.push(n);
+            if n > 0 {
+                urows.append(seg.units.get_mut(kind).expect("length just read"));
+            }
+        }
+        let mut erows: Vec<EdgeRow> = Vec::new();
+        for seg in segments.iter_mut() {
+            if let Some(rows) = seg.edges.get_mut(kind) {
+                erows.append(rows);
+            }
+        }
+        if !urows.is_empty() {
+            let name = format!("units.{kind}.jsonl");
+            let mut s = sink.stream(&name)?;
+            for r in &urows {
+                s.row(r)?;
+            }
+            sink.record(&name, s)?;
+            let name = humanify_core::libindex::table::edge_rows_file(kind);
+            let mut s = sink.stream(&name)?;
+            for r in &erows {
+                s.row(r)?;
+            }
+            sink.record(&name, s)?;
+            units.insert(kind.clone(), urows);
+            edges.insert(kind.clone(), erows);
+            unit_counts.insert(kind.clone(), counts);
+        }
+    }
+    Ok((units, edges, unit_counts))
+}
+
+/// The names tables (exp159, exp161; exp162 carries them per segment):
+/// the DISTINCT names first — the segments' own interners k-way-merged by
+/// string, the strings file's ids its positions, the serial merge's exact
+/// assignment — then each segment's rows in range order, every name id
+/// resolved by string into the global interner, the jsonl streamed
+/// through the sink. A kind's groups drain as its rows go. The names bin
+/// tables (strings/symbols/...) stream through the sink too, one at a
+/// time, off the concatenated rows.
+fn stream_names_tables(
+    sink: &mut TableSink<'_>,
+    segments: &mut [Segment],
+    kinds: &[String],
+    indexed: &BTreeMap<String, Vec<String>>,
+    units: &BTreeMap<String, Vec<UnitRow>>,
+    unit_counts: &BTreeMap<String, Vec<usize>>,
+) -> Result<(), String> {
+    let interner = merge_distinct_names(segments);
+    let mut names: BTreeMap<String, Vec<NameRowCompact>> = BTreeMap::new();
+    for kind in kinds {
+        if segments
+            .iter()
+            .all(|s| s.names_groups.get(kind).is_none_or(|g| g.is_empty()))
+        {
+            continue;
+        }
+        let unit_rows = units
+            .get(kind)
+            .ok_or_else(|| format!("names rows for slice {kind}: the slice has no unit rows"))?;
+        let ids = humanify_core::libindex::table::unit_row_ids(unit_rows)?;
+        let id_ofs = unit_row_id_ofs(
+            segments,
+            unit_rows,
+            unit_counts.get(kind).map_or(&[][..], Vec::as_slice),
+            &ids,
+        )?;
+        let name = humanify_core::libindex::table::names_rows_file(kind);
+        let mut s = sink.stream(&name)?;
+        let compact = stream_names_rows(segments, kind, indexed, &id_ofs, &interner, &mut s)?;
+        sink.record(&name, s)?;
+        names.insert(kind.clone(), compact);
+        for seg in segments.iter_mut() {
+            seg.names_groups.remove(kind);
+        }
+    }
+    {
+        let mut put = |name: String, bytes: Vec<u8>| sink.whole(&name, bytes);
+        humanify_core::libindex::table::names_lookup_files_into(
+            units, &names, &interner, &mut put,
+        )?;
+    }
+    Ok(())
 }
 
 /// Merge every shard at once (sorted into label order first) — the
