@@ -1,0 +1,117 @@
+--- cc composition ---
+  ('factory', 'moved', 'clean'): 836
+  ('factory', 'moved', 'clean', 'cross-claim'): 355
+  ('factory', 'moved', 'clean', 'cross-claim_b'): 78121
+  ('factory', 'moved', 'clean', 'cross-claim_unlabelled'): 355
+  ('factory', 'moved', 'clean', 'cross-claim_unlabelled_b'): 78121
+  ('factory', 'moved', 'clean', 'held'): 3941
+  ('factory', 'moved', 'clean', 'held_b'): 2735494
+  ('factory', 'moved', 'clean', 'held_unlabelled'): 3941
+  ('factory', 'moved', 'clean', 'held_unlabelled_b'): 2735494
+  ('factory', 'moved', 'clean', 'no-family'): 6
+  ('factory', 'moved', 'clean', 'no-family_b'): 19132
+  ('factory', 'moved', 'clean', 'no-family_unlabelled'): 6
+  ('factory', 'moved', 'clean', 'no-family_unlabelled_b'): 19132
+  ('factory', 'moved', 'clean', 'sub-floor'): 6028
+  ('factory', 'moved', 'clean', 'sub-floor_b'): 206523
+  ('factory', 'moved', 'clean', 'sub-floor_unlabelled'): 6028
+  ('factory', 'moved', 'clean', 'sub-floor_unlabelled_b'): 206523
+  ('factory', 'moved', 'clean', 'unclaimed'): 130
+  ('factory', 'moved', 'clean', 'unclaimed_b'): 6960
+  ('factory', 'moved', 'clean', 'unclaimed_unlabelled'): 130
+  ('factory', 'moved', 'clean', 'unclaimed_unlabelled_b'): 6960
+  ('factory', 'moved', 'unclaimed'): 547
+  ('factory', 'moved', 'unclaimed', 'unclaimed'): 2481
+  ('factory', 'moved', 'unclaimed', 'unclaimed_b'): 994764
+  ('factory', 'moved', 'unclaimed', 'unclaimed_unlabelled'): 2481
+  ('factory', 'moved', 'unclaimed', 'unclaimed_unlabelled_b'): 994764
+  ('factory', 'stay', 'clean'): 64
+  ('factory', 'stay', 'contested'): 7
+  ('factory', 'stay', 'stay', 'cross-claim'): 177
+  ('factory', 'stay', 'stay', 'cross-claim_b'): 58830
+  ('factory', 'stay', 'stay', 'cross-claim_unlabelled'): 177
+  ('factory', 'stay', 'stay', 'cross-claim_unlabelled_b'): 58830
+  ('factory', 'stay', 'stay', 'held'): 214
+  ('factory', 'stay', 'stay', 'held_b'): 78803
+  ('factory', 'stay', 'stay', 'held_unlabelled'): 214
+  ('factory', 'stay', 'stay', 'held_unlabelled_b'): 78803
+  ('factory', 'stay', 'stay', 'sub-floor'): 437
+  ('factory', 'stay', 'stay', 'sub-floor_b'): 13555
+  ('factory', 'stay', 'stay', 'sub-floor_unlabelled'): 437
+  ('factory', 'stay', 'stay', 'sub-floor_unlabelled_b'): 13555
+  ('factory', 'stay', 'stay', 'unclaimed'): 915
+  ('factory', 'stay', 'stay', 'unclaimed_b'): 860551
+  ('factory', 'stay', 'stay', 'unclaimed_unlabelled'): 915
+  ('factory', 'stay', 'stay', 'unclaimed_unlabelled_b'): 860551
+  ('factory', 'stay', 'unclaimed'): 193
+  ('group', 'clean'): 1039
+  ('group', 'clean', 'cross-claim'): 251
+  ('group', 'clean', 'cross-claim_b'): 96861
+  ('group', 'clean', 'cross-claim_library'): 2
+  ('group', 'clean', 'cross-claim_library_b'): 13706
+  ('group', 'clean', 'cross-claim_unlabelled'): 249
+  ('group', 'clean', 'cross-claim_unlabelled_b'): 83155
+  ('group', 'clean', 'held'): 1439
+  ('group', 'clean', 'held_b'): 820023
+  ('group', 'clean', 'held_library'): 29
+  ('group', 'clean', 'held_library_b'): 81706
+  ('group', 'clean', 'held_unlabelled'): 1410
+  ('group', 'clean', 'held_unlabelled_b'): 738317
+  ('group', 'clean', 'no-family'): 5
+  ('group', 'clean', 'no-family_b'): 1575
+  ('group', 'clean', 'no-family_unlabelled'): 5
+  ('group', 'clean', 'no-family_unlabelled_b'): 1575
+  ('group', 'clean', 'sub-floor'): 5486
+  ('group', 'clean', 'sub-floor_b'): 67490
+  ('group', 'clean', 'sub-floor_library'): 14
+  ('group', 'clean', 'sub-floor_library_b'): 136
+  ('group', 'clean', 'sub-floor_unlabelled'): 5472
+  ('group', 'clean', 'sub-floor_unlabelled_b'): 67354
+  ('group', 'contested'): 43
+  ('group', 'contested', 'no-claim'): 654
+  ('group', 'contested', 'no-claim_b'): 42989
+  ('group', 'contested', 'no-claim_library'): 2
+  ('group', 'contested', 'no-claim_library_b'): 95
+  ('group', 'contested', 'no-claim_unlabelled'): 652
+  ('group', 'contested', 'no-claim_unlabelled_b'): 42894
+  ('group', 'partial'): 147
+  ('group', 'partial', 'cross-claim'): 48
+  ('group', 'partial', 'cross-claim_b'): 38221
+  ('group', 'partial', 'cross-claim_library'): 2
+  ('group', 'partial', 'cross-claim_library_b'): 16609
+  ('group', 'partial', 'cross-claim_unlabelled'): 46
+  ('group', 'partial', 'cross-claim_unlabelled_b'): 21612
+  ('group', 'partial', 'held'): 413
+  ('group', 'partial', 'held_b'): 164006
+  ('group', 'partial', 'held_library'): 3
+  ('group', 'partial', 'held_library_b'): 1459
+  ('group', 'partial', 'held_unlabelled'): 410
+  ('group', 'partial', 'held_unlabelled_b'): 162547
+  ('group', 'partial', 'no-family'): 166
+  ('group', 'partial', 'no-family_app'): 4
+  ('group', 'partial', 'no-family_app_b'): 1448
+  ('group', 'partial', 'no-family_b'): 70453
+  ('group', 'partial', 'no-family_library'): 2
+  ('group', 'partial', 'no-family_library_b'): 347
+  ('group', 'partial', 'no-family_unlabelled'): 160
+  ('group', 'partial', 'no-family_unlabelled_b'): 68658
+  ('group', 'partial', 'sub-floor'): 864
+  ('group', 'partial', 'sub-floor_b'): 18079
+  ('group', 'partial', 'sub-floor_unlabelled'): 864
+  ('group', 'partial', 'sub-floor_unlabelled_b'): 18079
+  ('group', 'unclaimed'): 3621
+--- cc trade ---
+  ('R-composition', 'family_library'): 81706
+  ('R-composition', 'family_unlabelled'): 3473811
+  ('R-composition', 'stranger_library'): 13842
+  ('R-composition', 'stranger_unlabelled'): 462820
+  ('R-eject', 'family_library'): 81706
+  ('R-eject', 'family_unlabelled'): 3473811
+  ('R-eject', 'stranger_library'): 13842
+  ('R-eject', 'stranger_unlabelled'): 1457584
+  ('R-eject-claim', 'family_library'): 81706
+  ('R-eject-claim', 'family_unlabelled'): 3473811
+  ('R-eject-claim', 'stranger_library'): 13842
+  ('R-eject-claim', 'stranger_unlabelled'): 1457584
+  ('R-fold-min', 'family_unlabelled'): 2735494
+  ('R-fold-min', 'stranger_unlabelled'): 310736
