@@ -963,7 +963,6 @@ fn exp162_config(
         merge_jobs,
         offline: true,
         policy: Default::default(),
-        refuse: Vec::new(),
         pinned: vec!["aa-exp162@1.0.0".into(), "aa-exp162@1.1.0".into()],
         merge_only: true,
         sponge_regions: SpongeRegions::Drop,
