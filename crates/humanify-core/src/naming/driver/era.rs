@@ -645,21 +645,25 @@ fn run_era<P: NameProvider>(
     // The exp164 measurement dump: the era's statement coordinates, the
     // freeze's bindings, the converted regions and Site A's rows —
     // diagnostics only (serialized by the CLI's `--diagnostics`).
-    let era_dump = (!opts.restorations.is_empty() || !library_layout.spans.is_empty()).then(|| {
-        crate::naming::restore::EraDump {
-            body_len: modules.map_or(0, |m| m.body.len()),
-            frozen,
-            regions: library_layout.regions.clone(),
-            sites: era_sites,
-            body_raw_spans: library_layout.era_raw.clone(),
-            moved_spans: library_layout.moved_spans.clone(),
-            conversion: library_layout.conversion,
-            factory_files: opts
-                .era_bridge
-                .map(|b| b.bridge.factories.clone())
-                .unwrap_or_default(),
-            body_spans,
-        }
+    let era_dump = (!opts.restorations.is_empty()
+        || !library_layout.spans.is_empty()
+        || opts.era_bridge.is_some())
+    .then(|| crate::naming::restore::EraDump {
+        body_len: modules.map_or(0, |m| m.body.len()),
+        frozen,
+        regions: library_layout.regions.clone(),
+        sites: era_sites,
+        body_raw_spans: library_layout.era_raw.clone(),
+        moved_spans: library_layout.moved_spans.clone(),
+        moved_files: library_layout.moved_files.clone(),
+        ordinal_regions: library_layout.ordinal_regions.clone(),
+        ordinal_moved_files: library_layout.ordinal_moved_files.clone(),
+        conversion: library_layout.conversion,
+        factory_files: opts
+            .era_bridge
+            .map(|b| b.bridge.factories.clone())
+            .unwrap_or_default(),
+        body_spans,
     });
     // The plumbing the pipeline names itself, before any prompt shows it
     // (and over whatever name the transfer carried).
@@ -1039,6 +1043,12 @@ fn plan_layout(
     let (regions, conversion) =
         crate::naming::module_names::convert_regions(opts.claimed_regions, &era_raw);
     let mut layout = crate::naming::module_names::plan_library_modules(source, &regions);
+    // The baseline the precision check compares against (diagnostics
+    // only): the retired ordinal conversion's plan over the same groups.
+    let ordinal_regions = bridge.bridge.ordinal_regions(opts.claimed_regions);
+    layout.ordinal_moved_files =
+        crate::naming::module_names::plan_library_modules(source, &ordinal_regions).moved_files;
+    layout.ordinal_regions = ordinal_regions;
     layout.spans = restored_binding_spans(semantic, &body_spans, &era_raw, bridge.bridge);
     layout.regions = regions;
     layout.conversion = Some(conversion);

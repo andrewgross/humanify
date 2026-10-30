@@ -1073,6 +1073,9 @@ impl RunReports<'_> {
                 "bodyRawSpans": dump.body_raw_spans,
                 "movedSpans": dump.moved_spans,
                 "factoryFiles": dump.factory_files,
+                "movedFiles": dump.moved_files,
+                "ordinalRegions": dump.ordinal_regions,
+                "ordinalMovedFiles": dump.ordinal_moved_files,
                 "conversion": dump.conversion,
             });
             with_placement.insert(

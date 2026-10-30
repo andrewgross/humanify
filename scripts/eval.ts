@@ -715,7 +715,7 @@ const VERBS: Verb[] = [
       const [mode, ...rest] = args;
       const dir = path.join(REPO, "experiments/166-restore-or-ask");
       if (mode === "check") {
-        return sh("python3", [
+        return sh(EXP096_PYTHON, [
           "-I",
           path.join(dir, "vendor_precision.py"),
           ...rest

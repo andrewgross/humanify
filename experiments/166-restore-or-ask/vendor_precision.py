@@ -2,33 +2,33 @@
 """exp166: vendor-placement precision — what names mode puts under vendor/,
 judged against source-map truth, whether or not it was claimed.
 
-Reads ONE run's diagnostics file (`--diagnostics`; the eraRestoration block
-carries exp166's exact raw-to-era bridge: every era statement's RAW bundle
-span, the freeze's moved spans, every vendored factory's raw span and file)
-and the placement trail (the split's file per era statement), then reports:
+Reads ONE names-mode run's diagnostics file (`--diagnostics`). Its
+eraRestoration block carries exp166's exact raw-to-era bridge (every era
+statement's RAW bundle span), the moved modules (path + era statement
+spans; the split pre-fills them, so no placement trail records them), the
+vendored factories (raw span + file), and — diagnostics only — the plan the
+RETIRED ordinal conversion would have produced from the same claimed groups.
+So one run judges two worlds over the identical era body:
 
-  (a) app bytes placed under vendor/            (the bar is 0)
+  exact    what this binary placed (the bridge's conversion)
+  ordinal  what main's logic placed (the `i - removed_before` conversion)
+
+and reports, per world:
+
+  (a) app bytes placed under vendor/                      (the bar is 0)
   (b) library bytes under the WRONG package's vendor folder
-  (c) the old ordinal conversion's damage: converted region statements whose
-      era statement holds a different raw statement, and era statements the
-      freeze moved whose raw statement no claim of the moving package covers
+  (c) the conversion's damage: converted region statements whose era
+      statement holds a different raw statement; moved statements whose raw
+      statement no claim of the moving package covers (frozen wholesale in
+      main's logic)
 
-Two vendor populations, reported apart:
-  era      era statements the split placed under vendor/ (names mode's
-           planner moves, and on a hop the placement's inheritance of them)
-  factory  vendored CommonJS factories (the unpack; present in every mode)
-
-A run without the bridge (main's logic) is judged with `--raw-from <diag>`:
-the bridge spans of a bridged run of the SAME input. The era body and the
-bridge do not depend on the placement decisions (the unpack's runtime text
-and the formatter's output are the same), and the check REFUSES unless the
-two runs' era statement spans are identical.
+Populations: `era` (moved modules + any other era statement the split placed
+under vendor/) and `factory` (vendored CommonJS factories — the unpack, the
+same in both worlds and in every mode).
 
 usage:
-  python3 -I vendor_precision.py <diag.json> --truth bun-dev:<entry-id> [--raw-from <diag>]
-  python3 -I vendor_precision.py <diag.json> --truth cc216 [--raw-from <diag>]
-  python3 -I vendor_precision.py <diag.json> --truth none      # (c) only
-Prints one JSON object.
+  python3 -I vendor_precision.py <diag.json> --truth bun-dev:<entry-id>|cc216|none
+Prints one JSON object. (`npm run eval -- vendor-precision check …`)
 """
 import bisect
 import collections
@@ -48,8 +48,8 @@ NOT_LIBRARY = {"<app>", "<self>", "<unmapped>", "<foreign>"}
 # ---------------------------------------------------------------- truth ---
 def truth_bundev(entry_id):
     """Per raw span: {label: bytes} from the frozen segment table (lib096).
-    App bytes are spelled `<app>`; `<self>` is a copy inside the app's own
-    package; `<unmapped>` the map never covered."""
+    App bytes are spelled `<app>` (NOT `app` — exp165's census lumped them
+    into "other"); `<self>` is a copy inside the app's own package."""
     import lib096
 
     lib096.use("bun-dev")
@@ -87,8 +87,8 @@ def truth_cc():
             label = row["label"]
             if label == "app":
                 label = "<app>"
-            elif label.startswith("library:"):
-                label = row.get("pkg") or label.split(":", 1)[1]
+            elif label.startswith("library"):
+                label = row.get("pkg") or label.split(":", 1)[-1]
             else:
                 label = "<" + label + ">"
             units.append((row["start"], row["end"], label))
@@ -122,47 +122,33 @@ def vendor_package(path):
     return parts[0]
 
 
-def sanitized(pkg):
-    """The planner's path spelling of a package (sanitize_fs_path keeps
-    scoped directories); compared loosely — case and separators."""
+def loose(pkg):
     return pkg.replace("\\", "/").strip("/").lower() if pkg else pkg
 
 
 class Check:
-    def __init__(self, diag, truth_at, families, raw_from=None):
+    def __init__(self, diag, truth_at, families):
         er = diag.get("eraRestoration") or {}
         self.er = er
         self.trails = {t["index"]: t for t in diag["placementTrails"]["trails"]}
         self.body_spans = [tuple(s) for s in er.get("bodySpans", [])]
-        bridge = er
-        if raw_from is not None:
-            bridge = raw_from.get("eraRestoration") or {}
-            theirs = [tuple(s) for s in bridge.get("bodySpans", [])]
-            if theirs != self.body_spans:
-                raise SystemExit("--raw-from: the two runs' era statement spans differ")
-        self.raw = [tuple(r) if r else None for r in bridge.get("bodyRawSpans", [])]
-        self.factories = [(tuple(s), f) for s, f in bridge.get("factoryFiles", [])]
-        if "movedSpans" in er:
-            self.moved = {tuple(s) for s in er["movedSpans"]}
-        else:
-            # main's logic froze every moved statement: the freeze's
-            # bindings name them
-            self.moved = {self.body_spans[st] for st, _, _ in er.get("frozen", [])}
+        self.index_of = {s: i for i, s in enumerate(self.body_spans)}
+        self.raw = [tuple(r) if r else None for r in er.get("bodyRawSpans", [])]
+        self.factories = [(tuple(s), f) for s, f in er.get("factoryFiles", [])]
         self.truth_at = truth_at
         self.fam = families
 
     def same(self, a, b):
-        if self.fam is not None:
-            return self.fam.same(a, b) or sanitized(a) == sanitized(b)
-        return sanitized(a) == sanitized(b)
+        if loose(a) == loose(b):
+            return True
+        return self.fam is not None and self.fam.same(a, b)
 
     def judge(self, population, path, span, out):
         """One vendor-placed raw span: its truth bytes by verdict."""
         pkg = vendor_package(path)
-        if pkg is False:
+        if pkg is False or span is None:
             return
-        n = span[1] - span[0]
-        out[population + ":bytes"] += n
+        out[population + ":bytes"] += span[1] - span[0]
         out[population + ":files"].add(path)
         if self.truth_at is None:
             return
@@ -184,64 +170,76 @@ class Check:
                 out[population + ":wrongFiles"].add(path)
         out[population + ":labelled"] += sum(votes.values())
 
-    def placement(self):
+    def moved_statements(self, files):
+        """{era index: path} for one world's moved modules."""
+        out = {}
+        for path, spans in files:
+            for span in spans:
+                i = self.index_of.get(tuple(span))
+                if i is not None:
+                    out[i] = path
+        return out
+
+    def world(self, regions, moved_files):
         out = collections.defaultdict(int)
-        for k in ("era", "factory"):
-            for s in ("files", "appFiles", "wrongFiles"):
-                out[f"{k}:{s}"] = set()
-        if not self.raw:
-            out["noBridge"] = 1
-            return out
+        for s in ("files", "appFiles", "wrongFiles"):
+            out["era:" + s] = set()
+        moved = self.moved_statements(moved_files)
+        both = set(self.moved_statements(self.er.get("movedFiles", [])))
+        both |= set(self.moved_statements(self.er.get("ordinalMovedFiles", [])))
         seen = set()
-        for i, raw in enumerate(self.raw):
-            path = self.trails.get(i, {}).get("file")
-            if raw is None or (path, raw) in seen:
+        # (a)/(b): the moved modules, then any other statement the split
+        # put under vendor/ (the same in both worlds)
+        placed = list(moved.items()) + [
+            (i, t.get("file")) for i, t in self.trails.items() if i not in both
+        ]
+        for i, path in placed:
+            raw = self.raw[i] if i < len(self.raw) else None
+            if (path, raw) in seen:
                 continue  # a split statement shares its raw statement
             seen.add((path, raw))
             self.judge("era", path, raw, out)
-        for span, path in self.factories:
-            self.judge("factory", path, span, out)
-        return out
-
-    def conversion(self):
-        """(c): the ordinal conversion against the exact bridge."""
-        out = collections.Counter()
+        # (c)
         claim_of = {}
-        for region in self.er.get("regions", []):
+        for region in regions:
+            out["regions"] += 1
             for st, raw, claim in zip(region["statements"], region["rawSpans"], region["claims"]):
                 raw = tuple(raw)
                 claim_of[raw] = claim
                 out["regionStatements"] += 1
                 if st < len(self.raw) and self.raw[st] == raw:
                     out["regionStatementsContentCorrect"] += 1
-            out["regions"] += 1
-        if not self.raw:
-            return out
-        for i, span in enumerate(self.body_spans):
-            if span not in self.moved:
-                continue
-            path = self.trails.get(i, {}).get("file")
-            pkg = vendor_package(path) or None
-            raw = self.raw[i]
+        for i, path in moved.items():
+            raw = self.raw[i] if i < len(self.raw) else None
             claim = claim_of.get(raw)
             out["movedStatements"] += 1
+            out["movedBytes"] += (raw[1] - raw[0]) if raw else 0
+            pkg = vendor_package(path) or None
             if claim is None or pkg is None or not self.same(pkg, claim):
                 out["movedStatementsNotClaimedByMover"] += 1
                 out["movedBytesNotClaimedByMover"] += (raw[1] - raw[0]) if raw else 0
+        out["movedModules"] = len(moved_files)
+        return out
+
+    def factory(self):
+        out = collections.defaultdict(int)
+        for s in ("files", "appFiles", "wrongFiles"):
+            out["factory:" + s] = set()
+        for span, path in self.factories:
+            self.judge("factory", path, span, out)
         return out
 
 
 def jsonable(d):
-    return {k: (len(v) if isinstance(v, set) else v) for k, v in sorted(d.items())}
+    return {k: (sorted(v) if isinstance(v, set) else v) for k, v in sorted(d.items())}
 
 
-def run(diag_path, truth_spec, raw_from_path=None):
+def run(diag_path, truth_spec):
     with open(diag_path) as fh:
         diag = json.load(fh)
-    raw_from = None
-    if raw_from_path:
-        with open(raw_from_path) as fh:
-            raw_from = json.load(fh)
+    er = diag.get("eraRestoration") or {}
+    if "bodyRawSpans" not in er:
+        return {"noBridge": 1}
     families = None
     truth_at = None
     if truth_spec.startswith("bun-dev:"):
@@ -252,25 +250,22 @@ def run(diag_path, truth_spec, raw_from_path=None):
         from families_lib import Families
 
         families = Families()
-    check = Check(diag, truth_at, families, raw_from)
-    placement = check.placement()
-    lists = {
-        "appFiles": sorted(placement["era:appFiles"] | placement["factory:appFiles"]),
-        "wrongFiles": sorted(placement["era:wrongFiles"] | placement["factory:wrongFiles"]),
-    }
+    check = Check(diag, truth_at, families)
     return {
-        "placement": jsonable(placement),
-        "conversion": dict(check.conversion()),
-        **lists,
+        "exact": jsonable(check.world(er.get("regions", []), er.get("movedFiles", []))),
+        "ordinal": jsonable(
+            check.world(er.get("ordinalRegions", []), er.get("ordinalMovedFiles", []))
+        ),
+        "factory": jsonable(check.factory()),
+        "conversion": er.get("conversion"),
     }
 
 
 def main():
-    if len(sys.argv) < 3 or sys.argv[2] != "--truth":
+    if len(sys.argv) < 4 or sys.argv[2] != "--truth":
         print(__doc__)
         sys.exit(2)
-    raw_from = sys.argv[sys.argv.index("--raw-from") + 1] if "--raw-from" in sys.argv else None
-    print(json.dumps(run(sys.argv[1], sys.argv[3], raw_from), indent=1, sort_keys=True))
+    print(json.dumps(run(sys.argv[1], sys.argv[3]), indent=1, sort_keys=True))
 
 
 if __name__ == "__main__":

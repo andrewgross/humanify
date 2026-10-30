@@ -789,6 +789,21 @@ fn a_library_region_after_a_split_statement_moves_its_own_module_not_the_app_one
         })
         .collect();
     assert_eq!(moved_raw, vec![raw[5], raw[6]]);
+    // The diagnostics' baseline: the retired ordinal arithmetic, run over
+    // the same groups, moves the APP module (the trace's bug, reproduced).
+    let ordinal = &out.library_layout.ordinal_moved_files;
+    assert_eq!(ordinal.len(), 1, "{ordinal:?}");
+    let app_spans: Vec<(u32, u32)> = era_spans(&fresh)
+        .into_iter()
+        .zip(&out.library_layout.era_raw)
+        .filter(|(_, r)| **r == Some(raw[3]) || **r == Some(raw[4]))
+        .map(|(s, _)| s)
+        .collect();
+    assert!(ordinal[0].0.starts_with("vendor/jose/"), "{ordinal:?}");
+    assert_eq!(
+        ordinal[0].1, app_spans,
+        "the ordinal plan moved the app module"
+    );
 }
 
 fn named_by_module_step(out: &NamingOutcome, wrapper: &str) -> bool {

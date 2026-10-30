@@ -133,6 +133,36 @@ pub struct EraBridge {
 }
 
 impl EraBridge {
+    /// DIAGNOSTICS ONLY (exp166's baseline): the claimed groups as the
+    /// retired ordinal arithmetic converted them — raw container ordinal
+    /// minus every spliced-out statement before it (a statement the edits
+    /// emptied), blind to the formatter's splits.
+    pub fn ordinal_regions(&self, groups: &[ClaimedRegion]) -> Vec<ClaimedRegion> {
+        let mut ordinal_of: HashMap<(u32, u32), usize> = HashMap::new();
+        let mut removed_before = 0;
+        for (i, &(raw, (start, end))) in self.container.iter().enumerate() {
+            ordinal_of.insert(raw, i - removed_before);
+            if start == end {
+                removed_before += 1;
+            }
+        }
+        groups
+            .iter()
+            .filter_map(|group| {
+                let statements = group
+                    .raw_spans
+                    .iter()
+                    .map(|raw| ordinal_of.get(raw).copied())
+                    .collect::<Option<Vec<usize>>>()?;
+                Some(ClaimedRegion {
+                    statements,
+                    claims: group.claims.clone(),
+                    raw_spans: group.raw_spans.clone(),
+                })
+            })
+            .collect()
+    }
+
     /// The names Site B restored inside raw span `(start, end)`.
     pub fn restored_in(&self, (start, end): (u32, u32)) -> impl Iterator<Item = &str> {
         let at = self.restored.partition_point(|(o, _)| *o < start);
@@ -286,6 +316,15 @@ pub struct LibraryLayout {
     pub conversion: Option<RegionConversion>,
     /// Each era statement's raw bundle span (the bridge; empty without).
     pub era_raw: Vec<Option<(u32, u32)>>,
+    /// Per moved module: its vendor path and statement spans (era
+    /// coordinates) — the split pre-fills these paths, so no placement
+    /// trail records them.
+    pub moved_files: Vec<(String, Vec<(u32, u32)>)>,
+    /// DIAGNOSTICS ONLY (exp166's baseline): what the retired ordinal
+    /// conversion would have handed the planner from the same groups, and
+    /// what the planner would then have moved. No decision reads them.
+    pub ordinal_regions: Vec<ClaimedRegion>,
+    pub ordinal_moved_files: Vec<(String, Vec<(u32, u32)>)>,
 }
 
 /// The names-mode placement plan over the claimed regions (the planner
@@ -354,12 +393,15 @@ pub fn plan_library_modules(source: &ModuleSource<'_>, regions: &[ClaimedRegion]
     for ((module, _), placement) in joined.iter().zip(&planned.regions) {
         if let crate::place::library_layout::Placement::Move { path } = placement {
             layout.moved.push((*module, path.clone()));
+            let mut file = Vec::new();
             for &statement in &extract.modules[*module].statements {
                 if let Some(span) = spans.get(statement) {
                     layout.spans.push(*span);
                     layout.moved_spans.push(*span);
+                    file.push(*span);
                 }
             }
+            layout.moved_files.push((path.clone(), file));
         }
     }
     layout

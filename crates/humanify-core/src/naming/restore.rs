@@ -166,6 +166,12 @@ pub struct EraDump {
     pub body_raw_spans: Vec<Option<(u32, u32)>>,
     pub moved_spans: Vec<(u32, u32)>,
     pub factory_files: Vec<((u32, u32), String)>,
+    /// Per moved module: vendor path and era statement spans; and the
+    /// retired ordinal conversion's regions and moves (diagnostics only,
+    /// the precision check's baseline).
+    pub moved_files: Vec<(String, Vec<(u32, u32)>)>,
+    pub ordinal_regions: Vec<ClaimedRegion>,
+    pub ordinal_moved_files: Vec<(String, Vec<(u32, u32)>)>,
     /// What the exact conversion did (None without a bridge).
     pub conversion: Option<crate::naming::module_names::RegionConversion>,
 }
