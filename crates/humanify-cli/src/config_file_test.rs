@@ -242,8 +242,12 @@ fn every_key_without_a_flag_was_a_flag_that_moved_or_is_new() {
     // then; docs/tuning-values.md).
     // New in exp154, never flags: the run-time index build switch and its
     // package cap (docs/design/library-names-plan.md step 3).
+    // New in exp163, never flags: the ordered test mode (the config sweep's
+    // rule holds — a schedule for tests is a setting, not an operational
+    // flag; docs/concurrency.md rule 9, docs/audits/ordering-2026-10.md §4).
     let new_keys = |d: &str| {
-        d == "library.index_store"
+        d == "run.order"
+            || d == "library.index_store"
             || d == "naming.code_window_lines"
             || d.starts_with("library.lookup.")
             || d.starts_with("library.discovery.")

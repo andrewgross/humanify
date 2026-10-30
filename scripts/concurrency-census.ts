@@ -54,6 +54,7 @@ const ALLOWLIST_REL = "scripts/concurrency-allowlist.json";
  * must name one of these; the value is its doc section. */
 const PATTERNS: Readonly<Record<string, string>> = {
   "par-seam": "cpu-parallelism",
+  "order-mode": "the-ordered-mode-rule-9",
   "llm-runtime": "async-io",
   "rate-limiter": "async-io",
   "single-flight": "shared-state",

@@ -538,7 +538,10 @@ writes**. A cold run is invalid (CLAUDE.md).
   order and the rename stage applies renames in that order; a rule list that
   emits matches in a different order changes names even with the same
   matches. Step 4 must preserve emission order, and the neutrality run is
-  what proves it.
+  what proves it. (exp163's ordering audit re-classified this: the order is
+  SHIPPED BEHAVIOUR — changing it is an eval-gated matching change, never a
+  refactor that neutrality could clear, and not a parity requirement; the
+  TS `MatchMap` it was inherited from is gone.)
 - **Version gates.** Merging four stamps into one registry must not change
   any stamp's value: index shards and the prior-tree ledger are keyed by
   them. A stamp change invalidates every index (and should — the loader

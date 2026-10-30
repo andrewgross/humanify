@@ -64,8 +64,11 @@ impl Levers {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FastTier {
     /// The turn-driver path: no pipelining at all. Byte-identical to
-    /// [`FastTier::Exact`] (proven, e2e legacy goldens) and reachable
-    /// programmatically only — the CLI offers Exact as `--sequential`.
+    /// [`FastTier::Exact`] (proven, e2e legacy goldens). Reached through
+    /// the ordered test mode (`run.order = "ordered"` in the config file,
+    /// the ordering audit's rule 9) — the CLI offers Exact
+    /// (`naming.schedule = "sequential"`) as the conservative schedule;
+    /// a default run is Relaxed.
     #[default]
     Off,
     /// Byte-identical to `Off`, faster: `--sequential`.
@@ -79,6 +82,12 @@ impl FastTier {
     /// Any fast tier: the byte-identical levers are on.
     pub fn on(self) -> bool {
         self != FastTier::Off
+    }
+
+    /// The turn-driver tier — the ordered test mode's waves schedule
+    /// (`run.order = "ordered"`). Nothing pipelined runs under it.
+    pub fn is_turn_driver(self) -> bool {
+        matches!(self, FastTier::Off)
     }
 
     /// Whether a relaxed lever is on.

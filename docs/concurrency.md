@@ -6,32 +6,45 @@ and how that is checked. Written 2026-10-12 from the concurrency audit
 28 sites, findings W1–W2, R1–R6, O1–O20) and the blog post it was based on,
 [_"I am sorry, but you still have to think"_](https://itsallaboutthebit.com/i-am-sorry-but-you-still-have-to-think/).
 
+**Amended 2026-10-30 by the ordering audit**
+([`docs/audits/ordering-2026-10.md`](./audits/ordering-2026-10.md), exp163):
+rules 1 and 6 were originally justified by TS-parity comparability; the TS
+pipeline was deleted at the cutover, so they are now justified by the live
+gates that enforce them (neutrality, e2e's run-twice, the warm self-hop).
+The rule that changed in substance is NEW rule 9: **ordered operation is a
+TEST-MODE property, never a production one** — regular runs work through
+items as fast as the pool and the semaphore allow, and the guarantee they
+carry is canonical OUTPUT, not ordered WORK.
+
 ## Totals
 
-- **8 rules**, below, one section each. Each says which finding it comes from.
-- **10 patterns**. Every concurrency site in non-test pipeline code must
+- **9 rules**, below, one section each. Each says which finding it comes
+  from; rule 9 was added 2026-10-30 by the ordering audit.
+- **11 patterns**. Every concurrency site in non-test pipeline code must
   follow one of them.
-- **64 sites** on the allowlist (`scripts/concurrency-allowlist.json`),
+- **85 sites** on the allowlist (`scripts/concurrency-allowlist.json`),
   **2 of them known exceptions**: the two retry layers (R1). It started at
   61 sites and 5 exceptions; the other three — the `diff` subprocess (R3)
   and the webcrack and `git` subprocesses with no deadline — were fixed
   2026-10-12 by the one subprocess owner (`crate::subprocess`, see
-  Subprocesses).
+  Subprocesses); it has grown with the pipeline since (85 as of the
+  ordering audit, whose `order-mode` entry is the mode flag).
 - **Three checks enforce it**:
   - clippy, for what a lint can see;
   - the `census:concurrency` gate stage;
   - the same census in the pre-commit hook, on staged `.rs` files.
 
-| #   | Rule, in one line                                                                                                                                                              | From                   |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
-| 1   | CPU parallelism goes through `crate::par` only (rayon underneath), and results come back in input order.                                                                       | O13, O14, R4           |
-| 2   | Async I/O runs on the ONE tokio runtime the LLM provider owns. No second runtime, no nested `block_on`, no blocking work in async, no sync lock across `.await`.               | O1–O3, R6, post        |
-| 3   | Every network or subprocess wait has a deadline, and the deadline covers the WHOLE operation.                                                                                  | W2, W1 follow-up       |
-| 4   | A subprocess drains all its pipes at the same time, has a deadline, and fails loudly.                                                                                          | W1, R3                 |
-| 5   | Shared state: std locks for short sections only, an async lock only when the guard must cross `.await`, one lock order, bounded channels, `Relaxed` atomics only for counters. | O5, O6, O8, O17, post  |
-| 6   | Completion order never reaches the emitted tree or the stats. Results are put back in canonical order before anything is recorded.                                             | O7, R5                 |
-| 7   | A failed call is never silent. Retries live in exactly one layer, with jitter and a cap on total time.                                                                         | R2, R1 (open decision) |
-| 8   | Side threads (observers) only watch. They never feed output, and they exit when their owner goes away.                                                                         | O18, O19, O20          |
+| #   | Rule, in one line                                                                                                                                                                                        | From                    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| 1   | CPU parallelism goes through `crate::par` only (rayon underneath), and results come back in input order.                                                                                                 | O13, O14, R4            |
+| 2   | Async I/O runs on the ONE tokio runtime the LLM provider owns. No second runtime, no nested `block_on`, no blocking work in async, no sync lock across `.await`.                                         | O1–O3, R6, post         |
+| 3   | Every network or subprocess wait has a deadline, and the deadline covers the WHOLE operation.                                                                                                            | W2, W1 follow-up        |
+| 4   | A subprocess drains all its pipes at the same time, has a deadline, and fails loudly.                                                                                                                    | W1, R3                  |
+| 5   | Shared state: std locks for short sections only, an async lock only when the guard must cross `.await`, one lock order, bounded channels, `Relaxed` atomics only for counters.                           | O5, O6, O8, O17, post   |
+| 6   | Completion order never reaches the emitted tree or the stats. Results are put back in canonical order before anything is recorded.                                                                       | O7, R5                  |
+| 7   | A failed call is never silent. Retries live in exactly one layer, with jitter and a cap on total time.                                                                                                   | R2, R1 (open decision)  |
+| 8   | Side threads (observers) only watch. They never feed output, and they exit when their owner goes away.                                                                                                   | O18, O19, O20           |
+| 9   | Ordered operation is a TEST-MODE property (`run.order = "ordered"`). A default run works through items as fast as the pool and the semaphore allow; its guarantee is canonical OUTPUT, not ordered WORK. | exp163 (ordering audit) |
 
 ## The thread and runtime model today
 
@@ -60,28 +73,40 @@ The audit has the full diagram ("The thread and runtime model").
 An allowlist entry names exactly one of these. The census rejects any other
 name.
 
-| pattern          | What it is                                                                   | Where today                                                                          |
-| ---------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `par-seam`       | the one place that touches rayon or a scoped thread for CPU work             | `par.rs`                                                                             |
-| `llm-runtime`    | the one tokio runtime, its `block_on`s and its bounded fan-outs              | `provider.rs`                                                                        |
-| `rate-limiter`   | the concurrency cap (semaphore) and the requests-per-minute window           | `rate.rs`                                                                            |
-| `single-flight`  | one key, one answer: per-key async gate plus the answer maps                 | `cache.rs`                                                                           |
-| `retry-envelope` | a retry loop's backoff                                                       | `rate.rs` `with_retry`, `client.rs` `post_with_sdk_retries` (R1)                     |
-| `deadline`       | a timeout that bounds a whole operation, and the HTTP client it applies to   | `client.rs`                                                                          |
-| `subprocess`     | a child process: drained pipes, deadline, loud failure                       | `subprocess.rs` (the owner); `webcrack.rs`, `hunks.rs`, `unified.rs` `git_short_sha` |
-| `short-lock`     | a std `Mutex`/`RwLock` held for a few field updates, never across slow work  | `metrics.rs`, `llm_sim.rs`                                                           |
-| `stats-counter`  | an atomic used as a counter or a unique-name sequence; nothing decides on it | `cache.rs` counters, `PRIOR_PARSES`, `hunks.rs` temp-dir `SEQ`                       |
-| `observer`       | a side thread or lock that only watches (progress, profiling, logging)       | `progress.rs`, `profiling.rs`, `log.rs`, `unified.rs` log file                       |
+| pattern          | What it is                                                                                                                        | Where today                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `par-seam`       | the one place that touches rayon or a scoped thread for CPU work                                                                  | `par.rs`                                                                             |
+| `order-mode`     | the ordered-mode schedule flag: set once at startup, before any stage; it changes HOW work is scheduled, never what the output is | `par.rs` (the mode static)                                                           |
+| `llm-runtime`    | the one tokio runtime, its `block_on`s and its bounded fan-outs                                                                   | `provider.rs`                                                                        |
+| `rate-limiter`   | the concurrency cap (semaphore) and the requests-per-minute window                                                                | `rate.rs`                                                                            |
+| `single-flight`  | one key, one answer: per-key async gate plus the answer maps                                                                      | `cache.rs`                                                                           |
+| `retry-envelope` | a retry loop's backoff                                                                                                            | `rate.rs` `with_retry`, `client.rs` `post_with_sdk_retries` (R1)                     |
+| `deadline`       | a timeout that bounds a whole operation, and the HTTP client it applies to                                                        | `client.rs`                                                                          |
+| `subprocess`     | a child process: drained pipes, deadline, loud failure                                                                            | `subprocess.rs` (the owner); `webcrack.rs`, `hunks.rs`, `unified.rs` `git_short_sha` |
+| `short-lock`     | a std `Mutex`/`RwLock` held for a few field updates, never across slow work                                                       | `metrics.rs`, `llm_sim.rs`                                                           |
+| `stats-counter`  | an atomic used as a counter or a unique-name sequence; nothing decides on it                                                      | `cache.rs` counters, `PRIOR_PARSES`, `hunks.rs` temp-dir `SEQ`                       |
+| `observer`       | a side thread or lock that only watches (progress, profiling, logging)                                                            | `progress.rs`, `profiling.rs`, `log.rs`, `unified.rs` log file                       |
 
 ## CPU parallelism
 
 **Rule 1.** CPU work runs in parallel only through `crate::par`. Callers use
 `par::map_ordered`, `par::produce_then_map`, `par::join` or `par::beside`,
-never `par_iter` or `rayon::join` directly.
+never `par_iter` or `rayon::join` directly. Under the ordered mode
+(`run.order = "ordered"`, rule 9) the same helpers run their work
+sequentially — the sequential branch is inside the helpers, so the parallel
+and sequential forms are one implementation whose results are identical by
+construction.
 
 - **Results come back in input order.** Indexed `collect` writes each result
-  into its input slot (O13). This is why a parallel stage cannot change the
-  output.
+  into its input slot (O13). The reason is no longer parity with the deleted
+  TS pipeline (the port rule it came from, "iteration order is a decision
+  input", died at the cutover); it is that a parallel stage returning its
+  results in input order is byte-indistinguishable from the sequential
+  `.iter().map().collect()` it replaced — which is what neutrality (the
+  refactor gate) proves and what lets a reviewer read every parallel map as
+  its sequential loop. Input order is a FIXED order, and a fixed order is
+  all the determinism gates need; input order is the one that preserves
+  sequential equivalence.
 - **Closures are `Fn + Sync` and pure.** They capture no lock and no atomic
   (O13). Anything a closure counts comes back in its result and is summed on
   the main thread.
@@ -237,6 +262,13 @@ but it can no longer change the tree without a WARNING.
 same LLM answers. Completion order must never leak into the emitted tree or
 the stats.
 
+Re-justified 2026-10-30 (exp163): the rule exists because three LIVE gates
+hold it — e2e's run-twice byte-identity, the eval's warm self-hop
+(byte-identity plus zero cache writes), and neutrality, the refactor gate.
+It is not a parity requirement: the TS pipeline it was ported from is gone.
+What the rule governs is the OUTPUT, not the work — rule 9 separates the
+two.
+
 - Parallel maps return results in input order (rule 1).
 - `join_all` results are positional (O2).
 - `run_pipelined` is the one loop that runs in completion order (O3/O7).
@@ -254,6 +286,46 @@ the stats.
   `peakLivePromptBytes` are timing gauges by nature.
 - A new fan-out must say in its allowlist reason where its results are put
   back in order.
+
+## The ordered mode (rule 9)
+
+**Rule 9.** Ordered operation is a TEST-MODE property, not a production
+property. A default run (`run.order = "throughput"`, every regular run and
+the shipped default) works through items as fast as the pool and the
+semaphore allow and puts results back in canonical order where they are
+consumed — see the ordering audit's classification
+([`docs/audits/ordering-2026-10.md`](./audits/ordering-2026-10.md), §2): the
+parallel-era fan-outs are all reorder-buffers, free. `run.order =
+"ordered"` is what determinism-sensitive tests and debugging opt into:
+
+- the waves run the turn driver (`FastTier::Off` — no pipelining; every
+  turn's dispatch waits for its slowest call);
+- `par::map_ordered`, `produce_then_map`, `join` and `beside` run
+  sequentially — the sequential branch inside the same helper, never a
+  second implementation;
+- every chunked dispatch window is forced to 1 at the ONE `prompt_window`
+  construction point, so the sweep, the split namer and the retry dispatch
+  go one call at a time.
+
+Ordered forces the conservative naming schedule (`FastTier::Off`); setting
+`naming.relaxed_levers` alongside it is refused in config validation (the
+levers have nothing to select once the schedule is forced).
+`naming.schedule = "sequential"` together with `run.order = "ordered"` is
+allowed and redundant. Only proven territory is admitted: the
+`FastTier::Off` ≡ `Exact` byte-identity is pinned (`fast_test.rs`, e2e's
+legacy goldens); relaxed levers + the turn driver is an unproven pairing.
+
+What ordered mode changes in the artifacts — measured, not assumed
+(`tests/replay_determinism.rs`'s rule-9 pin, 2026-10-30): an ordered run's
+TREES are byte-identical to the conservative schedule's, and its cache-KEY
+SET is identical (an ordered replay of a conservative-schedule cache: zero
+misses, zero writes, byte-identical tree). Two things are NOT identical,
+both measured: the ask STREAM (the turn driver dispatches one extra
+duplicate-key call on the pin's fixture — 7 asks vs 6, same 3 distinct
+keys; the ask count is dispatch detail) and the prompts under the RELAXED
+default (the levers change decisions — why ordered forces the conservative
+schedule). The timing gauges (`peakLiveDispatches`, `peakLivePromptBytes`,
+the `--profile` spans) differ too; they are timing gauges by nature.
 
 ## Failures and retries
 

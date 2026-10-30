@@ -220,6 +220,97 @@ fn a_replay_of_a_live_run_asks_nothing_new_and_writes_the_same_tree() {
     );
 }
 
+/// Rule 9's pin (docs/concurrency.md, the ordered mode; exp163's ordering
+/// audit): the ordered TEST mode is a SCHEDULE, not a behaviour — the turn
+/// driver, the sequential `par` helpers and the one-call dispatch windows
+/// must produce the conservative schedule's bytes exactly. A live
+/// conservative-schedule run fills a scratch cache; an ORDERED replay of
+/// that cache must ask nothing new (zero misses, zero writes) and write
+/// the byte-identical tree.
+///
+/// The mode forces the conservative schedule because the obvious wider
+/// design — ordered mode ORTHOGONAL to the tier (a relaxed tier + turn
+/// driver) — was tried here first and REFUTED by this test's own shape:
+/// the turn driver asks 3 questions on this input that the pipelined
+/// driver never did (the drivers' prompts differ under the relaxed
+/// levers), so it is not the same bytes. The mode therefore admits proven
+/// territory only (`FastTier::Off` ≡ `Exact`, the e2e legacy goldens).
+///
+/// Diagnosis record for the pin itself (the `--dump-asks` +
+/// `--dump-artifacts` run that settled it, 2026-10-30): an earlier edit of
+/// this test dropped the replay leg's `llm.cache_dir`, which read as "3
+/// questions the conservative run never did". With the cache line back,
+/// the truth is the GOOD case: the two drivers' ASK STREAMS differ only by
+/// ONE EXTRA ask under the turn driver (7 vs 6 here — the pipelined
+/// driver's `step_lane` skips a `$` lane's ask that the turn driver still
+/// makes), but every cache key the ordered run computes is a key the
+/// conservative run also computed (3 distinct keys, byte-equal seq for
+/// seq), so the replay is COMPLETE: zero misses, zero writes, byte-identical
+/// tree. The key-SET identity is the contract this test pins — the ask
+/// COUNT is dispatch detail, like the timing gauges.
+#[test]
+fn the_ordered_mode_writes_the_conservative_schedule_s_tree() {
+    let s = Scratch::new("ordered");
+    let input = s.0.join("bundle.js");
+    std::fs::write(&input, INPUT).unwrap();
+    let input = input.display().to_string();
+    let cache = s.0.join("cache");
+    let (url, counter) = start();
+
+    // The live leg: the CONSERVATIVE schedule (naming.schedule =
+    // "sequential", the config sweep's spelling of the old --sequential).
+    let live = command(
+        &s.0,
+        &input,
+        &s.0.join("live"),
+        &url,
+        &format!(
+            "llm.cache_dir = {:?}\nnaming.schedule = \"sequential\"\n",
+            cache
+        ),
+    )
+    .output()
+    .unwrap();
+    let err = String::from_utf8_lossy(&live.stderr).into_owned();
+    assert_eq!(live.status.code(), Some(0), "{err}");
+    assert!(
+        counter.load(Ordering::SeqCst) > 0,
+        "the live run asked the stub"
+    );
+    let filled = cache_entries(&cache);
+    let live_tree = tree(&s.0.join("live"));
+    assert!(!live_tree.is_empty());
+
+    // The replay's endpoint is a stub that must never be asked.
+    let (replay_url, replay_counter) = start();
+    let out = s.0.join("ordered");
+    let replay = command(
+        &s.0,
+        &input,
+        &out,
+        &replay_url,
+        &format!("llm.cache_dir = {:?}\nrun.order = \"ordered\"\n", cache),
+    )
+    .output()
+    .unwrap();
+    let err = String::from_utf8_lossy(&replay.stderr).into_owned();
+    assert_eq!(replay.status.code(), Some(0), "{err}");
+    assert_eq!(
+        replay_counter.load(Ordering::SeqCst),
+        0,
+        "the ordered replay asked a question the conservative run never did"
+    );
+    assert_eq!(
+        cache_entries(&cache),
+        filled,
+        "the replay wrote cache entries"
+    );
+    assert!(
+        live_tree == tree(&out),
+        "the ordered mode wrote a different tree than the conservative schedule"
+    );
+}
+
 /// The same guarantee WITHOUT `--llm-cache` — how production runs, the cold
 /// eval and the version walks run. The copies of the configure arrow are
 /// one request: the model is asked it ONCE, and the run says how many
