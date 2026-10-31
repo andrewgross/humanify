@@ -3,7 +3,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { after, describe, it } from "node:test";
-import { changedLines, changedLinesInTree, treeFileDelta } from "./diff.js";
+import {
+  changedLines,
+  changedLineTexts,
+  changedLinesInTree,
+  treeFileDelta
+} from "./diff.js";
 import { bundleStatements, fileStatements, treeFiles } from "./trees.js";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "explib-"));
@@ -24,6 +29,17 @@ describe("experiments/lib diff", () => {
     // This is what every published "git lines" figure in this repo means. A
     // counter that reported 1 here would halve every ceiling.
     assert.strictEqual(changedLines("a\nb\nc\n", "a\nCHANGED\nc\n"), 2);
+  });
+
+  it("hands back the changed lines' TEXT, one entry per counted line", () => {
+    // The same owner, so a filter over the text (exp168's mint-bearing
+    // lines) can never disagree with the count it filters.
+    const texts = changedLineTexts("a\nb\nc\n", "a\nCHANGED\nc\n");
+    assert.deepStrictEqual(texts, ["b", "CHANGED"]);
+    assert.strictEqual(
+      texts.length,
+      changedLines("a\nb\nc\n", "a\nCHANGED\nc\n")
+    );
   });
 
   it("counts pure additions and deletions once each", () => {
