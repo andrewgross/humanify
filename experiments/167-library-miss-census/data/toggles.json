@@ -1,0 +1,103 @@
+{
+  "copy": {
+    "origin->unclaimed": {
+      "-": 1683
+    }
+  },
+  "evidence": {
+    "unclaimed->family": {
+      "held-by-other": 619
+    },
+    "unclaimed->origin": {
+      "-": 21346
+    },
+    "unclaimed->right": {
+      "-": 1302
+    }
+  },
+  "helper": {
+    "unclaimed->wrongFamily": {
+      "not-indexed.stoplisted": 387
+    }
+  },
+  "literal": {
+    "unclaimed->right": {
+      "-": 112398
+    }
+  },
+  "shadow": {
+    "right->family": {
+      "-": 16983
+    },
+    "unclaimed->right": {
+      "-": 93,
+      "guard.tie": 401
+    },
+    "unmapped->unclaimed": {
+      "-": 14
+    },
+    "wrongFamily->unclaimed": {
+      "wrong-package": 673
+    }
+  },
+  "tiefence": {
+    "unclaimed->family": {
+      "-": 8504
+    },
+    "unclaimed->right": {
+      "-": 169176,
+      "guard.other": 5257,
+      "guard.tie": 23998,
+      "guard.tie-fenced": 28544
+    },
+    "unclaimed->unmapped": {
+      "-": 10240
+    },
+    "unclaimed->wrongFamily": {
+      "-": 13379,
+      "guard.tie": 8353,
+      "guard.tie-fenced": 16476
+    }
+  },
+  "vetoall": {
+    "right->unclaimed": {
+      "-": 340
+    },
+    "unclaimed->family": {
+      "-": 1258
+    },
+    "unclaimed->right": {
+      "-": 674658,
+      "guard.veto": 248762
+    },
+    "unclaimed->unmapped": {
+      "-": 960
+    },
+    "unclaimed->wrongFamily": {
+      "-": 790,
+      "held-by-other": 1642,
+      "print-differs.file": 127
+    }
+  },
+  "wholeseed": {
+    "unclaimed->family": {
+      "-": 131,
+      "guard.presence": 973
+    },
+    "unclaimed->origin": {
+      "-": 58664
+    },
+    "unclaimed->right": {
+      "-": 94470,
+      "guard.presence": 2117271,
+      "print-differs.file": 1060
+    },
+    "unclaimed->unmapped": {
+      "-": 262
+    },
+    "unclaimed->wrongFamily": {
+      "-": 31738,
+      "held-by-other": 981
+    }
+  }
+}

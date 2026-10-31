@@ -1,0 +1,94 @@
+{
+  "causes": {
+    "guard.veto": {
+      "bytes": 20722,
+      "detail": [["vetoed=p-map", 20722]],
+      "topPackages": [["p-map", 20722]],
+      "units": 1
+    },
+    "held-by-other": {
+      "bytes": 46180,
+      "detail": [["holder=drizzle-kit", 46180]],
+      "topPackages": [["@smithy/smithy-client", 46180]],
+      "units": 1
+    },
+    "lookup-floor": {
+      "bytes": 34847,
+      "detail": [
+        ["why=content<3", 34847],
+        ["maxNodes:<50", 25876],
+        ["maxNodes:<100", 8971]
+      ],
+      "topPackages": [["lodash-es", 34847]],
+      "units": 2
+    },
+    "not-indexed.never": {
+      "bytes": 104692,
+      "detail": [],
+      "topPackages": [
+        ["@anthropic-ai/mcpb", 59671],
+        ["@anthropic-ai/bedrock-sdk", 29632],
+        ["@bufbuild/cel", 12325],
+        ["@anthropic-ai/foundry-sdk", 2043],
+        ["@anthropic-ai/google-cloud-sdk", 1021]
+      ],
+      "units": 7
+    },
+    "print-differs.nofile": {
+      "bytes": 102958,
+      "detail": [],
+      "topPackages": [
+        ["@aws-sdk/client-bedrock", 66774],
+        ["@aws-sdk/client-sso", 20226],
+        ["@aws-sdk/client-sts", 15958]
+      ],
+      "units": 3
+    },
+    "sub-floor": {
+      "bytes": 30302,
+      "detail": [["maxNodes:<10", 30302]],
+      "topPackages": [
+        ["@smithy/types", 16343],
+        ["lodash-es", 4426],
+        ["@aws-sdk/client-bedrock", 2043],
+        ["@aws-sdk/client-bedrock-runtime", 2043],
+        ["@smithy/eventstream-codec", 2043],
+        ["@aws-sdk/client-sso", 1702],
+        ["@smithy/signature-v4", 1702]
+      ],
+      "units": 10
+    },
+    "version-absent.nofile": {
+      "bytes": 62321,
+      "detail": [["refusedVersion=None", 62321]],
+      "topPackages": [
+        ["@azure/identity", 35252],
+        ["@anthropic-ai/sandbox-runtime", 27069]
+      ],
+      "units": 4
+    }
+  },
+  "corpus": "cc",
+  "estimate": "stratified ratio estimate over the 620-unit sample",
+  "indexId": "cb64c1f5fd507bee7f80efd46e0d01cec405a8b3028a9c05d56e94d7c071ec28",
+  "labelVocabularyUnits": {
+    "<app>": 511,
+    "<compiler-helper>": 1,
+    "library:*": 108
+  },
+  "reverseSampleUnits": [],
+  "sampleUnits": {
+    "<app>": 511,
+    "<compiler-helper>": 1,
+    "library": 108,
+    "missed": 28,
+    "named": 80
+  },
+  "totals": {
+    "<app>": 13036401,
+    "<compiler-helper>": 22856,
+    "library": 2221462,
+    "missed": 402024,
+    "named": 1819438
+  }
+}
