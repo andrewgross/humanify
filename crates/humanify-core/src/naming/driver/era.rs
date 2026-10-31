@@ -1049,7 +1049,13 @@ fn plan_layout(
     layout.ordinal_moved_files =
         crate::naming::module_names::plan_library_modules(source, &ordinal_regions).moved_files;
     layout.ordinal_regions = ordinal_regions;
-    layout.spans = restored_binding_spans(semantic, &body_spans, &era_raw, bridge.bridge);
+    layout.spans = restored_binding_spans(
+        semantic,
+        &body_spans,
+        &era_raw,
+        bridge.bridge,
+        opts.name_profile,
+    );
     layout.regions = regions;
     layout.conversion = Some(conversion);
     layout.era_raw = era_raw;
@@ -1058,12 +1064,18 @@ fn plan_layout(
 
 /// The declaration spans of the bindings Site B restored (exp166): a
 /// binding whose name the index restored inside the raw statement its
-/// era statement came from. Sorted, era coordinates.
+/// era statement came from. A restored name that is itself a minifier
+/// token (the mint census's own gate, `rename::floor::is_minifier_token`
+/// — `i`, `k`, `_a` from the package's own source) is NOT held: it says
+/// nothing the minified name did not, and a short name can coincide with
+/// an unrelated minifier name in the same statement. It takes the normal
+/// flow. Sorted, era coordinates.
 fn restored_binding_spans(
     semantic: &oxc_semantic::Semantic<'_>,
     body_spans: &[(u32, u32)],
     era_raw: &[Option<(u32, u32)>],
     bridge: &crate::naming::module_names::EraBridge,
+    profile: crate::rename::name_profile::NameProfile,
 ) -> Vec<(u32, u32)> {
     if bridge.restored.is_empty() {
         return Vec::new();
@@ -1087,7 +1099,8 @@ fn restored_binding_spans(
         let names = names_of
             .entry(i)
             .or_insert_with(|| bridge.restored_in(raw).collect());
-        if names.contains(scoping.symbol_name(symbol)) {
+        let name = scoping.symbol_name(symbol);
+        if names.contains(name) && !crate::rename::floor::is_minifier_token(profile, name) {
             out.push((span.start, span.end));
         }
     }

@@ -124,11 +124,98 @@ was left alone.
 
 ### cc (sample truth)
 
-TBD
+Fresh stub runs of the fixed binary on 2.1.215 and 2.1.216 (cc's truth is
+the 620-unit labelled sample on 2.1.216; 2.1.215 is judged on (c) only).
+
+| era placement (moved lazy modules)        | 2.1.216 ordinal | 2.1.216 exact | 2.1.215 ordinal | 2.1.215 exact |
+| ----------------------------------------- | --------------- | ------------- | --------------- | ------------- |
+| region statements content-correct         | 0 / 7,628       | 7,628 / 7,628 | 0 / 7,571       | 7,571 / 7,571 |
+| moved modules / statements                | 17 / 52         | 439 / 1,469   | 25 / 72         | 436 / 1,454   |
+| moved bytes                               | 16,324          | 543,802       | 45,395          | 541,435       |
+| moved statements not claimed by the mover | 40 (15,890 B)   | 0             | 57 (44,373 B)   | 0             |
+| labelled app bytes under vendor/          | 0 of 0 labelled | 0 of 46,354   | —               | —             |
+
+The conversion: 1,994 / 1,980 groups, 0 dropped. Copy B of the plugin
+installer now lands in `src/` on both versions (named), and `vendor/jose/`
+holds 63 real jose modules (the flattened-JWE code) — main's logic put the
+installer there and jose's own code in `src/`.
+
+### App code under vendor/, itemized (the fixed binary)
+
+`itemize_vendor_app.py`: every app-labelled byte under `vendor/`, with the
+mechanism that put it there, plus (cc) every UNLABELLED vendor file whose
+text looks like app code.
+
+- **bun-dev: 4 cases, 378 bytes, one bundle**
+  (`bun-dev-node-vscode_gh-rudreshveerkhare__catalyst-05cf16`) — and **none
+  is app code**: all four are the `websocket` package's own modules, which
+  the source map attributes to the app (a truth defect):
+  - `vendor/websocket/module-3c62f4b0.js` — 101 of 1,054 bytes: websocket's
+    `package.json` object (the tail of it mapped to the app). Mechanism:
+    index-claimed factory.
+  - `vendor/@discoveryjs/json-ext/src/version.js` — 56 bytes:
+    `module.exports = <package.json>().version`, websocket's `lib/version.js`.
+    Mechanism: unclaimed-but-clean move (exp157) — and the WRONG package:
+    the one-liner is generic, and the index's whole-module answer for it is
+    json-ext's identical `src/version.js`.
+  - `vendor/lib_3c078d91.js` — 173 bytes: websocket's `lib/websocket.js`
+    (the `{server, client, router, …, version}` export object). Mechanism:
+    root `lib_*` fallback (default mode writes it too).
+  - `vendor/lib_82619232-14.js` — 48 bytes: websocket's `index.js`
+    (`module.exports = require(lib/websocket)`). Mechanism: root fallback.
+- **bun-dev era placement (moved lazy modules): 0 app bytes** in either world.
+- **cc 2.1.216 and 2.1.215: 0 labelled app bytes under `vendor/`**. Suspect
+  scan (token counts only, nothing quoted): no vendor file outside
+  `@anthropic-ai/*` and `@modelcontextprotocol/*` contains an app-specific
+  token (`claude`, `CLAUDE_`, `marketplace`, `mcp`, `statusline`, `subagent`,
+  `permission mode`). The generic-token hits (`plugin`, `hook`) are library
+  code: commander's `command.js` (hooks), the AWS/smithy middleware
+  "plugin" stacks, msal-node's client plugins, node-forge's PRNG plugins,
+  ajv-formats, and four root `lib_*` files — checked by hand: three are AWS
+  SDK client constructors (`middlewareStack.use(get…Plugin(config))`), one
+  a DOM shim (`document.plugins`). All library, root fallback (the same in
+  default mode).
+- Mechanism census of what lands under `vendor/`: claims (the exact era
+  moves, the index-claimed factories), the exp157 unclaimed-clean factory
+  moves, the root fallback, and — on a hop — placement inheritance. The
+  jose class (a lazy fossil module filed on drifted claims) is GONE: it
+  needed the ordinal conversion.
 
 ## The fix (phase 3)
 
-TBD
+Two parts, both names-gated (the bridge exists only when the discovery
+carries the index's module answers), so default and report mode are inert.
+
+1. **The exact raw-to-era bridge (primary).** The printer records, for every
+   statement it prints, the input offset of the first source-spanned node
+   inside it (`format_file_with_origins`; the text is byte-identical — the
+   golden suite unchanged). The unpack maps every container statement's raw
+   span to its span in the runtime text through the exact edit list
+   (`unpack::bun::EditMap`). Together they say which raw statement every era
+   statement came from — a split statement included. `convert_regions` maps
+   each claimed group onto exactly those era statements (a group with an
+   unmapped raw statement is dropped whole; on cc: 0 dropped of 1,994). The
+   ordinal arithmetic is deleted from the unpack.
+2. **Restore or ask, never freeze.** The freeze holds only the bindings the
+   index restored (`restored_binding_spans`: a binding whose name Site B
+   restored inside the raw statement its era statement came from), held by
+   the one hold Site A's applications share (`RestoredHolds`: carried,
+   library-held, joined to the transferred set of its innermost function,
+   a module binding's row skipped). Every other identifier — moved module
+   or not, its wrapper included (the module step no longer skips moved
+   modules) — takes the normal flow: the prior's carry, then the model.
+
+Tests (red first, each watched fail before the fix):
+`a_moved_modules_unrestored_identifiers_are_asked_not_frozen`,
+`a_moved_modules_unrestored_identifiers_carry_from_the_prior` (red on the
+old freeze), `a_restored_slot_is_never_asked` (red with the hold disabled:
+the restored slot was asked),
+`a_library_region_after_a_split_statement_moves_its_own_module_not_the_app_one`
+(the jose shape; red on the ordinal path: the app module stayed minified),
+plus the formatter provenance tests (`format/origins_test.rs`) and the
+unpack bridge test. The placement root cause on the unpack side (the exp157
+unclaimed-clean move) was measured and LEFT ALONE: its only app-labelled
+bytes on bun-dev are the 56-byte truth defect above.
 
 ## The hop (phase 4)
 

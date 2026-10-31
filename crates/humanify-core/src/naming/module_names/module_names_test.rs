@@ -699,12 +699,14 @@ fn run_bridged(
 
 #[test]
 fn a_restored_slot_is_never_asked() {
-    // Site B restored the moved module's wrapper (the bridge carries the
-    // name it wrote at its raw offset): that one binding is held — never
-    // asked by a wave or the module step, its name ships — while the
-    // module's other identifiers stay in the normal flow.
-    let (fresh, bridge, origins) = bridged(BUNDLE, &[("var Hq = W", "Hq")]);
-    let raw = raw_statements(BUNDLE);
+    // Site B restored the moved module's wrapper to its original name (the
+    // bridge carries the name it wrote at its raw offset): that one binding
+    // is held — never asked by a wave or the module step, its name ships —
+    // while the module's other identifiers stay in the normal flow.
+    let raw_text = BUNDLE.replace("Hq", "loadColorTheme");
+    let (fresh, bridge, origins) =
+        bridged(&raw_text, &[("var loadColorTheme = W", "loadColorTheme")]);
+    let raw = raw_statements(&raw_text);
     let regions = [ClaimedRegion {
         statements: Vec::new(),
         claims: vec![Some("ms".to_string())],
@@ -719,19 +721,44 @@ fn a_restored_slot_is_never_asked() {
         out.library_layout.moved
     );
     assert!(
-        !asked_by_waves(&provider, "Hq"),
+        !asked_by_waves(&provider, "loadColorTheme"),
         "the restored slot is never asked"
     );
     assert!(
-        !named_by_module_step(&out, "Hq"),
+        !named_by_module_step(&out, "loadColorTheme"),
         "the restored wrapper is settled, never renamed by the module step"
     );
     assert_eq!(out.module_names.carried, 1, "it counts as carried");
     let code = out.code.expect("shipped");
     assert!(
-        code.contains("var Hq = __esm("),
+        code.contains("var loadColorTheme = __esm("),
         "the restored name ships: {code}"
     );
+}
+
+#[test]
+fn a_minifier_shaped_restoration_is_not_a_hold() {
+    // The index's original name is itself a minifier-shaped token (`Hq`;
+    // on cc: `i`, `k`, `_a` from the package's own source): it says
+    // nothing the minified name did not, the mint census counts it, and a
+    // short name inside a statement can coincide with an unrelated
+    // minifier name. It takes the normal flow like an unrestored slot.
+    let (fresh, bridge, origins) = bridged(BUNDLE, &[("var Hq = W", "Hq")]);
+    let raw = raw_statements(BUNDLE);
+    let regions = [ClaimedRegion {
+        statements: Vec::new(),
+        claims: vec![Some("ms".to_string())],
+        raw_spans: vec![raw[5]],
+    }];
+    let provider = ModuleProvider::new(by_purpose);
+    let out = run_bridged(&fresh, &provider, &regions, &bridge, &origins);
+    assert_eq!(out.library_layout.moved.len(), 1);
+    assert!(
+        named_by_module_step(&out, "Hq"),
+        "the minifier-shaped restoration is asked like any slot"
+    );
+    let code = out.code.expect("shipped");
+    assert!(!code.contains("var Hq = "), "{code}");
 }
 
 /// The cc 2.1.215 shape (exp166's trace): a raw statement the formatter
