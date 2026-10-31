@@ -1,0 +1,7 @@
+{
+  "name": "cjs-cli-app",
+  "version": "1.0.0",
+  "description": "A tiny command-line app written in CommonJS (exp172 fixture)",
+  "bin": "src/cli.js",
+  "license": "MIT"
+}

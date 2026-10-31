@@ -77,6 +77,7 @@ fn assign(code: &str, input: &crate::place::input::SplitInput, cuts: &[usize]) -
         &input.body,
         Some((code, input.spans.as_slice())),
         None,
+        &std::collections::HashSet::new(),
         ClusterSizing::ScaledToApp,
         cuts,
         super::ClusterNamers {
@@ -130,4 +131,40 @@ fn fixed_sizing_is_used_verbatim() {
         ClusterSizing::ScaledToApp.config_for(REFERENCE_APP_LINES),
         DEFAULT_CLUSTER_CONFIG
     );
+}
+
+/// exp172: a factory statement the unpack kept as the app's own module is
+/// grouped with the app; every other factory statement is vendored.
+#[test]
+fn an_app_factory_statement_is_grouped_with_the_app() {
+    let mut code = String::from("(function () {\n");
+    code.push_str(
+        "  var h = (e, t) => () => (t || e((t = { exports: {} }).exports, t), t.exports);\n",
+    );
+    code.push_str("  var libMod = h((e, t) => { t.exports = 1; });\n");
+    code.push_str("  var appMod = h((e, t) => { t.exports = 2; });\n");
+    for i in 0..55 {
+        code.push_str(&format!("  var item{i:02} = {i};\n"));
+    }
+    code.push_str("})();\n");
+    let input = crate::place::input::split_input(
+        &code,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("a wrapper bundle");
+    let app: std::collections::HashSet<usize> = [2].into_iter().collect();
+    let assignment = super::assign_clustered(
+        &input.body,
+        Some((&code, input.spans.as_slice())),
+        Some("h"),
+        &app,
+        ClusterSizing::ScaledToApp,
+        &[],
+        super::ClusterNamers {
+            namer: None,
+            reviser: None,
+        },
+    );
+    assert!(assignment[1].starts_with("vendor/"), "{assignment:?}");
+    assert!(assignment[2].starts_with("src/"), "{assignment:?}");
 }

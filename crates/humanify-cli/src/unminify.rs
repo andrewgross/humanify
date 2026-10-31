@@ -66,6 +66,10 @@ pub struct Unpacked {
     pub claimed_module_regions: Vec<humanify_core::naming::module_names::ClaimedRegion>,
     /// The raw-to-era bridge (exp166), names mode only.
     pub era_bridge: Option<humanify_core::naming::module_names::EraBridge>,
+    /// The factories the unpack kept in the app as the app's own CommonJS
+    /// modules (exp172) — the split groups them with the app; the
+    /// diagnostics list them.
+    pub app_modules: Vec<bun::AppModuleRow>,
 }
 
 /// `unpackBundle`: run the run's adapter into `out_dir` through the one
@@ -136,6 +140,7 @@ pub fn unpack_bundle(
         library_discovery,
         claimed_module_regions,
         era_bridge,
+        app_modules,
     ) = match outcome {
         AdapterOutcome::VendorRecord(outcome) => {
             report_vendor_unpack(&outcome, renderer);
@@ -148,6 +153,7 @@ pub fn unpack_bundle(
                 outcome.library_discovery,
                 outcome.claimed_module_regions,
                 outcome.era_bridge,
+                outcome.app_modules,
             )
         }
         AdapterOutcome::Files {
@@ -161,6 +167,7 @@ pub fn unpack_bundle(
             library_discovery.map(|r| *r),
             Vec::new(),
             None,
+            Vec::new(),
         ),
     };
     span.end(Some(
@@ -182,6 +189,7 @@ pub fn unpack_bundle(
         library_discovery,
         claimed_module_regions,
         era_bridge,
+        app_modules,
     })
 }
 
@@ -233,6 +241,24 @@ fn report_vendor_unpack(outcome: &bun::BunUnpackOutcome, renderer: &mut dyn Prog
             "Vendor identifier restoration: {} identifiers restored across {} vendor files \
              ({} statements answered, {} conflicts abstained)",
             r.totals.bindings, r.files, r.totals.statements, r.totals.conflicts
+        ));
+    }
+    if !outcome.app_modules.is_empty() {
+        let count = |reason| {
+            outcome
+                .app_modules
+                .iter()
+                .filter(|r| r.reason == reason)
+                .count()
+        };
+        use humanify_core::modules::app_factories::AppReason;
+        renderer.message(&format!(
+            "App modules: {} CommonJS factories kept in the app as its own modules ({} entry, \
+             {} own package, {} requiring app modules)",
+            outcome.app_modules.len(),
+            count(AppReason::Entry),
+            count(AppReason::OwnPackage),
+            count(AppReason::RequiresApp)
         ));
     }
     log_name_sources(outcome);

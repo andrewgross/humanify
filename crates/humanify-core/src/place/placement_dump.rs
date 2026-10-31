@@ -66,6 +66,10 @@ pub struct PlacementGate<'a, 'n> {
     /// pre-fills before any match or fresh name. The split refuses a
     /// non-empty layout under any other regime.
     pub library: &'a [(usize, String)],
+    /// The factory statements (body indexes) the unpack kept as the app's
+    /// OWN modules (exp172): the cluster regime groups them with the app
+    /// instead of vendoring them. Empty: none.
+    pub app_factories: std::collections::HashSet<usize>,
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
@@ -142,6 +146,7 @@ pub fn assign_regime(
                 &input.body,
                 Some((shipped, input.spans.as_slice())),
                 module_helper.as_ref().map(|h| h.name.as_str()),
+                &gate.app_factories,
                 // Scaled to the app (finding B1): exactly the old
                 // constants at Claude Code's size.
                 ClusterSizing::ScaledToApp,

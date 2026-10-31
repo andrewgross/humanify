@@ -270,6 +270,7 @@ fn run(row: &Value, replay: &Replay) -> Result<(Vec<String>, Vec<Value>), String
             &input.body,
             Some((code, input.spans.as_slice())),
             helper.as_ref().map(|h| h.name.as_str()),
+            &std::collections::HashSet::new(),
             ClusterSizing::Fixed(cluster_config(&row["clusterConfig"])),
             &[],
             ClusterNamers {

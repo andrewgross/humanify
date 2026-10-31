@@ -46,6 +46,20 @@ new module's file name back from its wrapper (`initColorUtils` →
 `color-utils.js`) and names inferred folders from the same names; the old
 warm-hop mint namer is gone. Inherited paths are never renamed.
 
+Stage 3 keeps a CommonJS app's OWN modules in the app (exp172,
+`modules::app_factories`): Bun and esbuild wrap every CommonJS module, app
+or library, and the unpack used to vendor every one. Before any name is
+chosen it accepts the ENTRY (the factory the app text only runs, when that
+text is nothing but helpers and bare factory calls), the modules the index
+or their declared identity give the app's own package (derived: the
+package and the entry's unattributed modules require each other, or the
+entry's modules require its `package.json`), and every module reachable
+from the entry that requires an accepted one — never one a library
+reaches, never one a vendor file requires, never anything downward. Those
+factories stay in the app text: named by the era, grouped by the split's
+fresh grouping under `src/` (its vendor bucket skips them). Claude Code's
+app text is far more than glue, so nothing moves there.
+
 In names mode (exp169), stage 9 also names the vendored factory bodies' identifiers
 the index did not restore: after the era, the bodies under `vendor/` are joined
 (one statement per body, vendor-path order), formatted and named by the same

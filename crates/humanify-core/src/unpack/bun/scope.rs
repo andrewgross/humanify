@@ -78,6 +78,10 @@ pub struct ScopePlan {
     /// statement with the SAME declared name; renames then give the
     /// accessor.
     pub bridges: Vec<BridgePlan>,
+    /// The factory reference graph: per factory (classification index),
+    /// the factories its body references (exp172's app-module decision
+    /// reads it).
+    pub edges: Vec<HashSet<usize>>,
 }
 
 /// One bridged read (finding #60), see [`ScopePlan::bridges`].
@@ -194,6 +198,7 @@ pub fn plan_bundle_scope_refs(
         kept,
         helper_edits,
         bridges,
+        edges,
     }
 }
 
