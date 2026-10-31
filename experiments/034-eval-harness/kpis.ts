@@ -16,6 +16,17 @@
  * every experiment that fixed relocation.
  */
 
+import type {
+  AppLines,
+  CrossLines,
+  MintCounts,
+  NameCounts,
+  RelocCounts,
+  Split3,
+  StatementCounts,
+  VendorLines
+} from "./surfaces.js";
+
 /** Where a scorecard's per-pair value lives; `undefined` ⇒ not scored. */
 export interface Scorecard {
   pair: string;
@@ -64,6 +75,9 @@ export interface Scorecard {
       buildConstantByKey?: Record<string, number>;
       real: number;
       realExBuild?: number;
+      /** Whole files added/removed (always written; typed since exp170,
+       * whose split reads it). churnLines = noise + real + fileAddRemove. */
+      fileAddRemove?: number;
       noise: number;
       naming: number;
       /**
@@ -122,6 +136,41 @@ export interface Scorecard {
       real: number;
       manifest: number;
       bodiesNameOnly: number;
+    };
+    /**
+     * exp170 (Andrew, 2026-10-31): every change-vs-noise KPI above, split by
+     * SURFACE — `app` (everything outside vendor/), `vendor`, and
+     * `crossBoundary` (units that changed surface between v-1 and v, charged
+     * once, as a move). Each split is a PARTITION of the frozen field above:
+     * app + vendor + crossBoundary = old (mints: + unattributed). ADDITIVE:
+     * every field above is byte-identical with or without this block.
+     * Definitions per axis: `surfaces.ts`. Absent on cards scored before
+     * 2026-10-31 — absent, not zero.
+     */
+    surfaces?: {
+      /** clean/noise/novel/noiseLn/realLn, by the file each BUNDLE statement
+       * is filed in. The bundle holds every statement that is not a CJS
+       * library factory — app code AND library code inlined as ES modules —
+       * so `vendor` here is the bundle code the pipeline's library placement
+       * filed into vendor/. Absent when a ledger's order does not cover its
+       * bundle. */
+      statements?: Split3<StatementCounts> & {
+        crossBoundary: StatementCounts & { toVendor: number; toApp: number };
+      };
+      /** reloc / newName, by each name's home file (`nameToFiles[name][0]`). */
+      names: Split3<NameCounts>;
+      /** relocSt, by the prior and fresh file of each 1:1 statement. */
+      tree: Split3<RelocCounts>;
+      /** mints, attributed by name as far as binding counts force it. */
+      mints?: MintCounts;
+      /** treeLn & co. (src/) and vendorLn/vendorReal (vendor/), with the
+       * statements that moved across paired by content and taken out of
+       * both sides' real change. Present when both trees were scored. */
+      lines?: {
+        app: AppLines;
+        vendor: VendorLines;
+        crossBoundary: CrossLines;
+      };
     };
   };
 }
@@ -194,6 +243,13 @@ export interface SummaryTotals {
   vendorChurnLines: number;
   vendorNoise: number;
   vendorReal: number;
+  /**
+   * exp170's app/vendor split: every numeric leaf of a card's
+   * `churn.surfaces`, flattened to `split.<path>` and summed over pairs
+   * (summarize.ts `flattenSurfaces`). Absent when no card carried the
+   * block — a `-` in every table, never 0.
+   */
+  [split: `split.${string}`]: number;
 }
 
 export const KPIS: Kpi[] = [
@@ -349,7 +405,115 @@ export const KPIS: Kpi[] = [
   }
 ];
 
-const BY_KEY = new Map(KPIS.map((k) => [k.key, k]));
+/**
+ * exp170: the APP / VENDOR / CROSS-BOUNDARY views of the KPIs above, keyed
+ * `app:<kpi>`, `vendor:<kpi>`, `cross:<kpi>`. Each reads one cell of the
+ * card's `surfaces` block, and `app:X + vendor:X + cross:X = X` (mints: plus
+ * `mints:unattributed`; the tree-line columns: `app:treeLn + vendor:treeLn +
+ * cross:treeLn = treeLn + vendor churnLines`). Direction is the parent KPI's.
+ * The app columns carry NO vendor contribution: a reader who ignores vendor/
+ * reads these and nothing else.
+ */
+type Surfaces = NonNullable<Scorecard["churn"]["surfaces"]>;
+type SurfaceKey = "app" | "vendor" | "crossBoundary";
+const SURFACE_PREFIX: Record<SurfaceKey, string> = {
+  app: "app",
+  vendor: "vendor",
+  crossBoundary: "cross"
+};
+
+/** One split column: `<surface>:<key>` reading `surfaces.<axis>.<surface>.<field>`. */
+function splitKpi(
+  surface: SurfaceKey,
+  key: string,
+  axis: "statements" | "names" | "tree" | "lines",
+  field: string,
+  direction: KpiDirection,
+  extra: Partial<Kpi> = {}
+): Kpi {
+  return {
+    key: `${SURFACE_PREFIX[surface]}:${key}`,
+    total: `split.${axis}.${surface}.${field}`,
+    direction,
+    fromCard: (c) => {
+      const block = c.churn.surfaces?.[axis] as
+        | Record<SurfaceKey, Record<string, number>>
+        | undefined;
+      const v = block?.[surface]?.[field];
+      return typeof v === "number" ? v : undefined;
+    },
+    ...extra
+  };
+}
+
+const mintKpi = (part: keyof MintCounts, key: string): Kpi => ({
+  key,
+  total: `split.mints.${part}`,
+  direction: "lower",
+  fromCard: (c) => (c.churn.surfaces as Surfaces | undefined)?.mints?.[part]
+});
+
+/** The columns repeated per surface, from the statement/name/tree axes. */
+function axisKpis(surface: SurfaceKey): Kpi[] {
+  return [
+    splitKpi(surface, "noise", "statements", "unchangedChurned", "lower"),
+    splitKpi(surface, "noiseLn", "statements", "namingNoiseLines", "lower"),
+    splitKpi(surface, "novel", "statements", "novel", "hold"),
+    splitKpi(surface, "realLn", "statements", "realLines", "hold"),
+    splitKpi(surface, "reloc", "names", "sameNameMovedFile", "context"),
+    splitKpi(surface, "relocSt", "tree", "relocatedStatements", "lower"),
+    splitKpi(surface, "newName", "names", "novelNames", "lower")
+  ];
+}
+
+export const SPLIT_KPIS: Kpi[] = [
+  splitKpi("app", "treeLn", "lines", "churnLines", "lower"),
+  splitKpi("app", "cleanLn", "lines", "churnLinesClean", "lower"),
+  splitKpi("app", "cleanReal", "lines", "realClean", "hold"),
+  splitKpi("app", "reorderLn", "lines", "reorder", "lower"),
+  ...axisKpis("app"),
+  mintKpi("app", "app:mints"),
+  splitKpi("vendor", "treeLn", "lines", "churnLines", "lower"),
+  splitKpi("vendor", "vendorLn", "lines", "noise", "lower"),
+  splitKpi("vendor", "vendorReal", "lines", "real", "hold", {
+    caveat:
+      "vendorReal with the statements that moved INTO (or out of) " +
+      "vendor/ taken out — those are cross:treeLn. The old vendorReal " +
+      "charged them as dependency change (exp168: 352 of 506 on exp164)"
+  }),
+  ...axisKpis("vendor").map((k) =>
+    k.key === "vendor:noise"
+      ? {
+          ...k,
+          caveat:
+            "the vendor:<statement-axis> columns are the BUNDLE statements " +
+            "(app code and ESM-inlined library code; never CJS library " +
+            "factories) the pipeline filed into vendor/"
+        }
+      : k
+  ),
+  mintKpi("vendor", "vendor:mints"),
+  splitKpi("crossBoundary", "treeLn", "lines", "churnLines", "context", {
+    caveat:
+      "git lines of statements that crossed the src/<->vendor/ boundary, " +
+      "paired by content and charged ONCE here instead of as an app " +
+      "removal plus a vendor addition. A move is not upstream change, but " +
+      "a correct one-time move of library code out of src/ is not a " +
+      "regression either: read the listed moves"
+  }),
+  splitKpi("crossBoundary", "stmts", "statements", "total", "context"),
+  splitKpi(
+    "crossBoundary",
+    "relocSt",
+    "tree",
+    "relocatedStatements",
+    "context"
+  ),
+  splitKpi("crossBoundary", "reloc", "names", "sameNameMovedFile", "context"),
+  mintKpi("unattributed", "mints:unattributed")
+];
+
+const BY_KEY = new Map([...KPIS, ...SPLIT_KPIS].map((k) => [k.key, k]));
 
 /** The KPIs a tool shows, in the order it shows them. Unknown key ⇒ throw. */
 export function kpisNamed(keys: string[]): Kpi[] {

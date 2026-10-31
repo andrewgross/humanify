@@ -20,7 +20,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { SummaryTotals } from "./kpis.js";
-import { KPIS } from "./kpis.js";
+import { KPIS, SPLIT_KPIS } from "./kpis.js";
 
 export interface NoiseBands {
   provenance: {
@@ -64,7 +64,7 @@ export function computeBands(
   totalsPerLabel: Array<Partial<SummaryTotals>>
 ): Record<string, number | null> {
   const out: Record<string, number | null> = {};
-  for (const kpi of KPIS) {
+  for (const kpi of [...KPIS, ...SPLIT_KPIS]) {
     const values = totalsPerLabel
       .map((t) => t[kpi.total])
       .filter((v): v is number => typeof v === "number");
