@@ -111,6 +111,20 @@ type Settings = Array<[string, Setting]>;
 const REPO = path.resolve(import.meta.dirname, "..");
 const BIN = path.join(REPO, "target/release/humanify");
 const FIXTURES = path.join(REPO, "test/e2e/fixtures");
+/**
+ * The library-index store every launch reads (exp171: names is the
+ * binary's DEFAULT, and with no index it finds or builds one in its store).
+ * Committed, tiny — one index built from the one real npm package the
+ * fixtures bundle (ms@2.1.3; test/e2e/library-index/README.md) — so every
+ * Bun fixture runs the default mode END TO END on the found path (index
+ * lookup, vendor placement, restoration), a non-Bun fixture takes the
+ * inert path (off's bytes, with its notice), and NOTHING is ever fetched
+ * or built: a launch that prints the build notice fails the stage.
+ */
+const LIBRARY_STORE = path.join(REPO, "test/e2e/library-index");
+/** The notice a run prints before it BUILDS an index (runtime_index.rs). */
+const BUILD_NOTICE =
+  "NOTICE: library names (the default) needs a library index";
 
 interface VersionPair {
   v1: string;
@@ -380,7 +394,11 @@ async function runBinary(
   const out = args[args.indexOf("-o") + 1];
   const config = `${out}.toml`;
   fs.mkdirSync(path.dirname(config), { recursive: true });
-  writePipelineConfig(config, [["llm.retries", 0], ...settings]);
+  writePipelineConfig(config, [
+    ["llm.retries", 0],
+    ["library.index_store_dir", LIBRARY_STORE],
+    ...settings
+  ]);
   const child = spawn(
     BIN,
     [...args, "--endpoint", endpoint, "--config", config],
@@ -400,6 +418,12 @@ async function runBinary(
   );
   if (code !== 0) {
     fail(`${label}: the binary exited ${code}\n${stderr.slice(-2000)}`);
+  }
+  if (stderr.includes(BUILD_NOTICE)) {
+    fail(
+      `${label}: the run set out to BUILD a library index — e2e must never fetch or build one ` +
+        `(hermeticity); the committed store ${LIBRARY_STORE} must serve every Bun fixture`
+    );
   }
   return stderr;
 }
@@ -619,6 +643,15 @@ function inputOf(name: string, version: string): string {
   return p;
 }
 
+/** Which library path a launch took (exp171), from its stderr. */
+function libraryPath(stderr: string): string {
+  if (/^Library index: using /m.test(stderr))
+    return "names, the committed index FOUND";
+  const inert = /^Library names: off for this run — ([^.(]*)/m.exec(stderr);
+  if (inert) return `inert (off's bytes): ${inert[1].trim()}`;
+  return "names, no machinery line (an explicit index or off)";
+}
+
 /**
  * Steps 1: the fresh run — the binary humanifies v1 against the stub, and
  * a stub rename MUST land (it proves the whole LLM path ran). A bundle
@@ -644,6 +677,7 @@ async function freshLeg(
     endpoint,
     `${label} fresh`
   );
+  console.log(`  library: ${libraryPath(stderr)}`);
   const freshOut = path.join(fresh, "index.js");
   if (!bundle && !fs.existsSync(freshOut)) {
     fail(`${label}: fresh run wrote no index.js`);

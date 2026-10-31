@@ -95,3 +95,101 @@ fn only_a_safe_vendor_path_is_reused() {
     assert!(!reusable_vendor_path("vendor/x.json", "vendor"));
     assert!(!reusable_vendor_path("vendor/a b.js", "vendor"));
 }
+
+// exp173: a names-mode prior tree holds its vendored bodies NAMED by the
+// pipeline (exp169) and formatted, while the fresh factory text is raw. The
+// bun-text-assets fixture's codec, its string edited (v1.0.0 -> v1.1.0).
+const RAW_CODEC_V2: &str = r#"(exports2, module2) => {
+  function load(input) {
+    if (typeof input !== "string") {
+      throw new TypeError("expected a YAML document as a string");
+    }
+    return input.split(",").map(function(part) {
+      return part.trim();
+    }).filter(Boolean).join("|");
+  }
+  function dump(value) {
+    return JSON.stringify(value, null, 2) + `
+---
+`;
+  }
+  function loadAll(docs, iterator) {
+    return docs.split("---").map(iterator);
+  }
+  module2.exports = { load, dump, loadAll };
+}"#;
+
+const NAMED_CODEC_V1: &str = r#"(exportsObject, moduleRecord) => {
+  function parseDocument(sourceText) {
+    if (typeof sourceText !== "string") {
+      throw new TypeError("expected a YAML document string");
+    }
+    return sourceText.split(",").map(function (segment) {
+      return segment.trim();
+    }).filter(Boolean).join("|");
+  }
+  function serializeValue(payload) {
+    return JSON.stringify(payload, null, 2) + `
+---
+`;
+  }
+  function parseAllDocuments(documents, callback) {
+    return documents.split("---").map(callback);
+  }
+  moduleRecord.exports = {
+    load: parseDocument,
+    dump: serializeValue,
+    loadAll: parseAllDocuments
+  };
+}"#;
+
+const NAMED_TEMPLATE: &str = r#"(exportsObject, moduleRecord) => {
+  var templateText = lib_06776fa4;
+  moduleRecord.exports = {
+    render: function (substitution) {
+      return templateText.replace("{x}", substitution);
+    }
+  };
+}"#;
+
+const NAMED_TEMPLATE_TEXT: &str = r#"(exportsObject, moduleRecord) => {
+  moduleRecord.exports = '<div class="tpl">{x}</div>';
+}"#;
+
+#[test]
+fn a_changed_module_pairs_with_its_pipeline_named_prior() {
+    let named = [NAMED_TEMPLATE_TEXT, NAMED_CODEC_V1, NAMED_TEMPLATE];
+    // As written, the pipeline's own names hide the twin (the exp171 defect).
+    let prior: Vec<ModuleFeatures> = named.iter().map(|t| module_features(t)).collect();
+    let fresh = vec![module_features(RAW_CODEC_V2)];
+    assert!(pair_by_content(&fresh, &prior, &idf_of(&prior)).is_empty());
+    // Read blind to the bindings' spellings, it pairs with its prior.
+    let prior: Vec<ModuleFeatures> = named.iter().map(|t| blind_module_features(t)).collect();
+    let fresh = vec![blind_module_features(RAW_CODEC_V2)];
+    let pairs = pair_by_content(&fresh, &prior, &idf_of(&prior));
+    assert_eq!(pairs.len(), 1, "{pairs:?}");
+    assert_eq!((pairs[0].fresh, pairs[0].prior), (0, 1));
+}
+
+#[test]
+fn blind_text_masks_every_binding_and_keeps_free_names_and_properties() {
+    let blind = blind_text("function(e,t){var n=lib_0123abcd,load=1;e.exports={render:n,load}}");
+    assert!(
+        !blind.contains("e.exports") && blind.contains(".exports"),
+        "{blind}"
+    );
+    assert!(
+        blind.contains("lib_0123abcd"),
+        "a free name is kept: {blind}"
+    );
+    assert!(blind.contains("render:"), "a property key is kept: {blind}");
+    // A shorthand property reads as its expansion, as a rename writes it.
+    assert!(blind.contains("load:"), "{blind}");
+    // The same module under other binding spellings reads the same.
+    assert_eq!(
+        blind,
+        blind_text(
+            "function(exportsObject,req){var templateText=lib_0123abcd,loader=1;exportsObject.exports={render:templateText,load:loader}}"
+        )
+    );
+}

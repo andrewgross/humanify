@@ -40,8 +40,8 @@ use crate::modules::vendor_names::{
 };
 use crate::modules::vendor_pairing::{
     Carried, ContentCarry, DeclaredCarry, ModuleFeatures, PriorModule, apply_content_pairs,
-    carry_by_declared_identity, is_content_candidate, leftover_priors, literal_idf,
-    module_features, pair_by_content,
+    blind_module_features, carry_by_declared_identity, is_content_candidate, leftover_priors,
+    literal_idf, module_features, pair_by_content,
 };
 use crate::modules::{
     BunModuleClassification, CarriedName, FactoryNameCounts, FactoryRecord, NameSource,
@@ -1168,13 +1168,23 @@ fn carry_by_content(
     if candidates.is_empty() || leftovers.is_empty() {
         return Some(report);
     }
+    // A prior whose vendored bodies the pipeline NAMED (names mode, exp169)
+    // is read blind to binding spellings on BOTH sides (exp173): its own
+    // names would otherwise hide a changed module's twin. Any other prior
+    // is read as written, as before.
+    let features: fn(&str) -> ModuleFeatures =
+        if crate::naming::vendor_bodies::prior_bodies_named(root) {
+            blind_module_features
+        } else {
+            module_features
+        };
     // Every prior module's features: the IDF is over the WHOLE prior tree.
     let prior_features: Vec<Option<ModuleFeatures>> =
         crate::par::map_ordered(&prior.modules, |m| {
             fs::read_to_string(root.join(&m.file_name))
                 .ok()
                 .and_then(|t| prior_factory_text(&t))
-                .map(|t| module_features(&t))
+                .map(|t| features(&t))
         });
     let idf = literal_idf(prior_features.iter().flatten());
     let by_file: HashMap<&str, usize> = prior
@@ -1196,7 +1206,7 @@ fn carry_by_content(
         readable.iter().map(|(_, f)| (*f).clone()).collect();
     let fresh_features: Vec<ModuleFeatures> = {
         let refs: Vec<&FactoryRecord> = candidates.iter().map(|&i| &factories[i]).collect();
-        crate::par::map_ordered(&refs, |f| module_features(&fresh_text(f)))
+        crate::par::map_ordered(&refs, |f| features(&fresh_text(f)))
     };
     let pairs = pair_by_content(&fresh_features, &leftover_features, &idf);
     report.carries = apply_content_pairs(

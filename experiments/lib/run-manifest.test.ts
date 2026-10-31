@@ -8,7 +8,10 @@ import {
   baseModeComparison,
   baseModeOf,
   labelBaseModes,
+  labelNamingModes,
   loadManifest,
+  namingModeComparison,
+  namingModeOf,
   manifestWarnings,
   peakRssMbFromStatus,
   isScorecardShape,
@@ -198,6 +201,96 @@ describe("base mode", () => {
       r.lines.some((l) => /UNKNOWN for old/.test(l)),
       r.lines.join("\n")
     );
+  });
+});
+
+describe("naming mode (exp171: names became the binary's default)", () => {
+  const withMatching = (matching: string | undefined): RunManifest => {
+    const m = base();
+    const resolved = m.config.resolved as Record<string, unknown>;
+    if (matching !== undefined) resolved.library = { matching };
+    return m;
+  };
+
+  it("reads the binary's own record of library.matching", () => {
+    assert.strictEqual(namingModeOf(withMatching("names")), "names");
+    assert.strictEqual(namingModeOf(withMatching("off")), "off");
+  });
+
+  it("reads report as OFF — report writes off's bytes", () => {
+    assert.strictEqual(namingModeOf(withMatching("report")), "off");
+  });
+
+  it("reads a run with no record as OFF — every label before exp171 was default-mode", () => {
+    assert.strictEqual(namingModeOf(withMatching(undefined)), "off");
+    const old = base();
+    delete old.config.resolved;
+    assert.strictEqual(namingModeOf(old), "off");
+  });
+
+  it("collects a label's modes: pipeline.json's record first, else its manifests, else off", () => {
+    const d = path.join(tmp, "naming-modes");
+    fs.mkdirSync(d, { recursive: true });
+    assert.deepStrictEqual(
+      labelNamingModes(d),
+      ["off"],
+      "no record at all: an old default-mode label"
+    );
+    writeManifest(d, "2.1.86", withMatching("names"));
+    assert.deepStrictEqual(labelNamingModes(d), ["names"]);
+    writeManifest(d, "2.1.119", withMatching("off"));
+    assert.deepStrictEqual(labelNamingModes(d), ["names", "off"]);
+    fs.writeFileSync(
+      path.join(d, "pipeline.json"),
+      JSON.stringify({ namingMode: "names" })
+    );
+    assert.deepStrictEqual(
+      labelNamingModes(d),
+      ["names"],
+      "the label's own record wins"
+    );
+  });
+
+  it("REFUSES a comparison across naming modes, naming each label's mode", () => {
+    const r = namingModeComparison(
+      [
+        { label: "ref-scratch", modes: ["off"] },
+        { label: "ref-names", modes: ["names"] }
+      ],
+      false
+    );
+    assert.ok(r.refusal, "an off-vs-names comparison must be refused");
+    assert.match(r.refusal, /ref-scratch=off/);
+    assert.match(r.refusal, /ref-names=names/);
+    assert.match(r.refusal, /--force-mixed/);
+    assert.ok(
+      r.lines.some((l) => /naming:/.test(l)),
+      "the mode line is always printed"
+    );
+  });
+
+  it("--force-mixed prints the mix loudly instead of refusing", () => {
+    const r = namingModeComparison(
+      [
+        { label: "a", modes: ["off"] },
+        { label: "b", modes: ["names"] }
+      ],
+      true
+    );
+    assert.strictEqual(r.refusal, null);
+    assert.ok(r.lines.some((l) => /MIXED NAMING MODES/.test(l)));
+  });
+
+  it("agreeing labels compare silently except for the mode line", () => {
+    const r = namingModeComparison(
+      [
+        { label: "r1", modes: ["names"] },
+        { label: "r2", modes: ["names"] }
+      ],
+      false
+    );
+    assert.strictEqual(r.refusal, null);
+    assert.strictEqual(r.lines.length, 1);
   });
 });
 

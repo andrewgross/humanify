@@ -34,6 +34,11 @@
 //! re-recorded goldens — argv + the TOML file it carries — must resolve to
 //! the effective record of a captured launch: the harness's new launches
 //! configure the run exactly as the old ones did.
+//!
+//! exp171 (2026-10-31): names is the binary's default, and every golden
+//! launch now carries the eval's library index (`[library] index`, from
+//! pairs.json) — compared with that key taken back out, after asserting it
+//! is exactly the eval's index.
 
 use serde_json::{Value, json};
 
@@ -452,12 +457,27 @@ fn every_golden_launch_resolves_to_a_captured_launchs_settings() {
         "the goldens shrank: {}",
         launches.len()
     );
+    // exp171: names became the binary's default, and the harness hands
+    // every names launch the full prebuilt index (pairs.json
+    // `libraryIndex`) so no run builds one at run time. That one key is the
+    // deliberate difference from the captured launches; the record is
+    // compared with it taken back out (every other setting must still
+    // match a captured launch).
+    let pairs: Value = serde_json::from_str(&repo_file("experiments/034-eval-harness/pairs.json"))
+        .expect("pairs.json is JSON");
+    let eval_index = pairs["libraryIndex"].clone();
+    assert!(eval_index.is_string(), "pairs.json names the eval's index");
     for launch in launches {
         assert!(
             !launch.1.is_empty(),
             "a golden launch without a config file: {launch:?}"
         );
-        let got = parsed_record(&launch);
+        let mut got = parsed_record(&launch);
+        assert_eq!(
+            got["libraryIndex"], eval_index,
+            "every golden (default = names) launch is handed the eval's index: {launch:?}"
+        );
+        got["libraryIndex"] = Value::Null;
         assert!(
             wanted.contains(&got),
             "a golden launch whose settings no captured launch had:\n{launch:?}\n{got:#}"

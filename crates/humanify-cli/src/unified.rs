@@ -416,12 +416,12 @@ fn pipeline_body(
         switches.switch_on(Switch::ManifestPriorOrder),
         // `--library-matching report`: discovery runs, its rows go to the
         // library report (and the diagnostics), nowhere else. `names`
-        // (plan step 4, under its unlock) asks for the same report and
+        // (plan step 4; the default since exp171) asks for the same report and
         // reads the index's whole-module answers — the unpack places
         // wholly claimed factories at the index's vendor paths, and
         // nothing else reads them. The request builder attaches the
         // answers itself (the discover verb builds the same request).
-        (config.library.matching != LibraryMatching::Off)
+        (config.library.matching != LibraryMatching::Off && library.inert.is_none())
             .then(|| config.library.discovery_request(library.index.as_ref())),
         profiler,
         renderer,
@@ -780,6 +780,10 @@ struct LibraryLoad {
     /// The machinery's answer (`indexSource` in the library report): set
     /// only when the run found or built its index at run time (exp154).
     source: Option<crate::runtime_index::IndexSource>,
+    /// No index can serve this bundle (exp171: not Bun-built, or it reveals
+    /// no package): the run goes on as `off` — discovery never runs — and
+    /// this is the notice it printed.
+    inert: Option<String>,
 }
 
 /// `--library-matching report`: open the index's slice for the recipe the
@@ -795,8 +799,7 @@ struct LibraryLoad {
 /// stays off), or from the machinery — `index_job` is the handle to the
 /// store search / run-time build `pipeline_body` started beside the run;
 /// taking its answer here is the joint. A machinery failure fails the run
-/// loudly (matching is `report` with no index passed, so there is nothing
-/// to fall back to).
+/// loudly; a bundle no index can serve (`Inert`, exp171) runs as `off`.
 fn load_library_index(
     code: &str,
     config: &Config,
@@ -816,30 +819,27 @@ fn load_library_index(
         Some(job) => match job.join(profiler, stop) {
             crate::runtime_index::JobAnswer::Found(dir, source)
             | crate::runtime_index::JobAnswer::Built(dir, source) => (dir, Some(source)),
+            crate::runtime_index::JobAnswer::Inert(why) => {
+                renderer.message(&why);
+                return Ok(LibraryLoad {
+                    inert: Some(why),
+                    ..LibraryLoad::default()
+                });
+            }
             crate::runtime_index::JobAnswer::Failed(error) => {
                 return Err(Crash(format!(
                     "run-time library index (library.index_build = \"auto\"): {error}"
                 )));
             }
         },
-        None => {
-            if config.library.index_build == crate::config::IndexBuild::Auto {
-                // index_build = "auto" but an explicit index was passed: the
-                // explicit index wins, the machinery never runs. Say so —
-                // the run's cache is not being searched.
-                renderer.message(
-                    "library.index_build = \"auto\" stays off: --library-index was passed",
-                );
-            }
-            (
-                config
-                    .library
-                    .index_dir()
-                    .expect("report needs an index or the machinery (checked at the parse point)")
-                    .map_err(Crash)?,
-                None,
-            )
-        }
+        None => (
+            config
+                .library
+                .index_dir()
+                .expect("report needs an index or the machinery (checked at the parse point)")
+                .map_err(Crash)?,
+            None,
+        ),
     };
     let recipe =
         humanify_core::libindex::recipe::detect_recipe(code, toolchain.bundler, toolchain.minifier);
@@ -849,6 +849,7 @@ fn load_library_index(
             index: Some(index),
             recipe_missing: None,
             source,
+            inert: None,
         },
         Err(LoadError::NoSlice { id, why }) => {
             // A report run goes on with path/banner detection only; a
@@ -865,6 +866,7 @@ fn load_library_index(
                 index_id: Some(id),
                 recipe_missing: Some(warning),
                 source,
+                inert: None,
             }
         }
         Err(LoadError::Unusable(e)) => {
@@ -967,6 +969,9 @@ impl RunReports<'_> {
             "indexId": self.library.index_id,
             "recipeMissing": self.library.recipe_missing,
         });
+        if let Some(why) = &self.library.inert {
+            doc["inert"] = serde_json::Value::String(why.clone());
+        }
         // The machinery's usage trail — only when it ran (the explicit
         // index path records nothing new, exp154).
         if let Some(source) = &self.library.source {

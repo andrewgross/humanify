@@ -22,7 +22,7 @@
 //! wrapper scope's bindings in `Object.keys` order, their reference paths
 //! and constant violations. Path questions go to [`babel`].
 
-mod babel;
+pub(crate) mod babel;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 

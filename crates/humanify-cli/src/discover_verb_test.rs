@@ -18,10 +18,16 @@ fn library(toml: &str) -> Library {
     library_from_file(Some(&f)).expect("valid")
 }
 
+/// The rule under REPORT matching — the library score's instrument mode
+/// (experiments/096-library-matching-score/run.py pins it since exp171,
+/// when names became the default and a names request began reading the
+/// index's module answers).
 fn rule(name: &str) -> Library {
     match name {
-        "agreement" => library("[library.lookup]\nagreement = true\n"),
-        "structural" => library(""),
+        "agreement" => {
+            library("[library]\nmatching = \"report\"\n[library.lookup]\nagreement = true\n")
+        }
+        "structural" => library("[library]\nmatching = \"report\"\n"),
         other => panic!("{other}"),
     }
 }
@@ -386,7 +392,12 @@ fn a_bundle_whose_recipe_the_index_lacks_fails_the_instrument() {
 fn a_names_request_carries_the_index_module_answers() {
     let code = fixture();
     let ix_dir = self_index(&code, "answers");
-    let names = library("[library]\nmatching = \"names\"\nnames_unlocked = true\n");
+    let names = library("");
+    assert_eq!(
+        names.matching,
+        crate::config::LibraryMatching::Names,
+        "names is the default (exp171)"
+    );
     let recipe = {
         let detection = humanify_core::detect::detect_bundle(&code);
         let toolchain = humanify_core::toolchain::resolve_toolchain(&detection, None, None);

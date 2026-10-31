@@ -251,6 +251,78 @@ export function baseModeComparison(
 }
 
 /**
+ * The NAMING MODE a run was scored in (exp171, 2026-10-31): `names` — the
+ * binary's default since then: library code the index recognises is
+ * placed under `vendor/<package>/` and named from the index — or `off`.
+ * Read from the binary's own record of its configuration
+ * (`resolved.library.matching`); `report` writes off's bytes (warm
+ * neutrality), so it reads as `off`. A run with no record is `off`: every
+ * label before exp171 was scored in the default mode, which was off, and
+ * every names-mode label before it (exp157-169) post-dates the record
+ * (2026-10-13), so it says names.
+ */
+export type NamingMode = "names" | "off";
+
+export function namingModeOf(m: RunManifest): NamingMode {
+  const library = m.config.resolved?.library as
+    | { matching?: string }
+    | undefined;
+  return library?.matching === "names" ? "names" : "off";
+}
+
+/**
+ * A label's naming modes: its `pipeline.json`'s `namingMode` (run.sh
+ * records it since exp171), else every manifest's, else `off` (a label
+ * with no record is an old default-mode label).
+ */
+export function labelNamingModes(resultsDir: string): string[] {
+  try {
+    const p = JSON.parse(
+      fs.readFileSync(path.join(resultsDir, "pipeline.json"), "utf8")
+    ) as { namingMode?: string };
+    if (p.namingMode) return [p.namingMode];
+  } catch {
+    /* no pipeline.json, or one from before namingMode existed */
+  }
+  const modes = [...new Set(loadManifests(resultsDir).map(namingModeOf))];
+  return modes.length > 0 ? modes.sort() : ["off"];
+}
+
+/**
+ * May these labels be compared on naming mode? Refused when their modes
+ * differ: names mode moves library code out of `src/` into `vendor/` and
+ * names it, so every surface's KPIs measure a different tree — a delta
+ * across modes reports the mode change as the candidate's effect (the
+ * names-mode references have their own bands, `noise-bands.json` keyed by
+ * mode). `force` turns the refusal into a loud line, as for base modes.
+ */
+export function namingModeComparison(
+  labels: ReadonlyArray<{ label: string; modes: readonly string[] }>,
+  force: boolean
+): { refusal: string | null; lines: string[] } {
+  const shown = (modes: readonly string[]) => modes.join("+");
+  const each = labels.map((l) => `${l.label}=${shown(l.modes)}`);
+  const lines = [`  naming: ${each.join(" · ")}`];
+  const known = new Set(labels.flatMap((l) => l.modes));
+  if (known.size <= 1) return { refusal: null, lines };
+  const what =
+    `these labels were scored in ${known.size} naming modes (${each.join(", ")}). ` +
+    "Names mode places library code under vendor/ and names it; off mode leaves it in " +
+    "src/: every delta between them includes the mode change, not just the candidate's.";
+  if (!force) {
+    return {
+      refusal:
+        `refusing to compare: ${what}\n` +
+        "Score the labels in one naming mode (`--pipeline-set library.matching=off` " +
+        "reproduces every reference before exp171), or pass --force-mixed if mixing is deliberate.",
+      lines
+    };
+  }
+  lines.push(`  !! MIXED NAMING MODES — shown anyway: ${what}`);
+  return { refusal: null, lines };
+}
+
+/**
  * Peak resident set in MB from the contents of `/proc/<pid>/status`.
  *
  * GNU `time` is not installed in this environment and

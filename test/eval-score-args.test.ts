@@ -128,8 +128,50 @@ describe("eval score argument parsing", () => {
       workdir: "/tmp/eval-work",
       bin: path.join(REPO, "target/release/humanify"),
       forceMixed: false,
-      pipelineSettings: []
+      pipelineSettings: [],
+      // exp171: names is the binary's default; a names launch is handed
+      // the full prebuilt index, never a run-time build.
+      namingMode: "names",
+      libraryIndex: PAIRS.libraryIndex
     });
+  });
+
+  it("names mode reads pairs.json's index unless --library-index names another", () => {
+    assert.strictEqual(score(["lbl"]).config.libraryIndex, PAIRS.libraryIndex);
+    const r = score(["lbl", "--library-index", "/ix/one"]);
+    assert.strictEqual(r.config.namingMode, "names");
+    assert.strictEqual(r.config.libraryIndex, "/ix/one");
+  });
+
+  it("library.matching=off is the off mode: no index handed to any launch", () => {
+    const r = score(["lbl", "--pipeline-set", "library.matching=off"]);
+    assert.strictEqual(r.config.namingMode, "off");
+    assert.strictEqual(r.config.libraryIndex, null);
+    assert.match(
+      String(
+        scoreArgs([
+          "lbl",
+          "--pipeline-set",
+          "library.matching=off",
+          "--library-index",
+          "/ix"
+        ])
+      ),
+      /--library-index given with library.matching=off/
+    );
+  });
+
+  it("report mode is the OFF regime (off's bytes) but still reads an index", () => {
+    const r = score(["lbl", "--pipeline-set", "library.matching=report"]);
+    assert.strictEqual(r.config.namingMode, "off");
+    assert.strictEqual(r.config.libraryIndex, PAIRS.libraryIndex);
+  });
+
+  it("refuses library.index as a --pipeline-set: --library-index is its one spelling", () => {
+    assert.match(
+      String(scoreArgs(["lbl", "--pipeline-set", "library.index=/ix"])),
+      /pass --library-index/
+    );
   });
 
   it("every flag lands in its run config field", () => {
@@ -152,7 +194,9 @@ describe("eval score argument parsing", () => {
       "--workdir",
       "/w",
       "--bin",
-      "rel/humanify"
+      "rel/humanify",
+      "--library-index",
+      "/ix"
     ]);
     assert.strictEqual(r.force, true);
     assert.deepStrictEqual(r.config, {
@@ -172,7 +216,9 @@ describe("eval score argument parsing", () => {
       // Resolved against the repo, so run.sh never resolves a path itself.
       bin: path.join(REPO, "rel/humanify"),
       forceMixed: true,
-      pipelineSettings: []
+      pipelineSettings: [],
+      namingMode: "names",
+      libraryIndex: "/ix"
     });
   });
 
@@ -232,8 +278,20 @@ describe("eval neutrality argument parsing", () => {
       priors: "/work/exp050-cold",
       inputsBase: PAIRS.inputsBase,
       endpoint: null,
-      pipelineSettings: []
+      pipelineSettings: [],
+      namingMode: "names",
+      libraryIndex: PAIRS.libraryIndex
     });
+    // A baseline from before exp171 defaults to off: compare across the
+    // flip in off mode, where no index reaches either leg.
+    const off = neutralityArgs([
+      "main",
+      "--pipeline-set",
+      "library.matching=off"
+    ]);
+    assert.ok(typeof off !== "string", String(off));
+    assert.strictEqual(off.namingMode, "off");
+    assert.strictEqual(off.libraryIndex, null);
     // The trap CLAUDE.md names: a new workdir moves the cache with it.
     const moved = neutralityArgs([
       "main",
@@ -275,13 +333,17 @@ describe("eval neutrality argument parsing", () => {
       "--pipeline-set",
       "library.matching=report",
       "--pipeline-set",
-      "library.index=/work/ix"
+      "naming.batch_size=10",
+      "--library-index",
+      "/work/ix"
     ]);
     assert.ok(typeof r !== "string", String(r));
     assert.deepStrictEqual(r.pipelineSettings, [
       "library.matching=report",
-      "library.index=/work/ix"
+      "naming.batch_size=10"
     ]);
+    // the index is the harness's own key (exp171), handed to both legs
+    assert.strictEqual(r.libraryIndex, "/work/ix");
   });
 
   it("refuses a --pipeline-set that names a key the harness sets itself, or is malformed", () => {

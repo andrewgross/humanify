@@ -3,6 +3,8 @@
   "_paths": "Override per-host with --inputs-base / --priors-base. The bahadur devcontainer mirrors these exact paths, so they resolve there unchanged. The LLM endpoint is deliberately NOT here (this repo is public): pass --endpoint, or set llm.endpoint in the git-ignored .humanify.local.json at the repo root (experiments/lib/llm-endpoint.sh).",
   "inputsBase": "/Users/andrewgross/Development/claude-code-versions/inputs",
   "priorsBase": "/Users/andrewgross/Development/unpacked-claude-code/versions",
+  "_libraryIndex": "The library index a names-mode launch reads (names is the binary's default since exp171): the full prebuilt Bun index (exp152, names tables exp159). Override with --library-index; refused with --pipeline-set library.matching=off.",
+  "libraryIndex": "/work/library-index/cb64c1f5fd507bee7f80efd46e0d01cec405a8b3028a9c05d56e94d7c071ec28",
   "llm": {
     "model": "openai/gpt-oss-20b",
     "apiKey": "local",

@@ -1,0 +1,111 @@
+{
+  "format": "humanify-library-index/4",
+  "asOf": "2026-10-25T23:59:59.999Z",
+  "fingerprints": {
+    "module": "vendor-content-key/4",
+    "literals": "literals/1",
+    "units": "units/3",
+    "edges": "edges/2",
+    "names": "names/1"
+  },
+  "registry": {
+    "earliestFetch": "2026-10-31T08:20:25.000Z",
+    "latestFetch": "2026-10-31T08:20:26.000Z",
+    "packuments": {
+      "bun": "fd19fdaf3555597da0f8062828a7c2304659502f2e8658e9635449f53ce35629",
+      "ms": "2dc6e090d0810d96d4c1953f01093518d4083914b44cc4c9957ff72ec06b5071"
+    }
+  },
+  "slices": [
+    {
+      "slice": "bun-bun-cjs-min",
+      "recipe": "bun:target=bun,format=cjs,minify,production",
+      "recipeVersion": "recipe/4",
+      "defaultForBundler": true,
+      "bundler": "bun",
+      "version": "1.4.0",
+      "published": "2026-08-20T14:14:51.965Z",
+      "newestAtAsOf": "1.4.4",
+      "bundlerAfterAsOf": false
+    },
+    {
+      "slice": "bun-node-cjs-min",
+      "recipe": "bun:target=node,format=cjs,minify,production",
+      "recipeVersion": "recipe/4",
+      "defaultForBundler": false,
+      "bundler": "bun",
+      "version": "1.4.0",
+      "published": "2026-08-20T14:14:51.965Z",
+      "newestAtAsOf": "1.4.4",
+      "bundlerAfterAsOf": false
+    }
+  ],
+  "packages": [
+    {
+      "name": "ms",
+      "version": "0.7.3",
+      "role": "major-2",
+      "published": "2017-03-08T21:59:28.048Z"
+    },
+    {
+      "name": "ms",
+      "version": "1.0.0",
+      "role": "major-1",
+      "published": "2017-03-19T21:43:15.128Z"
+    },
+    {
+      "name": "ms",
+      "version": "2.1.2",
+      "role": "patch",
+      "published": "2019-06-06T17:31:55.859Z"
+    },
+    {
+      "name": "ms",
+      "version": "2.1.3",
+      "role": "latest",
+      "published": "2020-12-08T13:54:35.223Z"
+    }
+  ],
+  "refused": [],
+  "shards": {
+    "bun-bun-cjs-min/ms@0.7.3": "f40e9e9acdadf9d3843811232a8310f388094f9c1e8b0615b7070df735745a1c",
+    "bun-bun-cjs-min/ms@1.0.0": "ac36dbe38a1990f8f614bcfc0bb7d740ad6a65e7067299b71f037ad628a9cf4d",
+    "bun-bun-cjs-min/ms@2.1.2": "1a6c7017b7587dc836895df37a7d0945db25fd3cdf7d37ff8225fb140f206b2b",
+    "bun-bun-cjs-min/ms@2.1.3": "7eee4be84d636f48e76f13a0612ac7f42e9c91626572606fd3c3891883de80b0",
+    "bun-node-cjs-min/ms@0.7.3": "e1ad7f4c35ab51e31b3eb9e8ac33246afe45675d0b734aacd024873bd80fd1fe",
+    "bun-node-cjs-min/ms@1.0.0": "60353eadf92ac5f59a79c90fd1736d0e05669ac19c313aea43acc95f9263cd31",
+    "bun-node-cjs-min/ms@2.1.2": "eeedec90675243ff12e7e125d41562cc8dbd32cf6daed2e44ccb5f3eb1ff6251",
+    "bun-node-cjs-min/ms@2.1.3": "b47537c52629253c93a43294ff3cf2b647249239c0d269dea8cb8ac7c8f9913f",
+    "literals/ms@0.7.3": "8d883b19dd5d7d96ede4c9e2306b1a2fabfaba8a69a5f70182cfa0a3d777e392",
+    "literals/ms@1.0.0": "7a49131a778a46a267fd8828817e6c7e842875216e8d287ff2cdb9272a56678d",
+    "literals/ms@2.1.2": "c74bd32163767ed98d450fc58753e65eaf499b2af5d3c5edf647999035a8513e",
+    "literals/ms@2.1.3": "7c37f43762ebeaa93563b2c541e126221a5dd08cdd40afa49e0455402657a6f9"
+  },
+  "tables": {
+    "callee-prints.bun-bun-cjs-min.bin": "07c4d4955540b4813080faa3315791947628d028061e7e5b994dd63872b98375",
+    "callee-prints.bun-node-cjs-min.bin": "a4eb127a36d1cc1e35342f3501aeedfb3702056e4dd1b28a3ffe9d08f5ebc3b3",
+    "edges.bun-bun-cjs-min.bin": "bb357740cb2dfa61fc1d4242959c832aa4932809a374da7779181f1abf0f4e7c",
+    "edges.bun-bun-cjs-min.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "edges.bun-node-cjs-min.bin": "c0d323ded3f41fab63cfbdc6e54e80ca7a680e304e8f30173bdea629f464e1e0",
+    "edges.bun-node-cjs-min.jsonl": "f68734ef2c029d3db0185ef8f2ce5df513e1da442d348628047e203b9d75f256",
+    "literals.bin": "326e5ee21a5c18ccdb6ae1084e876332cc210f980a41b63cc7f23d9261806333",
+    "literals.files.jsonl": "16201dec2165f5ced8afb30890e992545746d2e8ef82103b5111151640f1e9de",
+    "modules.bun-bun-cjs-min.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules.bun-node-cjs-min.jsonl": "c75de62db5e4fc34cd49c031d305e6319fa81affd986e656e45bd9d37dff7cd7",
+    "names.bun-bun-cjs-min.bin": "1f7027dd0511ea49af84c7a800270b04e1a810308209a8685e2d4e1a5396e5bf",
+    "names.bun-bun-cjs-min.jsonl": "ea9b3f44dd8840713fe80f4a0b1bfd2c2dff8cea75de3f5756189d95937b3482",
+    "names.bun-node-cjs-min.bin": "55329d3b9327d415625370033b94d6c2dad6dd59c7d9a47d6faec90f1858b500",
+    "names.bun-node-cjs-min.jsonl": "b235c2611c76121902b61015f77c5129cce143d406220f18521e3c6028c3fd83",
+    "names.json": "4b1d568e73fb7766cb180b1a88d894ddd866867c85ced74f5afff451153816b3",
+    "packages.json": "c6db28cf5b5be84d0c076b535e1c32ad88f256f3eb6e78e7d0ec449527c7e815",
+    "units.bun-bun-cjs-min.bin": "f9f0ad7a98c86f58d5681f952ef983fcb509e65cbb229ee650710c2e7b5405be",
+    "units.bun-bun-cjs-min.jsonl": "f82fd763e75e36721fa0d860a7e0346f8885f1dbdc87d96ae2d76faa235ad6d7",
+    "units.bun-node-cjs-min.bin": "b3870a9ec1b46419cf6b782f3bd26f64dcee0b21d8651f29442acd398a4b1589",
+    "units.bun-node-cjs-min.jsonl": "8fbd91951cd629af8c0a10071c0e5120883852673527b669e46719a31f5cad1c",
+    "versions.json": "99345c88cb600ceb9649adc84865f60f7171e50aa755568a02d015496ea5778b"
+  },
+  "data": {
+    "families.json": "ce2edd265d0b744409c758c02c6850c6961cea59937ef18c460da79d761e3a87",
+    "stoplists.json": "78025a730d7e9639b326332fe84e7886537cf018f308a605c65ecf3ea3c067ff"
+  }
+}

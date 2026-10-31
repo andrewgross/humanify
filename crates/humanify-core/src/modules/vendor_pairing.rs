@@ -140,6 +140,87 @@ pub fn module_features(text: &str) -> ModuleFeatures {
     }
 }
 
+/// The spelling every binding takes in [`blind_text`]: a short name, so the
+/// lexer masks it like a minified one.
+const BLIND_BINDING: &str = "_";
+
+/// A factory's text read BLIND to the spelling of its own bindings
+/// (exp173): formatted by the pipeline's formatter, then every identifier
+/// that declares or reads a binding of the factory itself spelled
+/// [`BLIND_BINDING`] — a shorthand property as its expansion
+/// (`{load}` → `{load: _}`), the way a rename writes it. Free names (the
+/// references to other modules, `require`, globals), property names and
+/// literals are kept.
+///
+/// A names-mode prior tree holds its vendored bodies NAMED by the pipeline
+/// (exp169, `naming::vendor_bodies`) and formatted, while the fresh factory
+/// is the bundle's raw text: read as written, the pipeline's own names hide
+/// a changed module's twin. Both sides read blind are the same text up to
+/// the code's real edits. The pipeline names bindings only, so nothing it
+/// assigns survives here. Text the formatter refuses is masked unformatted;
+/// text that does not parse is returned as given (its old reading).
+pub fn blind_text(text: &str) -> String {
+    let statement = crate::naming::vendor_bodies::join_bodies([text]);
+    let formatted = crate::format::format_file(&statement, &Default::default(), &[])
+        .map(|f| f.text)
+        .unwrap_or(statement);
+    mask_bindings(&formatted).unwrap_or(formatted)
+}
+
+/// `code` with every binding identifier, and every reference that resolves
+/// to one, spelled [`BLIND_BINDING`]. None when it does not parse.
+fn mask_bindings(code: &str) -> Option<String> {
+    use oxc_ast::AstKind;
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse_unambiguous(&allocator, code);
+    if !ingest.errors.is_empty() {
+        return None;
+    }
+    let semantic = ingest.semantic();
+    let scoping = semantic.scoping();
+    let nodes = semantic.nodes();
+    let mut edits: Vec<(usize, usize, String)> = Vec::new();
+    for node in nodes.iter() {
+        let (span, name) = match node.kind() {
+            AstKind::BindingIdentifier(b) => (b.span, b.name.as_str()),
+            AstKind::IdentifierReference(r)
+                if r.reference_id
+                    .get()
+                    .is_some_and(|id| scoping.get_reference(id).symbol_id().is_some()) =>
+            {
+                (r.span, r.name.as_str())
+            }
+            _ => continue,
+        };
+        let spelled = if crate::emit::cjs::babel::is_shorthand_value(nodes, node.id(), span) {
+            format!("{name}: {BLIND_BINDING}")
+        } else {
+            BLIND_BINDING.to_string()
+        };
+        edits.push((span.start as usize, span.end as usize, spelled));
+    }
+    edits.sort_unstable_by_key(|e| e.0);
+    edits.dedup_by_key(|e| e.0);
+    let mut out = String::with_capacity(code.len());
+    let mut at = 0;
+    for (start, end, spelled) in edits {
+        if start < at {
+            continue;
+        }
+        out.push_str(&code[at..start]);
+        out.push_str(&spelled);
+        at = end;
+    }
+    out.push_str(&code[at..]);
+    Some(out)
+}
+
+/// [`module_features`] of the [`blind_text`]: the reading for a prior tree
+/// whose vendored bodies the pipeline named.
+pub fn blind_module_features(text: &str) -> ModuleFeatures {
+    module_features(&blind_text(text))
+}
+
 /// `log((N + 1) / (df + 0.5))` per literal, over every module of the prior
 /// tree.
 pub fn literal_idf<'a>(modules: impl Iterator<Item = &'a ModuleFeatures>) -> HashMap<String, f64> {

@@ -84,12 +84,13 @@ fn the_bundle_itself_names_the_build_s_seeds() {
     assert!(seeds[0].evidence.contains("package-json"), "{:?}", seeds[0]);
 }
 
-/// An empty store and a bundle that reveals no package: the machinery
-/// fails the run loudly naming the escape hatches — through the joint, so
-/// the wiring (scope thread → channel → deadline'd join) is what this
-/// test proves.
+/// An empty store and a bundle that reveals no package, then a bundler
+/// no index can be built for: since exp171 (names is the default) neither
+/// fails the run — the machinery answers `Inert` with the notice the run
+/// prints, naming the escapes — through the joint, so the wiring (scope
+/// thread → channel → deadline'd join) is what this test proves.
 #[test]
-fn the_job_answers_through_the_joint_and_names_its_refusals() {
+fn a_bundle_no_index_can_serve_is_inert_and_says_why() {
     let config = machinery_config();
     let profiler = humanify_core::profiling::Profiler::disabled();
     let stop = AtomicBool::new(false);
@@ -98,14 +99,14 @@ fn the_job_answers_through_the_joint_and_names_its_refusals() {
         let job = start(scope, &profiler, code, &config, bun().0, bun().1, &stop);
         job.join(&profiler, &stop)
     });
-    let JobAnswer::Failed(error) = answer else {
-        panic!("no seed, nothing found: the run fails loudly");
+    let JobAnswer::Inert(why) = answer else {
+        panic!("no seed, nothing found: the run goes on as off");
     };
-    assert!(error.contains("reveals no package"), "{error}");
-    assert!(error.contains("--library-index"), "{error}");
-    assert!(error.contains("index_build = \"off\""), "{error}");
+    assert!(why.contains("reveals no npm package"), "{why}");
+    assert!(why.contains("--library-index"), "{why}");
+    assert!(why.contains("--library-matching off"), "{why}");
 
-    // A bundler this lane does not walk: refused before the store is even
+    // A bundler this lane does not walk: inert before the store is even
     // searched, naming the bundler and the same two escapes.
     let answer = std::thread::scope(|scope| {
         let job = start(
@@ -119,23 +120,32 @@ fn the_job_answers_through_the_joint_and_names_its_refusals() {
         );
         job.join(&profiler, &stop)
     });
-    let JobAnswer::Failed(error) = answer else {
-        panic!("esbuild is out of this lane's scope: refused");
+    let JobAnswer::Inert(why) = answer else {
+        panic!("esbuild is out of this lane's scope: inert");
     };
-    assert!(error.contains("esbuild"), "{error}");
-    assert!(error.contains("--library-index"), "{error}");
+    assert!(why.contains("esbuild"), "{why}");
+    assert!(why.contains("--library-index"), "{why}");
+    assert!(why.contains("--library-matching off"), "{why}");
 }
 
-/// Defaults never reach the machinery, and an explicit index wins over it
-/// (the gate it must not slip through).
+/// Since exp171 the DEFAULT reaches the machinery (names + auto); the
+/// opt-out (`--library-matching off`) never does, and an explicit index
+/// wins over it (the gate it must not slip through).
 #[test]
-fn defaults_and_an_explicit_index_leave_the_machinery_off() {
-    let (input, opts) = run_argv(&["in.js"]);
-    let defaults = Config::build(&input, &opts, None, |k| {
-        (k == crate::config::API_KEY_VAR).then(|| "env-key".to_string())
-    })
-    .unwrap();
-    assert!(!defaults.library.runs_index_machinery());
+fn the_default_runs_the_machinery_and_the_opt_out_and_an_explicit_index_do_not() {
+    let build = |argv: &[&str]| {
+        let (input, opts) = run_argv(argv);
+        Config::build(&input, &opts, None, |k| {
+            (k == crate::config::API_KEY_VAR).then(|| "env-key".to_string())
+        })
+        .unwrap()
+    };
+    assert!(build(&["in.js"]).library.runs_index_machinery());
+    assert!(
+        !build(&["in.js", "--library-matching", "off"])
+            .library
+            .runs_index_machinery()
+    );
     // report + auto: the machinery runs...
     assert!(machinery_config().library.runs_index_machinery());
     // ... but an explicit index turns it back off: it wins.
@@ -153,4 +163,75 @@ fn defaults_and_an_explicit_index_leave_the_machinery_off() {
     })
     .unwrap();
     assert!(!explicit.library.runs_index_machinery());
+}
+
+/// exp171: the notice a run prints BEFORE it builds an index names what is
+/// built, the estimate (from the versions to BUILD, not the reused ones),
+/// where it is stored and how to opt out — and the names it skipped.
+#[test]
+fn the_build_notice_says_what_how_much_where_and_how_to_opt_out() {
+    use humanify_index::cache::{RuntimePlan, Seed, estimate_build, plan_runtime};
+    let root = std::env::temp_dir().join(format!("humanify-notice-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let (cfg, planned, dropped) = plan_runtime(
+        &root,
+        vec![
+            Seed {
+                name: "ms".into(),
+                version: Some("2.1.0".into()),
+                evidence: "package.json".into(),
+            },
+            Seed {
+                name: "http://mths.be/fromcodepoint".into(),
+                version: None,
+                evidence: "banner".into(),
+            },
+        ],
+        Vec::new(),
+        "2026-10-25",
+        300,
+        true,
+    )
+    .expect("a declared version plans offline");
+    let plan = RuntimePlan {
+        cfg,
+        planned,
+        dropped,
+        to_build: 3,
+        reused: 1,
+    };
+    let text = crate::runtime_index::build_notice(&root, &plan, false);
+    assert!(
+        text.starts_with("NOTICE: library names (the default)"),
+        "{text}"
+    );
+    assert!(
+        text.contains("3 to build, 1 already in the store"),
+        "{text}"
+    );
+    let est = estimate_build(3, false);
+    assert!(
+        text.contains(&crate::runtime_index::humanize_bytes(est.bytes_high)),
+        "the estimate is printed: {text}"
+    );
+    assert!(text.contains(&root.display().to_string()), "where: {text}");
+    assert!(
+        text.contains("--library-matching off"),
+        "the opt-out: {text}"
+    );
+    assert!(
+        text.contains("http://mths.be/fromcodepoint"),
+        "skipped names: {text}"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn sizes_and_durations_read_plainly() {
+    use crate::runtime_index::{humanize_bytes, humanize_seconds};
+    assert_eq!(humanize_bytes(82_000_000), "82 MB");
+    assert_eq!(humanize_bytes(43_000_000_000), "43.0 GB");
+    assert_eq!(humanize_seconds(40), "40 s");
+    assert_eq!(humanize_seconds(12 * 60), "12 min");
+    assert_eq!(humanize_seconds(9000), "2.5 h");
 }

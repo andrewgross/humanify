@@ -151,7 +151,9 @@ sample of 2.1.216). Rebuild only what Bun needs:
 - **Gates.**
   - Library precision on the Bun test bed and Claude Code at least at today's bar: P 99.8%, app claimed 0.
   - The 034 eval: `novel` / `realLn` unchanged, vendor noise down.
-- Andrew decides the flip.
+- Andrew decides the flip. **DECIDED 2026-10-31: names is the default (exp171,
+  `experiments/171-names-default/README.md`)** — `library.names_unlocked` deleted, the run-time
+  machinery on by default with a notice before any build.
 
 ### 5. Placement stability (exp157)
 

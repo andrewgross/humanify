@@ -17,11 +17,13 @@ import {
   loadPairVerdicts,
   loadRunStatuses,
   runStatusBanner,
+  loadSelfHopReference,
   verdictBanner
 } from "../lib/invariants.js";
 import {
   isScorecardShape,
   labelBaseModes,
+  labelNamingModes,
   loadManifests
 } from "../lib/run-manifest.js";
 
@@ -36,6 +38,9 @@ export interface LabelProvenance {
   /** How each pair's base was produced (scratch / seeded / archive —
    *  `BaseMode`, run-manifest.ts). More than one = a mixed label. */
   baseModes: string[];
+  /** The naming mode the label ran in (names / off — `NamingMode`,
+   *  run-manifest.ts; exp171). More than one = a mixed label. */
+  namingModes: string[];
 }
 
 export function labelProvenance(dir: string): LabelProvenance {
@@ -45,7 +50,8 @@ export function labelProvenance(dir: string): LabelProvenance {
     models: uniq(manifests.map((m) => m.config.model)),
     endpoints: uniq(manifests.map((m) => m.config.endpoint)),
     reasoningEfforts: uniq(manifests.map((m) => m.config.reasoningEffort)),
-    baseModes: labelBaseModes(dir)
+    baseModes: labelBaseModes(dir),
+    namingModes: labelNamingModes(dir)
   };
 }
 
@@ -54,6 +60,12 @@ function baseModeLine(modes: string[]): string {
   if (modes.length === 1) return `BASE: ${modes[0]}`;
   if (modes.length === 0) return "BASE: UNKNOWN (no run manifests)";
   return `!! BASE: MIXED (${modes.join(" + ")}) — this label's pairs were scored on different bases`;
+}
+
+/** The summary's naming-mode line (see `NamingMode` in run-manifest.ts). */
+function namingModeLine(modes: string[]): string {
+  if (modes.length === 1) return `NAMING: ${modes[0]}`;
+  return `!! NAMING: MIXED (${modes.join(" + ")}) — this label's pairs ran in different naming modes`;
 }
 
 function loadScorecards(dir: string): Scorecard[] {
@@ -287,7 +299,18 @@ function main() {
   // reference labelled valid carried an unread self-hop violation. Every
   // recorded verdict now reaches the banner and the summary JSON.
   const verdicts = loadPairVerdicts(dir);
-  const banner = [...runStatusBanner(runStatuses), ...verdictBanner(verdicts)];
+  // The cold self-hop is judged against the label's own naming mode's
+  // range (exp171): names mode re-rolls differently from off.
+  const modes = labelNamingModes(dir);
+  const banner = [
+    ...runStatusBanner(runStatuses),
+    ...verdictBanner(
+      verdicts,
+      loadSelfHopReference(
+        modes.length === 1 && modes[0] === "names" ? "names" : "off"
+      )
+    )
+  ];
   if (treeChurnCards !== cards.length) {
     banner.push(
       `NOTE: relocSt totals ${treeChurnCards} of ${cards.length} pairs — the ` +
@@ -329,6 +352,7 @@ function main() {
   // The base mode leads the banner, always: a scratch label and a seeded one
   // measure different bases, and a reader must not have to open a manifest
   // to learn which this is (2026-10-03).
+  banner.unshift(namingModeLine(provenance.namingModes));
   banner.unshift(baseModeLine(provenance.baseModes));
   const summary = {
     model,

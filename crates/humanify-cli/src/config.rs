@@ -254,7 +254,9 @@ pub enum LibraryMatching {
     /// Also the index lookup and graph discovery, REPORTED (the run's
     /// output bytes are `off`'s).
     Report,
-    /// Index claims may name code — refused until an eval passes it.
+    /// Index claims place library code under `vendor/<package>/` and
+    /// restore its original names — the default since exp171 (Andrew,
+    /// 2026-10-31).
     Names,
 }
 
@@ -276,12 +278,11 @@ pub enum Unnamed {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum IndexBuild {
-    /// REPORT needs an index passed with `--library-index` (the old
-    /// behavior, the default).
+    /// `names`/`report` need an index passed with `--library-index`.
     Off,
-    /// REPORT with no index: search `index_store_dir` for a usable one,
-    /// else build one from the bundle's own revealed packages — any build
-    /// failure fails the run loudly.
+    /// `names`/`report` with no index: search `index_store_dir` for a
+    /// usable one, else build one from the bundle's own revealed packages
+    /// (the default since exp171; the run prints its estimate first).
     Auto,
 }
 
@@ -292,11 +293,6 @@ pub enum IndexBuild {
 #[serde(rename_all = "camelCase")]
 pub struct Library {
     pub matching: LibraryMatching,
-    /// The internal escape that lifts the `names` refusal
-    /// (`library.names_unlocked`; measurement only, never a default —
-    /// the refusal is armed until an eval passes the mode and Andrew
-    /// accepts it).
-    pub names_unlocked: bool,
     /// The index as given (a directory or an id).
     pub index: Option<String>,
     pub index_store: Option<String>,
@@ -417,11 +413,11 @@ impl Library {
     }
 
     /// Whether the run-time index machinery runs (exp154): matching is on
-    /// (`report`, or `names` under its unlock), NO index was passed (an
-    /// explicit index wins and the machinery stays off), and
-    /// `index_build` is `auto`. Everything the machinery touches lives
-    /// under `index_store_dir`; a run without it — the default — never
-    /// reads the store, never spawns a build.
+    /// (`names` — the default since exp171 — or `report`), NO index was
+    /// passed (an explicit index wins and the machinery stays off), and
+    /// `index_build` is `auto` (the default). Everything the machinery
+    /// touches lives under `index_store_dir`; `--library-matching off` (the
+    /// opt-out) never reads the store, never spawns a build.
     pub fn runs_index_machinery(&self) -> bool {
         self.matching != LibraryMatching::Off
             && self.index.is_none()
@@ -699,7 +695,6 @@ fn library_of(r: &Resolved) -> Library {
     };
     Library {
         matching: parse_enum(r.text("library.matching")).expect("a checked choice"),
-        names_unlocked: r.flag_on("library.names_unlocked"),
         index: r.text("library.index"),
         index_store: r.text("library.index_store"),
         index_store_dir: r.text("library.index_store_dir").expect("defaulted"),
@@ -804,56 +799,26 @@ pub fn library_from_file(file: Option<&ConfigFile>) -> Result<Library, Vec<Strin
 }
 
 /// The library decision's rules (docs/library-matching-config.md §2).
+/// `index_build = "auto"` (the default) with matching `off` is no
+/// conflict: it is the opt-out's own configuration — off never reaches
+/// the machinery.
 fn library_violations(r: &Resolved) -> Vec<String> {
     let mode = r.text("library.matching").unwrap_or_default();
     let index = r.text("library.index").is_some();
-    let names_unlocked = r.flag_on("library.names_unlocked");
+    let auto = r.text("library.index_build").as_deref() == Some("auto");
     let mut out = Vec::new();
-    match (mode.as_str(), index, names_unlocked) {
-        ("names", _, false) => out.push(
-            "--library-matching names is refused until an eval passes it \
-             (docs/library-matching-config.md §2): use --library-matching report — \
-             the internal escape is library.names_unlocked = true (measurement \
-             only, never a default)"
-                .to_string(),
-        ),
-        ("names", false, true) if r.text("library.index_build").as_deref() == Some("auto") => {}
-        ("names", false, true) => out.push(
-            "--library-matching names needs --library-index <dir|id>, or \
+    match (mode.as_str(), index) {
+        ("names" | "report", false) if !auto => out.push(format!(
+            "--library-matching {mode} needs --library-index <dir|id>, or \
              library.index_build = \"auto\" to let the run find or build one in \
              library.index_store_dir"
-                .to_string(),
-        ),
-        ("report", false, _) if r.text("library.index_build").as_deref() == Some("auto") => {}
-        ("report", false, _) => out.push(
-            "--library-matching report needs --library-index <dir|id>, or \
-             library.index_build = \"auto\" to let the run find or build one in \
-             library.index_store_dir"
-                .to_string(),
-        ),
-        ("off", true, _) => out.push(
+        )),
+        ("off", true) => out.push(
             "--library-index given with --library-matching off: the index would be \
-             silently ignored — pass --library-matching report, or drop the index"
+             silently ignored — pass --library-matching names or report, or drop the index"
                 .to_string(),
         ),
         _ => {}
-    }
-    if names_unlocked && mode != "names" {
-        out.push(
-            "library.names_unlocked is set but matching is not names: nothing to \
-             unlock — remove it, or pass --library-matching names"
-                .to_string(),
-        );
-    }
-    if mode != "report"
-        && mode != "names"
-        && r.text("library.index_build").as_deref() == Some("auto")
-    {
-        out.push(
-            "library.index_build = \"auto\" needs --library-matching report: with matching \
-             off the run would never read the index it built"
-                .to_string(),
-        );
     }
     out
 }

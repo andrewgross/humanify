@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 /**
  * The e2e stage's KNOWN-GAP mechanism (scripts/e2e.ts): a fixture that
  * records a gap the pipeline has today stays green only while it fails
@@ -74,7 +76,10 @@ describe("staleKnownGaps", () => {
   });
 
   it("accepts the committed list against the committed fixtures", () => {
-    assert.deepEqual(staleKnownGaps(KNOWN_GAPS, ["esbuild-minified"]), []);
+    const fixtures = fs.readdirSync(
+      path.join(import.meta.dirname, "e2e/fixtures")
+    );
+    assert.deepEqual(staleKnownGaps(KNOWN_GAPS, fixtures), []);
   });
 });
 

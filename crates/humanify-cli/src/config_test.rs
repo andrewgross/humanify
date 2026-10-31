@@ -74,7 +74,7 @@ fn every_naming_default_is_the_one_named_default() {
     assert_eq!(c.naming.schedule, FastTier::Relaxed(Levers::all()));
     assert!(c.naming.naming_floor && c.naming.naming_floor_sweep);
     assert!(c.library.skips_libraries());
-    assert_eq!(c.library.matching, crate::config::LibraryMatching::Off);
+    assert_eq!(c.library.matching, crate::config::LibraryMatching::Names);
     assert!(
         !c.matching.reconcile_prior_diff,
         "no prior: nothing to reconcile"

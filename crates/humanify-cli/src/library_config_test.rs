@@ -3,7 +3,7 @@
 //! names` + `--library-index`, `[library] unnamed`, and the lookup's and
 //! discovery's tunables as `[library]` keys. Every refusal before any work.
 
-use crate::config::{API_KEY_VAR, Config, ConfigFile, LibraryMatching, Unnamed};
+use crate::config::{API_KEY_VAR, Config, ConfigFile, IndexBuild, LibraryMatching, Unnamed};
 use crate::surface::{PipelineParse, parse_pipeline};
 
 fn build(argv: &[&str], toml: &str) -> Result<Config, Vec<String>> {
@@ -55,12 +55,35 @@ impl Drop for Index {
 }
 
 #[test]
-fn the_default_is_off_and_leave() {
+fn the_default_is_names_with_the_run_time_index_and_leave() {
+    // exp171 (Andrew, 2026-10-31): names mode is the default. With no
+    // index passed, the run finds or builds the one it needs in its cache
+    // (index_build = "auto") — so the default needs no index argument.
     let c = build(&["in.js"], "").unwrap();
-    assert_eq!(c.library.matching, LibraryMatching::Off);
+    assert_eq!(c.library.matching, LibraryMatching::Names);
+    assert_eq!(c.library.index_build, IndexBuild::Auto);
+    assert!(c.library.runs_index_machinery());
     assert_eq!(c.library.unnamed, Unnamed::Leave);
     assert!(c.library.skips_libraries());
+    assert_eq!(
+        c.library_index_problem(),
+        None,
+        "the machinery owns the index question: no index is not a problem"
+    );
+}
+
+#[test]
+fn library_matching_off_is_the_opt_out_and_never_runs_the_machinery() {
+    // The opt-out is the existing flag, and it must not trip over the
+    // default index_build = "auto" (auto with off is the opt-out's own
+    // configuration, not a conflict).
+    let c = build(&["in.js", "--library-matching", "off"], "").unwrap();
+    assert_eq!(c.library.matching, LibraryMatching::Off);
+    assert!(!c.library.runs_index_machinery());
     assert_eq!(c.library_index_problem(), None, "off never opens an index");
+    let c = build(&["in.js"], "[library]\nmatching = \"off\"\n").unwrap();
+    assert_eq!(c.library.matching, LibraryMatching::Off);
+    assert!(!c.library.runs_index_machinery());
 }
 
 #[test]
@@ -76,33 +99,64 @@ fn unnamed_model_is_the_old_no_skip_libraries() {
 }
 
 #[test]
-fn names_is_refused_until_an_eval_passes_it() {
-    refused(
+fn names_needs_no_unlock() {
+    let ix = Index::new("names", |_| {});
+    let c = build(
         &[
             "in.js",
             "--library-matching",
             "names",
             "--library-index",
-            "ix",
+            ix.path(),
         ],
         "",
-        "--library-matching names is refused until an eval passes it",
+    )
+    .expect("names is a mode like any other since exp171");
+    assert_eq!(c.library.matching, LibraryMatching::Names);
+    assert!(!c.library.runs_index_machinery(), "an explicit index wins");
+    assert_eq!(c.library_index_problem(), None);
+}
+
+#[test]
+fn the_retired_unlock_key_is_refused() {
+    // library.names_unlocked lifted a refusal that no longer exists: the
+    // key is deleted, and a file that still sets it fails loud.
+    assert!(
+        ConfigFile::check("cfg.toml", "[library]\nnames_unlocked = true\n").is_err(),
+        "an unknown key"
     );
 }
 
 #[test]
-fn report_without_an_index_is_refused() {
+fn without_the_run_time_build_an_index_is_required() {
     refused(
         &["in.js", "--library-matching", "report"],
-        "",
+        "[library]\nindex_build = \"off\"\n",
         "--library-matching report needs --library-index",
     );
+    refused(
+        &["in.js"],
+        "[library]\nindex_build = \"off\"\n",
+        "--library-matching names needs --library-index",
+    );
+    build(&["in.js", "--library-matching", "report"], "")
+        .expect("report with the default auto build finds or builds its index");
 }
 
 #[test]
 fn an_index_with_matching_off_is_refused_as_a_conflict() {
+    // With the default (names) an index is simply the index to use.
+    let c = build(&["in.js", "--library-index", "ix"], "").unwrap();
+    assert_eq!(c.library.matching, LibraryMatching::Names);
+    assert!(!c.library.runs_index_machinery(), "an explicit index wins");
     refused(
-        &["in.js", "--library-index", "ix"],
+        &[
+            "in.js",
+            "--library-index",
+            "ix",
+            "--library-matching",
+            "off",
+        ],
         "",
         "--library-index given with --library-matching off",
     );
@@ -252,13 +306,13 @@ fn the_exp102_precision_guards_are_keys() {
 
 /// exp109: the shipped DEFAULT is the campaign's measured recommendation
 /// (experiments/106-matcher-hygiene, experiments/109-default-config): the
-/// structural rule, exp102's three guards, and exp106's hygiene keys. Matching
-/// itself stays off, so only report / names runs read these.
+/// structural rule, exp102's three guards, and exp106's hygiene keys. Names
+/// (the default since exp171) and report runs read these.
 #[test]
 fn the_default_library_tunables_are_the_measured_recommendation() {
     use humanify_core::libdetect::discovery::BannerNames;
     let c = build(&["in.js"], "").unwrap();
-    assert_eq!(c.library.matching, LibraryMatching::Off);
+    assert_eq!(c.library.matching, LibraryMatching::Names);
     let r = c.library.rules();
     assert!(!r.agreement, "the structural rule");
     assert!(r.literal_margin_by_family);
@@ -477,80 +531,5 @@ fn the_exp132_factory_keys_default_on_and_turn_off() {
             && !o.factory_tie_fence
             && !o.factory_banner_index
             && !o.factory_whole_seed
-    );
-}
-
-#[test]
-fn names_unlocked_is_the_measurement_escape() {
-    let ix = Index::new("escape", |_| {});
-    let c = build(
-        &[
-            "in.js",
-            "--library-matching",
-            "names",
-            "--library-index",
-            ix.path(),
-        ],
-        "[library]\nnames_unlocked = true\n",
-    )
-    .expect("unlocked names builds");
-    assert_eq!(c.library.matching, LibraryMatching::Names);
-    assert!(c.library.names_unlocked);
-    assert_eq!(
-        c.library_index_problem(),
-        None,
-        "an unlocked names run checks its index exactly like report"
-    );
-    // Without the unlock the refusal stays armed and names the escape.
-    refused(
-        &[
-            "in.js",
-            "--library-matching",
-            "names",
-            "--library-index",
-            ix.path(),
-        ],
-        "",
-        "--library-matching names is refused until an eval passes it",
-    );
-    refused(
-        &[
-            "in.js",
-            "--library-matching",
-            "names",
-            "--library-index",
-            ix.path(),
-        ],
-        "",
-        "library.names_unlocked",
-    );
-}
-
-#[test]
-fn unlocked_names_still_needs_an_index() {
-    refused(
-        &["in.js", "--library-matching", "names"],
-        "[library]\nnames_unlocked = true\n",
-        "--library-matching names needs --library-index",
-    );
-    // The auto-built machinery answers it, exactly as for report.
-    build(
-        &["in.js", "--library-matching", "names"],
-        "[library]\nnames_unlocked = true\nindex_build = \"auto\"\n",
-    )
-    .expect("auto build machinery owns the index question for names too");
-}
-
-#[test]
-fn names_unlocked_without_names_is_a_conflict() {
-    refused(
-        &["in.js"],
-        "[library]\nnames_unlocked = true\n",
-        "library.names_unlocked is set but matching is not names",
-    );
-    refused(
-        &["in.js", "--library-matching", "report"],
-        "[library]\nnames_unlocked = true\n",
-        "library.names_unlocked is set but matching is not names",
     );
 }

@@ -16,6 +16,12 @@
  * measured" — rendered as `(±?)`, which is a claim of ignorance, not of
  * stability. A band of 0 is a real claim (draw-invariance) and only the
  * two hold columns have earned it.
+ *
+ * BY NAMING MODE (exp171): names mode files library code under vendor/
+ * and names it, so its draws differ from off mode's. The top-level
+ * `provenance`/`bands` are the OFF (pre-exp171 default) mode's, untouched;
+ * `byMode.names` holds the names-mode references' bands. A mode with no
+ * measured bands reads as NONE — never another mode's.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -33,23 +39,45 @@ export interface NoiseBands {
   bands: Record<string, number | null>;
 }
 
-const BANDS_PATH = path.join(import.meta.dirname, "noise-bands.json");
-
-let cached: NoiseBands | null | undefined;
-
-export function loadNoiseBands(): NoiseBands | null {
-  if (cached !== undefined) return cached;
-  try {
-    cached = JSON.parse(fs.readFileSync(BANDS_PATH, "utf8")) as NoiseBands;
-  } catch {
-    cached = null;
-  }
-  return cached;
+/** The file: the off mode's bands at the top, other modes under byMode. */
+interface NoiseBandsFile extends NoiseBands {
+  byMode?: Record<string, NoiseBands>;
 }
 
-/** The band for a KPI key; null when unmeasured or no bands file exists. */
-export function bandFor(kpiKey: string): number | null {
-  const bands = loadNoiseBands();
+/** A naming mode (run-manifest.ts `NamingMode`). */
+export type BandMode = "names" | "off";
+
+const BANDS_PATH = path.join(import.meta.dirname, "noise-bands.json");
+
+function readFile(file: string): NoiseBandsFile | null {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8")) as NoiseBandsFile;
+  } catch {
+    return null;
+  }
+}
+
+/** One mode's bands out of `file`; null when that mode has none. */
+export function readNoiseBands(
+  mode: BandMode,
+  file: string = BANDS_PATH
+): NoiseBands | null {
+  const f = readFile(file);
+  if (!f) return null;
+  if (mode === "off") return { provenance: f.provenance, bands: f.bands };
+  return f.byMode?.[mode] ?? null;
+}
+
+const cached = new Map<BandMode, NoiseBands | null>();
+
+export function loadNoiseBands(mode: BandMode = "off"): NoiseBands | null {
+  if (!cached.has(mode)) cached.set(mode, readNoiseBands(mode));
+  return cached.get(mode) ?? null;
+}
+
+/** The band for a KPI key in `mode`; null when unmeasured or no bands file exists. */
+export function bandFor(kpiKey: string, mode: BandMode = "off"): number | null {
+  const bands = loadNoiseBands(mode);
   const band = bands?.bands[kpiKey];
   return typeof band === "number" ? band : null;
 }
@@ -83,8 +111,23 @@ export function computeBands(
   return out;
 }
 
-export function writeNoiseBands(bands: NoiseBands): string {
-  fs.writeFileSync(BANDS_PATH, `${JSON.stringify(bands, null, 2)}\n`);
-  cached = undefined;
-  return BANDS_PATH;
+/** Write one mode's bands, keeping every other mode's. */
+export function writeNoiseBands(
+  bands: NoiseBands,
+  mode: BandMode = "off",
+  file: string = BANDS_PATH
+): string {
+  const prior = readFile(file);
+  const byMode = prior?.byMode ?? {};
+  const next: NoiseBandsFile =
+    mode === "off"
+      ? { ...bands, ...(Object.keys(byMode).length ? { byMode } : {}) }
+      : {
+          provenance: prior?.provenance ?? bands.provenance,
+          bands: prior?.bands ?? {},
+          byMode: { ...byMode, [mode]: bands }
+        };
+  fs.writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`);
+  cached.clear();
+  return file;
 }
