@@ -54,4 +54,5 @@ mod restore_test;
 pub mod shown;
 pub mod snap;
 pub mod validation;
+pub mod vendor_bodies;
 pub mod waves;
