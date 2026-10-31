@@ -1,0 +1,43 @@
+{
+  "conversion": {
+    "converted": 1994,
+    "dropped": 0,
+    "eraStatements": 7628,
+    "groups": 1994
+  },
+  "exact": {
+    "era:appFiles": 0,
+    "era:bytes": 543802,
+    "era:files": 439,
+    "era:labelled": 46354,
+    "era:libraryRight": 46354,
+    "era:wrongFiles": 0,
+    "movedBytes": 543802,
+    "movedModules": 439,
+    "movedStatements": 1469,
+    "regionStatements": 7628,
+    "regionStatementsContentCorrect": 7628,
+    "regions": 1994
+  },
+  "factory": {
+    "factory:appFiles": 0,
+    "factory:bytes": 4498172,
+    "factory:files": 1618,
+    "factory:labelled": 0,
+    "factory:wrongFiles": 0
+  },
+  "ordinal": {
+    "era:appFiles": 0,
+    "era:bytes": 6414,
+    "era:files": 17,
+    "era:labelled": 0,
+    "era:wrongFiles": 0,
+    "movedBytes": 16324,
+    "movedBytesNotClaimedByMover": 15890,
+    "movedModules": 17,
+    "movedStatements": 52,
+    "movedStatementsNotClaimedByMover": 40,
+    "regionStatements": 7628,
+    "regions": 1994
+  }
+}

@@ -1,7 +1,13 @@
 # exp166 — restore or ask, never freeze (and the exact raw-to-era bridge)
 
-STATUS: IN PROGRESS (2026-10-31). Branch `exp166-restore-or-ask` off main
-`c7cafbc74`. Numbers below marked TBD are filled as the runs land.
+STATUS: LANDED on the branch (2026-10-31). Branch `exp166-restore-or-ask` off
+main `c7cafbc74`; scored at `210ed0558`. **Every hop bar met.** On the
+2.1.215→2.1.216 hop in names mode, mints fall to 54 (exp164 501, default
+81). App bytes under `vendor/` are 0. novel and realLn are byte-equal.
+Restoration rises to 17,980 restored names at 9,016 applications. The vendor
+buckets beat exp164 on every row. The cold self-hop reads 8 lines (names
+mode's 1,040–1,176 is gone; the reference is 2–184). Neutrality is NEUTRAL in
+both modes, and the gate passes 13/13.
 
 ## The trace (phase 1)
 
@@ -219,4 +225,139 @@ bytes on bun-dev are the 56-byte truth defect above.
 
 ## The hop (phase 4)
 
-TBD
+`npm run eval -- score <label> --pairs 215->216` (names mode, the full
+names index `cb64c1f5…`, scratch base, cold, one pair, under
+`/work/heavy.lock`). Two labels: `exp166-names-hop` (commit `421a5e817`,
+the bridge + restore-or-ask) and `exp166-names-hop2` (`210ed0558`, plus "a
+minifier-shaped restoration is not a hold"). The before columns are exp161's
+default leg and exp164's names leg (the same config).
+
+| KPI                    | default (exp161) | names exp164 | exp166 hop 1 | **exp166 hop 2** | band  |
+| ---------------------- | ---------------- | ------------ | ------------ | ---------------- | ----- |
+| clean                  | 34,636           | 34,559       | 34,627       | 34,625           | ±17   |
+| noise                  | 281              | 358          | 290          | 292              | ±17   |
+| novel                  | 986              | 986          | 986          | **986 (=)**      | 0     |
+| noiseLn                | 3,304            | 5,990        | 4,900        | 4,919            | ±1376 |
+| realLn                 | 122,066          | 122,066      | 122,066      | **122,066 (=)**  | 0     |
+| reloc                  | 337              | 338          | 341          | 343              | ±35   |
+| newName                | 753              | 786          | 754          | 761              | ±13   |
+| mints                  | 81               | 501          | 1,482        | **54**           | ±33   |
+| tree churn             | 25,345           | —            | 25,522       | 25,537           | —     |
+| nameOnly lines         | 3,946            | 4,166        | 4,164        | 4,192            | —     |
+| cold self-hop (ln)     | 18               | 1,040        | 10           | **8**            | 2–184 |
+| restoration apps       | —                | 9,016        | 9,016        | **9,016 (=)**    | —     |
+| restored names (proxy) | —                | 12,980       | —            | **17,980**       | —     |
+
+- **Hop 1's mints (1,482) are explained and fixed.** About 1,400 of them were
+  index-restored names that are themselves minifier tokens (`i`, `k`, `v`,
+  `x`, `_a`: the package's own source). The new freeze held them in claimed
+  statements, where exp164 had let the model re-ask them. A restored name
+  that passes the mint census's own gate (`rename::floor::is_minifier_token`)
+  tells nothing the minified name did not, and a short name can coincide with
+  an unrelated minifier name in the same statement. So it now takes the normal
+  flow (`a_minifier_shaped_restoration_is_not_a_hold`, red then green). Hop 2's
+  54 remaining are model-chosen short names (`x`, `y`, `i`, `op`).
+- **Restored names (exp161's proxy, the same covered list):** exp164 12,980
+  (44.0% of 29,516), hop 2 17,980 (54.3% of 33,130). Cross-version
+  stability on that scope: 100% (33,130 / 33,130). exp164's was 99.96%.
+- **Determinism:** the warm self-hop is byte-identical with 0 cache writes on
+  both labels. Both pairs exit 0 with 0 provider errors, and the boot gate is OK.
+
+**The line-diff buckets** (exp161's `bucket-trees`; files / lines):
+
+| vendor       | default | names exp164 | exp166 hop 2 |
+| ------------ | ------- | ------------ | ------------ |
+| identical    | 1,595   | 1,612        | **2,031**    |
+| nameOnly     | 0 / 0   | 3 / 72       | **0 / 0**    |
+| realChange   | 0 / 0   | 5 / 34       | **0 / 0**    |
+| trulyAdded   | 23 / 97 | 33 / 439     | **26 / 263** |
+| trulyRemoved | 0 / 0   | 0 / 0        | 0 / 0        |
+
+| src          | default      | names exp164 | exp166 hop 2 |
+| ------------ | ------------ | ------------ | ------------ |
+| identical    | 4,276        | 4,205        | 3,828        |
+| nameOnly     | 22 / 108     | 52 / 276     | 47 / 252     |
+| realChange   | 552 / 19,909 | 558 / 20,089 | 537 / 19,918 |
+| trulyAdded   | 30 / 4,546   | 30 / 4,546   | 29 / 4,463   |
+| trulyRemoved | 0 / 0        | 10 / 342     | 2 / 140      |
+
+(src's `identical` count falls because ~420 library modules left src/ for
+vendor/, where they are identical.) The exact bridge moves ~30× more code into
+`vendor/`: on hop 2, 440 era modules / 1.43 MB placed by claim (exp164: 18 /
+22 KB). The buckets show it does not make vendor worse: every exp164 vendor
+noise row goes to 0.
+
+**exp168's distribution (`vendor_distribution.ts`, read-only;
+`tables/vendor-distribution-compare.md`):**
+
+- era (app) statements filed into `vendor/` by placement: exp164 105,255 B
+  in 18 files, **hop 2: 0**;
+- vendorReal 506 → **289** (default 120); vendorLn 255 → **183** (= default);
+  name re-rolls 72 → 0; mint-bearing vendor lines 122 → 1;
+- identical era vendor code keeps its names: 8,811 same / 0 different
+  (exp164 728 / 12).
+
+**App code crossing the src/vendor boundary** (statements with a prior
+counterpart, both directions, `cross_boundary.py`):
+
+- exp164: 11 src→vendor statements / 7,775 B, in exp168's 10 new
+  `vendor/<pkg>/module-*.js` files. **The exact bridge removes all 10.**
+- hop 2: 7 src→vendor statements / 2,421 B, in two `@anthropic-ai/*` modules
+  (sandbox-runtime, claude-agent-sdk). The claims are genuine (the bundle
+  ships those npm packages); they appeared on 2.1.216 and not on 2.1.215. That
+  is claim instability across versions (matching's territory), not this lane.
+- vendor→src: 0 in every run.
+
+The 289 vendorReal lines are 23 ajv factory files (120 lines, the same as
+default) plus three new `@anthropic-ai/*` module files (166 lines; two of
+them are the cross-boundary moves above).
+
+### The library scorer
+
+The scorer reads `humanify discover` reports. Regenerated with the final
+binary: **bun-dev 89 / 89 byte-identical** to exp165's reports (main's
+discovery), and **cc 2.1.216 identical** except the `bundlerOverride`
+field (this run passed `--bundler bun`). Claims, bundle order and every
+libraryDiscovery field are equal, so the scorer cards are unchanged (app
+claimed 0). Nothing in this lane touches discovery.
+
+### Neutrality and gate
+
+- Warm neutrality vs main `c7cafbc74` (pair 2.1.85→2.1.86, `--cache
+/work/neutrality-cache`, `--priors /work/exp050-cold`, under
+  `/work/neutrality.lock` + `/work/heavy.lock`):
+  **default mode: NEUTRAL** (0 files / 0 lines, cache +0 / +0, exit 0 / 0);
+  **report mode** (`library.matching=report`, the standing index):
+  **NEUTRAL** (0 / 0, +0 / +0, 0 / 0).
+- `npm run check`: **ALL 13 STAGES PASSED** at `210ed0558`.
+
+## The per-identifier walkthrough
+
+`factory_bindings.mjs` + `walkthrough.py` write one row per binding in
+`src/` and `vendor/` of the hop's 2.1.216 tree to
+`/work/exp166-data/hop-walkthrough/bindings.jsonl` (CC-derived; never
+committed). Each row records the file, the package, the minified name, the
+final name, the source of the name, and whether it equals the 2.1.215 name.
+Bucket totals: `tables/hop-walkthrough-buckets.json`. Of 298,272 bindings:
+
+- vendor/ (66,871): 35,917 index-restored, 2,492 carried by exact match,
+  4 model-asked, 4,854 unpack plumbing, 21,428 left minified (vendored
+  factory bodies the index did not answer: never asked in any mode), 2,176
+  without a trail. 66,559 equal the 2.1.215 name, 0 differ (312 have no
+  same-path prior).
+- src/ (231,401): 155,695 carried by exact match, 8,631 by close match /
+  reconcile, 4,273 model-asked, 10,989 index-restored, 3,356 by rule, 665
+  left minified, 47,792 without a trail (overwhelmingly the split's
+  cross-file import bindings, named after what they import). 216,881 equal
+  the 2.1.215 name, 956 differ.
+
+## What this does not look at (rule 8)
+
+- cc's truth is a 620-unit sample, and most of the bundle is unlabelled. The
+  cc app check is "0 of the labelled", plus a token-count suspect scan.
+- The bun-dev runs use the stub LLM (placement is LLM-independent; naming is
+  not judged there).
+- `cross_boundary.py` counts only statements with a prior counterpart.
+- The walkthrough's "index-restored" for era rows is a name match inside the
+  statement's raw span (the pipeline's own hold rule), not a binding-level
+  trail.
