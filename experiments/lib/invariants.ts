@@ -382,9 +382,18 @@ const SELF_HOP_REFERENCE = path.resolve(
   "../034-eval-harness/self-hop-reference.json"
 );
 
-export function loadSelfHopReference(): SelfHopReference {
+/**
+ * One naming mode's range (exp171): the top level is the OFF mode's (the
+ * pre-exp171 default), `byMode.names` the names-mode references'. A mode
+ * with no range recorded is null — judged "not judged", never against
+ * another mode's range (names mode re-rolls differently).
+ */
+export function loadSelfHopReference(
+  mode: "names" | "off" = "off"
+): SelfHopReference | null {
   const j = JSON.parse(fs.readFileSync(SELF_HOP_REFERENCE, "utf8"));
-  return { version: j.version, coldDiffLines: j.coldDiffLines };
+  const r = mode === "off" ? j : j.byMode?.[mode];
+  return r ? { version: r.version, coldDiffLines: r.coldDiffLines } : null;
 }
 
 /**
@@ -395,8 +404,11 @@ export function loadSelfHopReference(): SelfHopReference {
  */
 export function coldRangeVerdict(
   s: SelfHopVerdict,
-  ref: SelfHopReference
+  ref: SelfHopReference | null
 ): string {
+  if (ref === null) {
+    return `cold self-hop ${s.version}: ${s.diffLines} ln — not judged: no reference range is recorded for this naming mode.`;
+  }
   const counts = Object.values(ref.coldDiffLines);
   const lo = Math.min(...counts);
   const hi = Math.max(...counts);
@@ -558,7 +570,7 @@ function readVerdictField(p: string, field: string): any {
  */
 export function verdictBanner(
   v: PairVerdicts,
-  ref: SelfHopReference = loadSelfHopReference()
+  ref: SelfHopReference | null = loadSelfHopReference()
 ): string[] {
   const lines: string[] = [];
   for (const b of v.boots.filter((b) => !b.ok)) {

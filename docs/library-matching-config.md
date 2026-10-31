@@ -82,16 +82,17 @@ compatibility — a replaced flag's old spelling is deleted, not aliased.
 ## 2. The one library setting
 
 ```
-CLI:     --library-matching off | report | names     default off
-         --library-index <dir | index-id>             required unless off
+CLI:     --library-matching names | report | off     default names (exp171, 2026-10-31)
+         --library-index <dir | index-id>             optional: without it names/report find or
+                                                      build one (index_build = "auto", the default)
 Config:  [library] section of the one config file (--config <file>)
 ```
 
-| `--library-matching` | detection                                    | index                                                    | what library code gets                                                                                                                                                                                                                                                                                                                                                                                                               |
-| -------------------- | -------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `off` (default)      | path/banner (as today)                       | not read                                                 | per `unnamed`                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `report`             | path/banner + index lookup + graph discovery | read, slice chosen from the detected recipe              | per `unnamed`; index findings go to diagnostics/stats only. Must be byte-identical to `off` (warm neutrality)                                                                                                                                                                                                                                                                                                                        |
-| `names`              | same as report                               | read, and whole-module answers (`modules.<slice>.jsonl`) | wholly claimed bundled modules land at `vendor/<package>/<file>` — the index's real npm spelling, a stable `module-<N>.js` when the index does not know the file — and the model is never asked for them; identifier restoration stays out of scope (library-names plan step 4). Refused until an eval passes it — the internal escape is `library.names_unlocked = true` (measurement only; Andrew lifts the refusal, nothing else) |
+| `--library-matching` | detection                                    | index                                                    | what library code gets                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------- | -------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `off` (the opt-out)  | path/banner (as today)                       | not read, searched for or built                          | per `unnamed`                                                                                                                                                                                                                                                                                                                                                                                          |
+| `report`             | path/banner + index lookup + graph discovery | read, slice chosen from the detected recipe              | per `unnamed`; index findings go to diagnostics/stats only. Must be byte-identical to `off` (warm neutrality)                                                                                                                                                                                                                                                                                          |
+| `names`              | same as report                               | read, and whole-module answers (`modules.<slice>.jsonl`) | wholly claimed bundled modules land at `vendor/<package>/<file>` — the index's real npm spelling, a stable `module-<N>.js` when the index does not know the file — the index's original identifier names are restored (exp160/166), and unrestored identifiers are carried or asked like app code (exp166/169). **The default since exp171** (Andrew, 2026-10-31); `library.names_unlocked` is deleted |
 
 `[library] unnamed` — what happens to code identified as library that has no
 name from the index (in `off` and `report`, that is all of it):
@@ -110,13 +111,24 @@ end to end on the campaign index in experiments/109-default-config), read
 from `LookupRules::recommended()` / `DiscoveryOptions::recommended()`.
 `LookupRules::default()` / `DiscoveryOptions::default()` stay the engine's
 baseline (the agreement rule, every guard off), which the unit tests compare
-each rule against. Matching itself stays `off` by default, so these keys
-change only `report` (and, once allowed, `names`) runs; `humanify.example.toml`
+each rule against. They change `names` (the default since exp171) and
+`report` runs; `humanify.example.toml`
 is generated from the registry and holds every value below. Which index to
 point `library.index` at: docs/design/library-index.md §10.
 
-**The run-time machinery (exp154, plan step 3, default off).** With
-`index_build = "auto"` and matching `report` and NO `--library-index`, the run
+**The run-time machinery (exp154, plan step 3; the DEFAULT since exp171).**
+What a default run prints: an index FOUND in the store is one line
+(`Library index: using <id> from <store> (found; nothing to build)`); a
+bundle no index can serve (not Bun-built, or revealing no npm package) is one
+notice and the run goes on as `off` (`Library names: off for this run — …`);
+a BUILD is preceded by a NOTICE naming what is built, the estimated disk and
+time (calibrated in experiments/171-names-default/README.md), where it is
+stored and how to opt out — and then proceeds (no prompt: it would hang batch
+runs). A store with no Bun gets the pinned one (`PINNED_BUN`, 1.4.0) fetched
+with `npm install --ignore-scripts`; names the bundle's banners offer that are
+not npm package names, or that the registry does not know, are dropped and
+recorded in `build.json` (`dropped`). With
+`index_build = "auto"` and matching `names` or `report` and NO `--library-index`, the run
 finds or builds the index it needs in its own cache (`index_store_dir`,
 resolved against the output dir), in parallel with ingest: the store search
 starts as soon as detection resolves the bundler, and the library load joins it
@@ -140,13 +152,13 @@ profile summary's "Library index" block.
 unnamed = "leave"              # "leave" | "model"
 report_units = false
 
-# exp154 (library-names-plan step 3): the run-time index machinery, DEFAULT OFF —
-# a run with none of these keys set never reads the store, never spawns a build.
+# exp154 (library-names-plan step 3): the run-time index machinery — the DEFAULT
+# since exp171; --library-matching off never reads the store, never spawns a build.
 # index =                      # --library-index <dir|id>: explicit, wins over everything below
 index_store_dir = ".humanify/library-index"   # --library-index-store <dir>: the run's index cache,
                                #   resolved against the output dir: store/ shards, registry/,
                                #   tools/bun-<V>/, one <id>/ per merged index + build.json sidecar
-index_build = "off"            # "off" | "auto" (no flag): auto = matching "report" with NO
+index_build = "auto"           # "auto" | "off" (no flag): auto = matching names/report with NO
                                #   --library-index searches the store for an index with this
                                #   bundle's bundler slice, else builds one (in-process, in
                                #   parallel with ingest) from the packages the bundle itself

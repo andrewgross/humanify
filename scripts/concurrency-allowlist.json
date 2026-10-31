@@ -303,6 +303,13 @@
       "reason": "one minified bun/esbuild build (or `node <recipe script>` for webpack and rollup, exp105) of a package entry, built here and run by RecipeBuild::build through humanify_core::subprocess::run under BUILD_DEADLINE (30 min; seconds in the exp095 builds); a non-zero exit or timeout returns the error text and the build contributes no files (the module shard records it)"
     },
     {
+      "file": "crates/humanify-index/src/cache.rs",
+      "scope": "fetch_bun",
+      "construct": "subprocess",
+      "pattern": "subprocess",
+      "reason": "exp171: a default (names-mode) run whose store holds no Bun fetches the pinned one — `npm install bun@<v> --ignore-scripts` then `<bin> --version` — each through humanify_core::subprocess::run (pipes drained) under BUN_FETCH_DEADLINE (15 min); a non-zero exit, a timeout, no platform binary or a wrong version is a loud error that removes the half-made directory"
+    },
+    {
       "file": "crates/humanify-index/src/registry.rs",
       "scope": "fetch",
       "construct": "subprocess",

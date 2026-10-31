@@ -8,3 +8,7 @@ test/parity/wpb4-stats-schema.json
 # the standing --sequential == pre-flip-default proof (scripts/e2e.ts step 5).
 # A reformat breaks the proof, exactly like the byte-exact fixtures above.
 test/golden/legacy-default/
+
+# The e2e library-index store is a BUILT index (exp171): its manifest's
+# sha256 is its directory name, so a reformat would orphan it.
+test/e2e/library-index/

@@ -423,25 +423,15 @@ pub static KEYS: &[Key] = &[
         name: "matching",
         kind: Kind::Choice(library_modes),
         flag: Some("--library-matching"),
-        default: || text("off"),
+        default: || text("names"),
         unset: "",
-        doc: "What library matching does: \"off\" (path/banner detection only), \"report\" \
-              (also the index lookup + graph discovery, written to \
-              .humanify/library-report.json; output bytes unchanged), \"names\" (refused \
-              until an eval passes it).",
-    },
-    Key {
-        section: "library",
-        name: "names_unlocked",
-        kind: Kind::Bool,
-        flag: None,
-        default: off,
-        unset: "",
-        doc: "The internal escape that lifts the \"names\" refusal — measurement runs \
-              only, never a default: the refusal stays armed until an eval passes the \
-              mode. With it, and matching = \"names\", index claims name library code \
-              and library-covered files place under vendor/<package>/. Refused with any \
-              other mode.",
+        doc: "What library matching does: \"names\" (the default since exp171: code the \
+              library index recognises is placed under vendor/<package>/ and its original \
+              identifier names are restored; with no --library-index the run finds or builds \
+              the index it needs, see index_build), \"report\" (the index lookup + graph \
+              discovery written to .humanify/library-report.json; output bytes as \"off\") or \
+              \"off\" (path/banner detection only — the opt-out: no index is read, searched \
+              for or built).",
     },
     Key {
         section: "library",
@@ -449,7 +439,7 @@ pub static KEYS: &[Key] = &[
         kind: Kind::Text,
         flag: Some("--library-index"),
         default: none,
-        unset: "no index; required unless matching is \"off\", refused with \"off\"",
+        unset: "no index: names/report find or build one (index_build = \"auto\"); refused with \"off\"",
         doc: "The library fingerprint index: its directory, or its id (resolved under \
               index_store).",
     },
@@ -478,14 +468,15 @@ pub static KEYS: &[Key] = &[
         name: "index_build",
         kind: Kind::Choice(index_build_modes),
         flag: None,
-        default: || text("off"),
+        default: || text("auto"),
         unset: "",
-        doc: "Whether a run may build the index it needs AT RUN TIME (exp154): \"off\" \
-              (report needs --library-index <dir|id>) or \"auto\" (matching \"report\" \
-              with no index: search index_store_dir for one with the bundle's bundler \
-              slice, else build one from the packages the bundle itself reveals — any \
-              build failure fails the run loudly; an explicit --library-index wins and \
-              the machinery stays off).",
+        doc: "Whether a run may find or build the index it needs AT RUN TIME (exp154; the \
+              default since exp171): \"auto\" (matching \"names\" or \"report\" with no \
+              --library-index: search index_store_dir for an index with the bundle's bundler \
+              slice, else build one from the packages the bundle itself reveals — the run \
+              prints the estimated disk and time first; a bundle no index can be built for \
+              runs as \"off\", with a notice) or \"off\" (names/report need \
+              --library-index <dir|id>). An explicit --library-index wins.",
     },
     lib_int(
         "library",

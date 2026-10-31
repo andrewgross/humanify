@@ -44,6 +44,7 @@
       "experiments/lib/**",
       "scripts/**",
       "!test/e2e/fixtures/**",
+      "!test/e2e/library-index/**",
       "!test/golden/**",
       "!test/e2e/output/**",
       "!experiments/lib/match-truth/fixtures/**"

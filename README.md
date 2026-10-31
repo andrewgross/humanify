@@ -124,10 +124,14 @@ Only the operational options are flags: the input, `-o, --output-dir`,
 `--prior-version` (the previous release's `.humanify/humanified.js`: names,
 file layout and vendor names carry across versions), `--endpoint`,
 `--model`, `-v`/`-vv`, `--config <file>`, and the library decision
-(`--library-matching off|report|names`, default off, with
-`--library-index <dir>` for `report`, which writes
-`.humanify/library-report.json` and changes no other output byte; `names`
-is refused until an eval passes it). Everything else is a key in
+(`--library-matching names|report|off`, default `names`: library code the
+library index recognises is placed under `vendor/<package>/` and keeps its
+original names; with no `--library-index <dir>` a Bun bundle's run finds or
+BUILDS the index it needs in `.humanify/library-index` under the output
+directory — it prints the estimated disk and time first, and that can be
+gigabytes and tens of minutes; `--library-matching off` opts out, and
+`report` writes `.humanify/library-report.json` and changes no other output
+byte). Everything else is a key in
 the TOML config file; [`humanify.example.toml`](./humanify.example.toml)
 lists every key with its default and meaning (it is generated from the
 binary's own key registry, so it cannot drift). For example:

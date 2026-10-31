@@ -74,6 +74,10 @@ INPUTS=$(run_config .inputsBase)
 PRIORS=$(run_config .priorsBase)
 BIN=$(run_config .bin)
 FORCE_MIXED=$(run_config_flag .forceMixed)
+# exp171: the naming mode (names is the binary's default) and the index a
+# names launch reads — eval.ts resolved both; null index = off mode.
+NAMING_MODE=$(run_config .namingMode)
+LIBRARY_INDEX=$(run_config .libraryIndex)
 PIPELINE_SETS=()
 while IFS= read -r entry; do
   PIPELINE_SETS+=("$entry")
@@ -129,6 +133,12 @@ if [[ ${#PIPELINE_SETS[@]} -gt 0 ]]; then
   echo "PIPELINE SETTINGS (every launch): ${PIPELINE_SETS[*]}"
 fi
 
+if [[ -n "$LIBRARY_INDEX" ]]; then
+  echo "NAMING MODE: $NAMING_MODE — every launch reads the library index $LIBRARY_INDEX (never a run-time build)"
+else
+  echo "NAMING MODE: $NAMING_MODE — no library index"
+fi
+
 case "$BASE_MODE" in
   scratch) echo "BASE: scratch — each v-1 rebuilt by this pipeline with NO prior (a full cold run per base)" ;;
   seeded)  echo "BASE: seeded (--seeded-base) — each v-1 rebuilt with the ARCHIVE as --prior-version; it inherits the archive's names. Comparable only to seeded labels." ;;
@@ -142,9 +152,12 @@ mkdir -p "$RESULTS" "$WORK"
 jq -cn --argjson bin "$BIN_JSON" --argjson extra "$PIPELINE_SETS_JSON" \
   --arg baseMode "$BASE_MODE" --arg cfgPath "$RUN_CONFIG" \
   --arg cfgSha "$RUN_CONFIG_SHA" --arg bootModel "$BOOT_GATE_MODEL" \
+  --arg namingMode "$NAMING_MODE" --arg libraryIndex "$LIBRARY_INDEX" \
   '{pipeline:({kind:"rust-bin", bin:$bin}
     + (if $extra == null then {} else {pipelineSettings:$extra} end)),
-    baseMode:$baseMode, runConfig:{path:$cfgPath, sha256:$cfgSha},
+    baseMode:$baseMode, namingMode:$namingMode,
+    libraryIndex:(if $libraryIndex == "" then null else $libraryIndex end),
+    runConfig:{path:$cfgPath, sha256:$cfgSha},
     bootGateModel:$bootModel}' > "$RESULTS/pipeline.json"
 
 # pairs.json carries the laptop's absolute paths, and the bahadur devcontainer
@@ -181,10 +194,12 @@ CONC=$(jq -r .llm.concurrency "$CFG")
 # pipeline_config <out.toml> <section.key=value>...: write one launch's file.
 # The harness's own keys are listed in scripts/eval.ts (SCORE_HARNESS_KEYS),
 # which refuses a --pipeline-set naming one before anything builds.
+LIBRARY_SETS=()
+[[ -n "$LIBRARY_INDEX" ]] && LIBRARY_SETS=("library.index=$LIBRARY_INDEX")
 pipeline_config() {
   npx tsx "$REPO/experiments/lib/pipeline-config.ts" "$1" \
     "llm.reasoning_effort=$EFFORT" "llm.concurrency=$CONC" "split.enabled=true" \
-    "${@:2}" ${PIPELINE_SETS[@]+"${PIPELINE_SETS[@]}"}
+    "${@:2}" ${LIBRARY_SETS[@]+"${LIBRARY_SETS[@]}"} ${PIPELINE_SETS[@]+"${PIPELINE_SETS[@]}"}
 }
 CACHE_SETS=()
 [[ -n "$LLM_CACHE_DIR" ]] && CACHE_SETS=("llm.cache_dir=$LLM_CACHE_DIR")

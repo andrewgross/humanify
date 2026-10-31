@@ -134,11 +134,70 @@ describe("leaderboard across base modes", () => {
   });
 });
 
+describe("leaderboard across naming modes (exp171)", () => {
+  /** A scratch label whose pipeline.json records its naming mode. */
+  const moded = (name: string, mode: string | null): string => {
+    const l = label(name, { prior: REBASED, baseMode: "scratch" });
+    if (mode !== null) {
+      fs.writeFileSync(
+        path.join(RESULTS, l, "pipeline.json"),
+        JSON.stringify({ baseMode: "scratch", namingMode: mode })
+      );
+    }
+    return l;
+  };
+
+  it("REFUSES a names label beside an off label", () => {
+    const off = moded("n-off", "off");
+    const names = moded("n-names", "names");
+    const r = leaderboard(off, names);
+    assert.strictEqual(r.status, 2, r.out);
+    assert.match(r.out, /naming modes/i);
+    assert.match(r.out, new RegExp(`${off}=off`));
+    assert.match(r.out, new RegExp(`${names}=names`));
+  });
+
+  it("an old label with no record reads as OFF — and is refused beside names", () => {
+    const old = moded("n-old", null);
+    const names = moded("n-names2", "names");
+    const r = leaderboard(old, names);
+    assert.strictEqual(r.status, 2, r.out);
+    assert.match(r.out, new RegExp(`${old}=off`));
+  });
+
+  it("--force-mixed prints the table with a loud MIXED NAMING MODES note", () => {
+    const r = leaderboard(
+      moded("n-a", "off"),
+      moded("n-b", "names"),
+      "--force-mixed"
+    );
+    assert.strictEqual(r.status, 0, r.out);
+    assert.match(r.out, /MIXED NAMING MODES/);
+  });
+
+  it("two names labels compare, the mode line printed", () => {
+    const a = moded("n-r1", "names");
+    const b = moded("n-r2", "names");
+    const r = leaderboard(a, b);
+    assert.strictEqual(r.status, 0, r.out);
+    assert.match(r.out, new RegExp(`naming: ${a}=names · ${b}=names`));
+  });
+});
+
 describe("summary records the label's base modes", () => {
   it("labelProvenance carries baseModes from the manifests", () => {
     const l = label("prov", { prior: REBASED, baseMode: "scratch" });
     assert.deepStrictEqual(labelProvenance(path.join(RESULTS, l)).baseModes, [
       "scratch"
     ]);
+  });
+
+  it("labelProvenance carries the label's naming modes (exp171)", () => {
+    const l = label("prov-n", { prior: REBASED, baseMode: "scratch" });
+    assert.deepStrictEqual(
+      labelProvenance(path.join(RESULTS, l)).namingModes,
+      ["off"],
+      "no record: an old default-mode label"
+    );
   });
 });

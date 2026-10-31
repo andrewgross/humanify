@@ -18,8 +18,9 @@ use humanify_core::libindex::recipe::{DetectedRecipe, RecipeBundler, Target};
 
 use crate::build::Trace;
 use crate::cache::{
-    BuildSidecar, STORE_DIR, Seed, SidecarSlice, TOOLS_DIR, bun_binary, looks_like_id,
-    plan_runtime, search_store, write_build_sidecar,
+    BUN_FETCH_BYTES, BuildSidecar, PINNED_BUN, STORE_DIR, Seed, SidecarSlice, TOOLS_DIR,
+    bun_binary, estimate_build, looks_like_id, plan_runtime, search_store, uncovered,
+    valid_package_name, write_build_sidecar,
 };
 use crate::recipe::RecipeBuild;
 
@@ -273,6 +274,16 @@ fn the_sidecar_round_trips() {
             how: "declared".into(),
             evidence: "package.json".into(),
         }],
+        dropped: vec![crate::cache::DroppedSeed {
+            name: "http://mths.be/fromcodepoint".into(),
+            reason: "not an npm package name".into(),
+            evidence: "banner comment at byte 7".into(),
+        }],
+        failed: vec![crate::cache::DroppedSeed {
+            name: "@typescript-eslint/eslint-plugin@8.68.0".into(),
+            reason: "install/bundle failed: npm error ERESOLVE".into(),
+            evidence: String::new(),
+        }],
         versions_in_index: 1,
         packages: 1,
         refused: 0,
@@ -312,7 +323,10 @@ fn the_bun_lookup_picks_the_newest_and_names_the_fetch_command() {
     assert!(too.ends_with("bun-1.4.0/node_modules/.bin/bun"));
     let bare = temp("bun-none");
     let err = bun_binary(&bare, None).expect_err("nothing installed");
-    assert!(err.contains("npm install bun@1.4.0"), "{err}");
+    assert!(
+        err.contains(&format!("npm install bun@{PINNED_BUN}")),
+        "{err}"
+    );
     assert!(
         err.contains(bare.join(TOOLS_DIR).display().to_string().as_str()),
         "{err}"
@@ -389,7 +403,7 @@ fn run_time_pins_are_resolved_and_the_cap_is_enforced() {
             evidence: "banner".into(),
         },
     ];
-    let (cfg, planned) = plan_runtime(
+    let (cfg, planned, dropped) = plan_runtime(
         &root,
         seeds.clone(),
         vec![recipe("bun"), recipe("node")],
@@ -401,6 +415,11 @@ fn run_time_pins_are_resolved_and_the_cap_is_enforced() {
     assert_eq!(cfg.registry, root.join("registry"));
     assert_eq!(cfg.store, root.join(STORE_DIR));
     assert!(cfg.quiet, "the in-process build prints nothing");
+    assert!(
+        cfg.names,
+        "names mode restores the units' original names (exp171)"
+    );
+    assert!(dropped.is_empty(), "{dropped:?}");
     assert_eq!(
         cfg.pinned,
         vec!["ms@2.1.0".to_string(), "leftpad@1.0.0".to_string()]
@@ -446,6 +465,141 @@ fn an_unknown_seed_fails_the_plan_loudly() {
         true,
     ));
     assert!(err.contains("no-such-package"), "{err}");
+}
+
+/// exp171: the seed scan reads banners, so it offers URLs and prose; a name
+/// that cannot be an npm package is DROPPED with its reason, before any
+/// registry is asked — never a failed run (a bun-dev bundle's banner
+/// offered `http://mths.be/fromcodepoint`, and the plan died on it).
+#[test]
+fn a_seed_that_is_not_a_package_name_is_dropped_with_its_reason() {
+    let root = temp("bad-seed");
+    recorded_registry(&root);
+    let seed = |name: &str| Seed {
+        name: name.into(),
+        version: None,
+        evidence: "banner".into(),
+    };
+    let (cfg, planned, dropped) = plan_runtime(
+        &root,
+        vec![
+            seed("http://mths.be/fromcodepoint"),
+            seed("leftpad"),
+            seed("jQuery UI"),
+        ],
+        Vec::new(),
+        "2026-10-25",
+        300,
+        true,
+    )
+    .expect("the plan goes on without them");
+    assert_eq!(cfg.pinned, vec!["leftpad@1.0.0".to_string()]);
+    assert_eq!(planned.len(), 1);
+    let names: Vec<&str> = dropped.iter().map(|d| d.name.as_str()).collect();
+    assert_eq!(names, ["http://mths.be/fromcodepoint", "jQuery UI"]);
+    assert!(
+        dropped
+            .iter()
+            .all(|d| d.reason == "not an npm package name")
+    );
+    assert!(dropped.iter().all(|d| d.evidence == "banner"));
+}
+
+#[test]
+fn npm_package_names_are_told_apart_from_prose() {
+    for ok in [
+        "ms",
+        "lodash.merge",
+        "@aws-sdk/client-s3",
+        "a-b_c~d",
+        "jose",
+    ] {
+        assert!(valid_package_name(ok), "{ok}");
+    }
+    for bad in [
+        "",
+        "http://mths.be/fromcodepoint",
+        "jQuery",
+        "two words",
+        ".hidden",
+        "_private",
+        "@scope",
+        "@scope/",
+        "@/x",
+        &"a".repeat(215),
+    ] {
+        assert!(!valid_package_name(bad), "{bad:?}");
+    }
+}
+
+/// The notice's estimate scales with the versions to BUILD (reused ones
+/// cost nothing) and a Bun fetch adds its download.
+#[test]
+fn the_estimate_scales_with_the_versions_to_build() {
+    let none = estimate_build(0, false);
+    assert_eq!(none.bytes_low, 0);
+    assert_eq!(none.bytes_high, 0);
+    let ten = estimate_build(10, false);
+    let twenty = estimate_build(20, false);
+    assert!(
+        ten.bytes_low > 0 && ten.bytes_low <= ten.bytes_high,
+        "{ten:?}"
+    );
+    assert!(
+        ten.seconds_low > 0 && ten.seconds_low <= ten.seconds_high,
+        "{ten:?}"
+    );
+    assert_eq!(twenty.bytes_low, 2 * ten.bytes_low);
+    assert!(twenty.seconds_high > ten.seconds_high);
+    let with_bun = estimate_build(10, true);
+    assert_eq!(with_bun.bytes_low, ten.bytes_low + BUN_FETCH_BYTES);
+}
+
+/// exp171: the store search matches on the bundle's SLICE only, so a store
+/// that holds app A's run-time index would serve app B forever — and B's
+/// packages would never be indexed. A run-time index covers a bundle when
+/// every package name the bundle reveals is one its build planned or
+/// dropped; an index with no seed record (an offline full build) covers
+/// everything.
+#[test]
+fn a_run_time_index_covers_only_the_packages_it_was_built_from() {
+    let seed = |name: &str| Seed {
+        name: name.into(),
+        version: None,
+        evidence: "banner".into(),
+    };
+    let side = BuildSidecar {
+        seeds: vec![crate::cache::PlannedSeed {
+            name: "ms".into(),
+            ..Default::default()
+        }],
+        dropped: vec![crate::cache::DroppedSeed {
+            name: "no-such".into(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    assert_eq!(
+        uncovered(Some(&side), &[seed("ms"), seed("no-such")]),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        uncovered(
+            Some(&side),
+            &[seed("ms"), seed("leftpad"), seed("http://x.y/z")]
+        ),
+        vec!["leftpad".to_string()],
+        "a name that is no package is never a reason to rebuild"
+    );
+    let full = BuildSidecar::default();
+    assert!(
+        uncovered(Some(&full), &[seed("leftpad")]).is_empty(),
+        "no seed record: a full index"
+    );
+    assert!(
+        uncovered(None, &[seed("leftpad")]).is_empty(),
+        "no sidecar: a full index"
+    );
 }
 
 /// The id-looking names the store's merged indexes carry (64 lowercase

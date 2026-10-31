@@ -122,8 +122,12 @@ def write_rule_config(run_dir, rule, settings):
     twice."""
     path = os.path.join(run_dir, "discover.toml")
     rule_key = f"library.lookup.agreement={'true' if rule == 'agreement' else 'false'}"
+    # exp171: names became the pipeline's default, and a names request reads the index's module answers (an
+    # index without them fails). The score measures CLAIMS, which every mode makes alike, so it pins report —
+    # the mode every card before exp171 was scored in — unless the label sets matching itself.
+    mode = [] if any(s.startswith("library.matching=") for s in settings) else ["library.matching=report"]
     rc = subprocess.call(["npx", "tsx", os.path.join(REPO, "experiments/lib/pipeline-config.ts"), path, rule_key,
-                          *settings], cwd=REPO)
+                          *mode, *settings], cwd=REPO)
     if rc != 0:
         raise SystemExit(f"REFUSED: the --pipeline-set settings {settings} (pipeline-config.ts exit {rc})")
     return path

@@ -31,7 +31,8 @@ import {
 } from "../experiments/lib/pipeline-config.js";
 import {
   type BaseMode,
-  labelBaseModes
+  labelBaseModes,
+  labelNamingModes
 } from "../experiments/lib/run-manifest.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
@@ -206,8 +207,66 @@ const SCORE_FLAGS: Record<string, FlagKind> = {
   // self-hop legs), written into each launch's --config file; repeatable,
   // order kept — e.g. `--pipeline-set naming.schedule=sequential`. Recorded
   // in the label's pipeline.json.
-  "--pipeline-set": "repeat"
+  "--pipeline-set": "repeat",
+  // The library index a names-mode launch reads (exp171: names is the
+  // binary's default). Default: pairs.json's `libraryIndex`, the full
+  // prebuilt index — never the run-time build, whose as-of is the day it
+  // ran. Refused with `--pipeline-set library.matching=off`.
+  "--library-index": "value"
 };
+
+/**
+ * The naming mode a launch runs in: the binary's `library.matching`.
+ * `names` has been its default since exp171 (2026-10-31); `report` writes
+ * `off`'s bytes (warm-neutrality proven), so it is the OFF regime for
+ * comparison. Every label scored before exp171 without a
+ * `library.matching` setting was `off`.
+ */
+export type NamingMode = "names" | "off";
+
+/** The binary's default `library.matching` (crates/humanify-cli/src/config/keys.rs). */
+export const BINARY_DEFAULT_MATCHING = "names";
+
+/**
+ * The naming mode `sets` select, and the index a names launch must be
+ * handed: a names-mode eval NEVER lets the binary find or build an index
+ * at run time (its as-of would be the day it ran — two runs of one commit
+ * on different days could read different indexes). `library.index` is
+ * the harness's key (set with `--library-index`), refused in sets.
+ */
+export function namingModeOf(
+  sets: string[],
+  libraryIndexFlag: string | true | undefined
+):
+  | { namingMode: NamingMode; matching: string; libraryIndex: string | null }
+  | string {
+  const matching =
+    sets
+      .filter((e) => e.startsWith("library.matching="))
+      .map((e) => e.slice("library.matching=".length))
+      .at(-1) ?? BINARY_DEFAULT_MATCHING;
+  if (sets.some((e) => e.startsWith("library.index="))) {
+    return "--pipeline-set library.index=…: the index is the harness's own key — pass --library-index <dir>";
+  }
+  if (matching === "off") {
+    if (typeof libraryIndexFlag === "string") {
+      return "--library-index given with library.matching=off: the index would be silently ignored";
+    }
+    return { namingMode: "off", matching, libraryIndex: null };
+  }
+  const index =
+    typeof libraryIndexFlag === "string"
+      ? path.resolve(libraryIndexFlag)
+      : JSON.parse(fs.readFileSync(PAIRS_JSON, "utf8")).libraryIndex;
+  if (typeof index !== "string" || index === "") {
+    return `library.matching=${matching} needs an index: pass --library-index <dir> (pairs.json has no libraryIndex)`;
+  }
+  return {
+    namingMode: matching === "names" ? "names" : "off",
+    matching,
+    libraryIndex: index
+  };
+}
 
 /**
  * The ONE run config `eval score` hands run.sh (config sweep step 7,
@@ -239,6 +298,10 @@ export interface ScoreRunConfig {
   forceMixed: boolean;
   /** `--pipeline-set` entries, in order, for every launch's --config file. */
   pipelineSettings: string[];
+  /** The naming mode every launch runs in (exp171; `namingModeOf`). */
+  namingMode: NamingMode;
+  /** The index every launch reads (`library.index`), or null in off mode. */
+  libraryIndex: string | null;
 }
 
 /**
@@ -254,7 +317,8 @@ const SCORE_HARNESS_KEYS = [
   "llm.cache_dir",
   "diagnostics.log_file",
   "diagnostics.stats_json",
-  "diagnostics.diagnostics_file"
+  "diagnostics.diagnostics_file",
+  "library.index"
 ];
 
 /**
@@ -325,6 +389,8 @@ export function scoreArgs(args: string[]):
   const sets = parsed.given.filter(
     (_, i) => parsed.given[i - 1] === "--pipeline-set"
   );
+  const mode = namingModeOf(sets, f["--library-index"]);
+  if (typeof mode === "string") return mode;
   const setRefusal = settingsRefusal(SCORE_HARNESS_KEYS, sets);
   if (setRefusal) return setRefusal;
   const baseMode: BaseMode = archive
@@ -361,7 +427,9 @@ export function scoreArgs(args: string[]):
         strFlag(f, "--bin", path.join(REPO, "target/release/humanify"))
       ),
       forceMixed: force,
-      pipelineSettings: sets
+      pipelineSettings: sets,
+      namingMode: mode.namingMode,
+      libraryIndex: mode.libraryIndex
     }
   };
 }
@@ -388,6 +456,12 @@ export interface NeutralityRunConfig {
    * output byte). A key neutrality.sh sets itself is refused.
    */
   pipelineSettings: string[];
+  /** Both legs' naming mode (exp171; `namingModeOf`). A baseline from
+   *  before exp171 defaults to off: compare across the flip with
+   *  `--pipeline-set library.matching=off`. */
+  namingMode: NamingMode;
+  /** The index both legs read (`library.index`), or null in off mode. */
+  libraryIndex: string | null;
 }
 
 const NEUTRALITY_FLAGS: Record<string, FlagKind> = {
@@ -396,7 +470,8 @@ const NEUTRALITY_FLAGS: Record<string, FlagKind> = {
   "--priors": "value",
   "--inputs-base": "value",
   "--endpoint": "value",
-  "--pipeline-set": "repeat"
+  "--pipeline-set": "repeat",
+  "--library-index": "value"
 };
 
 /** The keys neutrality.sh's `leg_flags` writes for every leg. */
@@ -404,11 +479,12 @@ const NEUTRALITY_HARNESS_KEYS = [
   "llm.reasoning_effort",
   "llm.concurrency",
   "split.enabled",
-  "llm.cache_dir"
+  "llm.cache_dir",
+  "library.index"
 ];
 
 const NEUTRALITY_USAGE =
-  "neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D] [--inputs-base D] [--endpoint URL] [--pipeline-set section.key=value]...";
+  "neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D] [--inputs-base D] [--endpoint URL] [--library-index D] [--pipeline-set section.key=value]...";
 
 /** `eval neutrality`'s arguments → its run config, validated here. */
 export function neutralityArgs(args: string[]): NeutralityRunConfig | string {
@@ -425,6 +501,8 @@ export function neutralityArgs(args: string[]): NeutralityRunConfig | string {
   const sets = parsed.given.filter(
     (_, i) => parsed.given[i - 1] === "--pipeline-set"
   );
+  const mode = namingModeOf(sets, f["--library-index"]);
+  if (typeof mode === "string") return mode;
   const setRefusal = settingsRefusal(NEUTRALITY_HARNESS_KEYS, sets);
   if (setRefusal) return setRefusal;
   const workdir = strFlag(f, "--workdir", "/work");
@@ -437,7 +515,9 @@ export function neutralityArgs(args: string[]): NeutralityRunConfig | string {
     priors: strFlag(f, "--priors", path.join(workdir, "exp050-cold")),
     inputsBase: strFlag(f, "--inputs-base", pairsDefaults().inputsBase),
     endpoint: typeof f["--endpoint"] === "string" ? f["--endpoint"] : null,
-    pipelineSettings: sets
+    pipelineSettings: sets,
+    namingMode: mode.namingMode,
+    libraryIndex: mode.libraryIndex
   };
 }
 
@@ -748,7 +828,7 @@ const VERBS: Verb[] = [
     name: "bands",
     usage: "bands <label> <label> [label...]",
     description:
-      "Compute per-KPI noise bands from 2+ SAME-COMMIT cold repeat labels.",
+      "Compute per-KPI noise bands from 2+ SAME-COMMIT cold repeat labels, written into their naming mode's slot (the other mode's bands kept).",
     proves:
       "how much two runs of IDENTICAL code disagree per KPI — the floor a delta must clear",
     cannotProve:
@@ -778,16 +858,31 @@ const VERBS: Verb[] = [
         );
         return 2;
       }
-      const written = writeNoiseBands({
-        provenance: {
-          provisional: false,
-          sources: [`measured from ${labels.length} same-commit repeats`],
-          commit: [...commits][0],
-          labels
+      // exp171: bands are a property of a naming mode; the repeats must
+      // share one, and its slot is the one written (the other kept).
+      const modes = new Set(
+        labels.flatMap((l) => labelNamingModes(path.join(RESULTS, l)))
+      );
+      if (modes.size !== 1) {
+        console.error(
+          `labels span naming modes (${[...modes].join(", ")}) — a band is one mode's floor.`
+        );
+        return 2;
+      }
+      const mode = [...modes][0] === "names" ? "names" : "off";
+      const written = writeNoiseBands(
+        {
+          provenance: {
+            provisional: false,
+            sources: [`measured from ${labels.length} same-commit repeats`],
+            commit: [...commits][0],
+            labels
+          },
+          bands: computeBands(totals)
         },
-        bands: computeBands(totals)
-      });
-      console.log(`wrote measured bands: ${written}`);
+        mode
+      );
+      console.log(`wrote measured ${mode}-mode bands: ${written}`);
       return 0;
     }
   },

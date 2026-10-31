@@ -296,11 +296,34 @@ describe("the 5b self-hop gate: cold inside the reference range, warm byte-ident
   it("the committed reference is the scratch-base protocol's three cold repeats", () => {
     // Re-recorded 2026-10-03: the scratch-base default's same-commit repeats
     // (ref-scratch-0f338ffa-r1..r3). The seeded-era range was 92-180.
-    const ref = loadSelfHopReference();
+    const ref = loadSelfHopReference("off");
+    assert.ok(ref, "the off mode's range is on record");
     assert.strictEqual(ref.version, "2.1.216");
     assert.deepStrictEqual(
       Object.values(ref.coldDiffLines).sort((a, b) => a - b),
       [2, 32, 184]
+    );
+  });
+
+  it("a names-mode label is judged against the NAMES range, never off's (exp171)", () => {
+    const names = loadSelfHopReference("names");
+    if (names === null) {
+      // no names-mode range recorded yet: the verdict must say so
+      assert.match(
+        coldRangeVerdict(hop(), null),
+        /not judged: no reference range is recorded for this naming mode/
+      );
+    } else {
+      assert.strictEqual(names.version, "2.1.216");
+      assert.ok(
+        Object.keys(names.coldDiffLines).every((l) =>
+          l.startsWith("ref-names-")
+        )
+      );
+    }
+    assert.match(
+      coldRangeVerdict(hop(), null),
+      /not judged: no reference range is recorded for this naming mode/
     );
   });
 

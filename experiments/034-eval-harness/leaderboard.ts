@@ -20,8 +20,13 @@ import {
   kpisNamed,
   type SummaryTotals
 } from "./kpis.js";
-import { bandFor, loadNoiseBands } from "./noise-bands.js";
-import { baseModeComparison, labelBaseModes } from "../lib/run-manifest.js";
+import { type BandMode, bandFor, loadNoiseBands } from "./noise-bands.js";
+import {
+  baseModeComparison,
+  labelBaseModes,
+  labelNamingModes,
+  namingModeComparison
+} from "../lib/run-manifest.js";
 
 interface Summary {
   model: string;
@@ -35,6 +40,9 @@ interface Summary {
     /** Absent on summaries written before 2026-10-03: re-derived from the
      *  label's run manifests (`labelBaseModes`). */
     baseModes?: string[];
+    /** Absent on summaries written before exp171: re-derived
+     *  (`labelNamingModes` — pipeline.json, the manifests, else off). */
+    namingModes?: string[];
   };
 }
 
@@ -45,6 +53,17 @@ interface Summary {
 function baseModesOf(resultsDir: string, s: Summary, label: string): string[] {
   return (
     s.provenance?.baseModes ?? labelBaseModes(path.join(resultsDir, label))
+  );
+}
+
+/** Each label's naming modes — the summary's record, else re-derived. */
+function namingModesOf(
+  resultsDir: string,
+  s: Summary,
+  label: string
+): string[] {
+  return (
+    s.provenance?.namingModes ?? labelNamingModes(path.join(resultsDir, label))
   );
 }
 
@@ -282,8 +301,27 @@ function main() {
     console.error(`leaderboard: ${bases.refusal}`);
     process.exit(2);
   }
+  // exp171: names mode moves library code into vendor/ and names it — a
+  // different tree on every surface. Refused across modes, like bases.
+  const naming = namingModeComparison(
+    summaries.map((s, i) => ({
+      label: models[i],
+      modes: namingModesOf(resultsDir, s, models[i])
+    })),
+    forceMixed || browsing
+  );
+  if (naming.refusal) {
+    console.error(`leaderboard: ${naming.refusal}`);
+    process.exit(2);
+  }
   const base = summaries[0].totals;
   const cols = kpisNamed(COLUMNS);
+  // The bands of the mode being compared (one mode, unless forced mixed:
+  // then the base label's). A names-mode comparison never borrows off's.
+  const bandMode: BandMode =
+    namingModesOf(resultsDir, summaries[0], models[0])[0] === "names"
+      ? "names"
+      : "off";
 
   // Band-aware delta: a difference the instrument cannot resolve renders
   // as `~0±band`, not a signed number — rule 11 made structural. `±?`
@@ -299,7 +337,7 @@ function main() {
     if (isBase || b === undefined) return String(v);
     const d = v - b;
     if (d === 0) return `${v} (=)`;
-    const band = bandFor(kpiKey);
+    const band = bandFor(kpiKey, bandMode);
     if (band === null) return `${v} (${d > 0 ? `+${d}` : d}±?)`;
     if (Math.abs(d) <= band) return `${v} (~0±${band})`;
     return `${v} (${d > 0 ? `+${d}` : d})`;
@@ -346,12 +384,17 @@ function main() {
       "models scored before that KPI existed."
   );
   for (const line of caveatLines([...cols, ...splitShown])) console.log(line);
-  const bands = loadNoiseBands();
+  const bands = loadNoiseBands(bandMode);
+  if (bandMode === "names")
+    console.log(
+      "  bands: the NAMES-mode bands (noise-bands.json byMode.names)"
+    );
   for (const line of bandCommitWarning(resultsDir, models, bands)) {
     console.log(line);
   }
   for (const line of modelMismatchWarning(summaries)) console.log(line);
   for (const line of bases.lines) console.log(line);
+  for (const line of naming.lines) console.log(line);
   if (bands?.provenance.provisional) {
     console.log(
       "  bands: PROVISIONAL (seeded from recorded measurements) — produce a " +

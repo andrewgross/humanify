@@ -444,14 +444,9 @@ fn a_refused_library_decision_creates_nothing() {
     std::fs::write(stale.join("manifest.json"), m.replace("units/", "units/0")).unwrap();
     for (args, want) in [
         (
-            vec!["--library-matching", "names", "--library-index", "x"],
-            "refused until an eval",
+            vec!["--library-index", "x", "--library-matching", "off"],
+            "--library-matching off",
         ),
-        (
-            vec!["--library-matching", "report"],
-            "needs --library-index",
-        ),
-        (vec!["--library-index", "x"], "--library-matching off"),
         (
             vec![
                 "--library-matching",
@@ -890,48 +885,42 @@ fn library_report(out: &Path) -> serde_json::Value {
     .unwrap()
 }
 
-/// index_build defaults to "off": a run with defaults, a report run with
-/// an explicit index, and even an auto run with an explicit index (the
-/// explicit index WINS) never touch the store — the default root is
-/// neither read nor created, and no build process is ever spawned (the
-/// auto+explicit twin says so on stderr).
+/// The opt-out (`--library-matching off`) and an explicit index (it WINS
+/// over the default `index_build = "auto"`) never reach the machinery: the
+/// store is neither read nor created, no build process is spawned, and the
+/// explicit run's report carries no machinery trail.
 #[test]
-fn with_the_machinery_off_no_run_ever_touches_the_store() {
+fn the_opt_out_and_an_explicit_index_never_touch_the_store() {
     let s = Scratch::new("ix-off");
     let input = s.write("bundle.js", BUN_BUNDLE);
     let store = |tag: &str| s.0.join(tag).join(".humanify/library-index");
 
-    // Defaults: matching off, build off.
+    // The opt-out.
     let plain = s.0.join("plain");
-    let o = run(&s.0, &[&input, "-o", plain.to_str().unwrap()]);
-    assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
-    assert!(
-        !store("plain").exists(),
-        "a default run never reads (so never creates) the store"
-    );
-
-    // Report with an explicit index (build still off).
-    let ix = library_index(&s.0.join("ix"), true);
-    let explicit = s.0.join("explicit");
     let o = run(
         &s.0,
         &[
             &input,
             "-o",
-            explicit.to_str().unwrap(),
+            plain.to_str().unwrap(),
             "--library-matching",
-            "report",
-            "--library-index",
-            &ix,
+            "off",
         ],
     );
-    assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
-    assert!(!store("explicit").exists(), "the machinery never ran");
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    assert!(!err.contains("Library names"), "off says nothing: {err}");
+    assert!(!err.contains("Library index"), "off says nothing: {err}");
+    assert!(
+        !store("plain").exists(),
+        "off never reads (so never creates) the store"
+    );
 
-    // Auto + an explicit index: the explicit index wins, the machinery
-    // stays off — and the run SAYS so.
+    // An explicit index, with the default index_build = "auto": the
+    // explicit index wins and the machinery never runs.
+    let ix = library_index(&s.0.join("ix"), true);
     let wins = s.0.join("wins");
-    let o = run_with(
+    let o = run(
         &s.0,
         &[
             &input,
@@ -942,13 +931,12 @@ fn with_the_machinery_off_no_run_ever_touches_the_store() {
             "--library-index",
             &ix,
         ],
-        &["[library]", "index_build = \"auto\""],
     );
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     assert!(
-        err.contains("stays off: --library-index was passed"),
-        "the run says the machinery stayed off: {err}"
+        !err.contains("Library index: using"),
+        "the machinery never ran: {err}"
     );
     assert!(!store("wins").exists(), "the machinery never ran");
     // ... and using the explicit index produced the usual report.
@@ -987,6 +975,13 @@ fn auto_finds_a_pre_populated_index_and_uses_it_without_building() {
     );
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
+    // exp171: a found index is one quiet line — never the build notice.
+    assert!(err.contains("Library index: using "), "{err}");
+    assert!(err.contains("(found; nothing to build)"), "{err}");
+    assert!(
+        !err.contains("NOTICE"),
+        "nothing is built, nothing to warn about: {err}"
+    );
 
     // Found — the trail says so, with the properties it matched on.
     let report = library_report(&auto_dir);
@@ -1076,28 +1071,66 @@ fn assert_found_trail(report: &serde_json::Value) {
     );
 }
 
-/// index_build = "auto" with NOTHING usable: the run fails loudly (never
-/// silently downgrades to path/banner-only) naming the failed stage and
-/// the two escape hatches. BUN_BUNDLE reveals no package, so the failure
-/// is the plan stage — before any process is spawned.
+/// exp171: names is the DEFAULT, so a run on a bundle no index can serve
+/// must not fail. BUN_BUNDLE reveals no package and the store is empty:
+/// the run says so in one notice and goes on as `--library-matching off` —
+/// its output tree byte-identical to the opt-out's — and the plan creates
+/// nothing in the store (no process was spawned).
 #[test]
-fn auto_with_nothing_usable_fails_the_run_loudly() {
-    let s = Scratch::new("ix-fail");
+fn a_default_run_no_index_can_serve_runs_as_off_and_says_so() {
+    let s = Scratch::new("ix-inert");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let default_dir = s.0.join("default");
+    let o = run(&s.0, &[&input, "-o", default_dir.to_str().unwrap()]);
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    assert!(err.contains("Library names: off for this run"), "{err}");
+    assert!(err.contains("reveals no npm package"), "{err}");
+    assert!(err.contains("--library-matching off"), "{err}");
+    assert!(
+        !err.contains("NOTICE: library names"),
+        "nothing to build: {err}"
+    );
+    assert!(
+        !default_dir.join(".humanify/library-index").exists(),
+        "nothing was created in the store: {err}"
+    );
+    let off_dir = s.0.join("off");
+    let o = run(
+        &s.0,
+        &[
+            &input,
+            "-o",
+            off_dir.to_str().unwrap(),
+            "--library-matching",
+            "off",
+        ],
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
+    assert_eq!(
+        snapshot(&default_dir),
+        snapshot(&off_dir),
+        "an inert names run must write exactly the opt-out's bytes"
+    );
+}
+
+/// Without the run-time build (`index_build = "off"`), names and report
+/// need an explicit index: refused before any work, naming both escapes.
+#[test]
+fn without_the_run_time_build_names_needs_an_index() {
+    let s = Scratch::new("ix-build-off");
     let input = s.write("bundle.js", BUN_BUNDLE);
     let out = s.out().display().to_string();
     let o = run_with(
         &s.0,
-        &[&input, "-o", &out, "--library-matching", "report"],
-        &["[library]", "index_build = \"auto\""],
+        &[&input, "-o", &out],
+        &["library.index_build = \"off\""],
     );
     let err = stderr(&o);
-    assert_eq!(o.status.code(), Some(1), "fail loud: {err}");
-    assert!(err.contains("run-time library index"), "{err}");
-    assert!(err.contains("reveals no package to index"), "{err}");
-    assert!(err.contains("--library-index <dir|id>"), "{err}");
-    assert!(err.contains("library.index_build = \"off\""), "{err}");
+    assert_eq!(o.status.code(), Some(1), "{err}");
     assert!(
-        !s.out().join(".humanify/library-index").exists(),
-        "the plan refused before anything was created: {err}"
+        err.contains("--library-matching names needs --library-index"),
+        "{err}"
     );
+    assert!(!s.out().exists(), "refused before any work");
 }

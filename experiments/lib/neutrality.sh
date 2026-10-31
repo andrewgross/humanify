@@ -90,6 +90,10 @@ PIPELINE_SETS=()
 while IFS= read -r entry; do
   [[ -n "$entry" ]] && PIPELINE_SETS+=("$entry")
 done < <(jq -r '(.pipelineSettings // [])[]' "$RUN_CONFIG")
+# exp171: names is the binary's default; a names-mode leg reads the index
+# eval.ts resolved (never a run-time build). null = off mode.
+LIBRARY_INDEX=$(run_config .libraryIndex)
+[[ -n "$LIBRARY_INDEX" ]] && PIPELINE_SETS=("library.index=$LIBRARY_INDEX" ${PIPELINE_SETS[@]+"${PIPELINE_SETS[@]}"})
 mkdir -p "$WORK"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

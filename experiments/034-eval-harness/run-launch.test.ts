@@ -55,6 +55,16 @@ import { describe, it } from "node:test";
  * every launch line, config file and run config is byte-identical. The
  * label's pipeline.json gains the run config's sha256 and the boot gate's
  * pinned model (neither is in a golden).
+ *
+ * exp171 (2026-10-31): names became the binary's DEFAULT, and a names
+ * launch with no index would find or BUILD one at run time (its as-of the
+ * day it ran). The dispatcher now hands every launch the full prebuilt
+ * index (pairs.json `libraryIndex`, or `--library-index`). Both goldens
+ * were re-recorded and differ ONLY by one `[library] index = "<that
+ * index>"` section in every launch's config (10 launches: 4 rebases, 4
+ * scored legs' `configToml`, 2 self-hop legs); every argv is unchanged. A
+ * label scored with `--pipeline-set library.matching=off` is handed no
+ * index (its configs carry `matching = "off"` instead).
  */
 
 const HERE = import.meta.dirname;

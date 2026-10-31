@@ -1,14 +1,26 @@
 //! The run-time index machinery (exp154, docs/design/library-names-plan.md
-//! step 3): when `library.index_build = "auto"` and matching is `report`
-//! with NO index passed, the run finds or builds the index it needs in its
-//! cache (`library.index_store_dir`), CONCURRENT with its own ingest —
-//! started as soon as detection resolves the bundler, joined by the library
-//! load with a deadline (`library.index.wait`), never a sleep-poll.
+//! step 3): when `library.index_build = "auto"` and matching is `names` or
+//! `report` with NO index passed, the run finds or builds the index it
+//! needs in its cache (`library.index_store_dir`), CONCURRENT with its own
+//! ingest — started as soon as detection resolves the bundler, joined by
+//! the library load with a deadline (`library.index.wait`), never a
+//! sleep-poll.
 //!
-//! Default OFF: `unified::pipeline_body` only reaches this module through
-//! `Config::library::runs_index_machinery`, which is false unless the three
-//! keys say otherwise — a default run never reads the store directory and
-//! never spawns a build process.
+//! DEFAULT ON since exp171 (names is the default): `unified::pipeline_body`
+//! reaches this module through `Config::library::runs_index_machinery`;
+//! `--library-matching off` (the opt-out) and an explicit `--library-index`
+//! never do. What the user sees:
+//!
+//! - an index FOUND in the store: one line naming it — nothing is built;
+//! - a bundle no index can be built for (not a Bun bundle, or one that
+//!   reveals no npm package): one notice, and the run goes on as `off`
+//!   (`JobAnswer::Inert`) — a default run must not fail on its input's
+//!   bundler;
+//! - a BUILD: the notice ([`build_notice`]) before anything is installed —
+//!   what is built, the estimated disk and time, where it is stored, how
+//!   to opt out — then the build. The run does not wait for a confirmation:
+//!   a prompt would hang every batch run (exp171's decision; Andrew's rule
+//!   "if the index is not ready, wait" means build it).
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -24,7 +36,10 @@ use serde::Serialize;
 
 use crate::config::Config;
 use humanify_index::build::Trace;
-use humanify_index::cache::{Seed, StoreSearch, build_runtime, bun_binary, search_store};
+use humanify_index::cache::{
+    PINNED_BUN, Seed, StoreSearch, build_planned, bun_binary, estimate_build, fetch_bun,
+    plan_build, read_build_sidecar, search_store, uncovered, valid_package_name,
+};
 use humanify_index::recipe::RecipeBuild;
 
 /// How long the run waits for the machinery before it stops the build and
@@ -46,6 +61,10 @@ pub enum JobAnswer {
     Found(PathBuf, IndexSource),
     /// The run built one at run time (its fresh directory + trail).
     Built(PathBuf, IndexSource),
+    /// No index can serve this bundle (not Bun-built, or it reveals no
+    /// package): the run goes on as `--library-matching off`, and says so
+    /// (the notice is the text).
+    Inert(String),
     /// Why the machinery failed — the run fails loudly with it.
     Failed(String),
 }
@@ -159,6 +178,10 @@ fn outcome_metadata(answer: &JobAnswer) -> humanify_model::profiling::JsObject {
             set("reused", n(&trail.reused));
             set("refused", n(&trail.refused));
         }
+        JobAnswer::Inert(why) => {
+            set("outcome", Value::String("inert".into()));
+            set("why", Value::String(why.clone()));
+        }
         JobAnswer::Failed(error) => {
             set("outcome", Value::String("failed".into()));
             set("error", Value::String(error.clone()));
@@ -200,8 +223,17 @@ pub fn start<'scope>(
     IndexJob { rx }
 }
 
+/// The opt-out every notice names.
+const OPT_OUT: &str = "--library-matching off";
+
+/// A notice line from the job thread, straight to stderr: the machinery
+/// runs beside the run's setup, before any progress display draws.
+fn notice(text: &str) {
+    eprintln!("{text}");
+}
+
 /// The job thread's whole body: every failure is a loud `Failed` naming its
-/// stage.
+/// stage; a bundle no index can serve is `Inert`.
 fn job(
     profiler: &Profiler,
     code: &str,
@@ -220,10 +252,10 @@ fn job(
             .bundler
             .map(|b| b.name())
             .unwrap_or("an unknown bundler");
-        return JobAnswer::Failed(format!(
-            "run-time index build (exp154): bun-bundled apps only in this \
-             lane — this bundle was built with {has}. Pass --library-index \
-             <dir|id>, or set library.index_build = \"off\""
+        return JobAnswer::Inert(format!(
+            "Library names: off for this run — this bundle was built with {has}, and a \
+             library index can only be built for Bun bundles so far (pass --library-index \
+             <dir|id> with an index that has its slice, or {OPT_OUT} to silence this)"
         ));
     }
     // Search the store: one span over the whole look (the verdicts it
@@ -236,7 +268,12 @@ fn job(
     );
     let search: StoreSearch = search_store(root, &detected);
     span.end(None);
-    let candidates = search
+    // The bundle's own packages: what a build would index, and what a
+    // found RUN-TIME index must cover to serve it (exp171 — the search
+    // matches on the slice alone, so app A's index would otherwise serve
+    // app B forever and B's packages would never be indexed).
+    let seeds = bundle_revealed_seeds(code);
+    let mut candidates = search
         .candidates
         .iter()
         .map(|(id, verdict)| StoreCandidate {
@@ -244,6 +281,20 @@ fn job(
             verdict: verdict.clone(),
         })
         .collect::<Vec<_>>();
+    let covering = search.usable.iter().find(|found| {
+        let side = read_build_sidecar(&found.dir).ok().flatten();
+        let missing = uncovered(side.as_ref(), &seeds);
+        if !missing.is_empty() {
+            candidates.push(StoreCandidate {
+                id: found.id.clone(),
+                verdict: format!(
+                    "skipped: built from other packages — misses {}",
+                    missing.join(", ")
+                ),
+            });
+        }
+        missing.is_empty()
+    });
     let base =
         |outcome: &str, index_id: String, slice: String, bundler_version: String, as_of: String| {
             IndexSource {
@@ -255,12 +306,17 @@ fn job(
                 bundler_version,
                 detected_bundler_version: "unknown".to_string(),
                 as_of,
-                candidates,
+                candidates: candidates.clone(),
                 note: search.note.clone(),
                 ..Default::default()
             }
         };
-    if let Some(found) = &search.found {
+    if let Some(found) = covering {
+        notice(&format!(
+            "Library index: using {} from {} (found; nothing to build)",
+            short_id(&found.id),
+            root.display()
+        ));
         return JobAnswer::Found(
             found.dir.clone(),
             base(
@@ -272,22 +328,31 @@ fn job(
             ),
         );
     }
-    // Nothing usable: build. The seeds come from the bundle itself — no
-    // LLM, no base-list bootstrap.
-    let seeds = bundle_revealed_seeds(code);
-    if seeds.is_empty() {
-        return JobAnswer::Failed(
-            "run-time index build (plan): the bundle reveals no package to \
-             index — no library banner, no inlined package.json. Pass \
-             --library-index <dir|id>, or set library.index_build = \"off\""
-                .to_string(),
-        );
+    // Nothing usable: build, from the bundle's own packages — no LLM, no
+    // base-list bootstrap.
+    // Only a name that can be an npm package is anything to build from
+    // (Claude Code 2.1.216 offers two, both `azure/msal-…` without the `@`:
+    // nothing to build, so nothing is created, fetched or asked).
+    if !seeds.iter().any(|s| valid_package_name(&s.name)) {
+        return JobAnswer::Inert(no_package_notice(root));
     }
-    // The pinned Bun: nothing is ever downloaded; a cache without one is a
-    // loud failure naming the exact fetch command.
+    // The plan asks the bundler its version: a store with no Bun gets the
+    // pinned one first, announced before the download.
+    let fetched_bun = bun_binary(root, None).is_err();
     let (bin, picked_bun) = match bun_binary(root, None) {
-        Ok((bin, version)) => (bin, version),
-        Err(e) => return JobAnswer::Failed(format!("run-time index build (bun): {e}")),
+        Ok(found) => found,
+        Err(_) => {
+            notice(&format!(
+                "Library index: none in {} serves this bundle — fetching Bun {PINNED_BUN} \
+                 (~{}) into it to build one ({OPT_OUT} skips library names)",
+                root.display(),
+                humanize_bytes(humanify_index::cache::BUN_FETCH_BYTES)
+            ));
+            match fetch_bun(root, PINNED_BUN) {
+                Ok(fetched) => fetched,
+                Err(e) => return JobAnswer::Failed(format!("run-time index build (bun): {e}")),
+            }
+        }
     };
     let mut recipes = Vec::new();
     for target in ["bun", "node"] {
@@ -306,7 +371,7 @@ fn job(
         stage: Some(&stage),
         stages: Some(&stages),
     };
-    let built = match build_runtime(
+    let plan = match plan_build(
         root,
         seeds,
         recipes,
@@ -314,10 +379,54 @@ fn job(
         library.index_build_max_packages,
         trace,
     ) {
+        Ok(plan) => plan,
+        Err(e) => return JobAnswer::Failed(format!("run-time index build (plan): {e}")),
+    };
+    if plan.planned.is_empty() {
+        return JobAnswer::Inert(format!(
+            "{} ({} name(s) it offered are not packages the npm registry knows)",
+            no_package_notice(root),
+            plan.dropped.len()
+        ));
+    }
+    if plan.to_build == 0 {
+        notice(&format!(
+            "Library index: assembling one from {} version(s) already in {} (nothing to \
+             download or build)",
+            plan.reused,
+            root.display()
+        ));
+    } else {
+        notice(&build_notice(root, &plan, fetched_bun));
+    }
+    let started = std::time::Instant::now();
+    let built = match build_planned(root, plan, trace) {
         Ok(built) => built,
         Err(e) => return JobAnswer::Failed(e),
     };
     let s = &built.sidecar;
+    notice(&format!(
+        "Library index: built {} in {} — {} version(s) indexed, {} of them reused from the store{}; the \
+         store now takes {}",
+        short_id(&s.index_id),
+        humanize_seconds(started.elapsed().as_secs()),
+        s.built + s.reused,
+        s.reused,
+        if s.failed.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ", {} could not be indexed ({})",
+                s.failed.len(),
+                s.failed
+                    .iter()
+                    .map(|f| f.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        },
+        humanize_bytes(dir_bytes(root))
+    ));
     let mut trail = base(
         "built",
         s.index_id.clone(),
@@ -340,6 +449,113 @@ fn job(
     trail.refused = Some(s.refused);
     trail.stage_ms = s.stage_ms.clone();
     JobAnswer::Built(built.dir.clone(), trail)
+}
+
+/// The notice for a Bun bundle that reveals no npm package to index.
+fn no_package_notice(root: &std::path::Path) -> String {
+    format!(
+        "Library names: off for this run — no library index in {} serves this bundle, \
+         and it reveals no npm package name to build one from (its library banners and \
+         inlined package.json files name none). Pass --library-index <dir|id> to use a prebuilt index, or \
+         {OPT_OUT} to silence this",
+        root.display()
+    )
+}
+
+/// The notice a run prints BEFORE it builds an index (exp171): what is
+/// built, the estimated disk and time, where it is stored, how to opt out.
+pub(crate) fn build_notice(
+    root: &std::path::Path,
+    plan: &humanify_index::cache::RuntimePlan,
+    fetched_bun: bool,
+) -> String {
+    let est = estimate_build(plan.to_build, false);
+    let mut lines = vec![
+        "NOTICE: library names (the default) needs a library index for this bundle, and \
+         none was found."
+            .to_string(),
+        format!(
+            "  Building one now from the {} npm package(s) this bundle reveals ({} to build, \
+             {} already in the store): each is installed from the npm registry (install \
+             scripts skipped) and bundled with Bun{}.",
+            plan.planned.len(),
+            plan.to_build,
+            plan.reused,
+            if fetched_bun {
+                format!(" {PINNED_BUN} (just fetched into the store)")
+            } else {
+                String::new()
+            }
+        ),
+        format!(
+            "  Estimated: {} to {} of disk, {} to {} (measured on Bun-built apps; the run \
+             waits for it, then goes on).",
+            humanize_bytes(est.bytes_low),
+            humanize_bytes(est.bytes_high),
+            humanize_seconds(est.seconds_low),
+            humanize_seconds(est.seconds_high)
+        ),
+        format!(
+            "  Stored in: {} (later runs with this store reuse it).",
+            root.display()
+        ),
+        format!(
+            "  To skip it: {OPT_OUT} (no library names), or --library-index <dir|id> to use \
+             a prebuilt index."
+        ),
+    ];
+    if !plan.dropped.is_empty() {
+        let names: Vec<&str> = plan.dropped.iter().map(|d| d.name.as_str()).collect();
+        lines.push(format!(
+            "  Skipped {} name(s) the bundle offered that are not npm packages: {}",
+            names.len(),
+            names.join(", ")
+        ));
+    }
+    lines.join("\n")
+}
+
+/// The first 12 hex digits of an index id (enough to find it on disk).
+fn short_id(id: &str) -> &str {
+    &id[..id.len().min(12)]
+}
+
+/// Bytes as the notice prints them (`512 MB`, `4.2 GB`).
+pub(crate) fn humanize_bytes(bytes: u64) -> String {
+    const GB: f64 = 1e9;
+    const MB: f64 = 1e6;
+    let b = bytes as f64;
+    if b >= GB {
+        format!("{:.1} GB", b / GB)
+    } else {
+        format!("{:.0} MB", (b / MB).max(1.0))
+    }
+}
+
+/// Seconds as the notice prints them (`40 s`, `12 min`, `2.5 h`).
+pub(crate) fn humanize_seconds(s: u64) -> String {
+    if s < 90 {
+        format!("{s} s")
+    } else if s < 90 * 60 {
+        format!("{} min", (s + 30) / 60)
+    } else {
+        format!("{:.1} h", s as f64 / 3600.0)
+    }
+}
+
+/// The bytes under `dir` (every regular file, recursively; a link is not
+/// followed). The store's size after a build, for the closing line.
+fn dir_bytes(dir: &std::path::Path) -> u64 {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    rd.filter_map(|e| e.ok())
+        .map(|e| match e.file_type() {
+            Ok(t) if t.is_dir() => dir_bytes(&e.path()),
+            Ok(t) if t.is_file() => e.metadata().map(|m| m.len()).unwrap_or(0),
+            _ => 0,
+        })
+        .sum()
 }
 
 /// The packages the bundle ITSELF reveals (the run-time build's seed list:
