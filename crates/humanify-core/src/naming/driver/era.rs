@@ -101,6 +101,11 @@ pub struct EraOptions<'o> {
     /// names tables.
     pub restorations:
         &'o std::collections::BTreeMap<String, crate::libindex::table::RestorationRow>,
+    /// Per top-level statement of a text with no raw-to-era bridge, the
+    /// names the index already restored there (exp169: the vendored
+    /// factory bodies, one statement per body) — held by the same rule
+    /// as the bridge's restorations. Empty everywhere else.
+    pub statement_holds: &'o [std::collections::BTreeSet<String>],
 }
 
 /// The module step's input over a side's ESTree JSON: the wrapper body's
@@ -1032,6 +1037,25 @@ fn plan_layout(
             crate::naming::module_names::plan_library_modules(source, opts.claimed_regions);
         layout.spans.clear();
         layout.regions = opts.claimed_regions.to_vec();
+        if !opts.statement_holds.is_empty() {
+            // exp169: the vendored bodies' restored names, one statement
+            // per body — held exactly as the bridge's restorations are.
+            let body_spans: Vec<(u32, u32)> = source
+                .body
+                .iter()
+                .map(|s| crate::naming::module_names::span_of(s).unwrap_or((0, 0)))
+                .collect();
+            layout.spans = held_binding_spans(
+                semantic,
+                &body_spans,
+                |i| {
+                    opts.statement_holds
+                        .get(i)
+                        .map(|names| names.iter().map(String::as_str).collect())
+                },
+                opts.name_profile,
+            );
+        }
         return layout;
     };
     let body_spans: Vec<(u32, u32)> = source
@@ -1080,8 +1104,29 @@ fn restored_binding_spans(
     if bridge.restored.is_empty() {
         return Vec::new();
     }
+    held_binding_spans(
+        semantic,
+        body_spans,
+        |i| {
+            let raw = era_raw.get(i).copied().flatten()?;
+            Some(bridge.restored_in(raw).collect())
+        },
+        profile,
+    )
+}
+
+/// The ONE hold rule over a statement list (exp166, shared by exp169's
+/// vendored bodies): a binding declared inside statement `i` is held
+/// when its name is one `names_of(i)` restored there and is not itself a
+/// minifier token. Sorted, the text's coordinates.
+fn held_binding_spans<'n>(
+    semantic: &oxc_semantic::Semantic<'_>,
+    body_spans: &[(u32, u32)],
+    names_of_statement: impl Fn(usize) -> Option<std::collections::HashSet<&'n str>>,
+    profile: crate::rename::name_profile::NameProfile,
+) -> Vec<(u32, u32)> {
     let scoping = semantic.scoping();
-    let mut names_of: std::collections::HashMap<usize, std::collections::HashSet<&str>> =
+    let mut names_of: std::collections::HashMap<usize, Option<std::collections::HashSet<&str>>> =
         std::collections::HashMap::new();
     let mut out = Vec::new();
     for symbol in scoping.symbol_ids() {
@@ -1093,12 +1138,13 @@ fn restored_binding_spans(
         if span.start < start || span.end > end {
             continue;
         }
-        let Some(raw) = era_raw.get(i).copied().flatten() else {
+        let Some(names) = names_of
+            .entry(i)
+            .or_insert_with(|| names_of_statement(i))
+            .as_ref()
+        else {
             continue;
         };
-        let names = names_of
-            .entry(i)
-            .or_insert_with(|| bridge.restored_in(raw).collect());
         let name = scoping.symbol_name(symbol);
         if names.contains(name) && !crate::rename::floor::is_minifier_token(profile, name) {
             out.push((span.start, span.end));

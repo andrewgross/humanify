@@ -474,6 +474,21 @@ fn pipeline_body(
         renderer,
     )?;
     drop(ph);
+    // exp169 (names mode only — the bridge exists only there): the
+    // vendored factory bodies' unrestored identifiers, named like app
+    // code — the prior's carry first, then the model.
+    if let Some(bridge) = unpacked.era_bridge.as_ref() {
+        let ph = phase("vendor-body-naming");
+        naming.failed_calls.naming += name_vendor_bodies_stage(
+            Path::new(out_dir),
+            bridge,
+            prior_path,
+            &naming.config,
+            provider,
+            renderer,
+        )?;
+        drop(ph);
+    }
     renderer.message(&format!(
         "Done! You can find your unminified code in {out_dir}"
     ));
@@ -1229,6 +1244,65 @@ fn detect_stage(
     (toolchain, markers)
 }
 
+/// exp169: name the vendored factory bodies (names mode), write them
+/// back and the joined text the next release reads. Returns the pass's
+/// failed calls. One progress line with its size and time (its requests
+/// are in the run's one `LLM requests:` line).
+fn name_vendor_bodies_stage(
+    out_dir: &Path,
+    bridge: &humanify_core::naming::module_names::EraBridge,
+    prior_path: Option<&Path>,
+    config: &NamingConfig,
+    provider: &dyn NameProvider,
+    renderer: &mut dyn ProgressRenderer,
+) -> Result<usize, Crash> {
+    use humanify_core::naming::vendor_bodies as vb;
+    let started = std::time::Instant::now();
+    let bodies = vb::bodies_of_bridge(out_dir, bridge).map_err(Crash)?;
+    let prior = prior_path.and_then(vb::prior_vendor_naming);
+    // No module step: the bodies are not the bundle's module markers.
+    let mut config = config.clone();
+    config.module_naming = None;
+    let mut log = humanify_core::artifact_dump::DispatchLog::off(config.params.clone());
+    let Some(named) =
+        vb::name_vendor_bodies(&bodies, prior.as_deref(), &config, &provider, &mut log)
+            .map_err(Crash)?
+    else {
+        return Ok(0);
+    };
+    let written = vb::write_vendor_naming(out_dir, &bodies, &named).map_err(Crash)?;
+    let held: usize = bodies.iter().map(|b| b.restored.len()).sum();
+    let mut skipped: std::collections::BTreeMap<&str, usize> = Default::default();
+    for (_, why) in &named.skipped {
+        *skipped.entry(why.as_str()).or_default() += 1;
+    }
+    for (path, why) in &named.skipped {
+        verbose().log(&format!(
+            "Vendor body left as extracted ({}): {path}",
+            why.as_str()
+        ));
+    }
+    let prior_state = match (named.prior_used, &named.prior_refusal) {
+        (true, _) => "used".to_string(),
+        (false, Some(why)) => format!("refused ({why})"),
+        (false, None) => "none".to_string(),
+    };
+    renderer.message(&format!(
+        "Vendor body naming: {} bodies ({} rewritten, {} left as extracted {:?}, {} restored names held), \
+prior {}, {} provider errors, valid output: {}, {:.1}s",
+        bodies.len(),
+        written,
+        named.skipped.len(),
+        skipped,
+        held,
+        prior_state,
+        named.outcome.errors,
+        named.outcome.output_valid,
+        started.elapsed().as_secs_f64()
+    ));
+    Ok(named.outcome.errors)
+}
+
 /// The last processed file: its naming outcome, its unpacked path, and
 /// the formatted text the stage ran on (the diagnostics' fresh anchor).
 struct NamedFile {
@@ -1375,6 +1449,7 @@ impl NamingRun<'_> {
                 claimed_regions: self.claimed_regions,
                 era_bridge,
                 restorations: self.restorations,
+                statement_holds: &[],
             },
             &self.config,
             &self.provider,

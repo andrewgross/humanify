@@ -46,6 +46,12 @@ new module's file name back from its wrapper (`initColorUtils` →
 `color-utils.js`) and names inferred folders from the same names; the old
 warm-hop mint namer is gone. Inherited paths are never renamed.
 
+In names mode (exp169), stage 9 also names the vendored factory bodies' identifiers
+the index did not restore: after the era, the bodies under `vendor/` are joined
+(one statement per body, vendor-path order), formatted and named by the same
+driver as app code, with the prior release's `.humanify/vendor-humanified.js` as
+the prior (`naming::vendor_bodies`). Default mode never runs it.
+
 Stage 5's ladder (2026-10-10, finding #95), per vendored module: the prior
 release's name for the same structural hash → the prior module whose
 DECLARED identity is equal and unique on both sides → the prior module

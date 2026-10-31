@@ -150,6 +150,11 @@ pub struct NamingInput<'t> {
     /// no names tables.
     pub restorations:
         &'t std::collections::BTreeMap<String, crate::libindex::table::RestorationRow>,
+    /// Per top-level statement, the names the index already restored
+    /// there, held off every later namer (exp169: the vendored factory
+    /// bodies' text, [`crate::naming::vendor_bodies`]). Empty everywhere
+    /// else.
+    pub statement_holds: &'t [std::collections::BTreeSet<String>],
 }
 
 /// The raw-to-era bridge (exp166, [`crate::naming::module_names::EraBridge`])
@@ -272,6 +277,7 @@ pub fn run_naming<P: NameProvider>(
         claimed_regions: input.claimed_regions,
         era_bridge: input.era_bridge,
         restorations: input.restorations,
+        statement_holds: input.statement_holds,
     };
     let mut run_era = || match input.prior {
         Some(prior) => match_prior_version(
