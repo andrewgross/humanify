@@ -3,7 +3,7 @@
 //! names` + `--library-index`, `[library] unnamed`, and the lookup's and
 //! discovery's tunables as `[library]` keys. Every refusal before any work.
 
-use crate::config::{API_KEY_VAR, Config, ConfigFile, IndexBuild, LibraryMatching, Unnamed};
+use crate::config::{API_KEY_VAR, Config, ConfigFile, LibraryMatching, Unnamed};
 use crate::surface::{PipelineParse, parse_pipeline};
 
 fn build(argv: &[&str], toml: &str) -> Result<Config, Vec<String>> {
@@ -54,29 +54,145 @@ impl Drop for Index {
     }
 }
 
+/// A scratch library-index STORE: empty, or holding one id-named index.
+struct Store(std::path::PathBuf);
+
+impl Store {
+    fn new(tag: &str, with_index: bool) -> Store {
+        let dir = std::env::temp_dir().join(format!("lib-store-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        if with_index {
+            let ix = dir.join("cd".repeat(32));
+            std::fs::create_dir_all(&ix).unwrap();
+            std::fs::write(ix.join("manifest.json"), "{}").unwrap();
+        }
+        Store(dir)
+    }
+    fn toml(&self) -> String {
+        format!(
+            "[library]\nindex_store_dir = {:?}\n",
+            self.0.display().to_string()
+        )
+    }
+}
+
+impl Drop for Store {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 #[test]
-fn the_default_is_names_with_the_run_time_index_and_leave() {
-    // exp171 (Andrew, 2026-10-31): names mode is the default. With no
-    // index passed, the run finds or builds the one it needs in its cache
-    // (index_build = "auto") — so the default needs no index argument.
+fn the_default_is_names_searching_the_working_directory_store_and_leave() {
+    // exp171 (Andrew, 2026-10-31): names mode is the default. exp174: with
+    // no index passed, the run searches its store, which lives under the
+    // WORKING directory, and never builds one unless asked.
     let c = build(&["in.js"], "").unwrap();
     assert_eq!(c.library.matching, LibraryMatching::Names);
-    assert_eq!(c.library.index_build, IndexBuild::Auto);
+    assert!(!c.library.index_from_bundle, "the run-time build is opt-in");
     assert!(c.library.runs_index_machinery());
+    assert_eq!(
+        c.library.index_store_root(),
+        std::env::current_dir()
+            .unwrap()
+            .join(".humanify/library-index")
+    );
     assert_eq!(c.library.unnamed, Unnamed::Leave);
     assert!(c.library.skips_libraries());
+}
+
+#[test]
+fn an_absolute_store_dir_is_used_as_given() {
+    let c = build(&["in.js", "--library-index-store", "/abs/store"], "").unwrap();
     assert_eq!(
-        c.library_index_problem(),
-        None,
-        "the machinery owns the index question: no index is not a problem"
+        c.library.index_store_root(),
+        std::path::PathBuf::from("/abs/store")
+    );
+}
+
+#[test]
+fn names_with_an_empty_store_and_no_index_is_refused_before_work() {
+    // exp174 (Andrew, 2026-10-31): no silent fallback to off. The refusal
+    // names what is missing, where it looked, how to build an index, how
+    // to point to one, the run-time build's flag and the opt-out.
+    let empty = Store::new("empty", false);
+    for argv in [
+        &["in.js"][..],
+        &["in.js", "--library-matching", "report"][..],
+    ] {
+        let c = build(argv, &empty.toml()).unwrap();
+        let e = c.library_index_problem().expect("refused");
+        for want in [
+            "needs a library index, and none was found",
+            empty.0.to_str().unwrap(),
+            "humanify-index build",
+            "--as-of",
+            "--library-index <index-dir>",
+            "--library-index-from-bundle",
+            "--library-matching off",
+        ] {
+            assert!(e.contains(want), "{argv:?} must say {want:?}: {e}");
+        }
+    }
+}
+
+#[test]
+fn a_store_holding_an_index_is_no_problem() {
+    let full = Store::new("full", true);
+    let c = build(&["in.js"], &full.toml()).unwrap();
+    assert_eq!(c.library_index_problem(), None);
+}
+
+#[test]
+fn the_from_bundle_flag_opts_into_the_run_time_build() {
+    // The flag (or its key) is the ONLY way to the run-time build; the
+    // build answers at run time, so an empty store is no problem with it.
+    let empty = Store::new("from-bundle", false);
+    let c = build(&["in.js", "--library-index-from-bundle"], &empty.toml()).unwrap();
+    assert!(c.library.index_from_bundle);
+    assert!(c.library.runs_index_machinery());
+    assert_eq!(c.library_index_problem(), None);
+    let c = build(&["in.js"], "[library]\nindex_from_bundle = true\n").unwrap();
+    assert!(c.library.index_from_bundle);
+}
+
+#[test]
+fn the_from_bundle_flag_is_refused_where_it_would_be_ignored() {
+    refused(
+        &[
+            "in.js",
+            "--library-index-from-bundle",
+            "--library-matching",
+            "off",
+        ],
+        "",
+        "--library-index-from-bundle given with --library-matching off",
+    );
+    refused(
+        &[
+            "in.js",
+            "--library-index-from-bundle",
+            "--library-index",
+            "ix",
+        ],
+        "",
+        "--library-index-from-bundle given with --library-index",
+    );
+}
+
+#[test]
+fn the_retired_index_build_key_is_refused() {
+    // library.index_build (off | auto) is replaced by the flag; no alias.
+    assert!(
+        ConfigFile::check("cfg.toml", "[library]\nindex_build = \"auto\"\n").is_err(),
+        "an unknown key"
     );
 }
 
 #[test]
 fn library_matching_off_is_the_opt_out_and_never_runs_the_machinery() {
-    // The opt-out is the existing flag, and it must not trip over the
-    // default index_build = "auto" (auto with off is the opt-out's own
-    // configuration, not a conflict).
+    // The opt-out is the existing flag: it never searches the store, so
+    // an empty one is no problem.
     let c = build(&["in.js", "--library-matching", "off"], "").unwrap();
     assert_eq!(c.library.matching, LibraryMatching::Off);
     assert!(!c.library.runs_index_machinery());
@@ -125,22 +241,6 @@ fn the_retired_unlock_key_is_refused() {
         ConfigFile::check("cfg.toml", "[library]\nnames_unlocked = true\n").is_err(),
         "an unknown key"
     );
-}
-
-#[test]
-fn without_the_run_time_build_an_index_is_required() {
-    refused(
-        &["in.js", "--library-matching", "report"],
-        "[library]\nindex_build = \"off\"\n",
-        "--library-matching report needs --library-index",
-    );
-    refused(
-        &["in.js"],
-        "[library]\nindex_build = \"off\"\n",
-        "--library-matching names needs --library-index",
-    );
-    build(&["in.js", "--library-matching", "report"], "")
-        .expect("report with the default auto build finds or builds its index");
 }
 
 #[test]

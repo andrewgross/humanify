@@ -64,9 +64,6 @@ fn bundlers() -> Vec<String> {
 fn library_modes() -> Vec<String> {
     ["off", "report", "names"].map(String::from).to_vec()
 }
-fn index_build_modes() -> Vec<String> {
-    ["off", "auto"].map(String::from).to_vec()
-}
 fn unnamed_modes() -> Vec<String> {
     ["leave", "model"].map(String::from).to_vec()
 }
@@ -427,8 +424,9 @@ pub static KEYS: &[Key] = &[
         unset: "",
         doc: "What library matching does: \"names\" (the default since exp171: code the \
               library index recognises is placed under vendor/<package>/ and its original \
-              identifier names are restored; with no --library-index the run finds or builds \
-              the index it needs, see index_build), \"report\" (the index lookup + graph \
+              identifier names are restored; with no --library-index the run uses an index \
+              it finds in index_store_dir and fails before any work when there is none, see \
+              index_from_bundle), \"report\" (the index lookup + graph \
               discovery written to .humanify/library-report.json; output bytes as \"off\") or \
               \"off\" (path/banner detection only — the opt-out: no index is read, searched \
               for or built).",
@@ -439,7 +437,8 @@ pub static KEYS: &[Key] = &[
         kind: Kind::Text,
         flag: Some("--library-index"),
         default: none,
-        unset: "no index: names/report find or build one (index_build = \"auto\"); refused with \"off\"",
+        unset: "no index: names/report use one found in index_store_dir (or build one with \
+                index_from_bundle), else fail before any work; refused with \"off\"",
         doc: "The library fingerprint index: its directory, or its id (resolved under \
               index_store).",
     },
@@ -458,25 +457,28 @@ pub static KEYS: &[Key] = &[
         flag: Some("--library-index-store"),
         default: || text(".humanify/library-index"),
         unset: "",
-        doc: "The run's library-index cache, resolved against the output dir: the shard \
-              store/ (reused across builds), the packument snapshot registry/, the pinned \
-              bundler tools tools/, and every merged index as <id>/ with its build.json \
-              sidecar. Nothing outside it is ever autoloaded.",
+        doc: "The run's library-index store, resolved against the WORKING directory (exp174; \
+              an absolute path is used as given): every merged index as <id>/ (the sha256 of \
+              its manifest.json) — the indexes a run with no --library-index searches — plus, \
+              when index_from_bundle builds, the shard store/ (reused across builds), the \
+              packument snapshot registry/, the pinned bundler tools tools/ and each built \
+              index's build.json sidecar. Nothing outside it is ever autoloaded.",
     },
     Key {
         section: "library",
-        name: "index_build",
-        kind: Kind::Choice(index_build_modes),
-        flag: None,
-        default: || text("auto"),
+        name: "index_from_bundle",
+        kind: Kind::Bool,
+        flag: Some("--library-index-from-bundle"),
+        default: off,
         unset: "",
-        doc: "Whether a run may find or build the index it needs AT RUN TIME (exp154; the \
-              default since exp171): \"auto\" (matching \"names\" or \"report\" with no \
-              --library-index: search index_store_dir for an index with the bundle's bundler \
-              slice, else build one from the packages the bundle itself reveals — the run \
-              prints the estimated disk and time first; a bundle no index can be built for \
-              runs as \"off\", with a notice) or \"off\" (names/report need \
-              --library-index <dir|id>). An explicit --library-index wins.",
+        doc: "Build the library index AT RUN TIME from the npm packages the bundle itself \
+              reveals (its library banner comments and inlined package.json files) when \
+              index_store_dir holds none that serves it (exp154/exp171; opt-in since exp174): \
+              each package is installed from the npm registry (install scripts skipped) and \
+              bundled with Bun, after a notice with the estimated disk and time; a bundle \
+              that reveals no package, or is not Bun-built, runs as \"off\" with a notice. \
+              Without it, names/report with no --library-index use an index FOUND in \
+              index_store_dir, and a run that finds none fails before any work.",
     },
     lib_int(
         "library",

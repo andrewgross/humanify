@@ -273,19 +273,6 @@ pub enum Unnamed {
     Model,
 }
 
-/// `library.index_build` (exp154, library-names-plan step 3): whether a
-/// run may build the index it needs at run time.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum IndexBuild {
-    /// `names`/`report` need an index passed with `--library-index`.
-    Off,
-    /// `names`/`report` with no index: search `index_store_dir` for a
-    /// usable one, else build one from the bundle's own revealed packages
-    /// (the default since exp171; the run prints its estimate first).
-    Auto,
-}
-
 /// The ONE library decision (config sweep step 6): what matching does, the
 /// index, what unnamed library code gets, and the lookup's and
 /// discovery's tunables.
@@ -296,13 +283,17 @@ pub struct Library {
     /// The index as given (a directory or an id).
     pub index: Option<String>,
     pub index_store: Option<String>,
-    /// The run's index cache (`library.index_store_dir`): shard store,
-    /// packument snapshot, pinned bundler tools, and the merged indexes a
-    /// run finds or builds — resolved against the output dir by the
-    /// machinery (exp154).
+    /// The run's index store (`library.index_store_dir`): the merged
+    /// indexes a run with no `--library-index` searches (and, with
+    /// `index_from_bundle`, the shard store, packument snapshot and pinned
+    /// bundler tools its build uses) — resolved against the WORKING
+    /// directory (exp174; exp154 resolved it against the output dir).
     pub index_store_dir: String,
-    /// Whether a run may build the index it needs at run time (exp154).
-    pub index_build: IndexBuild,
+    /// `--library-index-from-bundle` (exp174): build the index at run time
+    /// from the packages the bundle reveals when the store holds none
+    /// (exp154/exp171's build, now opt-in). Off: a run with no index and
+    /// nothing in the store fails before any work.
+    pub index_from_bundle: bool,
     /// The safety cap on a run-time build's package list (exp154).
     pub index_build_max_packages: usize,
     pub unnamed: Unnamed,
@@ -413,21 +404,23 @@ impl Library {
     }
 
     /// Whether the run-time index machinery runs (exp154): matching is on
-    /// (`names` — the default since exp171 — or `report`), NO index was
-    /// passed (an explicit index wins and the machinery stays off), and
-    /// `index_build` is `auto` (the default). Everything the machinery
-    /// touches lives under `index_store_dir`; `--library-matching off` (the
-    /// opt-out) never reads the store, never spawns a build.
+    /// (`names` — the default since exp171 — or `report`) and NO index was
+    /// passed (an explicit index wins and the machinery stays off). The
+    /// machinery SEARCHES the store and, only with `index_from_bundle`,
+    /// builds what it does not find (exp174). Everything it touches lives
+    /// under `index_store_dir`; `--library-matching off` (the opt-out)
+    /// never reads the store, never spawns a build.
     pub fn runs_index_machinery(&self) -> bool {
-        self.matching != LibraryMatching::Off
-            && self.index.is_none()
-            && self.index_build == IndexBuild::Auto
+        self.matching != LibraryMatching::Off && self.index.is_none()
     }
 
-    /// The store's root, resolved against the output dir (an absolute
+    /// The store's root, resolved against the WORKING directory (exp174:
+    /// everything for a run sits where it is launched; an absolute
     /// `index_store_dir` replaces it outright — `Path::join` semantics).
-    pub fn index_store_root(&self, output_dir: &str) -> std::path::PathBuf {
-        std::path::Path::new(output_dir).join(&self.index_store_dir)
+    /// Absolute, so every message names the directory it means.
+    pub fn index_store_root(&self) -> std::path::PathBuf {
+        let dir = std::path::Path::new(&self.index_store_dir);
+        std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf())
     }
 
     /// The index directory `index` names: a directory as given, else an id
@@ -679,6 +672,8 @@ fn flag_values(opts: &CommandOptions) -> Vec<FlagValue> {
         text("library.matching", &opts.library_matching),
         text("library.index", &opts.library_index),
         text("library.index_store_dir", &opts.library_index_store),
+        opts.library_index_from_bundle
+            .then_some(("library.index_from_bundle", Val::Bool(true))),
         (opts.verbose > 0).then(|| ("diagnostics.verbosity", Val::Int(u64::from(opts.verbose)))),
     ]
     .into_iter()
@@ -698,7 +693,7 @@ fn library_of(r: &Resolved) -> Library {
         index: r.text("library.index"),
         index_store: r.text("library.index_store"),
         index_store_dir: r.text("library.index_store_dir").expect("defaulted"),
-        index_build: parse_enum(r.text("library.index_build")).expect("a checked choice"),
+        index_from_bundle: r.flag_on("library.index_from_bundle"),
         index_build_max_packages: n("library.index_build_max_packages") as usize,
         unnamed: parse_enum(r.text("library.unnamed")).expect("a checked choice"),
         report_units: r.flag_on("library.report_units"),
@@ -799,26 +794,35 @@ pub fn library_from_file(file: Option<&ConfigFile>) -> Result<Library, Vec<Strin
 }
 
 /// The library decision's rules (docs/library-matching-config.md §2).
-/// `index_build = "auto"` (the default) with matching `off` is no
-/// conflict: it is the opt-out's own configuration — off never reaches
-/// the machinery.
+/// With no index, names/report search the store (the default) — whether it
+/// holds one is a filesystem question, asked by
+/// `Config::library_index_problem`. `index_from_bundle` is refused where
+/// it would be silently ignored, as an index with `off` is.
 fn library_violations(r: &Resolved) -> Vec<String> {
     let mode = r.text("library.matching").unwrap_or_default();
     let index = r.text("library.index").is_some();
-    let auto = r.text("library.index_build").as_deref() == Some("auto");
+    let from_bundle = r.flag_on("library.index_from_bundle");
     let mut out = Vec::new();
-    match (mode.as_str(), index) {
-        ("names" | "report", false) if !auto => out.push(format!(
-            "--library-matching {mode} needs --library-index <dir|id>, or \
-             library.index_build = \"auto\" to let the run find or build one in \
-             library.index_store_dir"
-        )),
-        ("off", true) => out.push(
+    if mode == "off" && index {
+        out.push(
             "--library-index given with --library-matching off: the index would be \
              silently ignored — pass --library-matching names or report, or drop the index"
                 .to_string(),
-        ),
-        _ => {}
+        );
+    }
+    if from_bundle && mode == "off" {
+        out.push(
+            "--library-index-from-bundle given with --library-matching off: nothing would \
+             be built — pass --library-matching names or report, or drop the flag"
+                .to_string(),
+        );
+    }
+    if from_bundle && index {
+        out.push(
+            "--library-index-from-bundle given with --library-index: the explicit index is \
+             used and nothing would be built — drop one of them"
+                .to_string(),
+        );
     }
     out
 }
@@ -995,9 +999,30 @@ impl Config {
             return None;
         }
         if self.library.runs_index_machinery() {
-            // The machinery owns the question: it SEARCHES the store at run
-            // time and builds what it does not find, so "no --library-index"
-            // is not a problem here (exp154).
+            // No index passed: the store must hold one (exp174, Andrew
+            // 2026-10-31 — names mode needs a real index), unless the run
+            // may build one from the bundle (`--library-index-from-bundle`,
+            // which owns its own answers at run time). WHICH stored index
+            // serves the bundle needs its recipe (detection, later); an
+            // empty store is refused here, before any work.
+            if self.library.index_from_bundle {
+                return None;
+            }
+            let root = self.library.index_store_root();
+            if humanify_index::cache::stored_index_ids(&root).is_empty() {
+                return Some(crate::runtime_index::no_index_error(
+                    self.library.matching,
+                    &root,
+                    &format!(
+                        "{} holds no index (no <id>/manifest.json in it)",
+                        if root.is_dir() {
+                            "it exists but"
+                        } else {
+                            "it does not exist, so it"
+                        }
+                    ),
+                ));
+            }
             return None;
         }
         let dir = match self.library.index_dir()? {

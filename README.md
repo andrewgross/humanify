@@ -126,10 +126,17 @@ file layout and vendor names carry across versions), `--endpoint`,
 `--model`, `-v`/`-vv`, `--config <file>`, and the library decision
 (`--library-matching names|report|off`, default `names`: library code the
 library index recognises is placed under `vendor/<package>/` and keeps its
-original names; with no `--library-index <dir>` a Bun bundle's run finds or
-BUILDS the index it needs in `.humanify/library-index` under the output
-directory — it prints the estimated disk and time first, and that can be
-gigabytes and tens of minutes; `--library-matching off` opts out, and
+original names. Names mode NEEDS a library index: pass one with
+`--library-index <dir>`, or keep one in the library-index store,
+`.humanify/library-index/` in the directory you run from (one `<id>/`
+directory per index, named by the sha256 of its `manifest.json`;
+`--library-index-store <dir>` names another store). With neither, the run
+FAILS before doing any work and says how to build an index (the offline
+builder, `humanify-index build`), how to point to one, and how to opt out.
+`--library-index-from-bundle` instead builds one at run time from the npm
+packages the bundle itself reveals (library banners, inlined
+`package.json`): it installs them from the npm registry and prints the
+estimated disk and time first. `--library-matching off` opts out, and
 `report` writes `.humanify/library-report.json` and changes no other output
 byte). Everything else is a key in
 the TOML config file; [`humanify.example.toml`](./humanify.example.toml)

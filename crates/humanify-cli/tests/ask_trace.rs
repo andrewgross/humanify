@@ -141,7 +141,8 @@ fn start_stub() -> String {
 }
 
 /// One run; `extra` are `--config` settings (dotted TOML lines) beside
-/// no retries and the ask log.
+/// no retries, the ask log and library matching off (names, the default,
+/// needs a library index since exp174; these tests are about the asks).
 fn run(
     dir: &Path,
     input: &str,
@@ -153,6 +154,7 @@ fn run(
     let config = out.with_extension("toml");
     let toml: String = [
         "llm.retries = 0".to_string(),
+        "library.matching = \"off\"".to_string(),
         format!("diagnostics.dump_asks = {asks:?}"),
     ]
     .into_iter()

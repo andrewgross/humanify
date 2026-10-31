@@ -1,8 +1,10 @@
 //! The run's library-index cache (docs/design/library-names-plan.md
 //! step 3, exp154): ONE root directory a run finds by itself —
-//! `library.index_store_dir`, default `.humanify/library-index` — holding
-//! everything a run-time build reads or writes, so the second run reuses
-//! the first one's work:
+//! `library.index_store_dir`, default `.humanify/library-index` under the
+//! WORKING directory (exp174) — holding the merged indexes a run with no
+//! `--library-index` searches, and everything a run-time build
+//! (`--library-index-from-bundle`) reads or writes, so the second run
+//! reuses the first one's work:
 //!
 //! - `store/` — the shard store ([`build::BuildConfig::store`]): one
 //!   shard per `pkg@version` per recipe and bundler version. This is what
@@ -171,6 +173,24 @@ pub fn looks_like_id(name: &str) -> bool {
         && name
             .bytes()
             .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
+/// The merged indexes `root` holds: every id-named directory with a
+/// `manifest.json`, sorted (stale or foreign ones included — the store
+/// search judges each). Empty when `root` does not exist. The question a
+/// run with no `--library-index` asks before any work (exp174): an empty
+/// store is a loud refusal, never a silent fallback.
+pub fn stored_index_ids(root: &Path) -> Vec<String> {
+    let Ok(rd) = std::fs::read_dir(root) else {
+        return Vec::new();
+    };
+    let mut ids: Vec<String> = rd
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| looks_like_id(name) && root.join(name).join("manifest.json").is_file())
+        .collect();
+    ids.sort();
+    ids
 }
 
 /// The index the search settled on, with the properties it matched on.

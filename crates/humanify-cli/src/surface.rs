@@ -21,7 +21,8 @@
 //! Config sweep step 5 (2026-10-13): only the OPERATIONAL flags are flags
 //! — the input, `-o`, `--prior-version`, `--endpoint`, `--model`,
 //! `--config`, `-v`, and the ONE library decision (`--library-matching`,
-//! `--library-index`, step 6). Every other
+//! `--library-index`, step 6; `--library-index-store`,
+//! `--library-index-from-bundle`, exp154/exp174). Every other
 //! setting is a key in the `--config` TOML file; its old flag is refused
 //! naming the key ([`MOVED_FLAGS`]).
 //!
@@ -114,28 +115,39 @@ pub struct CommandOptions {
     #[arg(
         long,
         value_name = "mode",
-        help = "Library matching: off (path/banner detection only, the default), report \
-                (also the library index lookup + graph discovery, reported; output \
-                unchanged), names (refused until an eval passes it)"
+        help = "Library matching: names (the default: library code the index recognises \
+                goes under vendor/<package>/ with its original names restored; needs a \
+                library index), report (the index lookup + graph discovery, reported; \
+                output as off), off (path/banner detection only; no index read, searched \
+                for or built)"
     )]
     pub library_matching: Option<String>,
     #[arg(
         long,
         value_name = "dir|id",
         help = "The library fingerprint index (a directory, or an id under \
-                library.index_store); required unless --library-matching is off, \
+                library.index_store). Without it, names/report use an index found in \
+                the library-index store and fail before any work when it holds none; \
                 refused with off"
     )]
     pub library_index: Option<String>,
     #[arg(
         long,
         value_name = "dir",
-        help = "The run's library-index cache (library.index_store_dir, resolved \
-                against the output dir): the shard store, the registry snapshot, \
-                the pinned bundler tools and every merged index a run-time build \
-                (library.index_build) finds there"
+        help = "The library-index store a run with no --library-index searches \
+                (library.index_store_dir; default .humanify/library-index, resolved \
+                against the working directory): one <id>/ per merged index, plus what \
+                --library-index-from-bundle builds with"
     )]
     pub library_index_store: Option<String>,
+    #[arg(
+        long,
+        help = "When the store holds no index for the bundle, build one at run time from \
+                the npm packages the bundle itself reveals (library banners, inlined \
+                package.json): installs each from the npm registry and bundles it with \
+                Bun, after printing the estimated disk and time (library.index_from_bundle)"
+    )]
+    pub library_index_from_bundle: bool,
 }
 
 /// Flags MOVED into the config file (config sweep step 5, 2026-10-13; no

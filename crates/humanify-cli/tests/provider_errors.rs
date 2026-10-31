@@ -37,7 +37,13 @@ fn provider_errors_are_reported_at_the_default_verbosity() {
     let input = s.0.join("bundle.js");
     std::fs::write(&input, INPUT).unwrap();
     let config = s.0.join("humanify.toml");
-    std::fs::write(&config, "[llm]\nconcurrency = 4\nretries = 0\n").unwrap();
+    // Library matching off: names (the default) needs a library index
+    // since exp174, and this test is about provider errors.
+    std::fs::write(
+        &config,
+        "[llm]\nconcurrency = 4\nretries = 0\n[library]\nmatching = \"off\"\n",
+    )
+    .unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_humanify"))
         .current_dir(&s.0)
         .env_clear()
@@ -138,6 +144,7 @@ fn run_failing(fixture: &str) -> FailedRun {
         &config,
         format!(
             "[llm]\nconcurrency = 16\nretries = 0\n[split]\nenabled = true\n\
+             [library]\nmatching = \"off\"\n\
              [diagnostics]\nstats_json = {stats:?}\n"
         ),
     )
