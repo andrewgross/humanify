@@ -2498,3 +2498,115 @@ fn mapped_before(bridge: &crate::naming::module_names::EraBridge, at: u32) -> u3
         .map(|(_, mapped)| mapped.0)
         .expect("a container statement")
 }
+
+/// What names mode's vendor-body pass leaves in a prior tree (exp169): each
+/// vendored body's bindings NAMED (here: a fixed spelling per binding,
+/// applied as whole words outside the strings) and the joined named text
+/// beside `humanified.js`.
+fn name_prior_bodies(dir: &Path, names: &[(&str, &str)]) {
+    let word = |c: char| c.is_alphanumeric() || c == '_' || c == '$';
+    for entry in fs::read_dir(dir.join("vendor")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "js") {
+            continue;
+        }
+        let text = fs::read_to_string(&path).unwrap();
+        let mut out = String::new();
+        let mut in_string: Option<char> = None;
+        let mut token = String::new();
+        let flush = |token: &mut String, out: &mut String| {
+            let renamed = names
+                .iter()
+                .find(|(from, _)| from == token)
+                .map_or(token.as_str(), |(_, to)| to);
+            out.push_str(renamed);
+            token.clear();
+        };
+        let mut prev = ' ';
+        for c in text.chars() {
+            if let Some(q) = in_string {
+                out.push(c);
+                if c == q && prev != '\\' {
+                    in_string = None;
+                }
+            } else if word(c) {
+                token.push(c);
+            } else {
+                // A property (`x.load`) keeps its name.
+                if out.ends_with('.') {
+                    out.push_str(&token);
+                    token.clear();
+                } else {
+                    flush(&mut token, &mut out);
+                }
+                if c == '"' || c == '\'' || c == '`' {
+                    in_string = Some(c);
+                }
+                out.push(c);
+            }
+            prev = c;
+        }
+        flush(&mut token, &mut out);
+        fs::write(&path, out).unwrap();
+    }
+    let marker = dir.join(crate::naming::vendor_bodies::VENDOR_NAMING_SOURCE);
+    fs::create_dir_all(marker.parent().unwrap()).unwrap();
+    fs::write(marker, "/* the joined named bodies */\n").unwrap();
+}
+
+#[test]
+fn a_changed_module_keeps_its_file_when_the_prior_named_its_bodies() {
+    // exp173: the names-mode prior holds its bodies under the pipeline's
+    // names; the fresh factory is raw. The pairing must not read the
+    // pipeline's own names as the module's content.
+    let first = TempDir::new("named-pair1");
+    hop_with(
+        &yaml_bundle("expected a YAML document string"),
+        &first.0,
+        None,
+        |r| {
+            Some(if r.evidence.contains("YAMLException") {
+                "js-yaml".into()
+            } else {
+                "html-render".into()
+            })
+        },
+    );
+    name_prior_bodies(
+        &first.0,
+        &[
+            ("exports", "exportsObject"),
+            ("s", "sourceText"),
+            ("out", "codeUnits"),
+            ("i", "position"),
+            ("o", "payload"),
+            ("t", "contentText"),
+            ("docs", "documents"),
+            ("iterator", "mapDocument"),
+        ],
+    );
+    let named = fs::read_to_string(first.0.join("vendor/js-yaml.js")).unwrap();
+    assert!(named.contains("sourceText.charCodeAt(position)"), "{named}");
+    let m1 = factories(&read_manifest(&first.0));
+    let before = entry_with(&m1, "YAMLException", &first.0).clone();
+
+    let second = TempDir::new("named-pair2");
+    let asked = hop_with(
+        &yaml_bundle("expected a YAML document as a string"),
+        &second.0,
+        Some(&first.0),
+        |_| Some("yaml-parser".into()),
+    );
+    let m2 = factories(&read_manifest(&second.0));
+    let after = entry_with(&m2, "YAMLException", &second.0);
+    assert!(
+        asked.is_empty(),
+        "the paired module is never re-asked: {asked:?}"
+    );
+    assert_eq!(s(after, "name"), "js-yaml");
+    assert_eq!(s(after, "fileName"), "vendor/js-yaml.js");
+    assert_eq!(
+        s(after, "runtimeIdentifier"),
+        s(&before, "runtimeIdentifier")
+    );
+}

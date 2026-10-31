@@ -222,19 +222,7 @@ export interface KnownGap {
   error: string;
 }
 
-export const KNOWN_GAPS: KnownGap[] = [
-  {
-    fixture: "bun-text-assets",
-    spec: "exp171 finding: names-mode vendor naming vs the content carry (finding #90)",
-    reason:
-      "names mode (the default since exp171) names vendored factory bodies like app code (exp169), so the " +
-      "PRIOR tree's vendor files carry descriptive identifiers while the fresh factory text is raw; the " +
-      "content carry (modules::vendor_pairing) shingles identifier tokens and no longer pairs a CHANGED " +
-      "vendored module with its prior file, so it draws a new path. Fix: pair on identifier-blind text " +
-      "(or the prior's raw text); off mode is unaffected (--library-matching off passes this fixture)",
-    error: 'unpack: "expected a YAML document" moved from'
-  }
-];
+export const KNOWN_GAPS: KnownGap[] = [];
 
 /** How a fixture's outcome reads against its known-gap entry, if any. */
 export function judgeKnownGap(
