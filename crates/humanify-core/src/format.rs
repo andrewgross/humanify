@@ -110,6 +110,12 @@ impl Default for FormatOptions {
 pub struct Formatted {
     pub text: String,
     pub library_carry: Option<FunctionLibraryCarry>,
+    /// Statement provenance (exp166), only from
+    /// [`format_file_with_origins`]: `(output start, input origin)` per
+    /// printed statement, sorted by output start — the input offset is
+    /// the first source-spanned node printed inside the statement, so a
+    /// statement the beautify split out of another still names it.
+    pub statement_origins: Vec<(u32, u32)>,
 }
 
 /// Stage 6 for one processed file (`createBabelPlugin()(code, context)`):
@@ -120,6 +126,25 @@ pub fn format_file(
     code: &str,
     opts: &FormatOptions,
     regions: &[CommentRegion],
+) -> Result<Formatted, String> {
+    format_file_inner(code, opts, regions, false)
+}
+
+/// [`format_file`] plus the statement provenance
+/// ([`Formatted::statement_origins`]): the same text, byte for byte.
+pub fn format_file_with_origins(
+    code: &str,
+    opts: &FormatOptions,
+    regions: &[CommentRegion],
+) -> Result<Formatted, String> {
+    format_file_inner(code, opts, regions, true)
+}
+
+fn format_file_inner(
+    code: &str,
+    opts: &FormatOptions,
+    regions: &[CommentRegion],
+    origins: bool,
 ) -> Result<Formatted, String> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_module(&allocator, code);
@@ -150,9 +175,23 @@ pub fn format_file(
     if opts.plant == Some(Plant::RustNumberFormat) {
         printer.plant_rust_numbers();
     }
+    if origins {
+        printer.record_statement_origins();
+    }
+    let (body, mut statement_origins) = printer.generate_with_origins(root);
+    let text = with_license_header(body.clone(), &licenses);
+    // The license header goes BEFORE the program (after a `#!` line):
+    // every statement shifts by the bytes it added.
+    let added = (text.len() - body.len()) as u32;
+    if added > 0 {
+        for (out, _) in &mut statement_origins {
+            *out += added;
+        }
+    }
     Ok(Formatted {
-        text: with_license_header(printer.generate(root), &licenses),
+        text,
         library_carry,
+        statement_origins,
     })
 }
 
@@ -196,3 +235,6 @@ mod format_test;
 
 #[cfg(test)]
 mod beautify_test;
+
+#[cfg(test)]
+mod origins_test;

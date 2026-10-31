@@ -64,6 +64,8 @@ pub struct Unpacked {
     /// 4, exp156), already in the naming era's wrapper-body ordinals —
     /// handed to the naming stage in memory. Empty in every other mode.
     pub claimed_module_regions: Vec<humanify_core::naming::module_names::ClaimedRegion>,
+    /// The raw-to-era bridge (exp166), names mode only.
+    pub era_bridge: Option<humanify_core::naming::module_names::EraBridge>,
 }
 
 /// `unpackBundle`: run the run's adapter into `out_dir` through the one
@@ -133,6 +135,7 @@ pub fn unpack_bundle(
         app_declarations,
         library_discovery,
         claimed_module_regions,
+        era_bridge,
     ) = match outcome {
         AdapterOutcome::VendorRecord(outcome) => {
             report_vendor_unpack(&outcome, renderer);
@@ -144,6 +147,7 @@ pub fn unpack_bundle(
                 outcome.app_declarations,
                 outcome.library_discovery,
                 outcome.claimed_module_regions,
+                outcome.era_bridge,
             )
         }
         AdapterOutcome::Files {
@@ -156,6 +160,7 @@ pub fn unpack_bundle(
             Vec::new(),
             library_discovery.map(|r| *r),
             Vec::new(),
+            None,
         ),
     };
     span.end(Some(
@@ -176,6 +181,7 @@ pub fn unpack_bundle(
         app_declarations,
         library_discovery,
         claimed_module_regions,
+        era_bridge,
     })
 }
 

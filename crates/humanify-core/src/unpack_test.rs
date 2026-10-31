@@ -2330,12 +2330,11 @@ fn names_mode_needs_the_claim_rows() {
 }
 
 #[test]
-fn names_mode_claims_the_lazy_module_regions_in_era_ordinals() {
-    // A lazy module BEFORE any extracted factory: the placement group's
-    // rows — the helper as an unclaimed pending, the claimed init head —
-    // become a claimed region in ERA ordinals, which here (the one
-    // factory sits after the region, so nothing before it is removed)
-    // are the raw container ordinals. The CJS factory is also what puts
+fn names_mode_claims_the_lazy_module_regions_by_raw_span() {
+    // A lazy module: the placement group's rows — the helper as an
+    // unclaimed pending, the claimed init head — become a claimed region
+    // of RAW statement spans; the naming era maps them onto its own
+    // statements through the exact bridge (exp166). The CJS factory is also what puts
     // the run on the classified path at all: a helper-less floor bundle
     // claims nothing (no regions, by design — an empty layout, and
     // nothing moves).
@@ -2381,7 +2380,7 @@ fn names_mode_claims_the_lazy_module_regions_in_era_ordinals() {
     assert_eq!(
         out.claimed_module_regions,
         vec![crate::naming::module_names::ClaimedRegion {
-            statements: vec![0, 1],
+            statements: Vec::new(),
             claims: vec![None, Some("ms".to_string())],
             raw_spans: vec![(0, head_start - 1), (head_start, next - 1)],
         }],
@@ -2391,10 +2390,11 @@ fn names_mode_claims_the_lazy_module_regions_in_era_ordinals() {
 }
 
 #[test]
-fn a_names_region_after_an_extracted_factory_shifts_to_era_ordinals() {
-    // The standing vendor-bridge invariant: an extracted factory removes
-    // one container statement, so a lazy module after it shifts down by
-    // one in the era body.
+fn a_names_regions_raw_statements_map_to_their_runtime_text_through_the_bridge() {
+    // exp166: the bridge maps every retained container statement's raw
+    // span to its span in the runtime text the naming stage formats —
+    // through the very edit list the runtime was sliced with, so an
+    // extracted factory before the region shifts it exactly.
     let bundle = concat!(
         "var x = (I, A) => () => (A || (I((A = {exports:{}}).exports, A), A.exports));\n",
         "var mod_a = x((exports) => {\n",
@@ -2429,21 +2429,34 @@ fn a_names_region_after_an_extracted_factory_shifts_to_era_ordinals() {
         },
     )
     .unwrap();
-    // mod_a is extracted; var W was raw ordinal 2, var Gq 3 — one lower
-    // in the era body the split will see. The RAW spans do not shift:
-    // they are the same statements' bundle coordinates.
     let w_start = bundle.find("var W =").expect("helper starts") as u32;
     let gq_start = bundle.find("var Gq").expect("head starts") as u32;
     let next = bundle.find("var app").expect("next statement") as u32;
-    assert_eq!(
-        out.claimed_module_regions,
-        vec![crate::naming::module_names::ClaimedRegion {
-            statements: vec![1, 2],
-            claims: vec![None, Some("ms".to_string())],
-            raw_spans: vec![(w_start, gq_start - 1), (gq_start, next - 1)],
-        }],
-        "{:?}",
-        out.claimed_module_regions
+    let region_spans = vec![(w_start, gq_start - 1), (gq_start, next - 1)];
+    assert_eq!(out.claimed_module_regions.len(), 1);
+    assert_eq!(out.claimed_module_regions[0].raw_spans, region_spans);
+    let bridge = out
+        .era_bridge
+        .as_ref()
+        .expect("names mode carries a bridge");
+    let runtime = fs::read_to_string(t.0.join(&bridge.runtime_file)).expect("runtime");
+    for raw in region_spans {
+        let (_, mapped) = bridge
+            .container
+            .iter()
+            .find(|(r, _)| *r == raw)
+            .copied()
+            .expect("a container statement");
+        assert_eq!(
+            &runtime[mapped.0 as usize..mapped.1 as usize],
+            &bundle[raw.0 as usize..raw.1 as usize],
+            "the region's statement lands at its own runtime bytes"
+        );
+        assert_eq!(bridge.raw_of_runtime(mapped.0), Some(raw));
+    }
+    assert!(
+        mapped_before(bridge, w_start) < w_start,
+        "the extracted factory shifted it"
     );
 }
 
@@ -2474,4 +2487,14 @@ fn a_body_range_edit_under_a_declaration_splice_is_dropped_from_the_container_sl
         !out.contains("pLimit"),
         "the body's edit is under the splice: {out}"
     );
+}
+
+/// The runtime offset the bridge maps raw offset `at`'s statement to.
+fn mapped_before(bridge: &crate::naming::module_names::EraBridge, at: u32) -> u32 {
+    bridge
+        .container
+        .iter()
+        .find(|(raw, _)| raw.0 == at)
+        .map(|(_, mapped)| mapped.0)
+        .expect("a container statement")
 }

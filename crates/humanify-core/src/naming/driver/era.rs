@@ -88,11 +88,13 @@ pub struct EraOptions<'o> {
     pub prompt_window: usize,
     /// `NamingConfig::module_naming`.
     pub module_naming: Option<crate::place::assign::namer::SplitNamerBudget>,
-    /// The names mode's claimed placement groups, already in this era's
-    /// wrapper-body ordinals (the unpack converts them; empty when the
-    /// mode is off). Read BEFORE the freeze: the layout it plans feeds
-    /// both the model-exclusion spans and the split's vendor paths.
+    /// The names mode's claimed placement groups by raw span (empty when
+    /// the mode is off), converted onto this era's statements through
+    /// `era_bridge`. Read BEFORE the freeze: the layout it plans feeds the
+    /// split's vendor paths and the restored-binding holds.
     pub claimed_regions: &'o [crate::naming::module_names::ClaimedRegion],
+    /// The raw-to-era bridge (exp166) for this file, names mode only.
+    pub era_bridge: Option<crate::naming::driver::EraBridgeInput<'o>>,
     /// The claimed units' captured restoration answers (exp160,
     /// [`crate::libindex::table::RestorationRow`]), keyed by unit print
     /// hash — empty in every other mode, and empty for an index without
@@ -343,12 +345,7 @@ pub fn prior_era<P: NameProvider>(
         semantic.source_text(),
         opts.module_wrappers,
     );
-    let library_layout = modules
-        .as_ref()
-        .map(|source| {
-            crate::naming::module_names::plan_library_modules(source, opts.claimed_regions)
-        })
-        .unwrap_or_default();
+    let library_layout = plan_layout(opts, modules.as_ref(), semantic);
     let ph = crate::profiling::phase("era:transfer");
     let mut freeze =
         crate::rename::transfer::library_freeze(stage, opts.library, opts.skip_libraries)?;
@@ -512,12 +509,7 @@ pub fn fresh_era<P: NameProvider>(
     // Planned before the freeze for the same reason as the prior era: the
     // moved statements' spans are part of the freeze the state marking
     // reads, so the model is never asked for a library-placed module.
-    let library_layout = modules
-        .as_ref()
-        .map(|source| {
-            crate::naming::module_names::plan_library_modules(source, opts.claimed_regions)
-        })
-        .unwrap_or_default();
+    let library_layout = plan_layout(opts, modules.as_ref(), semantic);
     let freeze = PreFreeze {
         library: classify_library_functions(
             &json,
@@ -595,6 +587,7 @@ fn run_era<P: NameProvider>(
             .collect()
     });
     let mut frozen: Vec<(usize, u32, String)> = Vec::new();
+    let mut holds = RestoredHolds::new(graph);
     if !library_layout.spans.is_empty() {
         let inside: Vec<u32> = start
             .rename
@@ -611,21 +604,17 @@ fn run_era<P: NameProvider>(
             .map(|(i, _)| i as u32)
             .collect();
         for i in inside {
-            let binding = start
-                .rename
-                .view()
-                .binding(crate::rename::validated::scopes::BindingId(i));
+            let id = crate::rename::validated::scopes::BindingId(i);
+            let binding = start.rename.view().binding(id);
             let statement = statement_of_span(&body_spans, binding.id_span);
-            let name = start
-                .rename
-                .name_of(crate::rename::validated::scopes::BindingId(i))
-                .to_string();
+            let name = start.rename.name_of(id).to_string();
             if let Some(statement) = statement {
-                frozen.push((statement, binding.symbol.index() as u32, name));
+                frozen.push((statement, binding.symbol.index() as u32, name.clone()));
             }
-            start
-                .rename
-                .record_carried(crate::rename::validated::scopes::BindingId(i));
+            // exp166: the freeze holds only what the index restored —
+            // held exactly as Site A's restorations are, since no row skip
+            // keeps the waves off a restored slot any more.
+            holds.hold(&mut start, graph, id, &name);
         }
     }
     // exp160, library-names plan step 7: the index's restoration answers
@@ -638,39 +627,17 @@ fn run_era<P: NameProvider>(
     let mut era_sites: Vec<crate::naming::restore::RestorationSite> = Vec::new();
     if !opts.restorations.is_empty()
         && let Some(source) = modules
-        && !opts.claimed_regions.is_empty()
+        && !library_layout.regions.is_empty()
     {
         let mut outcome = crate::naming::restore::apply_era_restoration(
             &mut start.rename,
             semantic,
             source,
-            opts.claimed_regions,
+            &library_layout.regions,
             opts.restorations,
         );
         for (binding, name) in &outcome.applied {
-            start.rename.record_carried(*binding);
-            start.rename.mark_library_held(*binding);
-            let id_span = start.rename.view().binding(*binding).id_span;
-            // The innermost function whose span holds the binding: the
-            // wave ask reads the fn's transferred set by name.
-            if let Some(f) = (0..graph.functions.len())
-                .filter(|&i| {
-                    let span = graph.functions[i].span;
-                    span.start <= id_span.start && id_span.end <= span.end
-                })
-                .min_by_key(|&i| graph.functions[i].span.end - graph.functions[i].span.start)
-            {
-                start.transferred[f].insert(name.clone());
-            }
-            // A module-level binding: its row skips entirely.
-            if let Some(j) = graph
-                .module_bindings
-                .iter()
-                .position(|b| b.symbol == start.rename.view().binding(*binding).symbol)
-            {
-                start.binding_state[j]
-                    .mark_skipped("library-restored", &graph.module_bindings[j].session_id);
-            }
+            holds.hold(&mut start, graph, *binding, name);
         }
         library_layout.restored_spans = outcome.spans;
         era_sites = std::mem::take(&mut outcome.sites);
@@ -678,14 +645,25 @@ fn run_era<P: NameProvider>(
     // The exp164 measurement dump: the era's statement coordinates, the
     // freeze's bindings, the converted regions and Site A's rows —
     // diagnostics only (serialized by the CLI's `--diagnostics`).
-    let era_dump = (!opts.restorations.is_empty() || !library_layout.spans.is_empty()).then(|| {
-        crate::naming::restore::EraDump {
-            body_len: modules.map_or(0, |m| m.body.len()),
-            body_spans,
-            frozen,
-            regions: opts.claimed_regions.to_vec(),
-            sites: era_sites,
-        }
+    let era_dump = (!opts.restorations.is_empty()
+        || !library_layout.spans.is_empty()
+        || opts.era_bridge.is_some())
+    .then(|| crate::naming::restore::EraDump {
+        body_len: modules.map_or(0, |m| m.body.len()),
+        frozen,
+        regions: library_layout.regions.clone(),
+        sites: era_sites,
+        body_raw_spans: library_layout.era_raw.clone(),
+        moved_spans: library_layout.moved_spans.clone(),
+        moved_files: library_layout.moved_files.clone(),
+        ordinal_regions: library_layout.ordinal_regions.clone(),
+        ordinal_moved_files: library_layout.ordinal_moved_files.clone(),
+        conversion: library_layout.conversion,
+        factory_files: opts
+            .era_bridge
+            .map(|b| b.bridge.factories.clone())
+            .unwrap_or_default(),
+        body_spans,
     });
     // The plumbing the pipeline names itself, before any prompt shows it
     // (and over whatever name the transfer carried).
@@ -715,7 +693,6 @@ fn run_era<P: NameProvider>(
             &start.rename,
             &occ,
             &start.lazy_init_helpers,
-            &library_layout.moved,
             &mut start.binding_state,
         ),
         _ => crate::naming::module_names::ModulePlan::default(),
@@ -945,6 +922,192 @@ fn run_era<P: NameProvider>(
 /// only): the spans are statement order and do not overlap, so the last
 /// statement starting at or before the binding's identifier is its
 /// statement. `None` when the spans are unknown (no module source).
+/// How a restored binding is kept off every later namer (exp160's Site A
+/// rule, shared by exp166's restore-or-ask freeze): recorded carried and
+/// library-held, its name joins the transferred set of the innermost
+/// function whose span holds it (the wave ask reads that set by name),
+/// and a module-level binding's row skips entirely. Lookups are indexed:
+/// the restored set runs to thousands of bindings.
+struct RestoredHolds {
+    /// Function indices by span start (an enclosing function before the
+    /// functions it holds), with each one's innermost enclosing function.
+    order: Vec<usize>,
+    parent: Vec<Option<usize>>,
+    module_binding_of: std::collections::HashMap<oxc_semantic::SymbolId, usize>,
+}
+
+impl RestoredHolds {
+    fn new(graph: &UnifiedGraph) -> Self {
+        let mut order: Vec<usize> = (0..graph.functions.len()).collect();
+        order.sort_by_key(|&i| {
+            let span = graph.functions[i].span;
+            (span.start, std::cmp::Reverse(span.end))
+        });
+        let mut parent = vec![None; order.len()];
+        let mut stack: Vec<usize> = Vec::new();
+        for (k, &i) in order.iter().enumerate() {
+            let span = graph.functions[i].span;
+            while let Some(&top) = stack.last() {
+                if graph.functions[order[top]].span.end >= span.end {
+                    break;
+                }
+                stack.pop();
+            }
+            parent[k] = stack.last().copied();
+            stack.push(k);
+        }
+        let module_binding_of = graph
+            .module_bindings
+            .iter()
+            .enumerate()
+            .map(|(j, b)| (b.symbol, j))
+            .collect();
+        RestoredHolds {
+            order,
+            parent,
+            module_binding_of,
+        }
+    }
+
+    /// The innermost function whose span holds `span` (`span.start <= s`
+    /// and `e <= span.end`), as Site A's linear scan chose it.
+    fn innermost(&self, graph: &UnifiedGraph, s: u32, e: u32) -> Option<usize> {
+        let at = self
+            .order
+            .partition_point(|&i| graph.functions[i].span.start <= s);
+        let mut k = at.checked_sub(1)?;
+        loop {
+            if graph.functions[self.order[k]].span.end >= e {
+                return Some(self.order[k]);
+            }
+            k = self.parent[k]?;
+        }
+    }
+
+    fn hold(
+        &mut self,
+        start: &mut WaveStart,
+        graph: &UnifiedGraph,
+        binding: crate::rename::validated::scopes::BindingId,
+        name: &str,
+    ) {
+        start.rename.record_carried(binding);
+        start.rename.mark_library_held(binding);
+        let view = start.rename.view().binding(binding);
+        let (id_span, symbol) = (view.id_span, view.symbol);
+        if let Some(f) = self.innermost(graph, id_span.start, id_span.end) {
+            start.transferred[f].insert(name.to_string());
+        }
+        if let Some(&j) = self.module_binding_of.get(&symbol)
+            && start.binding_state[j].is_pending()
+        {
+            start.binding_state[j]
+                .mark_skipped("library-restored", &graph.module_bindings[j].session_id);
+        }
+    }
+}
+
+/// Names mode's era layout (exp166), once per era, before the freeze:
+/// the claimed groups converted onto this era's statements through the
+/// exact raw-to-era bridge ([`crate::naming::module_names::convert_regions`]),
+/// the placement plan over them, and the freeze narrowed to what the index
+/// actually restored ("restore or ask, never freeze"): a binding in the
+/// era is held only when Site B restored its name inside the raw
+/// statement it came from — every other identifier, moved module or not,
+/// goes through the normal naming flow (the prior's carry, then the
+/// model). Without a bridge the regions are taken as given (era
+/// ordinals — the unit tests' seam) and nothing is frozen.
+fn plan_layout(
+    opts: &EraOptions<'_>,
+    modules: Option<&crate::naming::module_names::ModuleSource<'_>>,
+    semantic: &oxc_semantic::Semantic<'_>,
+) -> crate::naming::module_names::LibraryLayout {
+    let Some(source) = modules else {
+        return Default::default();
+    };
+    let Some(bridge) = opts.era_bridge else {
+        // No bridge: the regions are taken as given (era ordinals) and,
+        // with no restoration record, nothing is frozen.
+        let mut layout =
+            crate::naming::module_names::plan_library_modules(source, opts.claimed_regions);
+        layout.spans.clear();
+        layout.regions = opts.claimed_regions.to_vec();
+        return layout;
+    };
+    let body_spans: Vec<(u32, u32)> = source
+        .body
+        .iter()
+        .map(|s| crate::naming::module_names::span_of(s).unwrap_or((0, 0)))
+        .collect();
+    let era_raw = bridge.bridge.era_raw_spans(&body_spans, bridge.origins);
+    let (regions, conversion) =
+        crate::naming::module_names::convert_regions(opts.claimed_regions, &era_raw);
+    let mut layout = crate::naming::module_names::plan_library_modules(source, &regions);
+    // The baseline the precision check compares against (diagnostics
+    // only): the retired ordinal conversion's plan over the same groups.
+    let ordinal_regions = bridge.bridge.ordinal_regions(opts.claimed_regions);
+    layout.ordinal_moved_files =
+        crate::naming::module_names::plan_library_modules(source, &ordinal_regions).moved_files;
+    layout.ordinal_regions = ordinal_regions;
+    layout.spans = restored_binding_spans(
+        semantic,
+        &body_spans,
+        &era_raw,
+        bridge.bridge,
+        opts.name_profile,
+    );
+    layout.regions = regions;
+    layout.conversion = Some(conversion);
+    layout.era_raw = era_raw;
+    layout
+}
+
+/// The declaration spans of the bindings Site B restored (exp166): a
+/// binding whose name the index restored inside the raw statement its
+/// era statement came from. A restored name that is itself a minifier
+/// token (the mint census's own gate, `rename::floor::is_minifier_token`
+/// — `i`, `k`, `_a` from the package's own source) is NOT held: it says
+/// nothing the minified name did not, and a short name can coincide with
+/// an unrelated minifier name in the same statement. It takes the normal
+/// flow. Sorted, era coordinates.
+fn restored_binding_spans(
+    semantic: &oxc_semantic::Semantic<'_>,
+    body_spans: &[(u32, u32)],
+    era_raw: &[Option<(u32, u32)>],
+    bridge: &crate::naming::module_names::EraBridge,
+    profile: crate::rename::name_profile::NameProfile,
+) -> Vec<(u32, u32)> {
+    if bridge.restored.is_empty() {
+        return Vec::new();
+    }
+    let scoping = semantic.scoping();
+    let mut names_of: std::collections::HashMap<usize, std::collections::HashSet<&str>> =
+        std::collections::HashMap::new();
+    let mut out = Vec::new();
+    for symbol in scoping.symbol_ids() {
+        let span = scoping.symbol_span(symbol);
+        let Some(i) = statement_of_span(body_spans, span) else {
+            continue;
+        };
+        let (start, end) = body_spans[i];
+        if span.start < start || span.end > end {
+            continue;
+        }
+        let Some(raw) = era_raw.get(i).copied().flatten() else {
+            continue;
+        };
+        let names = names_of
+            .entry(i)
+            .or_insert_with(|| bridge.restored_in(raw).collect());
+        let name = scoping.symbol_name(symbol);
+        if names.contains(name) && !crate::rename::floor::is_minifier_token(profile, name) {
+            out.push((span.start, span.end));
+        }
+    }
+    out.sort_unstable();
+    out
+}
+
 fn statement_of_span(body_spans: &[(u32, u32)], span: oxc_span::Span) -> Option<usize> {
     if body_spans.is_empty() {
         return None;

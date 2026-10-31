@@ -1,0 +1,58 @@
+{
+  "bundles": 71,
+  "exact": {
+    "era:appFiles": 0,
+    "era:bytes": 470361,
+    "era:files": 364,
+    "era:labelled": 470361,
+    "era:libraryRight": 432098,
+    "era:libraryWrongPackage": 38263,
+    "era:wrongFiles": 25,
+    "movedBytes": 470361,
+    "movedModules": 364,
+    "movedStatements": 1455,
+    "regionStatements": 2512,
+    "regionStatementsContentCorrect": 2512,
+    "regions": 691
+  },
+  "factory": {
+    "factory:app": 378,
+    "factory:appFiles": 4,
+    "factory:bytes": 163994468,
+    "factory:files": 38684,
+    "factory:labelled": 163851801,
+    "factory:libraryAtRoot": 26862705,
+    "factory:libraryRight": 135132767,
+    "factory:libraryWrongPackage": 1467056,
+    "factory:self": 388895,
+    "factory:wrongFiles": 5263
+  },
+  "noBridge": [
+    "bun-dev-bun-cli_babel-istanbul-f3b1f1",
+    "bun-dev-bun-cli_ember-cli-afb389",
+    "bun-dev-bun-cli_health-88539c",
+    "bun-dev-bun-cli_jsforce-566556",
+    "bun-dev-bun-cli_lingui_cli-33be9c",
+    "bun-dev-bun-electron_gh-cclank__quickshot-6f4904",
+    "bun-dev-bun-electron_gh-sanlinhtik3__thalika-voice-clone-9c854e",
+    "bun-dev-bun-electron_gh-simon-fraser__musictube-player-904ca4",
+    "bun-dev-bun-vscode_gh-cschlosser__doxdocgen-435b5b"
+  ],
+  "noCard": [],
+  "ordinal": {
+    "era:appFiles": 0,
+    "era:bytes": 11499,
+    "era:files": 17,
+    "era:labelled": 11499,
+    "era:libraryRight": 2339,
+    "era:libraryWrongPackage": 9160,
+    "era:wrongFiles": 12,
+    "movedBytes": 11538,
+    "movedBytesNotClaimedByMover": 9284,
+    "movedModules": 17,
+    "movedStatements": 39,
+    "movedStatementsNotClaimedByMover": 27,
+    "regionStatements": 2515,
+    "regions": 692
+  }
+}

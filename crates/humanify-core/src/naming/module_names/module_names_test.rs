@@ -141,6 +141,7 @@ fn run(fresh: &str, prior: Option<&str>, provider: &ModuleProvider) -> NamingOut
             prior,
             library: None,
             claimed_regions: &[],
+            era_bridge: None,
             restorations: crate::naming::driver::no_restorations(),
         },
         &config(),
@@ -427,7 +428,7 @@ fn the_split_names_each_file_by_its_module_name() {
 
 // ---- names mode: library placement (exp156) ----------------------------------
 
-use crate::naming::module_names::{ClaimedRegion, LibraryLayout};
+use crate::naming::module_names::{ClaimedRegion, EraBridge, LibraryLayout};
 
 /// `BUNDLE`'s modules as the era extracts them: m0 = statements 0..=4
 /// (`var W` through `var Gq`), m1 = statement 5 (`var Hq`), m2 = 6..=8.
@@ -461,6 +462,7 @@ fn run_with_regions(
             prior,
             library: None,
             claimed_regions: regions,
+            era_bridge: None,
             restorations: crate::naming::driver::no_restorations(),
         },
         &config(),
@@ -485,6 +487,7 @@ fn run_with_restorations(
             prior,
             library: None,
             claimed_regions: regions,
+            era_bridge: None,
             restorations,
         },
         &config(),
@@ -568,74 +571,280 @@ fn restoration_names_a_claimed_statement_before_the_model_is_ever_asked() {
     );
 }
 
+// ---- exp166: "restore or ask, never freeze" — names mode keeps the model
+// off ONLY what the index restored; every other identifier of a moved
+// module takes the normal flow (the prior's carry, then the model). And
+// the claimed regions reach the era through the exact raw-to-era bridge,
+// never through ordinal arithmetic the formatter's splits break. -------------
+
 #[test]
-fn a_wholly_claimed_module_moves_to_vendor_and_is_never_asked() {
+fn a_moved_modules_unrestored_identifiers_are_asked_not_frozen() {
     let provider = ModuleProvider::new(by_purpose);
     let out = run_with_regions(BUNDLE, None, &provider, &lazy_regions());
-    let layout: &LibraryLayout = &out.library_layout;
     assert_eq!(
-        layout.moved,
+        out.library_layout.moved,
         vec![(1usize, "vendor/ms/module-55da5bd8.js".to_string())],
         "only the wholly claimed module moves; the partial one stays: {:?}",
-        layout.moved
+        out.library_layout.moved
     );
-    // The model names nothing of the moved module: not the wrapper, not
-    // the body's function, not the file (the module step skips it).
-    assert!(
-        !asked_by_waves(&provider, "Hq"),
-        "the moved module's wrapper is never asked"
-    );
-    // Not a module-step entry: the step asked only the OTHER two modules
-    // (the prompt keys renumber the asked set), and none of its applied
-    // names is the moved wrapper's.
+    // Nothing of it was restored, so nothing of it is frozen: its wrapper
+    // takes the module step like every other module (the file path stays
+    // the placement's).
     assert_eq!(
-        out.module_names.asked, 2,
-        "three modules, one moved: only two are asked"
+        out.module_names.barrels, 1,
+        "the moved barrel takes the module step's barrel rule too"
     );
     assert!(
-        out.module_names
-            .named
-            .iter()
-            .chain(&out.module_names.named_on_disclosure)
-            .chain(&out.module_names.fallback)
-            .all(|(old, _)| old != "Hq"),
-        "the moved module's wrapper is never named: {:?}",
-        out.module_names.named
+        named_by_module_step(&out, "Hq"),
+        "the moved module's wrapper is named: {:?}",
+        out.module_names.barrel_rule
     );
-    // Its identifiers stay exactly as they were — the wrapper keeps its
-    // own minified name (the lazy helper's rename to `__esm` is the
-    // plumbing pass's, module-wide, not the moved module's identifier).
     let code = out.code.expect("shipped");
-    assert!(code.contains("var Hq = __esm("), "{code}");
     assert!(
-        !code.contains("var init") || code.contains("var initColorUtils"),
-        "the OTHER modules still name normally: {code}"
+        !code.contains("var Hq = "),
+        "an unrestored slot never ships its minified name: {code}"
     );
 }
 
 #[test]
-fn a_moved_modules_exclusion_holds_over_a_prior_too() {
-    // The prior is the same bundle fully named; with the region claimed,
-    // the transfer must not carry the prior's names into the moved
-    // module either — its statements are library-placed, names as-is.
+fn a_moved_modules_unrestored_identifiers_carry_from_the_prior() {
+    // The prior is the same bundle fully named: the moved module's
+    // unrestored wrapper takes the prior's name (the default pipeline's
+    // carry for unchanged code), not its minified one.
     let first = run(BUNDLE, None, &ModuleProvider::new(by_purpose));
     let prior = first.code.expect("shipped");
     let provider = ModuleProvider::new(|_| Some("other-name"));
     let out = run_with_regions(BUNDLE, Some(&prior), &provider, &lazy_regions());
-    let layout = &out.library_layout;
     assert_eq!(
-        layout.moved,
+        out.library_layout.moved,
         vec![(1usize, "vendor/ms/module-55da5bd8.js".to_string())]
     );
     let code = out.code.expect("shipped");
-    assert!(
-        code.contains("var Hq = __esm("),
-        "the moved module keeps its own names over a prior: {code}"
+    assert!(!code.contains("var Hq = "), "{code}");
+    let wrapper_of = |text: &str| -> String {
+        let at = text
+            .find("__esm(() => {\n  initColorUtils();")
+            .expect("the barrel");
+        text[..at].rsplit('\n').next().unwrap().to_string()
+    };
+    assert_eq!(
+        wrapper_of(&code),
+        wrapper_of(&prior),
+        "the moved module's wrapper carries the prior's name"
+    );
+}
+
+/// `raw` as the bridge sees it with no unpack edits (runtime = raw): the
+/// formatter's output with its statement provenance, every raw program
+/// statement as one container statement, and Site B's restored names
+/// given as (needle in `raw`, name inside the needle).
+fn bridged(raw: &str, restored: &[(&str, &str)]) -> (String, EraBridge, Vec<(u32, u32)>) {
+    let formatted =
+        crate::format::format_file_with_origins(raw, &crate::format::FormatOptions::default(), &[])
+            .expect("formats");
+    let spans = raw_statements(raw);
+    let restored = restored
+        .iter()
+        .map(|(needle, name)| {
+            let at = raw.find(needle).expect("needle") + needle.find(name).expect("name");
+            (at as u32, name.to_string())
+        })
+        .collect();
+    let bridge = EraBridge {
+        container: spans.iter().map(|&s| (s, s)).collect(),
+        factories: Vec::new(),
+        runtime_file: "runtime.js".into(),
+        restored,
+    };
+    (formatted.text, bridge, formatted.statement_origins)
+}
+
+fn raw_statements(raw: &str) -> Vec<(u32, u32)> {
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, raw, "raw.js");
+    ingest
+        .program
+        .body
+        .iter()
+        .map(|s| {
+            let span = oxc_span::GetSpan::span(s);
+            (span.start, span.end)
+        })
+        .collect()
+}
+
+fn run_bridged(
+    fresh: &str,
+    provider: &ModuleProvider,
+    regions: &[ClaimedRegion],
+    bridge: &EraBridge,
+    origins: &[(u32, u32)],
+) -> NamingOutcome {
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(config().params);
+    run_naming(
+        &NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+            claimed_regions: regions,
+            era_bridge: Some(crate::naming::driver::EraBridgeInput { bridge, origins }),
+            restorations: crate::naming::driver::no_restorations(),
+        },
+        &config(),
+        provider,
+        &mut log,
+    )
+    .expect("the stage runs")
+}
+
+#[test]
+fn a_restored_slot_is_never_asked() {
+    // Site B restored the moved module's wrapper to its original name (the
+    // bridge carries the name it wrote at its raw offset): that one binding
+    // is held — never asked by a wave or the module step, its name ships —
+    // while the module's other identifiers stay in the normal flow.
+    let raw_text = BUNDLE.replace("Hq", "loadColorTheme");
+    let (fresh, bridge, origins) =
+        bridged(&raw_text, &[("var loadColorTheme = W", "loadColorTheme")]);
+    let raw = raw_statements(&raw_text);
+    let regions = [ClaimedRegion {
+        statements: Vec::new(),
+        claims: vec![Some("ms".to_string())],
+        raw_spans: vec![raw[5]],
+    }];
+    let provider = ModuleProvider::new(by_purpose);
+    let out = run_bridged(&fresh, &provider, &regions, &bridge, &origins);
+    assert_eq!(
+        out.library_layout.moved.len(),
+        1,
+        "{:?}",
+        out.library_layout.moved
     );
     assert!(
-        !asked_by_waves(&provider, "Hq"),
-        "and nothing inside it is asked"
+        !asked_by_waves(&provider, "loadColorTheme"),
+        "the restored slot is never asked"
     );
+    assert!(
+        !named_by_module_step(&out, "loadColorTheme"),
+        "the restored wrapper is settled, never renamed by the module step"
+    );
+    assert_eq!(out.module_names.carried, 1, "it counts as carried");
+    let code = out.code.expect("shipped");
+    assert!(
+        code.contains("var loadColorTheme = __esm("),
+        "the restored name ships: {code}"
+    );
+}
+
+#[test]
+fn a_minifier_shaped_restoration_is_not_a_hold() {
+    // The index's original name is itself a minifier-shaped token (`Hq`;
+    // on cc: `i`, `k`, `_a` from the package's own source): it says
+    // nothing the minified name did not, the mint census counts it, and a
+    // short name inside a statement can coincide with an unrelated
+    // minifier name. It takes the normal flow like an unrestored slot.
+    let (fresh, bridge, origins) = bridged(BUNDLE, &[("var Hq = W", "Hq")]);
+    let raw = raw_statements(BUNDLE);
+    let regions = [ClaimedRegion {
+        statements: Vec::new(),
+        claims: vec![Some("ms".to_string())],
+        raw_spans: vec![raw[5]],
+    }];
+    let provider = ModuleProvider::new(by_purpose);
+    let out = run_bridged(&fresh, &provider, &regions, &bridge, &origins);
+    assert_eq!(out.library_layout.moved.len(), 1);
+    assert!(
+        named_by_module_step(&out, "Hq"),
+        "the minifier-shaped restoration is asked like any slot"
+    );
+    let code = out.code.expect("shipped");
+    assert!(!code.contains("var Hq = "), "{code}");
+}
+
+/// The cc 2.1.215 shape (exp166's trace): a raw statement the formatter
+/// splits (`var p = 1, q = 2, r = 3;` → three statements) sits BEFORE an
+/// app module and a claimed library module. Ordinal arithmetic put the
+/// library's claims on the app module two statements earlier (the plugin
+/// installer filed under `vendor/jose/`); the bridge puts them on the
+/// library's own statements.
+const DRIFT_BUNDLE: &str = "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n\
+var p = 1, q = 2, r = 3;\n\
+var A = W(() => {\n  p = q + r;\n});\n\
+function app1(y) {\n  return y + \"plugin-installer\";\n}\n\
+var P = W(() => {\n  app1(2);\n});\n\
+function lib1(x) {\n  return x + \"jose-1\";\n}\n\
+var J = W(() => {\n  lib1(1);\n});\n";
+
+#[test]
+fn a_library_region_after_a_split_statement_moves_its_own_module_not_the_app_one() {
+    let (fresh, bridge, origins) = bridged(DRIFT_BUNDLE, &[]);
+    let raw = raw_statements(DRIFT_BUNDLE);
+    // The region as the unpack reports it: raw statements 5 and 6 (lib1,
+    // J) claimed jose — and the ordinals the old arithmetic gave them.
+    let regions = [ClaimedRegion {
+        statements: vec![5, 6],
+        claims: vec![Some("jose".to_string()), Some("jose".to_string())],
+        raw_spans: vec![raw[5], raw[6]],
+    }];
+    let provider = ModuleProvider::new(by_purpose);
+    let out = run_bridged(&fresh, &provider, &regions, &bridge, &origins);
+    let moved = &out.library_layout.moved;
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert!(moved[0].1.starts_with("vendor/jose/"), "{moved:?}");
+    let code = out.code.expect("shipped");
+    assert!(
+        !code.contains("function app1(") && !code.contains("var P = "),
+        "the app module is named like app code: {code}"
+    );
+    let conversion = out.library_layout.conversion.expect("converted");
+    assert_eq!((conversion.converted, conversion.dropped), (1, 0));
+    // The moved module is the library's: its statements are the raw
+    // statements the region claimed, no other.
+    let moved_raw: Vec<(u32, u32)> = out
+        .library_layout
+        .moved_spans
+        .iter()
+        .map(|span| {
+            let i = out
+                .library_layout
+                .era_raw
+                .iter()
+                .zip(era_spans(&fresh))
+                .position(|(_, s)| s == *span)
+                .expect("an era statement");
+            out.library_layout.era_raw[i].expect("bridged")
+        })
+        .collect();
+    assert_eq!(moved_raw, vec![raw[5], raw[6]]);
+    // The diagnostics' baseline: the retired ordinal arithmetic, run over
+    // the same groups, moves the APP module (the trace's bug, reproduced).
+    let ordinal = &out.library_layout.ordinal_moved_files;
+    assert_eq!(ordinal.len(), 1, "{ordinal:?}");
+    let app_spans: Vec<(u32, u32)> = era_spans(&fresh)
+        .into_iter()
+        .zip(&out.library_layout.era_raw)
+        .filter(|(_, r)| **r == Some(raw[3]) || **r == Some(raw[4]))
+        .map(|(s, _)| s)
+        .collect();
+    assert!(ordinal[0].0.starts_with("vendor/jose/"), "{ordinal:?}");
+    assert_eq!(
+        ordinal[0].1, app_spans,
+        "the ordinal plan moved the app module"
+    );
+}
+
+fn named_by_module_step(out: &NamingOutcome, wrapper: &str) -> bool {
+    let m = &out.module_names;
+    m.named
+        .iter()
+        .chain(&m.named_on_disclosure)
+        .chain(&m.barrel_rule)
+        .chain(&m.fallback)
+        .any(|(old, _)| old == wrapper)
+}
+
+fn era_spans(fresh: &str) -> Vec<(u32, u32)> {
+    raw_statements(fresh)
 }
 
 #[test]

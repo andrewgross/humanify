@@ -702,6 +702,33 @@ const VERBS: Verb[] = [
     }
   },
   {
+    name: "vendor-precision",
+    usage:
+      "vendor-precision check <diag.json> --truth bun-dev:<id>|cc216|none  |  vendor-precision bun-dev <bin> <label> [jobs]",
+    description:
+      "exp166: what a NAMES-mode run put under vendor/, judged by source-map truth — app bytes there (bar 0), library bytes in the wrong package's folder, and era statements frozen/converted onto a raw statement they did not come from. `check` reads one run's --diagnostics file (a scored run's <workdir>/<label>/<version>.diag.json); `bun-dev` stub-runs the binary over the bun-dev corpus (full truth) and aggregates.",
+    proves:
+      "app/wrong-package bytes among the truth-LABELLED vendor bytes, through the run's own exact raw-to-era bridge (eraRestoration.bodyRawSpans)",
+    cannotProve:
+      "anything about unlabelled bytes (cc's truth is a 620-unit sample), or a run without the bridge (pre-exp166 binaries: noBridge=1)",
+    run(args) {
+      const [mode, ...rest] = args;
+      const dir = path.join(REPO, "experiments/166-restore-or-ask");
+      if (mode === "check") {
+        return sh(EXP096_PYTHON, [
+          "-I",
+          path.join(dir, "vendor_precision.py"),
+          ...rest
+        ]);
+      }
+      if (mode === "bun-dev") {
+        return sh(path.join(dir, "bundev-precision.sh"), rest);
+      }
+      console.error(`usage: eval ${this.usage}`);
+      return 2;
+    }
+  },
+  {
     name: "summarize",
     usage: "summarize <label>",
     description:

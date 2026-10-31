@@ -1,0 +1,26 @@
+{
+  "src": {
+    "carried-close": 8631,
+    "carried-exact": 155695,
+    "equalsPrior:False": 956,
+    "equalsPrior:None": 13564,
+    "equalsPrior:True": 216881,
+    "index-restored": 10989,
+    "kept": 47792,
+    "left-minified": 665,
+    "model-asked": 4273,
+    "named-by-rule": 3356,
+    "total": 231401
+  },
+  "vendor": {
+    "carried-exact": 2492,
+    "equalsPrior:None": 312,
+    "equalsPrior:True": 66559,
+    "index-restored": 35917,
+    "kept": 2176,
+    "left-minified": 21428,
+    "model-asked": 4,
+    "named-by-rule": 4854,
+    "total": 66871
+  }
+}
