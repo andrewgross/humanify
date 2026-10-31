@@ -140,11 +140,13 @@ fn run(dir: &Path, input: &str, out: &Path, cache: &Path, endpoint: &str) -> Out
 }
 
 /// One launch; `settings` are extra `--config` lines (dotted TOML).
+/// Library matching off: names (the default) needs a library index since
+/// exp174, and this test is about replay.
 fn command(dir: &Path, input: &str, out: &Path, endpoint: &str, settings: &str) -> Command {
     let config = out.with_extension("toml");
     std::fs::write(
         &config,
-        format!("llm.concurrency = 8\nllm.retries = 0\n{settings}"),
+        format!("llm.concurrency = 8\nllm.retries = 0\nlibrary.matching = \"off\"\n{settings}"),
     )
     .unwrap();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_humanify"));

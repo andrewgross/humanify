@@ -287,7 +287,10 @@ fn a_bad_reasoning_effort_is_refused() {
 fn missing_input_files_are_named() {
     let c = with_file(
         &["in.js", "--prior-version", "/nonexistent/prior.js"],
-        "[split]\nenabled = true\nledger = \"/nonexistent/ledger.json\"\n",
+        // library off: names (the default) would add its own refusal for
+        // the empty store (exp174, library_config_test.rs).
+        "[split]\nenabled = true\nledger = \"/nonexistent/ledger.json\"\n\
+         [library]\nmatching = \"off\"\n",
     );
     assert_eq!(
         c.missing_inputs(),

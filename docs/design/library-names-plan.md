@@ -92,6 +92,13 @@ sample of 2.1.216). Rebuild only what Bun needs:
 
 ### 3. The builder as a library, a cache, and run-time builds
 
+> **UPDATE exp174 (2026-10-31):** `index_build` is deleted. A run with no
+> `--library-index` SEARCHES the store, which now lives under the WORKING
+> directory (`<cwd>/.humanify/library-index`), and fails before any work
+> when it finds nothing; the run-time build below is opt-in through
+> `--library-index-from-bundle` (`library.index_from_bundle`). See
+> docs/library-matching-config.md §2.
+>
 > **STATUS: BUILT (exp154, 2026-10-26), default off.** The cache layout, the
 > store finder (`search_store`), the in-process run-time build
 > (`build_runtime`, called from the CLI's `runtime_index` on a scope thread

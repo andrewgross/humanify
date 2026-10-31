@@ -44,6 +44,9 @@ const library = [
   ...(mode === "off" ? [] : [`index_store_dir = "${STORE}"`]),
   ...(preFlip && mode === "names" ? ["names_unlocked = true"] : []),
   ...(preFlip && mode !== "off" && !index ? ['index_build = "auto"'] : []),
+  // exp174: the run-time build is opt-in (a binary from before exp174
+  // refuses this key, as one from after refuses index_build).
+  ...(!preFlip && mode !== "off" && !index ? ["index_from_bundle = true"] : []),
   ...(index ? [`index = "${index}"`] : [])
 ].join("\n");
 fs.writeFileSync(

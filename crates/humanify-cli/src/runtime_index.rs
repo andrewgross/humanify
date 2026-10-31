@@ -1,26 +1,29 @@
 //! The run-time index machinery (exp154, docs/design/library-names-plan.md
-//! step 3): when `library.index_build = "auto"` and matching is `names` or
-//! `report` with NO index passed, the run finds or builds the index it
-//! needs in its cache (`library.index_store_dir`), CONCURRENT with its own
-//! ingest — started as soon as detection resolves the bundler, joined by
-//! the library load with a deadline (`library.index.wait`), never a
-//! sleep-poll.
+//! step 3): when matching is `names` (the default) or `report` with NO
+//! index passed, the run looks for the index it needs in its store
+//! (`library.index_store_dir`, under the WORKING directory since exp174),
+//! CONCURRENT with its own ingest — started as soon as detection resolves
+//! the bundler, joined by the library load with a deadline
+//! (`library.index.wait`), never a sleep-poll.
 //!
-//! DEFAULT ON since exp171 (names is the default): `unified::pipeline_body`
-//! reaches this module through `Config::library::runs_index_machinery`;
-//! `--library-matching off` (the opt-out) and an explicit `--library-index`
-//! never do. What the user sees:
+//! `unified::pipeline_body` reaches this module through
+//! `Config::library::runs_index_machinery`; `--library-matching off` (the
+//! opt-out) and an explicit `--library-index` never do. What the user sees
+//! (exp174, Andrew 2026-10-31: names mode REQUIRES a real index):
 //!
 //! - an index FOUND in the store: one line naming it — nothing is built;
-//! - a bundle no index can be built for (not a Bun bundle, or one that
-//!   reveals no npm package): one notice, and the run goes on as `off`
-//!   (`JobAnswer::Inert`) — a default run must not fail on its input's
-//!   bundler;
-//! - a BUILD: the notice ([`build_notice`]) before anything is installed —
-//!   what is built, the estimated disk and time, where it is stored, how
-//!   to opt out — then the build. The run does not wait for a confirmation:
-//!   a prompt would hang every batch run (exp171's decision; Andrew's rule
-//!   "if the index is not ready, wait" means build it).
+//! - by DEFAULT, no stored index serves the bundle: the run FAILS
+//!   ([`no_index_error`]: what is missing, how to build one, how to point
+//!   to one, how to opt out). An empty store is refused before any work
+//!   (`Config::library_index_problem`); a store whose indexes lack the
+//!   bundle's slice is refused here, before unpack writes anything.
+//! - with `--library-index-from-bundle` (exp171's path, opt-in): a bundle
+//!   no index can be built for (not a Bun bundle, or one that reveals no
+//!   npm package) prints one notice and goes on as `off`
+//!   (`JobAnswer::Inert`); otherwise the notice ([`build_notice`]) before
+//!   anything is installed — what is built, the estimated disk and time,
+//!   where it is stored, how to opt out — then the build. The run does not
+//!   wait for a confirmation: a prompt would hang every batch run.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -214,8 +217,7 @@ pub fn start<'scope>(
 ) -> IndexJob {
     let (tx, rx) = mpsc::sync_channel(1);
     let library = config.library.clone();
-    let output_dir = config.io.output_dir.clone();
-    let root = library.index_store_root(&output_dir);
+    let root = library.index_store_root();
     scope.spawn(move || {
         let answer = job(profiler, code, &library, &root, bundler, minifier, stop);
         let _ = tx.send(answer);
@@ -225,6 +227,116 @@ pub fn start<'scope>(
 
 /// The opt-out every notice names.
 const OPT_OUT: &str = "--library-matching off";
+
+/// The flag that opts into the run-time build (exp174).
+const FROM_BUNDLE: &str = "--library-index-from-bundle";
+
+/// The loud refusal of a run that needs a library index and has none
+/// (exp174, Andrew 2026-10-31): what is missing and where it looked
+/// (`why`), how to build one (the offline builder's real invocation), how
+/// to point a run at one, the run-time build's flag, and the opt-out. ONE
+/// text for both places that refuse: an empty store before any work
+/// (`Config::library_index_problem`) and a store none of whose indexes
+/// serves the bundle (the job, after detection).
+pub fn no_index_error(
+    mode: crate::config::LibraryMatching,
+    root: &std::path::Path,
+    why: &str,
+) -> String {
+    let mode = match mode {
+        crate::config::LibraryMatching::Report => "--library-matching report",
+        _ => "library names (--library-matching names, the default)",
+    };
+    [
+        format!("{mode} needs a library index, and none was found."),
+        format!(
+            "  Looked in: {} (the library-index store: library.index_store_dir, resolved \
+             against the working directory) — {why}.",
+            root.display()
+        ),
+        "  Build one with the offline index builder (cargo build --release -p \
+         humanify-index; it fetches from the npm registry and bundles with Bun):"
+            .to_string(),
+        "    humanify-index build --packages packages.txt --as-of <YYYY-MM-DD> --names \\"
+            .to_string(),
+        "      --registry <dir> --store <dir> --work <dir> --out <index-dir> \\".to_string(),
+        "      --recipe bun:target=bun,format=cjs,minify,production \\".to_string(),
+        "      --recipe bun:target=node,format=cjs,minify,production --bun <bun binary>"
+            .to_string(),
+        "    (packages.txt: one npm package per line, `name` or `name@version`)".to_string(),
+        "  Point the run at it: --library-index <index-dir>, or move it into the store as \
+         <store>/<sha256 of its manifest.json>/ (--library-index-store <dir> names another \
+         store)."
+            .to_string(),
+        format!(
+            "  Or build one now from the npm packages this bundle itself reveals (library \
+             banners, inlined package.json; installs from the npm registry): {FROM_BUNDLE}"
+        ),
+        format!("  Or run without library names: {OPT_OUT}"),
+    ]
+    .join("\n")
+}
+
+/// By default (no `--library-index-from-bundle`): the store's indexes
+/// exist (`Config::library_index_problem` refused an empty store before
+/// any work) but none may serve THIS bundle — then the run fails loudly,
+/// naming each index and why it was not used. Never a build, never `off`.
+fn found_or_refused(
+    library: &crate::config::Library,
+    root: &std::path::Path,
+    search: &StoreSearch,
+    candidates: Vec<StoreCandidate>,
+) -> JobAnswer {
+    let Some(found) = search.usable.first() else {
+        let verdicts: Vec<String> = candidates
+            .iter()
+            .map(|c| format!("{}: {}", short_id(&c.id), c.verdict))
+            .collect();
+        let why = if verdicts.is_empty() {
+            search
+                .note
+                .clone()
+                .unwrap_or_else(|| "it holds no index".to_string())
+        } else {
+            format!(
+                "no index in it serves this bundle ({})",
+                verdicts.join("; ")
+            )
+        };
+        return JobAnswer::Failed(no_index_error(library.matching, root, &why));
+    };
+    found_answer(root, found, candidates, search.note.clone())
+}
+
+/// A stored index the run uses: the one quiet line, and the trail.
+fn found_answer(
+    root: &std::path::Path,
+    found: &humanify_index::cache::FoundIndex,
+    candidates: Vec<StoreCandidate>,
+    note: Option<String>,
+) -> JobAnswer {
+    notice(&format!(
+        "Library index: using {} from {} (found; nothing to build)",
+        short_id(&found.id),
+        root.display()
+    ));
+    JobAnswer::Found(
+        found.dir.clone(),
+        IndexSource {
+            outcome: "found".to_string(),
+            index_id: found.id.clone(),
+            store: root.display().to_string(),
+            slice: found.slice.clone(),
+            bundler: found.bundler.clone(),
+            bundler_version: found.bundler_version.clone(),
+            detected_bundler_version: "unknown".to_string(),
+            as_of: found.as_of.clone(),
+            candidates,
+            note,
+            ..Default::default()
+        },
+    )
+}
 
 /// A notice line from the job thread, straight to stderr: the machinery
 /// runs beside the run's setup, before any progress display draws.
@@ -247,6 +359,25 @@ fn job(
         return JobAnswer::Failed("the run stopped before the index machinery started".into());
     }
     let detected = detect_recipe(code, bundler, minifier);
+    if !library.index_from_bundle {
+        let span = profiler.start_span(
+            "library.index.search-store",
+            "library-index",
+            LIBRARY_INDEX,
+            None,
+        );
+        let search = search_store(root, &detected);
+        span.end(None);
+        let candidates = search
+            .candidates
+            .iter()
+            .map(|(id, verdict)| StoreCandidate {
+                id: id.clone(),
+                verdict: verdict.clone(),
+            })
+            .collect();
+        return found_or_refused(library, root, &search, candidates);
+    }
     if detected.bundler != Some(RecipeBundler::Bun) {
         let has = detected
             .bundler
@@ -312,21 +443,7 @@ fn job(
             }
         };
     if let Some(found) = covering {
-        notice(&format!(
-            "Library index: using {} from {} (found; nothing to build)",
-            short_id(&found.id),
-            root.display()
-        ));
-        return JobAnswer::Found(
-            found.dir.clone(),
-            base(
-                "found",
-                found.id.clone(),
-                found.slice.clone(),
-                found.bundler_version.clone(),
-                found.as_of.clone(),
-            ),
-        );
+        return found_answer(root, found, candidates, search.note.clone());
     }
     // Nothing usable: build, from the bundle's own packages — no LLM, no
     // base-list bootstrap.

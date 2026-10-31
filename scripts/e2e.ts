@@ -112,19 +112,27 @@ const REPO = path.resolve(import.meta.dirname, "..");
 const BIN = path.join(REPO, "target/release/humanify");
 const FIXTURES = path.join(REPO, "test/e2e/fixtures");
 /**
- * The library-index store every launch reads (exp171: names is the
- * binary's DEFAULT, and with no index it finds or builds one in its store).
- * Committed, tiny — one index built from the one real npm package the
- * fixtures bundle (ms@2.1.3; test/e2e/library-index/README.md) — so every
- * Bun fixture runs the default mode END TO END on the found path (index
- * lookup, vendor placement, restoration), a non-Bun fixture takes the
- * inert path (off's bytes, with its notice), and NOTHING is ever fetched
- * or built: a launch that prints the build notice fails the stage.
+ * The library-index store every launch reads. Names mode is the binary's
+ * DEFAULT (exp171) and, since exp174, REQUIRES a real library index: with
+ * no `--library-index` it uses one found in its store
+ * (`library.index_store_dir`, else `<cwd>/.humanify/library-index`) and
+ * FAILS before any work when there is none. This committed, tiny store —
+ * one index built from the one real npm package the fixtures bundle
+ * (ms@2.1.3; test/e2e/library-index/README.md) — is pointed to explicitly,
+ * so every Bun fixture runs the default mode END TO END on the found path
+ * (index lookup, vendor placement, restoration). Its slices are Bun's
+ * only, so a non-Bun fixture runs with `--library-matching off` (names
+ * would refuse it: no index serves its bundler). NOTHING is ever fetched
+ * or built: a launch that fails for a missing index fails the stage on its
+ * exit code, and one that prints the run-time build's notice (or its inert
+ * line — `--library-index-from-bundle` is never passed) fails it too.
  */
 const LIBRARY_STORE = path.join(REPO, "test/e2e/library-index");
 /** The notice a run prints before it BUILDS an index (runtime_index.rs). */
 const BUILD_NOTICE =
   "NOTICE: library names (the default) needs a library index";
+/** The run-time build's inert line (runtime_index.rs): never in e2e. */
+const INERT_LINE = "Library names: off for this run";
 
 interface VersionPair {
   v1: string;
@@ -457,9 +465,9 @@ async function runBinary(
   if (code !== 0) {
     fail(`${label}: the binary exited ${code}\n${stderr.slice(-2000)}`);
   }
-  if (stderr.includes(BUILD_NOTICE)) {
+  if (stderr.includes(BUILD_NOTICE) || stderr.includes(INERT_LINE)) {
     fail(
-      `${label}: the run set out to BUILD a library index — e2e must never fetch or build one ` +
+      `${label}: the run took the run-time index build path — e2e must never fetch or build one ` +
         `(hermeticity); the committed store ${LIBRARY_STORE} must serve every Bun fixture`
     );
   }
@@ -681,13 +689,22 @@ function inputOf(name: string, version: string): string {
   return p;
 }
 
-/** Which library path a launch took (exp171), from its stderr. */
-function libraryPath(stderr: string): string {
+/** Which library path a launch took (exp171/exp174), from its stderr. */
+function libraryPath(stderr: string, library: Settings): string {
   if (/^Library index: using /m.test(stderr))
     return "names, the committed index FOUND";
-  const inert = /^Library names: off for this run — ([^.(]*)/m.exec(stderr);
-  if (inert) return `inert (off's bytes): ${inert[1].trim()}`;
-  return "names, no machinery line (an explicit index or off)";
+  if (library.length > 0)
+    return "off (not a Bun bundle: the committed store has Bun slices only)";
+  fail(`names ran without the found-index line:\n${stderr.slice(-2000)}`);
+}
+
+/**
+ * The library settings of every launch of a pair: none (the default,
+ * names, on the committed store) for a Bun bundle; off for any other —
+ * the store has no slice for it, and names would refuse to run.
+ */
+function librarySettings(detection: Detection): Settings {
+  return detection.bundler === "bun" ? [] : [["library.matching", "off"]];
 }
 
 /**
@@ -703,7 +720,8 @@ async function freshLeg(
   endpoint: string,
   bundle: boolean,
   fresh: string,
-  split: Settings
+  split: Settings,
+  library: Settings
 ): Promise<string> {
   const label = `${name} ${pair.v1}->${pair.v2}`;
   const stats: Settings = bundle
@@ -715,7 +733,7 @@ async function freshLeg(
     endpoint,
     `${label} fresh`
   );
-  console.log(`  library: ${libraryPath(stderr)}`);
+  console.log(`  library: ${libraryPath(stderr, library)}`);
   const freshOut = path.join(fresh, "index.js");
   if (!bundle && !fs.existsSync(freshOut)) {
     fail(`${label}: fresh run wrote no index.js`);
@@ -780,7 +798,7 @@ async function checkPair(
   );
   const root = path.join(scratch, `${name}-${pair.v1}-${pair.v2}`);
   const fresh = path.join(root, "fresh");
-  await runPair(name, pair, endpoint, root, bundle);
+  await runPair(name, pair, endpoint, root, bundle, librarySettings(detection));
   const vendorFiles = bundle ? vendorFileCount(fresh) : 0;
   const splitMethod = bundle ? splitMethodOf(`${fresh}.stats.json`) : undefined;
   if (bundle)
@@ -810,14 +828,19 @@ async function runPair(
   pair: VersionPair,
   endpoint: string,
   root: string,
-  bundle: boolean
+  bundle: boolean,
+  library: Settings
 ): Promise<void> {
   const label = `${name} ${pair.v1}->${pair.v2}`;
   const fresh = path.join(root, "fresh");
   const prior = path.join(root, "prior-a");
   const again = path.join(root, "prior-b");
-  // A bundle fixture's output is the runnable split tree.
-  const split: Settings = bundle ? [["split.enabled", true]] : [];
+  // A bundle fixture's output is the runnable split tree; every launch of
+  // the pair makes the same library decision.
+  const split: Settings = [
+    ...(bundle ? ([["split.enabled", true]] as Settings) : []),
+    ...library
+  ];
 
   // The prior the next release diffs against: the split tree's
   // humanified source (or the named file a bundle the split does not read
@@ -828,7 +851,8 @@ async function runPair(
     endpoint,
     bundle,
     fresh,
-    split
+    split,
+    library
   );
   await priorLeg(name, pair, endpoint, priorReference, prior, again, split);
   const seqPriorA = await sequencedLeg(

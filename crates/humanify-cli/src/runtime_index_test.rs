@@ -26,24 +26,33 @@ fn run_argv(argv: &[&str]) -> (String, CommandOptions) {
 }
 
 /// A Config whose library block says the machinery runs (report matching,
-/// no index, auto build) — the only configuration that reaches the module.
-fn machinery_config() -> Config {
-    let (input, opts) = run_argv(&["in.js", "--library-matching", "report"]);
-    // `index_build = "auto"` has no flag (config sweep step 7): it is a
-    // file key, so the test builds the config from a TOML string.
-    // io.output_dir points the store at a fresh empty path: the machinery
-    // searches `<output>/.humanify/library-index` — this test must depend
-    // on NO store existing, wherever it happens to run.
-    let out = std::env::temp_dir().join(format!("humanify-machinery-{}", std::process::id()));
+/// no index) with an empty store at a fresh path — this test must depend
+/// on NO store existing, wherever it happens to run. `from_bundle`: the
+/// run-time build is on (`--library-index-from-bundle`, exp174).
+fn machinery_config_with(from_bundle: bool) -> Config {
+    let mut argv = vec!["in.js", "--library-matching", "report"];
+    if from_bundle {
+        argv.push("--library-index-from-bundle");
+    }
+    let (input, opts) = run_argv(&argv);
+    let store = std::env::temp_dir().join(format!(
+        "humanify-machinery-{from_bundle}-{}",
+        std::process::id()
+    ));
     let toml = format!(
-        "[library]\nindex_build = \"auto\"\n[io]\noutput_dir = {:?}\n",
-        out.display().to_string()
+        "[library]\nindex_store_dir = {:?}\n",
+        store.display().to_string()
     );
     let file = crate::config::ConfigFile::check("cfg.toml", &toml).expect("the file parses");
     Config::build(&input, &opts, Some(&file), |k| {
         (k == crate::config::API_KEY_VAR).then(|| "env-key".to_string())
     })
-    .expect("report+auto accepts")
+    .expect("report with no index accepts")
+}
+
+/// The machinery with the run-time build on: exp171's path.
+fn machinery_config() -> Config {
+    machinery_config_with(true)
 }
 
 /// A plain Bundler/Minifier pair: Bun + Terser is what a Bun bundle this
@@ -84,11 +93,12 @@ fn the_bundle_itself_names_the_build_s_seeds() {
     assert!(seeds[0].evidence.contains("package-json"), "{:?}", seeds[0]);
 }
 
-/// An empty store and a bundle that reveals no package, then a bundler
-/// no index can be built for: since exp171 (names is the default) neither
-/// fails the run — the machinery answers `Inert` with the notice the run
-/// prints, naming the escapes — through the joint, so the wiring (scope
-/// thread → channel → deadline'd join) is what this test proves.
+/// With `--library-index-from-bundle` (exp171's path, opt-in since
+/// exp174): an empty store and a bundle that reveals no package, then a
+/// bundler no index can be built for — neither fails the run: the
+/// machinery answers `Inert` with the notice the run prints, naming the
+/// escapes — through the joint, so the wiring (scope thread → channel →
+/// deadline'd join) is what this test proves.
 #[test]
 fn a_bundle_no_index_can_serve_is_inert_and_says_why() {
     let config = machinery_config();
@@ -128,6 +138,40 @@ fn a_bundle_no_index_can_serve_is_inert_and_says_why() {
     assert!(why.contains("--library-matching off"), "{why}");
 }
 
+/// WITHOUT the run-time build (the default since exp174): a store with
+/// nothing for the bundle is a loud `Failed` — never `Inert`, never a
+/// build — whatever the bundler, carrying the refusal that says what is
+/// missing and every way out.
+#[test]
+fn by_default_a_store_with_nothing_for_the_bundle_fails_loudly() {
+    let config = machinery_config_with(false);
+    let profiler = humanify_core::profiling::Profiler::disabled();
+    let stop = AtomicBool::new(false);
+    let code = "/*! leftpad v1.2.3 */\nconsole.log(1);\n"; // a seed it must NOT build from
+    for (bundler, minifier) in [bun(), (BundlerType::Esbuild, MinifierType::Esbuild)] {
+        let answer = std::thread::scope(|scope| {
+            let job = start(scope, &profiler, code, &config, bundler, minifier, &stop);
+            job.join(&profiler, &stop)
+        });
+        let JobAnswer::Failed(why) = answer else {
+            panic!("{bundler:?}: nothing found and no build asked for: the run fails");
+        };
+        for want in [
+            "--library-matching report needs a library index, and none was found",
+            "humanify-index build",
+            "--library-index <index-dir>",
+            "--library-index-from-bundle",
+            "--library-matching off",
+        ] {
+            assert!(why.contains(want), "{bundler:?} must say {want:?}: {why}");
+        }
+    }
+    assert!(
+        !config.library.index_store_root().exists(),
+        "nothing created: no fetch, no build"
+    );
+}
+
 /// Since exp171 the DEFAULT reaches the machinery (names + auto); the
 /// opt-out (`--library-matching off`) never does, and an explicit index
 /// wins over it (the gate it must not slip through).
@@ -146,22 +190,16 @@ fn the_default_runs_the_machinery_and_the_opt_out_and_an_explicit_index_do_not()
             .library
             .runs_index_machinery()
     );
-    // report + auto: the machinery runs...
+    // report with no index: the machinery runs...
     assert!(machinery_config().library.runs_index_machinery());
     // ... but an explicit index turns it back off: it wins.
-    let (input, opts) = run_argv(&[
+    let explicit = build(&[
         "in.js",
         "--library-matching",
         "report",
         "--library-index",
         "/some/index",
     ]);
-    let file = crate::config::ConfigFile::check("cfg.toml", "[library]\nindex_build = \"auto\"\n")
-        .unwrap();
-    let explicit = Config::build(&input, &opts, Some(&file), |k| {
-        (k == crate::config::API_KEY_VAR).then(|| "env-key".to_string())
-    })
-    .unwrap();
     assert!(!explicit.library.runs_index_machinery());
 }
 

@@ -838,9 +838,7 @@ fn load_library_index(
                 });
             }
             crate::runtime_index::JobAnswer::Failed(error) => {
-                return Err(Crash(format!(
-                    "run-time library index (library.index_build = \"auto\"): {error}"
-                )));
+                return Err(Crash(format!("library index: {error}")));
             }
         },
         None => (
