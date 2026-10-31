@@ -1,7 +1,7 @@
 # exp174 — names mode requires a real library index
 
 STATUS: BUILT (2026-10-31), branch `exp174-index-required`, rebased on main
-`dfc0bd12e` (exp171 + exp173 merged). Andrew's decisions (2026-10-31):
+`996a693cd` (exp171 + exp173 + exp172 merged). Andrew's decisions (2026-10-31):
 
 1. Names mode REQUIRES a real library index, built or pointed to. The silent
    fallback to `off` goes away. The build-from-what-the-bundle-reveals path
@@ -73,11 +73,11 @@ STATUS: BUILT (2026-10-31), branch `exp174-index-required`, rebased on main
   bytes.
 - e2e: still points every launch at the committed store
   (`test/e2e/library-index/`) explicitly. Bun fixtures run the default (6
-  pairs, index FOUND); the 12 non-Bun pairs (3 plain, 9 esbuild) run
+  pairs before exp172, 7 with `bun-cjs-app`; index FOUND); the 12 non-Bun pairs (3 plain, 9 esbuild) run
   `--library-matching off`, because the store has Bun slices only and names
   now refuses them instead of running inert. A launch that fails for a
   missing index fails the stage on its exit code; one that prints the build
-  notice or the inert line fails it too. 18 pairs pass, 0 known gaps. **No
+  notice or the inert line fails it too. 19 pairs pass, 0 known gaps. **No
   golden changed**: the legacy goldens are non-Bun fixtures, whose inert run
   wrote off's bytes.
 - Help golden and `humanify.example.toml` regenerated (the new flag/key, the
@@ -85,7 +85,23 @@ STATUS: BUILT (2026-10-31), branch `exp174-index-required`, rebased on main
 
 ## Neutrality (the eval always passes `--library-index`)
 
-RESULTS_PLACEHOLDER
+Both WARM, 2.1.85→2.1.86, against merged main `996a693cd`, through
+`npm run eval -- neutrality 996a693cd 2.1.85:2.1.86 --priors /work/exp050-cold
+--cache /work/neutrality-cache`:
+
+| mode                                        | verdict                                    | cache writes (candidate / baseline) |
+| ------------------------------------------- | ------------------------------------------ | ----------------------------------- |
+| names (both legs `library.index=cb64c1f5…`) | **NEUTRAL**: 0 files / 0 lines, exit 0 / 0 | +7,084 / **+0**                     |
+| off (`--pipeline-set library.matching=off`) | **NEUTRAL**: 0 files / 0 lines, exit 0 / 0 | +0 / **+0**                         |
+
+The eval always hands names launches `--library-index`, so the store and
+the new refusal are never reached; its outputs cannot change, and do not.
+
+The e2e fixture `bun-cjs-app` (exp172, a Bun CommonJS app bundling
+`tinylib`, which is not in the committed `ms` index) is a Bun bundle, so it
+runs the default on the committed store: the index is FOUND (both Bun slices
+present) and simply claims nothing for `tinylib`. No build, no refusal; e2e
+19 pairs pass (7 found, 12 off).
 
 ## Proposed CLAUDE.md addition (for Andrew)
 
