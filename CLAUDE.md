@@ -243,6 +243,24 @@ three repeats — so any movement in either is real; the ±2,800/hop figure that
 circulated before the bands existed is superseded folklore. Details:
 `experiments/034-eval-harness/README.md`.
 
+**Read every KPI per surface (exp170, 2026-10-31).** Each change/noise KPI is
+split three ways, and the three add back up exactly to the old column:
+
+- **APP** (`app:*`): everything outside `vendor/`, no vendor contribution. It
+  is what a reader who ignores `vendor/` sees, so judge app-side levers here.
+- **VENDOR** (`vendor:*`): `vendor/` plus any bundle code the library
+  placement filed into it.
+- **CROSS-BOUNDARY** (`cross:*`): code moved between `src/` and `vendor/`,
+  charged once as a move (paired by content). Read the moves the summary
+  lists; before the split, such a move was charged as an add on one side and
+  a removal on the other (exp164's vendorReal 506 was 244 vendor + 262 moved).
+
+`app:novel` / `app:realLn` have a band of 0 but CAN move when placement files
+new code into `vendor/` (exp166: 4 statements, 71 lines). The TOTAL
+`novel`/`realLn` decide whether real change moved. Labels scored before
+2026-10-31 print `-` for the split; re-score their trees with
+`experiments/170-app-vendor-split/rescore.ts`.
+
 **Which committed reference to use, and why it is not the one this file used to
 name.** Check a reference's `*-run-status.json` before citing it: absent is
 UNKNOWN, not passing.
