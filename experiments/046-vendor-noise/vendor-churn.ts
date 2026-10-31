@@ -126,6 +126,12 @@ export interface VendorChurn {
   realChangeFiles: string[];
   /** Every relocation pair, so a move is visible rather than absorbed. */
   relocated: RelocatedPair[];
+  /**
+   * Every charged file, one row per bucket entry (identical files included
+   * at 0 lines), so a caller can cut a bucket further (exp168). The rows'
+   * lines sum to `vendorTotalLines - manifest.changedLines` by construction.
+   */
+  fileRows: VendorFileRow[];
   examples: {
     realChangeTop: Array<{ file: string; lines: number }>;
     movedPath: string[];
@@ -144,6 +150,25 @@ export interface RelocatedPair {
   realLines: number;
   /** The path draw, booked as noise. */
   drawLines: number;
+}
+
+export type VendorBucket =
+  | "identical"
+  | "nameOnly"
+  | "freeReroll"
+  | "movedPath"
+  | "realChange"
+  | "trulyAdded"
+  | "trulyRemoved"
+  | "relocated"
+  | "unparsed";
+
+/** One charged file: which bucket, which side(s), how many lines. */
+export interface VendorFileRow {
+  bucket: VendorBucket;
+  prior?: string;
+  fresh?: string;
+  lines: number;
 }
 
 const mk = (): Bucket => ({ files: 0, lines: 0 });
@@ -353,6 +378,13 @@ export function decomposeVendorChurn(
   const unparsed = mk();
 
   const realChangeFiles: Array<{ file: string; lines: number }> = [];
+  const fileRows: VendorFileRow[] = [];
+  const row = (
+    bucket: VendorBucket,
+    lines: number,
+    prior: string | undefined,
+    fresh: string | undefined
+  ) => fileRows.push({ bucket, lines, prior, fresh });
   const movedExamples: string[] = [];
   const addedExamples: string[] = [];
   const addedRel: string[] = [];
@@ -365,6 +397,7 @@ export function decomposeVendorChurn(
     const fsig = sigOf.get(`fresh|${rel}`);
     if (fsig === undefined) {
       bump(unparsed, lineCount(fp));
+      row("unparsed", lineCount(fp), undefined, rel);
       continue;
     }
 
@@ -372,17 +405,20 @@ export function decomposeVendorChurn(
       const pp = path.join(priorDir, rel);
       if (fs.readFileSync(pp, "utf-8") === fs.readFileSync(fp, "utf-8")) {
         identical.files++;
+        row("identical", 0, rel, rel);
         continue;
       }
       const lines = changedLines(pp, fp);
       if (sigOf.get(`prior|${rel}`) === fsig) {
         bump(nameOnly, lines);
+        row("nameOnly", lines, rel, rel);
         continue;
       }
       const a = infoOf.get(`prior|${rel}`);
       const b = infoOf.get(`fresh|${rel}`);
       if (a && b && divergenceClass(a, b) === "free-minified-reroll") {
         bump(freeReroll, lines);
+        row("freeReroll", lines, rel, rel);
         continue;
       }
       // Same path, different content — but the content may simply have SWAPPED
@@ -390,12 +426,14 @@ export function decomposeVendorChurn(
       // content is absent from the prior tree entirely.
       if (priorBySig.has(fsig)) {
         bump(movedPath, lines);
+        row("movedPath", lines, priorBySig.get(fsig)?.[0], rel);
         if (movedExamples.length < 8) {
           movedExamples.push(`${rel} <- ${priorBySig.get(fsig)?.[0]}`);
         }
         continue;
       }
       bump(realChange, lines);
+      row("realChange", lines, rel, rel);
       realChangeFiles.push({ file: rel, lines });
       changedInPlace.push(rel);
       continue;
@@ -403,6 +441,7 @@ export function decomposeVendorChurn(
 
     if (priorBySig.has(fsig)) {
       bump(movedPath, lineCount(fp));
+      row("movedPath", lineCount(fp), priorBySig.get(fsig)?.[0], rel);
       if (movedExamples.length < 8) {
         movedExamples.push(`${rel} <- ${priorBySig.get(fsig)?.[0]}`);
       }
@@ -450,14 +489,17 @@ export function decomposeVendorChurn(
     const b = infoOf.get(`fresh|${pair.fresh}`);
     if (a && b && divergenceClass(a, b) === "free-minified-reroll") {
       bump(freeReroll, lines);
+      row("freeReroll", lines, pair.prior, pair.fresh);
     } else {
       bump(realChange, lines);
+      row("realChange", lines, pair.prior, pair.fresh);
       realChangeFiles.push({ file: pair.fresh, lines });
     }
     // What the old charge was (whole prior removed + whole fresh added),
     // less the real diff charged above: the path draw, and only that.
     const draw = lineCount(pp) + lineCount(fp) - lines;
     bump(relocated, draw);
+    row("relocated", draw, pair.prior, pair.fresh);
     relocatedPairs.push({ ...pair, realLines: lines, drawLines: draw });
     pairedPrior.add(pair.prior);
     pairedFresh.add(pair.fresh);
@@ -465,11 +507,13 @@ export function decomposeVendorChurn(
   for (const rel of addedRel) {
     if (pairedFresh.has(rel)) continue;
     bump(trulyAdded, lineCount(path.join(freshDir, rel)));
+    row("trulyAdded", lineCount(path.join(freshDir, rel)), undefined, rel);
     if (addedExamples.length < 8) addedExamples.push(rel);
   }
   for (const rel of removedRel) {
     if (pairedPrior.has(rel)) continue;
     bump(trulyRemoved, lineCount(path.join(priorDir, rel)));
+    row("trulyRemoved", lineCount(path.join(priorDir, rel)), rel, undefined);
   }
 
   const manifest = decomposeManifest(priorDir, freshDir);
@@ -512,6 +556,7 @@ export function decomposeVendorChurn(
       realChange.lines + trulyAdded.lines + trulyRemoved.lines,
     realChangeFiles: realChangeFiles.map((e) => e.file),
     relocated: relocatedPairs,
+    fileRows,
     examples: {
       realChangeTop: realChangeFiles
         .sort((x, y) => y.lines - x.lines)

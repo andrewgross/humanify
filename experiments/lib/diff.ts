@@ -46,11 +46,30 @@ export function changedLines(priorText: string, freshText: string): number {
   return countMarkers(computeNormalDiff(priorText, freshText));
 }
 
+/**
+ * The changed lines themselves (without their `< ` / `> ` marker), one entry
+ * per line `changedLines` counts — for a caller that filters the charge by
+ * what a line holds (exp168's mint-bearing vendor lines) without becoming a
+ * second counter.
+ */
+export function changedLineTexts(
+  priorText: string,
+  freshText: string
+): string[] {
+  return computeNormalDiff(priorText, freshText)
+    .split("\n")
+    .filter(isMarker)
+    .map((line) => line.slice(2));
+}
+
+const isMarker = (line: string): boolean =>
+  line.startsWith("<") || line.startsWith(">");
+
 /** `<` / `>` lines in normal-diff output. */
 function countMarkers(diffText: string): number {
   let n = 0;
   for (const line of diffText.split("\n")) {
-    if (line.startsWith("<") || line.startsWith(">")) n++;
+    if (isMarker(line)) n++;
   }
   return n;
 }

@@ -120,6 +120,25 @@ describe("decomposeVendorChurn", () => {
     assert.equal(r.bodies.trulyRemoved.files, 1);
   });
 
+  it("lists every file it charged, one row per bucket entry, summing to the body total", () => {
+    // exp168 reads the per-file rows to cut buckets further; the rows must
+    // reconcile with the totals they decompose or the cut is a second answer.
+    const r = decomposeVendorChurn(prior, fresh);
+    const sum = r.fileRows.reduce((n, row) => n + row.lines, 0);
+    assert.equal(sum, r.vendorTotalLines - r.manifest.changedLines);
+    const byBucket = (b: string) =>
+      r.fileRows
+        .filter((row) => row.bucket === b)
+        .map((row) => row.fresh ?? row.prior);
+    assert.deepEqual(byBucket("realChange"), ["c.js"]);
+    assert.deepEqual(byBucket("trulyRemoved"), ["gone.js"]);
+    assert.deepEqual(byBucket("movedPath"), ["nested/d-2.js"]);
+    assert.equal(
+      r.fileRows.find((row) => row.bucket === "movedPath")?.prior,
+      "d.js"
+    );
+  });
+
   it("reports real dependency change as the added+removed+changed lines only", () => {
     const r = decomposeVendorChurn(prior, fresh);
     const expected =
