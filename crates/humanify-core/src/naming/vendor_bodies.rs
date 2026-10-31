@@ -46,8 +46,40 @@ pub struct VendorNaming {
     /// Whether the prior was used (a prior the driver refused as another
     /// program is dropped and the bodies are named fresh).
     pub prior_used: bool,
+    /// Why the driver refused the prior, when it did.
+    pub prior_refusal: Option<String>,
+    /// The bodies left as extracted, with why (path order).
+    pub skipped: Vec<(String, Skip)>,
     pub outcome: NamingOutcome,
 }
+
+/// Why a body is left as the unpack extracted it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Skip {
+    /// The formatter's strict parse refused it.
+    Unformattable,
+    /// It holds a lone UTF-16 surrogate escape (`"\uD800"`): the ESTree
+    /// serialization every side of the match reads cannot carry one, so
+    /// one such body would cost every OTHER body its prior.
+    LoneSurrogate,
+    /// A formatted line longer than [`MAX_LINE_CHARS`]: no prompt window
+    /// can show it inside the model's context (highlight.js keyword
+    /// tables, symbol lists — 7 calls refused at 33–84k tokens).
+    LongLine,
+}
+
+impl Skip {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Skip::Unformattable => "unformattable",
+            Skip::LoneSurrogate => "lone-surrogate",
+            Skip::LongLine => "long-line",
+        }
+    }
+}
+
+/// The longest formatted line a named body may hold (chars).
+pub const MAX_LINE_CHARS: usize = 20_000;
 
 /// The joined text: one `(<body>);` statement per body, in the given order.
 pub fn join_bodies<'b>(bodies: impl IntoIterator<Item = &'b str>) -> String {
@@ -108,10 +140,11 @@ pub fn name_vendor_bodies<P: NameProvider>(
     let mut order: Vec<usize> = (0..bodies.len()).collect();
     order.sort_by(|&a, &b| bodies[a].path.cmp(&bodies[b].path));
     let mut formatted: Vec<(usize, String)> = Vec::new();
+    let mut skipped: Vec<(String, Skip)> = Vec::new();
     for &i in &order {
-        let joined = join_bodies([bodies[i].text.as_str()]);
-        if let Ok(f) = crate::format::format_file(&joined, &Default::default(), &[]) {
-            formatted.push((i, f.text));
+        match format_body(&bodies[i].text) {
+            Ok(text) => formatted.push((i, text)),
+            Err(skip) => skipped.push((bodies[i].path.clone(), skip)),
         }
     }
     if formatted.is_empty() {
@@ -140,9 +173,10 @@ pub fn name_vendor_bodies<P: NameProvider>(
     };
     // A prior the driver refuses (the same-program check: it shares
     // nearly no code with these bodies) is dropped, never fatal.
-    let (outcome, prior_used) = match prior.map(|p| run(Some(p), log)) {
-        Some(Ok(outcome)) => (outcome, true),
-        Some(Err(_)) | None => (run(None, log)?, false),
+    let (outcome, prior_used, prior_refusal) = match prior.map(|p| run(Some(p), log)) {
+        Some(Ok(outcome)) => (outcome, true, None),
+        Some(Err(why)) => (run(None, log)?, false, Some(why)),
+        None => (run(None, log)?, false, None),
     };
     let mut texts: Vec<String> = bodies.iter().map(|b| b.text.clone()).collect();
     let named = outcome
@@ -163,8 +197,54 @@ pub fn name_vendor_bodies<P: NameProvider>(
         texts,
         joined,
         prior_used,
+        prior_refusal,
+        skipped,
         outcome,
     }))
+}
+
+/// One body as the joined text holds it, or why it stays as extracted.
+fn format_body(text: &str) -> Result<String, Skip> {
+    if has_lone_surrogate_escape(text) {
+        return Err(Skip::LoneSurrogate);
+    }
+    let formatted = crate::format::format_file(&join_bodies([text]), &Default::default(), &[])
+        .map_err(|_| Skip::Unformattable)?
+        .text;
+    if formatted
+        .lines()
+        .any(|l| l.chars().count() > MAX_LINE_CHARS)
+    {
+        return Err(Skip::LongLine);
+    }
+    Ok(formatted)
+}
+
+/// A `\uXXXX` escape of a UTF-16 surrogate that is not one half of a
+/// high-low pair. Conservative: an escaped backslash before `u` counts too.
+fn has_lone_surrogate_escape(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let unit_at = |at: usize| -> Option<u16> {
+        if bytes.get(at) != Some(&b'\\') || bytes.get(at + 1) != Some(&b'u') {
+            return None;
+        }
+        let hex = text.get(at + 2..at + 6)?;
+        u16::from_str_radix(hex, 16).ok()
+    };
+    let mut i = 0;
+    while i + 6 <= bytes.len() {
+        match unit_at(i) {
+            Some(0xD800..=0xDBFF) => {
+                if !matches!(unit_at(i + 6), Some(0xDC00..=0xDFFF)) {
+                    return true;
+                }
+                i += 12;
+            }
+            Some(0xDC00..=0xDFFF) => return true,
+            _ => i += 1,
+        }
+    }
+    false
 }
 
 /// The vendored factory bodies the unpack wrote under `vendor/` (the

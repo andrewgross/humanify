@@ -201,3 +201,76 @@ fn bodies_are_joined_in_path_order_and_returned_in_input_order() {
     let z = out.joined.find("askedR").expect("z");
     assert!(a < z, "path order: {}", out.joined);
 }
+
+#[test]
+fn a_body_with_a_lone_surrogate_ships_as_extracted_and_the_rest_still_carry() {
+    let surrogate = "function(e,t){var r=\"\\uD800-\\uDFFF\";t.exports=r}";
+    let first = name_vendor_bodies(
+        &[
+            body("vendor/semver/functions/coerce.js", SEMVER_LIKE, &[]),
+            body("vendor/xml/chars.js", surrogate, &[]),
+        ],
+        None,
+        &config(),
+        &Namer::new("prior"),
+        &mut log(),
+    )
+    .expect("runs")
+    .expect("named");
+    assert_eq!(first.texts[1], surrogate, "shipped as extracted");
+    assert_eq!(
+        first.skipped,
+        vec![(
+            "vendor/xml/chars.js".to_string(),
+            super::Skip::LoneSurrogate
+        )]
+    );
+    let namer = Namer::new("fresh");
+    let out = name_vendor_bodies(
+        &[
+            body("vendor/semver/functions/coerce.js", SEMVER_LIKE, &[]),
+            body("vendor/xml/chars.js", surrogate, &[]),
+        ],
+        Some(&first.joined),
+        &config(),
+        &namer,
+        &mut log(),
+    )
+    .expect("runs")
+    .expect("named");
+    assert!(out.prior_used, "the prior is read");
+    assert!(namer.asked().is_empty(), "asked {:?}", namer.asked());
+    assert_eq!(out.texts[0], first.texts[0]);
+}
+
+#[test]
+fn a_body_with_a_line_too_long_for_a_prompt_ships_as_extracted() {
+    let long = format!(
+        "function(e,t){{var r=\"{}\";t.exports=r}}",
+        "x".repeat(super::MAX_LINE_CHARS + 1)
+    );
+    let namer = Namer::new("asked");
+    let out = name_vendor_bodies(
+        &[
+            body("vendor/hl/lang.js", &long, &[]),
+            body("vendor/a/a.js", "function(e,t){var q=2;t.exports=q}", &[]),
+        ],
+        None,
+        &config(),
+        &namer,
+        &mut log(),
+    )
+    .expect("runs")
+    .expect("named");
+    assert_eq!(out.texts[0], long);
+    assert!(out.texts[1].contains("askedQ"), "{}", out.texts[1]);
+    assert!(
+        !namer.asked().iter().any(|a| a == "r"),
+        "{:?}",
+        namer.asked()
+    );
+    assert_eq!(
+        out.skipped,
+        vec![("vendor/hl/lang.js".to_string(), super::Skip::LongLine)]
+    );
+}

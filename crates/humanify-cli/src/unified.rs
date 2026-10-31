@@ -1272,19 +1272,30 @@ fn name_vendor_bodies_stage(
     };
     let written = vb::write_vendor_naming(out_dir, &bodies, &named).map_err(Crash)?;
     let held: usize = bodies.iter().map(|b| b.restored.len()).sum();
+    let mut skipped: std::collections::BTreeMap<&str, usize> = Default::default();
+    for (_, why) in &named.skipped {
+        *skipped.entry(why.as_str()).or_default() += 1;
+    }
+    for (path, why) in &named.skipped {
+        verbose().log(&format!(
+            "Vendor body left as extracted ({}): {path}",
+            why.as_str()
+        ));
+    }
+    let prior_state = match (named.prior_used, &named.prior_refusal) {
+        (true, _) => "used".to_string(),
+        (false, Some(why)) => format!("refused ({why})"),
+        (false, None) => "none".to_string(),
+    };
     renderer.message(&format!(
-        "Vendor body naming: {} bodies ({} rewritten, {} restored names held), prior {}, \
-{} provider errors, valid output: {}, {:.1}s",
+        "Vendor body naming: {} bodies ({} rewritten, {} left as extracted {:?}, {} restored names held), \
+prior {}, {} provider errors, valid output: {}, {:.1}s",
         bodies.len(),
         written,
+        named.skipped.len(),
+        skipped,
         held,
-        if named.prior_used {
-            "used"
-        } else if prior.is_some() {
-            "refused"
-        } else {
-            "none"
-        },
+        prior_state,
         named.outcome.errors,
         named.outcome.output_valid,
         started.elapsed().as_secs_f64()
