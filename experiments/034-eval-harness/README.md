@@ -142,6 +142,51 @@ lower pairing threshold (0.3, or none), so it is not a threshold effect.
 Re-derive its `vendor` blocks from its trees before comparing vendor columns
 (the trees under `/tmp/eval-work/<label>/` are enough; nothing re-runs).
 
+### APP vs VENDOR — every KPI split by surface (exp170, 2026-10-31)
+
+Andrew: every change-vs-noise KPI is reported separately for **app** code and
+**vendor** code. A reader who trusts vendor identification ignores the vendor
+side of the diff, so the app numbers must stand on their own, with no vendor
+contribution mixed in, and code that crosses the boundary must be visible.
+
+**Before the split, no headline KPI was app-only** (the audit,
+`experiments/170-app-vendor-split/README.md`): the statement columns
+(clean/noise/novel/noiseLn/realLn) score the BUNDLE, which holds every statement that is not a CJS library
+factory (app code, and library code inlined as ES modules) wherever the split
+files it — including the ones filed into vendor/; reloc/newName/relocSt read the whole ledger; mints is the whole
+census (on exp164's hop at least 450 of its 501 mints sat in bundle code filed
+in vendor/ — the exp164/165 jose junk); treeLn & co. are src/ only and vendorLn/vendorReal vendor/ only, but
+each charges its half of every cross-boundary move (exp168: 352 of exp164's
+506 vendorReal lines were app statements moved src/→vendor/).
+
+The card now carries `churn.surfaces` (owner: `surfaces.ts`). **Every split is
+a PARTITION of a frozen field: `app + vendor + crossBoundary = old`** (mints:
+`app + vendor + unattributed`; tree lines: `app:treeLn + vendor:treeLn +
+cross:treeLn = treeLn + vendor churnLines`). It is ADDITIVE: every existing
+field is byte-identical with or without it (proven by re-scoring every card
+with trees, below), so the historical trend line is untouched.
+
+- **app** = everything outside `vendor/`; **vendor** = `vendor/`. On the
+  statement axis `vendor` means the BUNDLE code the pipeline's library
+  placement filed into vendor/: the bundle holds everything that is not a CJS
+  library factory — app code and library code inlined as ES modules.
+- **crossBoundary** = units that changed surface between v-1 and v. In the
+  tree lines, a statement that left one surface and arrived on the other
+  (paired by the identifier-blind `statementHash`, net flow per hash) is
+  taken out of BOTH sides' real charge and charged once, here. One-line
+  shapes (`var x = () => {};`) are refused as too generic to prove a move
+  (`refused`), and a side's take is capped at what that file was charged
+  (`capped`), so the partition is exact.
+- **mints** are a list of names with no position: each is attributed only as
+  far as the bundle's binding counts force it; the rest is `unattributed`.
+
+`summarize` prints an app | vendor | cross | total table and lists every
+pair's moves; the leaderboard prints APP, VENDOR and CROSS-BOUNDARY tables
+(KPI keys `app:<kpi>`, `vendor:<kpi>`, `cross:<kpi>`, defined in
+`kpis.ts SPLIT_KPIS`) under the main one, with bands. A label scored before
+2026-10-31 prints `-` there; re-score its trees with
+`experiments/170-app-vendor-split/rescore.ts` (scorer only).
+
 ### RAW vs CLEAN — the contract (2026-10-02)
 
 Andrew: "I lean towards not changing the actual code itself when possible, so

@@ -3,7 +3,8 @@
     "provisional": false,
     "sources": [
       "measured from 3 same-commit repeats",
-      "vendorLn/vendorReal re-scored 2026-10-06 from the SAME trees with the relocation-pairing vendor scorer (fix/vendor-scorer-pairing): every other band byte-equal; vendor numbers before/after are not comparable"
+      "vendorLn/vendorReal re-scored 2026-10-06 from the SAME trees with the relocation-pairing vendor scorer (fix/vendor-scorer-pairing): every other band byte-equal; vendor numbers before/after are not comparable",
+      "app:/vendor:/cross: split bands (exp170, 2026-10-31) derived from the SAME three refs re-scored by the split-aware scorer (scorer only; every old card field byte-identical, every pre-existing band reproduced exactly)"
     ],
     "commit": "0f338ffa",
     "labels": [
@@ -27,6 +28,34 @@
     "cleanReal": 74,
     "reorderLn": 0,
     "vendorLn": 55,
-    "vendorReal": 32
+    "vendorReal": 32,
+    "app:treeLn": 16,
+    "app:cleanLn": 16,
+    "app:cleanReal": 74,
+    "app:reorderLn": 0,
+    "app:noise": 17,
+    "app:noiseLn": 1376,
+    "app:novel": 0,
+    "app:realLn": 0,
+    "app:reloc": 35,
+    "app:relocSt": 0,
+    "app:newName": 13,
+    "app:mints": 34,
+    "vendor:treeLn": 87,
+    "vendor:vendorLn": 55,
+    "vendor:vendorReal": 32,
+    "vendor:noise": 0,
+    "vendor:noiseLn": 0,
+    "vendor:novel": 0,
+    "vendor:realLn": 0,
+    "vendor:reloc": 0,
+    "vendor:relocSt": 0,
+    "vendor:newName": 0,
+    "vendor:mints": 0,
+    "cross:treeLn": 0,
+    "cross:stmts": 0,
+    "cross:relocSt": 0,
+    "cross:reloc": 0,
+    "mints:unattributed": 1
   }
 }

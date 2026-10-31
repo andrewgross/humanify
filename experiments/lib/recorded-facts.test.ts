@@ -106,8 +106,29 @@ const SCORECARD_ARCHIVAL = [
   // Sub-splits of the vendor churn, printed per pair by printVendor. Their
   // parents (churnLines/noise/real) are the totalled figures.
   "churn.vendor.manifest",
-  "churn.vendor.bodiesNameOnly"
+  "churn.vendor.bodiesNameOnly",
+  // exp170's cross-boundary MOVES list: a listing, not a total — printed per
+  // pair by summarize's printSurfaces so a move is seen, never summed.
+  "churn.surfaces.lines.crossBoundary.moves[].from",
+  "churn.surfaces.lines.crossBoundary.moves[].to",
+  "churn.surfaces.lines.crossBoundary.moves[].statements",
+  "churn.surfaces.lines.crossBoundary.moves[].lines"
 ] as const;
+
+const stmtCounts = () => ({
+  total: 1,
+  unchangedClean: 1,
+  unchangedChurned: 1,
+  novel: 1,
+  namingNoiseLines: 1,
+  realLines: 1
+});
+const nameCounts = () => ({
+  freshNames: 1,
+  novelNames: 1,
+  sameNameMovedFile: 1
+});
+const relocCounts = () => ({ statementsCompared: 1, relocatedStatements: 1 });
 
 function fullScorecard(): Scorecard {
   return {
@@ -155,6 +176,54 @@ function fullScorecard(): Scorecard {
         real: 1,
         manifest: 1,
         bodiesNameOnly: 1
+      },
+      // exp170: the app/vendor split — every numeric leaf reaches a
+      // `split.*` total.
+      surfaces: {
+        statements: {
+          app: stmtCounts(),
+          vendor: stmtCounts(),
+          crossBoundary: { ...stmtCounts(), toVendor: 1, toApp: 1 }
+        },
+        names: {
+          app: nameCounts(),
+          vendor: nameCounts(),
+          crossBoundary: nameCounts()
+        },
+        tree: {
+          app: relocCounts(),
+          vendor: relocCounts(),
+          crossBoundary: relocCounts()
+        },
+        mints: { app: 1, vendor: 1, unattributed: 1 },
+        lines: {
+          app: {
+            churnLines: 1,
+            churnLinesClean: 1,
+            real: 1,
+            realClean: 1,
+            fileAddRemove: 1,
+            noise: 1,
+            naming: 1,
+            alias: 1,
+            reorder: 1
+          },
+          vendor: { churnLines: 1, noise: 1, real: 1 },
+          crossBoundary: {
+            churnLines: 1,
+            appSide: 1,
+            appSideFromFiles: 1,
+            vendorSide: 1,
+            toVendor: { statements: 1, lines: 1 },
+            toApp: { statements: 1, lines: 1 },
+            capped: 1,
+            refused: 1,
+            unparsedVendorFiles: 1,
+            moves: [
+              { from: "src/a.js", to: "vendor/b.js", statements: 1, lines: 1 }
+            ]
+          }
+        }
       }
     }
   };

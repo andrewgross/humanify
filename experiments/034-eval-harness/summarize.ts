@@ -147,11 +147,32 @@ function churnRow(
  * It lived inside `main` and was therefore untestable, which is how a field
  * can be measured every run and quietly totalled nowhere.
  */
+/**
+ * Every numeric leaf of a card's `churn.surfaces` (exp170), as
+ * `split.<path>` → value. Arrays (the listed moves) are not totals; they are
+ * printed per pair by `printSurfaces`.
+ */
+export function flattenSurfaces(
+  surfaces: Scorecard["churn"]["surfaces"]
+): Array<[`split.${string}`, number]> {
+  const out: Array<[`split.${string}`, number]> = [];
+  const walk = (v: unknown, at: string) => {
+    if (typeof v === "number") out.push([`split.${at}`, v]);
+    else if (v && typeof v === "object" && !Array.isArray(v)) {
+      for (const [k, x] of Object.entries(v)) walk(x, at ? `${at}.${k}` : k);
+    }
+  };
+  walk(surfaces, "");
+  return out;
+}
+
 export function summarizeCards(cards: Scorecard[]): {
   totals: SummaryTotals;
   treeChurnCards: number;
   spellingCards: number;
   cleanDiffCards: number;
+  /** Cards carrying exp170's app/vendor split (the rest predate it). */
+  surfaceCards: number;
 } {
   const totals: SummaryTotals = {
     stmts: 0,
@@ -183,6 +204,7 @@ export function summarizeCards(cards: Scorecard[]): {
   let treeChurnCards = 0;
   let spellingCards = 0;
   let cleanDiffCards = 0;
+  let surfaceCards = 0;
   for (const c of cards) {
     totals.stmts += c.churn.statements.total;
     totals.unchangedClean += c.churn.statements.unchangedClean;
@@ -228,8 +250,20 @@ export function summarizeCards(cards: Scorecard[]): {
       totals.vendorNoise += c.churn.vendor.noise;
       totals.vendorReal += c.churn.vendor.real;
     }
+    if (c.churn.surfaces) {
+      surfaceCards++;
+      for (const [k, v] of flattenSurfaces(c.churn.surfaces)) {
+        totals[k] = (totals[k] ?? 0) + v;
+      }
+    }
   }
-  return { totals, treeChurnCards, spellingCards, cleanDiffCards };
+  return {
+    totals,
+    treeChurnCards,
+    spellingCards,
+    cleanDiffCards,
+    surfaceCards
+  };
 }
 
 function main() {
@@ -238,8 +272,13 @@ function main() {
   const dir = path.join(import.meta.dirname, "results", model);
   const cards = loadScorecards(dir);
   if (cards.length === 0) throw new Error(`no scorecards in ${dir}`);
-  const { totals, treeChurnCards, spellingCards, cleanDiffCards } =
-    summarizeCards(cards);
+  const {
+    totals,
+    treeChurnCards,
+    spellingCards,
+    cleanDiffCards,
+    surfaceCards
+  } = summarizeCards(cards);
 
   // Whether the pipeline declared each run VALID, recorded by run.sh. Absent
   // for every result set produced before this existed — absent, not clean.
@@ -254,6 +293,13 @@ function main() {
       `NOTE: relocSt totals ${treeChurnCards} of ${cards.length} pairs — the ` +
         "rest recorded no tree churn, and their statements are missing from " +
         "the total rather than counted as zero."
+    );
+  }
+  if (surfaceCards !== cards.length) {
+    banner.push(
+      `NOTE: the app/vendor split covers ${surfaceCards} of ${cards.length} ` +
+        "pairs — the rest predate it (exp170, 2026-10-31); re-score their " +
+        "trees with analyze.ts. Their split is missing, not zero."
     );
   }
   const layoutCards = cards.filter((c) => c.churn.layout).length;
@@ -342,6 +388,7 @@ function main() {
   );
   for (const line of caveatLines(shown)) console.log(line);
   printLayout(cards, totals, cleanDiffCards);
+  printSurfaces(cards, totals);
   console.log(`\nwrote ${path.join(dir, "summary.json")}`);
   // And again last, so it is the final thing on screen as well as the first.
   // A run whose pipeline rejected its own output must not be summarised by a
@@ -539,6 +586,116 @@ function printCleanDiff(
       "still INCLUDES the noise columns above. A `-` clean number means the " +
       "card predates 2026-10-02, not a clean diff of zero."
   );
+}
+
+/**
+ * APP vs VENDOR (exp170): every split KPI as a row, the surfaces as columns,
+ * APP FIRST — a reader who trusts vendor identification reads the app column
+ * and nothing else, so it must carry no vendor contribution. TOTAL across
+ * pairs, then each pair's cross-boundary moves listed, so a move is seen
+ * rather than absorbed.
+ */
+function printSurfaces(cards: Scorecard[], totals: SummaryTotals): void {
+  const split = cards.filter((c) => c.churn.surfaces);
+  if (split.length === 0) return;
+  console.log(
+    "\n=== app vs vendor (exp170; app + vendor + cross = the column above) ==="
+  );
+  const head = [
+    "kpi".padEnd(12),
+    pad("app", 10),
+    pad("vendor", 10),
+    pad("cross", 10),
+    pad("= total", 10)
+  ].join(" ");
+  console.log(head);
+  console.log("-".repeat(head.length));
+  const get = (k: string) => totals[`split.${k}` as `split.${string}`];
+  const cell = (v: number | undefined) => pad(v === undefined ? "-" : v, 10);
+  const row = (
+    name: string,
+    at: string,
+    field: string,
+    total?: number,
+    cross?: number
+  ) => {
+    const parts = ["app", "vendor", "crossBoundary"].map((s) =>
+      s === "crossBoundary" && cross !== undefined
+        ? cross
+        : get(`${at}.${s}.${field}`)
+    );
+    console.log([name.padEnd(12), ...parts.map(cell), cell(total)].join(" "));
+  };
+  row(
+    "treeLn*",
+    "lines",
+    "churnLines",
+    totals.layoutChurnLines + totals.vendorChurnLines
+  );
+  const crossLn = get("lines.crossBoundary.churnLines");
+  const crossFiles = get("lines.crossBoundary.appSideFromFiles");
+  row(
+    "real*",
+    "lines",
+    "real",
+    totals.layoutReal + totals.vendorReal,
+    crossLn === undefined ? undefined : crossLn - (crossFiles ?? 0)
+  );
+  row(
+    "files*",
+    "lines",
+    "fileAddRemove",
+    totals.layoutChurnLines - totals.layoutNoise - totals.layoutReal,
+    crossFiles
+  );
+  row("noise*", "lines", "noise", totals.layoutNoise + totals.vendorNoise, 0);
+  row("noise", "statements", "unchangedChurned", totals.unchangedChurned);
+  row("noiseLn", "statements", "namingNoiseLines", totals.namingNoiseLines);
+  row("novel", "statements", "novel", totals.novel);
+  row("realLn", "statements", "realLines", totals.realLines);
+  row("reloc", "names", "sameNameMovedFile", totals.sameNameMovedFile);
+  row("relocSt", "tree", "relocatedStatements", totals.relocatedStatements);
+  row("newName", "names", "novelNames", totals.novelNames);
+  console.log(
+    [
+      "mints".padEnd(12),
+      cell(get("mints.app")),
+      cell(get("mints.vendor")),
+      pad(`${get("mints.unattributed") ?? "-"} unatt`, 10),
+      cell(totals.mintedLeftovers)
+    ].join(" ")
+  );
+  console.log(
+    "* tree git lines: app = src/ (composeDiff), vendor = vendor/ (the " +
+      "vendor scorer: its noise is vendorLn, its real vendorReal), total = " +
+      "the two surfaces' old sum. Statement rows: the BUNDLE (everything " +
+      "but CJS library factories: app code and ESM-inlined library code), " +
+      "by the file each statement is filed in — so vendor there is what the " +
+      "library placement filed into vendor/. mints are attributed by name; the " +
+      "unattributed rest is never guessed."
+  );
+  for (const c of split) {
+    const x = c.churn.surfaces?.lines?.crossBoundary;
+    if (!x) continue;
+    console.log(
+      `cross-boundary ${c.pair}: ${x.churnLines} lines (app side ` +
+        `${x.appSide}, vendor side ${x.vendorSide}); to vendor ` +
+        `${x.toVendor.statements} stmts, to app ${x.toApp.statements} stmts` +
+        (x.capped
+          ? `; ${x.capped} statement lines over their file's charge, not taken`
+          : "") +
+        (x.refused
+          ? `; ${x.refused} lines of one-line statements not paired (too generic to prove a move)`
+          : "") +
+        (x.unparsedVendorFiles
+          ? `; ${x.unparsedVendorFiles} vendor files unparsed`
+          : "")
+    );
+    for (const m of x.moves.slice(0, 12)) {
+      console.log(`    ${m.statements}x ${m.from} -> ${m.to} (${m.lines} ln)`);
+    }
+    if (x.moves.length > 12) console.log(`    ... ${x.moves.length - 12} more`);
+  }
 }
 
 // Only when RUN, not when imported. `summarizeCards` is exported so a guard

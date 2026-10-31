@@ -28,22 +28,29 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { composeDiff } from "../037-noise-source-decomposition/diff-composition.js";
-import { decomposeVendorChurn } from "../046-vendor-noise/vendor-churn.js";
+import {
+  decomposeVendorChurn,
+  type VendorChurn
+} from "../046-vendor-noise/vendor-churn.js";
 import { buildConstantChurn } from "./build-constant-churn.js";
 import { nameOnlyChurn } from "./name-only-churn.js";
-import { statementsOf } from "./statements.js";
+import { type Stmt, statementsOf } from "./statements.js";
 import type { Scorecard } from "./kpis.js";
+import {
+  boundaryLines,
+  declaredBySide,
+  type Ledger,
+  mintSplit,
+  nameSplit,
+  relocSplit,
+  type StatementKind,
+  statementKinds,
+  statementSplit,
+  uniqueStatementPairs
+} from "./surfaces.js";
 
 function readJson<T>(path: string): T {
   return JSON.parse(fs.readFileSync(path, "utf8")) as T;
-}
-
-interface Ledger {
-  nameToFiles: Record<string, string[]>;
-  /** file per statement index, parallel to `hashes` */
-  order?: string[];
-  /** rename-invariant statementHash per statement index */
-  hashes?: string[];
 }
 
 /**
@@ -81,36 +88,21 @@ function relocationChurn(fresh: Ledger, prior: Ledger) {
  * hash-overlap between a removed prior file and an added fresh file.
  */
 function treeChurn(fresh: Ledger, prior: Ledger) {
-  const fh = fresh.hashes ?? [];
-  const ph = prior.hashes ?? [];
   const fo = fresh.order ?? [];
   const po = prior.order ?? [];
-  const count = (hs: string[]) => {
-    const m = new Map<string, number>();
-    for (const h of hs) m.set(h, (m.get(h) ?? 0) + 1);
-    return m;
-  };
-  const fc = count(fh);
-  const pc = count(ph);
-  const priorFileByHash = new Map<string, string>();
-  ph.forEach((h, i) => {
-    if (pc.get(h) === 1) priorFileByHash.set(h, po[i]);
-  });
-
-  let compared = 0;
+  // The comparable statements: a hash occurring exactly once in each ledger
+  // (surfaces.ts owns the definition; the app/vendor split reads it too).
+  const pairs = uniqueStatementPairs(fresh, prior);
+  const compared = pairs.length;
   let relocated = 0;
   const relocByFilePair = new Map<string, number>();
-  fh.forEach((h, i) => {
-    if (fc.get(h) !== 1) return;
-    const priorFile = priorFileByHash.get(h);
-    if (priorFile === undefined) return;
-    compared++;
-    if (priorFile !== fo[i]) {
+  for (const { priorFile, freshFile } of pairs) {
+    if (priorFile !== freshFile) {
       relocated++;
-      const key = `${priorFile} -> ${fo[i]}`;
+      const key = `${priorFile} -> ${freshFile}`;
       relocByFilePair.set(key, (relocByFilePair.get(key) ?? 0) + 1);
     }
-  });
+  }
 
   const freshFiles = new Set(fo);
   const priorFiles = new Set(po);
@@ -119,17 +111,15 @@ function treeChurn(fresh: Ledger, prior: Ledger) {
   // Rename detection: a removed prior file whose 1:1 statements moved by
   // MAJORITY into one added fresh file.
   const movedInto = new Map<string, Map<string, number>>();
-  fh.forEach((h, i) => {
-    if (fc.get(h) !== 1) return;
-    const priorFile = priorFileByHash.get(h);
-    if (priorFile === undefined || !removed.includes(priorFile)) return;
+  for (const { priorFile, freshFile } of pairs) {
+    if (!removed.includes(priorFile)) continue;
     let m = movedInto.get(priorFile);
     if (!m) {
       m = new Map();
       movedInto.set(priorFile, m);
     }
-    m.set(fo[i], (m.get(fo[i]) ?? 0) + 1);
-  });
+    m.set(freshFile, (m.get(freshFile) ?? 0) + 1);
+  }
   let renamed = 0;
   const renamedPairs: string[] = [];
   for (const [priorFile, dests] of movedInto) {
@@ -159,34 +149,27 @@ function treeChurn(fresh: Ledger, prior: Ledger) {
   };
 }
 
-function churn(freshCode: string, priorCode: string) {
-  const fresh = statementsOf(freshCode);
-  const prior = statementsOf(priorCode);
-  // Prior text set per hash — a fresh statement is CLEAN iff its exact text is
-  // already present under its hash (structure unchanged AND names reproduced).
-  const priorByHash = new Map<string, Set<string>>();
-  for (const s of prior) {
-    let set = priorByHash.get(s.hash);
-    if (!set) priorByHash.set(s.hash, (set = new Set()));
-    set.add(s.text);
-  }
+function churn(fresh: Stmt[], kinds: StatementKind[]) {
+  // A fresh statement is CLEAN iff its exact text is already present under
+  // its hash (structure unchanged AND names reproduced), NOISE if only the
+  // hash is, NOVEL otherwise — classified once, by `statementKinds`
+  // (surfaces.ts), which the app/vendor split partitions.
   let unchangedClean = 0;
   let unchangedChurned = 0;
   let novel = 0;
   let namingNoiseLines = 0;
   let realLines = 0;
-  for (const s of fresh) {
-    const priorTexts = priorByHash.get(s.hash);
-    if (!priorTexts) {
+  fresh.forEach((s, i) => {
+    if (kinds[i] === "novel") {
       novel++;
       realLines += s.lines;
-    } else if (priorTexts.has(s.text)) {
+    } else if (kinds[i] === "clean") {
       unchangedClean++;
     } else {
       unchangedChurned++;
       namingNoiseLines += s.lines;
     }
-  }
+  });
   return {
     statements: {
       total: fresh.length,
@@ -311,7 +294,12 @@ export function layoutChurn(priorSrc: string, freshSrc: string) {
  * unchanged by construction). The pairs are listed so a move stays visible.
  */
 export function vendorChurn(priorVendor: string, freshVendor: string) {
-  const v = decomposeVendorChurn(priorVendor, freshVendor);
+  return vendorBlock(decomposeVendorChurn(priorVendor, freshVendor));
+}
+
+/** The card's vendor block from the scorer's decomposition (exported so the
+ * app/vendor split can reuse ONE decomposition's file rows). */
+export function vendorBlock(v: VendorChurn) {
   return {
     churnLines: v.vendorTotalLines,
     noise: v.noiseLines,
@@ -332,6 +320,38 @@ export function vendorChurn(priorVendor: string, freshVendor: string) {
   };
 }
 
+/** The card's `surfaces` block (exp170): each part present only when its
+ * inputs are — absent is "not split", never zero. */
+function surfacesBlock(i: {
+  freshStmts: Stmt[];
+  priorStmts: Stmt[];
+  kinds: StatementKind[];
+  freshLedger: Ledger;
+  priorLedger: Ledger;
+  census: string[] | undefined;
+  tree: Parameters<typeof boundaryLines>[0] | undefined;
+}): NonNullable<Scorecard["churn"]["surfaces"]> {
+  const statements = statementSplit(
+    i.freshStmts,
+    i.priorStmts,
+    i.kinds,
+    i.freshLedger.order,
+    i.priorLedger.order
+  );
+  const order = i.freshLedger.order;
+  const mints =
+    statements && order && Array.isArray(i.census)
+      ? mintSplit(i.census, declaredBySide(i.freshStmts, order))
+      : undefined;
+  return {
+    ...(statements ? { statements } : {}),
+    names: nameSplit(i.freshLedger.nameToFiles, i.priorLedger.nameToFiles),
+    tree: relocSplit(i.freshLedger, i.priorLedger),
+    ...(mints ? { mints } : {}),
+    ...(i.tree ? { lines: boundaryLines(i.tree) } : {})
+  };
+}
+
 function main() {
   const [freshHum, priorHum, freshLed, priorLed, statsPath, pair] =
     process.argv.slice(2);
@@ -343,30 +363,62 @@ function main() {
         "[freshVendorDir priorVendorDir]"
     );
   }
+  const freshLedger: Ledger = readJson(freshLed);
+  const priorLedger: Ledger = readJson(priorLed);
+  const stats = readJson(statsPath);
+  // Parsed ONCE: the statement KPIs and their app/vendor split read the same
+  // classification. Nodes kept on the fresh side for the mint attribution.
+  const freshStmts = statementsOf(fs.readFileSync(freshHum, "utf8"), {
+    keepNodes: true
+  });
+  const priorStmts = statementsOf(fs.readFileSync(priorHum, "utf8"));
+  const kinds = statementKinds(freshStmts, priorStmts);
+  const haveLayout =
+    freshSrc && priorSrc && fs.existsSync(freshSrc) && fs.existsSync(priorSrc);
+  const haveVendor =
+    freshVendor &&
+    priorVendor &&
+    fs.existsSync(freshVendor) &&
+    fs.existsSync(priorVendor);
+  // Optional: the split trees are only present for --split runs, and
+  // scoring them costs a few minutes per pair.
+  const layout = haveLayout ? layoutChurn(priorSrc, freshSrc) : undefined;
+  const vendorRaw = haveVendor
+    ? decomposeVendorChurn(priorVendor, freshVendor)
+    : undefined;
+  const vendor = vendorRaw ? vendorBlock(vendorRaw) : undefined;
   const scorecard: Scorecard = {
     pair,
-    determinism: determinism(readJson(statsPath)),
+    determinism: determinism(stats),
     churn: {
-      ...churn(
-        fs.readFileSync(freshHum, "utf8"),
-        fs.readFileSync(priorHum, "utf8")
-      ),
-      relocations: relocationChurn(readJson(freshLed), readJson(priorLed)),
-      tree: treeChurn(readJson(freshLed), readJson(priorLed)),
-      // Optional: the split trees are only present for --split runs, and
-      // scoring them costs a few minutes per pair.
-      ...(freshSrc &&
-      priorSrc &&
-      fs.existsSync(freshSrc) &&
-      fs.existsSync(priorSrc)
-        ? { layout: layoutChurn(priorSrc, freshSrc) }
-        : {}),
-      ...(freshVendor &&
-      priorVendor &&
-      fs.existsSync(freshVendor) &&
-      fs.existsSync(priorVendor)
-        ? { vendor: vendorChurn(priorVendor, freshVendor) }
-        : {})
+      ...churn(freshStmts, kinds),
+      relocations: relocationChurn(freshLedger, priorLedger),
+      tree: treeChurn(freshLedger, priorLedger),
+      ...(layout ? { layout } : {}),
+      ...(vendor ? { vendor } : {}),
+      // exp170: every KPI above, split app / vendor / crossBoundary. ADDITIVE
+      // — the fields above are byte-identical with or without it.
+      surfaces: surfacesBlock({
+        freshStmts,
+        priorStmts,
+        kinds,
+        freshLedger,
+        priorLedger,
+        // biome-ignore lint/suspicious/noExplicitAny: external stats JSON shape
+        census: (stats as any)?.coverage?.mintedCensus?.names,
+        tree:
+          layout && vendor && vendorRaw
+            ? {
+                priorSrc,
+                freshSrc,
+                priorVendor,
+                freshVendor,
+                layout,
+                vendorRaw,
+                vendor
+              }
+            : undefined
+      })
     }
   };
   console.log(JSON.stringify(scorecard, null, 2));

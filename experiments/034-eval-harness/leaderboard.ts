@@ -78,6 +78,60 @@ const COLUMNS = [
   "vendorReal"
 ];
 
+/**
+ * exp170: the same comparison per SURFACE, app first. A reader who trusts
+ * vendor identification reads the APP table and nothing else, so it carries
+ * no vendor contribution; the VENDOR table holds vendor/ (and the app code
+ * filed into it); CROSS-BOUNDARY holds what moved between them, charged once.
+ * Printed when any compared label carries the split (a `-` = scored before
+ * exp170, re-score its trees; never 0).
+ */
+const SPLIT_TABLES: Array<[title: string, keys: string[]]> = [
+  [
+    "APP (everything outside vendor/; no vendor contribution)",
+    [
+      "app:treeLn",
+      "app:cleanLn",
+      "app:noise",
+      "app:noiseLn",
+      "app:novel",
+      "app:realLn",
+      "app:cleanReal",
+      "app:reloc",
+      "app:relocSt",
+      "app:newName",
+      "app:mints",
+      "app:reorderLn"
+    ]
+  ],
+  [
+    "VENDOR (vendor/; statement columns = bundle code filed into vendor/)",
+    [
+      "vendor:treeLn",
+      "vendor:vendorLn",
+      "vendor:vendorReal",
+      "vendor:noise",
+      "vendor:noiseLn",
+      "vendor:novel",
+      "vendor:realLn",
+      "vendor:reloc",
+      "vendor:relocSt",
+      "vendor:newName",
+      "vendor:mints"
+    ]
+  ],
+  [
+    "CROSS-BOUNDARY (moved src/<->vendor/, charged once as a move)",
+    [
+      "cross:treeLn",
+      "cross:stmts",
+      "cross:relocSt",
+      "cross:reloc",
+      "mints:unattributed"
+    ]
+  ]
+];
+
 /** Suffix marking which way is good, so the header is self-describing. */
 const MARK: Record<Kpi["direction"], string> = {
   lower: "↓",
@@ -251,32 +305,47 @@ function main() {
     return `${v} (${d > 0 ? `+${d}` : d})`;
   };
 
-  console.log("\n=== eval leaderboard (totals across pairs) ===");
-  const w = 18;
-  console.log(
-    [
-      "model".padEnd(20),
-      ...cols.map((k) => `${k.key}${MARK[k.direction]}`.padStart(w))
-    ].join(" ")
-  );
-  console.log("-".repeat(20 + cols.length * (w + 1)));
-  summaries.forEach((s, i) => {
+  const table = (title: string, shown: Kpi[]) => {
+    console.log(`\n=== ${title} ===`);
+    const w = 18;
     console.log(
       [
-        s.model.padEnd(20),
-        ...cols.map((k) =>
-          cell(s.totals[k.total], base[k.total], i === 0, k.key).padStart(w)
-        )
+        "model".padEnd(20),
+        ...shown.map((k) => `${k.key}${MARK[k.direction]}`.padStart(w))
       ].join(" ")
     );
-  });
+    console.log("-".repeat(20 + shown.length * (w + 1)));
+    summaries.forEach((s, i) => {
+      console.log(
+        [
+          s.model.padEnd(20),
+          ...shown.map((k) =>
+            cell(s.totals[k.total], base[k.total], i === 0, k.key).padStart(w)
+          )
+        ].join(" ")
+      );
+    });
+  };
+  table("eval leaderboard (totals across pairs)", cols);
+  const splitShown: Kpi[] = [];
+  if (
+    summaries.some((s) =>
+      Object.keys(s.totals).some((k) => k.startsWith("split."))
+    )
+  ) {
+    for (const [title, keys] of SPLIT_TABLES) {
+      const shown = kpisNamed(keys);
+      table(title, shown);
+      splitShown.push(...shown);
+    }
+  }
   console.log(
     `\nbaseline = ${summaries[0].model} (first listed). ` +
       "↓ drive to zero · = REAL CODE CHANGE, must not move in either " +
       "direction · ~ a move means nothing on its own. A column is '-' on " +
       "models scored before that KPI existed."
   );
-  for (const line of caveatLines(cols)) console.log(line);
+  for (const line of caveatLines([...cols, ...splitShown])) console.log(line);
   const bands = loadNoiseBands();
   for (const line of bandCommitWarning(resultsDir, models, bands)) {
     console.log(line);
