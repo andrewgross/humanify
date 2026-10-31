@@ -261,11 +261,39 @@ new code into `vendor/` (exp166: 4 statements, 71 lines). The TOTAL
 2026-10-31 print `-` for the split; re-score their trees with
 `experiments/170-app-vendor-split/rescore.ts`.
 
+**Names mode is the DEFAULT since exp171 (2026-10-31).** Library code the index
+recognises goes under `vendor/<package>/` with its names restored, and the rest
+of vendor code is named like app code (exp169). `--library-matching off` is the
+opt-out. `npm run eval` always hands names launches the prebuilt full index
+(pairs.json `libraryIndex`) and never a run-time build. **Every label has a
+NAMING MODE** (`pipeline.json` `namingMode`; labels before exp171 read as
+`off`). The leaderboard REFUSES mixed naming modes unless `--force-mixed`,
+exactly as it does for base modes. Neutrality across the flip must run in off
+mode.
+
 **Which committed reference to use, and why it is not the one this file used to
 name.** Check a reference's `*-run-status.json` before citing it: absent is
 UNKNOWN, not passing.
 
-- **`ref-scratch-0f338ffa-r1/r2/r3` — the current valid cold reference**
+- **`ref-names-0357696e-r1/r2/r3` — the current valid NAMES-mode cold
+  reference** (2026-10-31, scratch bases, full prebuilt index `cb64c1f5…`). All
+  12 pairs exit 0, boots OK, warm self-hops byte-identical, cold self-hop
+  8/8/8. novel 4,188 / realLn 416,377, byte-equal to every reference. These
+  runs set `noise-bands.json` `byMode.names` and the names self-hop range.
+  **Names-mode bands are WIDE: noiseLn ±15,709, noise ±397, treeLn ±2,116.**
+  All of it comes from one bimodal pair, 2.1.197→198: one app binding (the
+  error-classes lazy init, 275 callers) that names mode fails to settle by
+  module vote, so on a tie the model re-rolls it (exp173). Judge names-mode
+  changes on novel/realLn (band 0) and the per-surface columns, not on total
+  noise. vendorReal reads ~10,850 against off mode's ~1,320. That gap is REAL
+  dependency change, mostly highlight.js 11 at 2.1.198: names mode prints
+  vendor code formatted, while off mode prints one minified line per file
+  (exp173 corrects exp171's "defect" reading). In names mode, real change can
+  also move into `vendor/` (19 novel statements / 442 realLn on the reference,
+  from claimed ESM-inlined libraries), so the TOTALS stay the hold columns.
+- **`ref-scratch-0f338ffa-r1/r2/r3` — the current valid OFF-mode cold
+  reference** (compare only against off-mode labels; its bands are the
+  top-level `noise-bands.json`)
   (2026-10-03), the first on SCRATCH bases (the default): three same-commit
   cold repeats of main `0f338ffa` on the 8× gpt-oss-20b server (vLLM 0.30,
   nginx in front, `-c 472`). All 12 pairs exit 0, boots OK, warm self-hops
