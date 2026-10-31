@@ -3,7 +3,9 @@
 STATUS: BUILT (2026-10-31), branch `exp171-names-default` off main
 `dba4a0e10`. Andrew's decision (2026-10-31): `--library-matching names` is
 the default, with a clear notice before the pipeline builds a library index.
-The reference repeats are in "The new reference" below.
+The three-repeat names-mode reference is `ref-names-0357696e-r1..r3`
+("The new reference"): novel/realLn byte-equal, every gate clean, names
+bands written beside the off bands.
 
 ## Totals first
 
@@ -30,6 +32,13 @@ The reference repeats are in "The new reference" below.
   apps tried, doctoc and helm-intellisense reveal nothing (inert); better-svg
   reveals 5, novel-engine 2 and array-index-inlay 15. Most of these are
   linter/tooling banners, and some of them fail to install.
+- **The reference (3 cold repeats, all four pairs).** novel 4,188 / realLn
+  416,377 are byte-equal to the default references. Every pair exits 0, every
+  boot passes, warm self-hops are byte-identical, and the cold self-hop is 8
+  lines. Names mode buys mints −130 and vendorLn −55%, and costs vendorReal
+  +9,500 (defect 2, almost all on 2.1.197→198). Its cold noise is bimodal on
+  that same pair, so its noise bands are wide (noiseLn ±15,709 against off's
+  ±1,376).
 - **The eval never uses the run-time build.** `npm run eval` hands every
   names-mode launch the full prebuilt index (pairs.json `libraryIndex`, or
   `--library-index`). Its as-of would otherwise be the day of the run.
@@ -189,7 +198,134 @@ The Claude Code found-path row was measured once with the pre-flip binary
 
 ## The new reference
 
-(filled in below when the three repeats finish)
+`ref-names-0357696e-r1/r2/r3`: three same-commit cold repeats of the branch
+head `0357696e` (the code commit; later commits are data and docs only), on
+scratch bases, with all four pairs, run one at a time and alone under
+`/work/heavy.lock`. Names mode reads the full prebuilt index
+`cb64c1f5…`.
+
+**Status: every gate clean on all three.**
+
+- 12 of 12 pairs exit 0, with 0 provider errors and `cache +0`.
+- All 12 boot gates pass (pinned `claude-opus-4-1`).
+- Warm self-hops are byte-identical with 0 cache writes.
+- The cold self-hop reads 8 lines on all three runs (the off range is 2–184).
+- `pipeline.json` records `namingMode: names` and the index, and every
+  manifest's `resolved.library.matching` is `names`.
+
+**novel / realLn TOTAL: 4,188 / 416,377 on all three — byte-equal to the
+default references** (and to every reference before them).
+
+Per surface, against the default-mode references `ref-scratch-0f338ffa-r1..r3`
+(the exp170 split-scored copies). Ranges are min–max over the three repeats:
+
+| KPI                           | off (0f338ffa r1–r3)        | **names (0357696e r1–r3)**  | off band   | **names band** |
+| ----------------------------- | --------------------------- | --------------------------- | ---------- | -------------- |
+| novel / realLn                | 4,188 / 416,377             | **4,188 / 416,377 (=)**     | 0 / 0      | **0 / 0**      |
+| treeLn                        | 147,218–147,234             | 144,651–146,767             | 16         | 2,116          |
+| cleanReal                     | 85,567–85,641               | 83,959–85,001               | 74         | 1,042          |
+| noise (stmts)                 | 2,732–2,749                 | 2,740–3,137                 | 17         | 397            |
+| noiseLn                       | 47,593–48,969               | 49,830–65,539               | 1,376      | 15,709         |
+| reloc                         | 1,385–1,420                 | 1,368–1,385                 | 35         | 17             |
+| newName                       | 3,586–3,599                 | 3,611–3,645                 | 13         | 34             |
+| mints                         | 340–373                     | 211–233                     | 33         | 22             |
+| vendorLn                      | 3,524–3,579                 | 1,579–1,587                 | 55         | 8              |
+| vendorReal                    | 1,302–1,334                 | 10,832–10,928               | 32         | 96             |
+| **app:** treeLn               | 147,218–147,234             | 144,515–146,631             | 16         | 2,116          |
+| app: novel / realLn           | 4,188 / 416,377             | 4,169 / 415,935             | 0          | 0              |
+| app: noise / noiseLn          | 2,732–2,749 / 47,593–48,969 | 2,696–3,093 / 49,309–65,027 | 17 / 1,376 | 397 / 15,718   |
+| app: mints                    | 338–372                     | 197–222                     | 34         | 25             |
+| app: newName / reloc          | 3,586–3,599 / 1,385–1,420   | 3,583–3,615 / 1,301–1,323   | 13 / 35    | 32 / 22        |
+| **vendor:** treeLn            | 4,826–4,913                 | 12,275–12,371               | 87         | 96             |
+| vendor: vendorLn / vendorReal | 3,524–3,579 / 1,302–1,334   | 1,579–1,587 / 10,696–10,792 | 55 / 32    | 8 / 96         |
+| vendor: novel / realLn        | 0 / 0                       | 19 / 442                    | 0          | 0              |
+| vendor: noise / mints         | 0 / 0                       | 41–42 / 4–10                | 0          | 1 / 6          |
+| **cross:** treeLn (stmts)     | 0                           | 272 (14)                    | 0          | 0              |
+
+How to read it:
+
+- **The hold columns hold.** The totals are byte-equal. 19 novel statements
+  (442 realLn) move out of the app view into `vendor/`. These are the
+  ESM-inlined library modules names mode claims (`zod-to-json-schema`,
+  `@anthropic-ai/claude-agent-sdk`, `sandbox-runtime`, `lodash`,
+  `auto-bind`; exp170 already showed this on one hop). Their `app:` bands are
+  0, so an app-only reader sees those 442 lines of real change disappear.
+  Whether that is right depends on whether the claims are right.
+- **What names mode buys:** mints −130 (app −140), vendorLn −1,945 (−55%),
+  and app reloc down about 80.
+- **What it costs: vendorReal +9,500, almost all on 2.1.197→198** (8,971 of
+  10,832 in r1; off: 1,135). There the default scorer re-pairs 61 renamed
+  highlight.js/prism language files; names mode pairs 0. This is defect 2
+  (vendor naming defeats the content carry) at eval scale: a CHANGED vendor
+  module is re-named fresh by the model, so the whole file reads as real
+  change. It is the first lever to pull.
+- **Names mode is much noisier between cold repeats.** The treeLn band is
+  ±2,116 (off ±16), the noise band ±397 (off ±17) and the noiseLn band
+  ±15,709 (off ±1,376). It is ONE pair and app-side: on 2.1.197→198, r1 and
+  r3 churn ~915 app statements / ~22,000 noise lines, while r2 churns 518 /
+  7,046, which is off mode's level (521–523 / 6,880–8,011). The other three
+  pairs agree within the off bands. A cold names-mode label can land in
+  either mode on that pair. Until that bimodality is explained, names-mode
+  noise deltas under ~15,000 noiseLn / ~400 statements are unresolvable
+  (rule 11). Judge names-mode changes on `novel`/`realLn` (band 0), the vendor
+  columns (tight) and the per-pair breakdown, not on total noise.
+
+Bands are written to `noise-bands.json` under `byMode.names` (the top-level
+off-mode bands are byte-identical to before), and the cold self-hop range
+(8–8, version 2.1.216) to `self-hop-reference.json` under `byMode.names`.
+
+## Proposed CLAUDE.md text (for Andrew — an agent may not edit CLAUDE.md)
+
+Replace the "Which committed reference to use" lead bullet and add the
+naming-mode and app/vendor guidance:
+
+> **Names mode is the DEFAULT since exp171 (2026-10-31).** `--library-matching
+names` places library code the index recognises under `vendor/<package>/`
+> and restores its names; `--library-matching off` is the opt-out. A run with
+> no `--library-index` finds or BUILDS an index in `.humanify/library-index`
+> under the output dir, printing the estimated disk and time first. Claude
+> Code reveals no npm package name, so for it the run-time build is inert and
+> names mode needs the prebuilt full index. `npm run eval` always hands
+> names launches the prebuilt index (pairs.json `libraryIndex`,
+> `--library-index`), never a run-time build.
+>
+> **Every label has a NAMING MODE** (`pipeline.json` `namingMode`; labels
+> before exp171 with no record are `off`). The leaderboard REFUSES mixed
+> modes unless `--force-mixed`, exactly as for base modes. Score an
+> off-mode label with `--pipeline-set library.matching=off`. Neutrality
+> across the flip must run in off mode (a pre-exp171 baseline defaults to
+> off).
+>
+> - **`ref-names-0357696e-r1/r2/r3` — the current valid NAMES-mode cold
+>   reference** (2026-10-31, scratch bases, full prebuilt index `cb64c1f5…`).
+>   All 12 pairs exit 0, boots OK, warm self-hops byte-identical, cold
+>   self-hop 8/8/8. novel 4,188 / realLn 416,377 (byte-equal to every
+>   reference). They set `noise-bands.json` `byMode.names` and the names
+>   self-hop range. **Names-mode noise bands are wide: noiseLn ±15,709,
+>   noise ±397, treeLn ±2,116**, driven by one bimodal pair (2.1.197→198,
+>   app side). Judge names-mode changes on novel/realLn (band 0) and the
+>   vendor columns, not on total noise. vendorReal reads ~10,850 (off:
+>   ~1,320). That is the known vendor-naming/content-carry defect, not
+>   dependency change.
+> - **`ref-scratch-0f338ffa-r1/r2/r3` — the OFF-mode reference** (the
+>   default before exp171). Its bands are the top-level `noise-bands.json`.
+>   Compare only against off-mode labels.
+>
+> **App vs vendor (exp170).** Every change-vs-noise KPI is reported for app
+> code (`app:`), vendor code (`vendor:`) and code that crossed the boundary
+> (`cross:`); app + vendor + cross = the total. A reader who ignores
+> `vendor/` reads the `app:` table alone. Two cautions:
+>
+> - In names mode, real change can MOVE into `vendor/` (19 novel statements
+>   / 442 realLn on the reference: claimed ESM-inlined library modules), so
+>   `app:novel`/`app:realLn` sit below the totals. The totals stay the hold
+>   columns.
+> - `cross:` lists every statement that moved between `src/` and `vendor/`.
+>   Read the listed moves. A correct one-time move is not a regression, and a
+>   wrong claim shows up there first.
+>
+> In off mode the `vendor:` statement columns and every `cross:` column are
+> 0 by construction, so their zero bands there say nothing about names mode.
 
 ## What this does not look at (rule 8)
 

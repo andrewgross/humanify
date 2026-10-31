@@ -57,5 +57,64 @@
     "cross:relocSt": 0,
     "cross:reloc": 0,
     "mints:unattributed": 1
+  },
+  "byMode": {
+    "names": {
+      "provenance": {
+        "provisional": false,
+        "sources": ["measured from 3 same-commit repeats"],
+        "commit": "0357696ed",
+        "labels": [
+          "ref-names-0357696e-r1",
+          "ref-names-0357696e-r2",
+          "ref-names-0357696e-r3"
+        ]
+      },
+      "bands": {
+        "clean": 397,
+        "noise": 397,
+        "novel": 0,
+        "noiseLn": 15709,
+        "realLn": 0,
+        "reloc": 17,
+        "relocSt": 2,
+        "newName": 34,
+        "mints": 22,
+        "treeLn": 2116,
+        "cleanLn": 2120,
+        "cleanReal": 1042,
+        "reorderLn": 0,
+        "vendorLn": 8,
+        "vendorReal": 96,
+        "app:treeLn": 2116,
+        "app:cleanLn": 2120,
+        "app:cleanReal": 1039,
+        "app:reorderLn": 0,
+        "app:noise": 397,
+        "app:noiseLn": 15718,
+        "app:novel": 0,
+        "app:realLn": 0,
+        "app:reloc": 22,
+        "app:relocSt": 2,
+        "app:newName": 32,
+        "app:mints": 25,
+        "vendor:treeLn": 96,
+        "vendor:vendorLn": 8,
+        "vendor:vendorReal": 96,
+        "vendor:noise": 1,
+        "vendor:noiseLn": 9,
+        "vendor:novel": 0,
+        "vendor:realLn": 0,
+        "vendor:reloc": 1,
+        "vendor:relocSt": 0,
+        "vendor:newName": 2,
+        "vendor:mints": 6,
+        "cross:treeLn": 0,
+        "cross:stmts": 0,
+        "cross:relocSt": 0,
+        "cross:reloc": 4,
+        "mints:unattributed": 9
+      }
+    }
   }
 }

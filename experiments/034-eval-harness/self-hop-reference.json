@@ -10,5 +10,21 @@
     "ref-scratch-0f338ffa-r1": "0f338ffa",
     "ref-scratch-0f338ffa-r2": "0f338ffa",
     "ref-scratch-0f338ffa-r3": "0f338ffa"
+  },
+  "byMode": {
+    "names": {
+      "_comment": "The NAMES-mode cold self-hop range (exp171, 2026-10-31): names became the binary default, and names mode re-rolls differently from off. Three same-commit cold repeats of 0357696e on scratch bases, the same runs that set noise-bands.json byMode.names. Judged only for a names-mode label (invariants.ts loadSelfHopReference(\"names\")).",
+      "version": "2.1.216",
+      "coldDiffLines": {
+        "ref-names-0357696e-r1": 8,
+        "ref-names-0357696e-r2": 8,
+        "ref-names-0357696e-r3": 8
+      },
+      "commits": {
+        "ref-names-0357696e-r1": "0357696e",
+        "ref-names-0357696e-r2": "0357696e",
+        "ref-names-0357696e-r3": "0357696e"
+      }
+    }
   }
 }
