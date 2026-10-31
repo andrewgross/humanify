@@ -89,6 +89,11 @@ pub struct SplitOptions<'a, 'n> {
     /// here. Non-empty with a non-fossil regime is refused (below):
     /// the layout's model exclusion assumed the module split.
     pub library: &'a [(usize, String)],
+    /// The factories the unpack kept in the app as the app's OWN CommonJS
+    /// modules (exp172, `modules::app_factories`), by RAW name: resolved
+    /// against the FRESH text like the capture records, their statements
+    /// are grouped with the app instead of vendored.
+    pub app_modules: &'a [String],
 }
 
 /// Where the split's ≥50 wrapper-binding gate is read. Being a bundled
@@ -324,6 +329,13 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             module_wrappers: options.module_wrappers,
             module_ends,
             library: options.library,
+            app_factories: app_factory_statements(
+                options.app_modules,
+                options.vendor_fresh,
+                input.body.len(),
+                original_binding_count,
+                layout,
+            )?,
         },
         options.prior,
         trail,
@@ -536,6 +548,42 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     outcome.ledger = JsValue::Object(ledger);
     outcome.facts = facts;
     Ok(outcome)
+}
+
+/// The statements (body indexes) holding the factories the unpack kept as
+/// the app's own modules (exp172), resolved like the capture records: the
+/// FRESH text still declares the RAW names and aligns statement-for-
+/// statement with the shipped one. A statement counts only when every
+/// name it declares is an app module's (a statement that also declares a
+/// kept library factory stays vendored). Nothing to resolve, or no fresh
+/// text: none — the factories are vendored as before, never lost.
+fn app_factory_statements(
+    app_modules: &[String],
+    fresh: Option<&str>,
+    body_len: usize,
+    original_binding_count: Option<usize>,
+    layout: crate::toolchain::BundleLayout,
+) -> Result<std::collections::HashSet<usize>, String> {
+    let (false, Some(fresh)) = (app_modules.is_empty(), fresh) else {
+        return Ok(std::collections::HashSet::new());
+    };
+    let fresh_body = split_input_with_original_bundle(fresh, original_binding_count, layout)?.body;
+    if fresh_body.len() != body_len {
+        return Err(format!(
+            "app modules: the fresh text has {} wrapper statements, the shipped code has {body_len} — they no longer align",
+            fresh_body.len()
+        ));
+    }
+    let wanted: std::collections::HashSet<&str> = app_modules.iter().map(String::as_str).collect();
+    Ok(fresh_body
+        .iter()
+        .enumerate()
+        .filter(|(_, stmt)| {
+            let names = fossil_declared_names(stmt);
+            !names.is_empty() && names.iter().all(|n| wanted.contains(n.as_str()))
+        })
+        .map(|(si, _)| si)
+        .collect())
 }
 
 /// Resolve the unpack's vendor capture records (finding #60) against the

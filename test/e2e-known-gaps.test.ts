@@ -14,6 +14,7 @@ import {
   judgeKnownGap,
   KNOWN_GAPS,
   type KnownGap,
+  placementFailures,
   staleKnownGaps,
   staysFailures
 } from "../scripts/e2e.js";
@@ -158,6 +159,37 @@ describe("assetFailures", () => {
         ["src/_assets/a.js", "src/index.js"]
       ),
       ["unpack: no app text asset src/_assets/b.js"]
+    );
+  });
+});
+
+describe("placementFailures", () => {
+  const src = new Map([["src/cli.js", "APP-MARK"]]);
+  const vendor = new Map([["vendor/tinylib/index.js", "LIB-MARK"]]);
+
+  it("passes app markers in src/ and library markers in vendor/", () => {
+    assert.deepEqual(
+      placementFailures(
+        { src: ["APP-MARK"], vendor: ["LIB-MARK"] },
+        src,
+        vendor
+      ),
+      []
+    );
+  });
+
+  it("names a marker on the wrong side, or on neither", () => {
+    assert.deepEqual(
+      placementFailures(
+        { src: ["LIB-MARK", "GONE"], vendor: ["APP-MARK"] },
+        src,
+        vendor
+      ),
+      [
+        'placement: "LIB-MARK" is in vendor/tinylib/index.js, expected src/',
+        'placement: no file holds "GONE"',
+        'placement: "APP-MARK" is in src/cli.js, expected vendor/'
+      ]
     );
   });
 });

@@ -67,6 +67,9 @@ pub struct SplitStageInput<'a> {
     /// the vendor bridge's (finding #60) raw-name anchor. None when no
     /// naming outcome exists.
     pub fresh: Option<&'a str>,
+    /// The factories the unpack kept as the app's own CommonJS modules
+    /// (exp172), by raw name — the split groups them with the app.
+    pub app_modules: &'a [String],
     /// The run's ORIGINAL input bundle — the text the unpack stage saw,
     /// before its vendor extraction spliced the CJS factories out. The
     /// split's ≥50 wrapper-binding gate reads the INPUT (being a bundled
@@ -395,6 +398,7 @@ fn split_before_commit(
             layout: input.toolchain.layout.piece,
             module_wrappers: input.toolchain.module_wrappers.piece,
             library: input.library,
+            app_modules: input.app_modules,
         },
     )?;
     renderer.message(&format!(

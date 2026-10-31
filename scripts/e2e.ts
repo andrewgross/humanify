@@ -158,7 +158,10 @@ interface FixtureConfig {
  *     #90: a module that is only app text is an app asset, not vendored);
  *   - `stays` — marker strings whose vendor/ file must keep the SAME path
  *     from the fresh tree to the prior leg's (finding #90: a vendor module
- *     whose string changed length is carried by content, file and all).
+ *     whose string changed length is carried by content, file and all);
+ *   - `placement` — marker strings that must sit in the fresh tree's src/
+ *     (`src`) or vendor/ (`vendor`) and NOT on the other side (exp172: a
+ *     CommonJS app's own modules are app code, its library is vendored).
  */
 interface FixtureExpectations {
   bundler?: string;
@@ -168,6 +171,13 @@ interface FixtureExpectations {
   apart?: [string, string][];
   assets?: string[];
   stays?: string[];
+  placement?: Placement;
+}
+
+/** exp172's `placement` expectation: markers per side of the tree. */
+interface Placement {
+  src?: string[];
+  vendor?: string[];
 }
 
 /** What the fresh run did, as the expectations read it. */
@@ -322,6 +332,34 @@ export function assetFailures(assets: string[], files: string[]): string[] {
   return assets
     .filter((a) => !files.includes(a))
     .map((a) => `unpack: no app text asset ${a}`);
+}
+
+/**
+ * Each `placement` marker not found on its side: `src` and `vendor` map
+ * each side's files to their text.
+ */
+export function placementFailures(
+  placement: Placement,
+  src: Map<string, string>,
+  vendor: Map<string, string>
+): string[] {
+  const holder = (files: Map<string, string>, marker: string) =>
+    [...files].find(([, text]) => text.includes(marker))?.[0];
+  const out: string[] = [];
+  const check = (markers: string[], want: "src/" | "vendor/") => {
+    const [home, away] = want === "src/" ? [src, vendor] : [vendor, src];
+    for (const m of markers) {
+      const wrong = holder(away, m);
+      if (wrong !== undefined) {
+        out.push(`placement: "${m}" is in ${wrong}, expected ${want}`);
+      } else if (holder(home, m) === undefined) {
+        out.push(`placement: no file holds "${m}"`);
+      }
+    }
+  };
+  check(placement.src ?? [], "src/");
+  check(placement.vendor ?? [], "vendor/");
+  return out;
 }
 
 /**
@@ -723,6 +761,11 @@ async function checkPair(
       expect?.stays ?? [],
       dirTexts(fresh, "vendor"),
       dirTexts(path.join(root, "prior-a"), "vendor")
+    ),
+    ...placementFailures(
+      expect?.placement ?? {},
+      appTexts(fresh),
+      dirTexts(fresh, "vendor")
     )
   ];
   if (missed.length > 0) fail(`${label}: ${missed.join("; ")}`);

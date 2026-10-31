@@ -1355,10 +1355,14 @@ fn factory_callee(stmt: &Value) -> Option<(String, String, usize)> {
 /// in it goes to `vendor/`. None: no bundled modules, nothing vendored —
 /// the grouping no longer guesses a helper by tallying the most-used
 /// higher-order callee (which took an app's own `forwardRef`/`memo`).
+/// `app_factories`: the factory statements the unpack kept as the app's
+/// OWN modules (exp172, `modules::app_factories`) — grouped with the app,
+/// never vendored.
 pub fn assign_clustered(
     body: &[Value],
     code: Option<(&str, &[(u32, u32)])>,
     module_helper: Option<&str>,
+    app_factories: &HashSet<usize>,
     sizing: ClusterSizing,
     module_ends: &[usize],
     namers: ClusterNamers,
@@ -1368,7 +1372,10 @@ pub fn assign_clustered(
     let mut assignment = vec![String::new(); body.len()];
     let mut app_idx: Vec<usize> = Vec::new();
     for (i, stmt) in body.iter().enumerate() {
-        let fc = helper.as_ref().and_then(|_| factory_callee(stmt));
+        let fc = helper
+            .as_ref()
+            .filter(|_| !app_factories.contains(&i))
+            .and_then(|_| factory_callee(stmt));
         match fc {
             Some((binding, callee, _)) if Some(&callee) == helper.as_ref() => {
                 let stem = match code {

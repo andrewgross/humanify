@@ -309,6 +309,10 @@ pub struct BunUnpackOutcome {
     /// The vendored bodies' restoration (exp160 Site B), when the capture
     /// found answers — the totals for the run's restored-identifier line.
     pub body_restoration: Option<crate::naming::restore::BodyRestorationReport>,
+    /// The CommonJS factories kept in the app as the app's own modules
+    /// (exp172, `modules::app_factories`), in bundle order. Empty when
+    /// none is.
+    pub app_modules: Vec<AppModuleRow>,
     /// The names mode's claimed placement groups (library-names plan step
     /// 4, exp156), already converted to the naming era's wrapper-body
     /// ordinals — the CLI threads them into the naming stage, whose
@@ -317,6 +321,17 @@ pub struct BunUnpackOutcome {
     /// The raw-to-era bridge (exp166) — names mode only (None whenever no
     /// claimed region was asked for), so every other run is inert.
     pub era_bridge: Option<crate::naming::module_names::EraBridge>,
+}
+
+/// One factory kept in the app as the app's own module (exp172).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppModuleRow {
+    pub factory_var: String,
+    /// The declarator's raw bundle span.
+    pub start: u32,
+    pub end: u32,
+    pub reason: crate::modules::app_factories::AppReason,
 }
 
 /// What the content carry did: how many modules it could pair, against
@@ -428,6 +443,7 @@ pub fn unpack_bun(
             claimed_module_regions: Vec::new(),
             era_bridge: None,
             body_restoration: None,
+            app_modules: Vec::new(),
         })
     };
 
@@ -465,6 +481,9 @@ pub fn unpack_bun(
         .as_ref()
         .map(|c| c.factories.iter().map(|f| f.span).collect())
         .unwrap_or_default();
+    // exp172: the app-module decision's reference graph and entry, read
+    // on the whole classification before the scope plan's retain.
+    let mut app_graph = AppGraph::default();
     if let Some(c) = classification.as_mut() {
         let plan = scope::plan_bundle_scope_refs(
             code,
@@ -474,6 +493,7 @@ pub fn unpack_bun(
             require_var.as_deref(),
             options.interop,
         );
+        app_graph = AppGraph::read(&ingest, c, &plan, options.layout, require_var.as_deref());
         kept_in_app = plan.kept.len();
         helper_edits = plan.helper_edits;
         let mut index = 0;
@@ -491,6 +511,7 @@ pub fn unpack_bun(
     let mut app_declarations = Vec::new();
     let mut library_discovery = None;
     let mut claimed_module_regions = Vec::new();
+    let mut app_modules: Vec<AppModuleRow> = Vec::new();
     // What the bundler kept about the whole bundle (P17), read once.
     let bundle_facts = options.module_identity.bundle_facts(code);
     if let (Some(c), Some(planner)) = (classification.as_mut(), planner.as_ref()) {
@@ -513,6 +534,20 @@ pub fn unpack_bun(
             library_discovery.as_ref(),
             require_var.as_deref(),
         )?;
+        // exp172: the app's own CommonJS modules stay in the app, decided
+        // before any name is chosen.
+        app_modules = keep_app_factories(
+            c,
+            &mut captures_by_module,
+            &app_graph,
+            &ingest,
+            planner,
+            library_discovery.as_ref().filter(|_| {
+                options
+                    .library_discovery
+                    .is_some_and(|r| r.module_answers.is_some())
+            }),
+        );
         if let Some(entries) = &prior.stale_era {
             // A stale-era prior (TS or an older hashVersion): re-key its
             // names and order by CONTENT onto this run's structural hashes
@@ -800,7 +835,203 @@ pub fn unpack_bun(
         claimed_module_regions,
         era_bridge,
         body_restoration,
+        app_modules,
     })
+}
+
+/// What the app-module decision (exp172) reads from the whole
+/// classification, before the scope plan's retain: the reference graph,
+/// the factories the scope plan kept, and the entry factories when the
+/// app text is only glue.
+#[derive(Default)]
+struct AppGraph {
+    edges: Vec<HashSet<usize>>,
+    kept: HashSet<usize>,
+    entries: Option<Vec<usize>>,
+}
+
+impl AppGraph {
+    fn read(
+        ingest: &Ingest<'_>,
+        c: &BunModuleClassification,
+        plan: &scope::ScopePlan,
+        layout: crate::toolchain::BundleLayout,
+        require_var: Option<&str>,
+    ) -> AppGraph {
+        // A body reaching any app-scope binding means the app text holds
+        // more than glue: no entry.
+        let entries = (plan.kept.is_empty() && plan.bridges.is_empty())
+            .then(|| entry_factories_of(ingest, c, layout, require_var))
+            .flatten();
+        AppGraph {
+            edges: plan.edges.clone(),
+            kept: plan.kept.clone(),
+            entries,
+        }
+    }
+}
+
+/// The factories the app text runs (`modules::app_factories::entry_factories`),
+/// classification indices.
+fn entry_factories_of(
+    ingest: &Ingest<'_>,
+    c: &BunModuleClassification,
+    layout: crate::toolchain::BundleLayout,
+    require_var: Option<&str>,
+) -> Option<Vec<usize>> {
+    let semantic = ingest.semantic();
+    let scoping = semantic.scoping();
+    let nodes = semantic.nodes();
+    let by_span: HashMap<(u32, u32), usize> = c
+        .factories
+        .iter()
+        .enumerate()
+        .map(|(i, f)| ((f.span.start, f.span.end), i))
+        .collect();
+    let wrapper = layout.find_wrapper(ingest.program, semantic);
+    let statements = crate::cut::container_statements(
+        ingest.program,
+        semantic,
+        wrapper.as_ref().map(|w| w.body_span),
+    );
+    crate::modules::app_factories::entry_factories(
+        statements.iter(),
+        |span| by_span.contains_key(&(span.start, span.end)),
+        |id| {
+            let symbol = scoping.get_reference(id.reference_id()).symbol_id()?;
+            let AstKind::VariableDeclarator(d) = nodes.kind(scoping.symbol_declaration(symbol))
+            else {
+                return None;
+            };
+            by_span.get(&(d.span.start, d.span.end)).copied()
+        },
+        require_var,
+    )
+}
+
+/// The package a names-mode placement path files a module under
+/// (`vendor/<package>/…`, `vendor/@scope/name/…`).
+fn package_of_vendor_path(path: &str) -> Option<String> {
+    let mut parts = path.strip_prefix(VENDOR_DIR)?.strip_prefix('/')?.split('/');
+    let first = parts.next()?;
+    let package = if first.starts_with('@') {
+        format!("{first}/{}", parts.next()?)
+    } else {
+        first.to_string()
+    };
+    // A file directly under vendor/ names no package.
+    parts.next().map(|_| package)
+}
+
+/// The app-module decision (exp172, `modules::app_factories`) over the
+/// RETAINED factories: every accepted one is removed from the
+/// classification (it stays in the app text, which the naming, the split
+/// and the placement treat as app code) together with its capture
+/// records. `claims`: the index's claim rows, names mode only.
+fn keep_app_factories(
+    c: &mut BunModuleClassification,
+    captures_by_module: &mut Vec<Vec<ManifestCapture>>,
+    graph: &AppGraph,
+    ingest: &Ingest<'_>,
+    planner: &IdentifierPlanner,
+    claims: Option<&crate::libdetect::discovery::DiscoveryReport>,
+) -> Vec<AppModuleRow> {
+    use crate::modules::app_factories::{FactoryEvidence, decide};
+    // Retained position ↔ classification index (the retain kept order).
+    let pre_of_post: Vec<usize> = (0..c.factories.len() + graph.kept.len())
+        .filter(|i| !graph.kept.contains(i))
+        .collect();
+    let mut post_of_pre: HashMap<usize, usize> = HashMap::new();
+    for (post, &pre) in pre_of_post.iter().enumerate() {
+        post_of_pre.insert(pre, post);
+    }
+    let mut rows: Vec<&crate::libdetect::discovery::ClaimRow> = claims
+        .map(|r| r.claims.iter().collect())
+        .unwrap_or_default();
+    rows.sort_by_key(|row| row.start);
+    let evidence: Vec<FactoryEvidence> = c
+        .factories
+        .iter()
+        .enumerate()
+        .map(|(post, f)| {
+            let mut packages: std::collections::BTreeSet<String> =
+                std::collections::BTreeSet::new();
+            let first = rows.partition_point(|row| row.start < f.span.start);
+            for row in rows[first..]
+                .iter()
+                .take_while(|row| row.start < f.span.end)
+            {
+                if row.end <= f.span.end {
+                    packages.insert(row.package.clone());
+                }
+            }
+            if let Some(p) = f.index_path.as_deref().and_then(package_of_vendor_path) {
+                packages.insert(p);
+            }
+            let declared = f.identity.as_ref().and_then(|d| d.package.clone());
+            packages.extend(declared.clone());
+            let manifest_of = f
+                .identity
+                .as_ref()
+                .filter(|d| d.member.as_deref() == Some("package.json"))
+                .and(declared);
+            let requires = pre_of_post
+                .get(post)
+                .and_then(|&pre| graph.edges.get(pre))
+                .map(|deps| {
+                    let mut deps: Vec<usize> = deps
+                        .iter()
+                        .filter_map(|pre| post_of_pre.get(pre).copied())
+                        .collect();
+                    deps.sort_unstable();
+                    deps
+                })
+                .unwrap_or_default();
+            FactoryEvidence {
+                packages,
+                manifest_of,
+                source_path: f.source_path.clone(),
+                excluded: f.name_source == Some(NameSource::Asset)
+                    || planner.references(ingest, f).is_none(),
+                requires,
+            }
+        })
+        .collect();
+    let entries: Option<Vec<usize>> = graph.entries.as_ref().map(|e| {
+        e.iter()
+            .filter_map(|pre| post_of_pre.get(pre).copied())
+            .collect()
+    });
+    let decision = decide(&evidence, entries.as_deref());
+    if decision.modules.is_empty() {
+        return Vec::new();
+    }
+    let reasons: HashMap<usize, crate::modules::app_factories::AppReason> =
+        decision.modules.iter().copied().collect();
+    let rows: Vec<AppModuleRow> = decision
+        .modules
+        .iter()
+        .map(|&(i, reason)| {
+            let f = &c.factories[i];
+            AppModuleRow {
+                factory_var: f.factory_var.clone(),
+                start: f.span.start,
+                end: f.span.end,
+                reason,
+            }
+        })
+        .collect();
+    let mut index = 0;
+    c.factories.retain(|_| {
+        index += 1;
+        !reasons.contains_key(&(index - 1))
+    });
+    let mut index = 0;
+    captures_by_module.retain(|_| {
+        index += 1;
+        !reasons.contains_key(&(index - 1))
+    });
+    rows
 }
 
 /// The names-mode block of [`unpack_bun`] (library-names plan step 4,

@@ -2498,3 +2498,44 @@ fn mapped_before(bridge: &crate::naming::module_names::EraBridge, at: u32) -> u3
         .map(|(_, mapped)| mapped.0)
         .expect("a container statement")
 }
+
+/// exp172: a CommonJS app — its entry is a wrapped module the app text
+/// only runs (`module.exports={};main();`), and it reads its own
+/// `package.json`. One library declares itself by banner; `util` is
+/// unattributed.
+const CJS_APP_BUNDLE: &str = concat!(
+    "var h=(e,t)=>()=>(t||e((t={exports:{}}).exports,t),t.exports);\n",
+    "var lib=h((e,t)=>{/*! tinylib v1.0.0 | MIT */t.exports={shout:(s)=>s.toUpperCase()}});\n",
+    "var util=h((e)=>{e.add=(a,b)=>a+b});\n",
+    "var pkg=h((e,t)=>{t.exports={name:\"cli-app\",version:\"1.0.0\",description:\"a cli\",bin:\"cli.js\",license:\"MIT\"}});\n",
+    "var main=h((e,t)=>{var u=util(),l=lib(),p=pkg();console.log(l.shout(p.version+u.add(2,3)))});\n",
+    "module.exports={};main();\n"
+);
+
+#[test]
+fn a_commonjs_apps_entry_and_its_own_package_json_stay_in_the_app() {
+    let t = TempDir::new("cjs-app");
+    let outcome = unpack_bun(CJS_APP_BUNDLE, &t.0, BunUnpackOptions::default()).unwrap();
+    let rows: Vec<(&str, crate::modules::app_factories::AppReason)> = outcome
+        .app_modules
+        .iter()
+        .map(|r| (r.factory_var.as_str(), r.reason))
+        .collect();
+    use crate::modules::app_factories::AppReason;
+    assert_eq!(
+        rows,
+        vec![("pkg", AppReason::OwnPackage), ("main", AppReason::Entry)]
+    );
+    let runtime = fs::read_to_string(t.0.join("runtime.js")).unwrap();
+    assert!(
+        runtime.contains("console.log("),
+        "the entry's body is app text: {runtime}"
+    );
+    assert!(runtime.contains("name:\"cli-app\""), "{runtime}");
+    let entries = factories(&read_manifest(&t.0));
+    assert_eq!(entries.len(), 2, "lib and util stay vendored: {entries:?}");
+    for e in &entries {
+        let body = fs::read_to_string(t.0.join(s(e, "fileName"))).unwrap();
+        assert!(!body.contains("console.log"), "{body}");
+    }
+}

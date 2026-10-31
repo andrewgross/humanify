@@ -13,7 +13,9 @@
 //! A bundler wraps every CJS module in a `var X = HELPER(fn)` factory
 //! that survives minification; factories are essentially guaranteed
 //! third-party, so the rename pipeline skips their bindings/functions and
-//! the split extracts them to vendor/. Classifying them is what makes the
+//! the split extracts them to vendor/ — except an app written in CommonJS,
+//! whose own modules are factories too: [`app_factories`] (exp172) is the
+//! one owner of which factories stay in the app. Classifying them is what makes the
 //! function graph's member set match the TS oracle's (the factory-body
 //! functions are skipped there).
 //!
@@ -41,6 +43,7 @@ use crate::hash::forms::{CanonicalForm, MATCH_KEY};
 use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use identity::readers::{BannerInfo, parse_banner};
 
+pub mod app_factories;
 pub mod helper_shape;
 pub mod identity;
 pub mod inline_modules;

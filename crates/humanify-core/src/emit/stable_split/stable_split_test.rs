@@ -73,6 +73,7 @@ fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
             vendor_fresh: None,
             input_gate: InputGate::TextAtHand,
             library: &[],
+            app_modules: &[],
         },
     )
     .expect("the split runs");
@@ -140,6 +141,7 @@ fn bridge_options<'a>(
         // original-bundle path).
         input_gate: InputGate::TextAtHand,
         library: &[],
+        app_modules: &[],
     }
 }
 
@@ -289,6 +291,7 @@ fn gated_options<'a>(original_bundle: Option<&'a str>) -> SplitOptions<'a, 'a> {
         vendor_fresh: None,
         input_gate: original_bundle.map_or(InputGate::TextAtHand, InputGate::Original),
         library: &[],
+        app_modules: &[],
     }
 }
 
@@ -551,6 +554,7 @@ fn a_moved_library_module_lands_at_its_vendor_path() {
         &code,
         SplitOptions {
             library: &[(1, "vendor/ms/module-1.js".to_string())],
+            app_modules: &[],
             ..offered_options()
         },
     )
@@ -602,6 +606,7 @@ fn a_non_fossil_bundle_with_a_library_layout_fails_loud() {
         &code,
         SplitOptions {
             library: &[(1, "vendor/ms/module-1.js".to_string())],
+            app_modules: &[],
             ..offered_options()
         },
     ) {
@@ -611,5 +616,52 @@ fn a_non_fossil_bundle_with_a_library_layout_fails_loud() {
     assert!(
         err.contains("library placement"),
         "the refusal names the conflict: {err}"
+    );
+}
+
+/// exp172: a wrapper bundle holding a library factory the unpack KEPT in
+/// the app (finding #51's case: vendored by the fresh grouping) and the
+/// app's own CommonJS module (`appMod`), plus app code to clear the gate.
+fn app_factory_bundle(app: &str) -> String {
+    let mut s = String::from("(function () {\n");
+    s.push_str(
+        "  var h = (e, t) => () => (t || e((t = { exports: {} }).exports, t), t.exports);\n",
+    );
+    s.push_str("  var keptLib = h((e, t) => { t.exports = \"LIB-MARK\"; });\n");
+    s.push_str(&format!(
+        "  var {app} = h((e, t) => {{ t.exports = \"APP-MARK\" + keptLib(); }});\n"
+    ));
+    for i in 0..55 {
+        s.push_str(&format!("  var item{i:02} = {i};\n"));
+    }
+    s.push_str(&format!("  console.log({app}());\n}})();\n"));
+    s
+}
+
+#[test]
+fn the_apps_own_factory_statements_are_grouped_with_the_app() {
+    let fresh = app_factory_bundle("appMod");
+    let shipped = app_factory_bundle("appModRenamed");
+    let app_modules = ["appMod".to_string()];
+    let mut options = bridge_options(&[], Some(&fresh));
+    options.app_modules = &app_modules;
+    let outcome = stable_split(&shipped, options).expect("the split runs");
+    let holder = |marker: &str| {
+        outcome
+            .files
+            .iter()
+            .find(|(_, text)| text.contains(marker))
+            .map(|(p, _)| p.clone())
+            .unwrap_or_default()
+    };
+    assert!(
+        holder("LIB-MARK").starts_with("vendor/"),
+        "{}",
+        holder("LIB-MARK")
+    );
+    assert!(
+        holder("APP-MARK").starts_with("src/"),
+        "{}",
+        holder("APP-MARK")
     );
 }

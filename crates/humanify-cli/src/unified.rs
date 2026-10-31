@@ -511,6 +511,11 @@ fn pipeline_body(
         }) = &last
         && let Some(code) = &outcome.code
     {
+        let app_module_vars: Vec<String> = unpacked
+            .app_modules
+            .iter()
+            .map(|r| r.factory_var.clone())
+            .collect();
         let mut split = crate::split_stage::SplitStageInput {
             output_dir: Path::new(out_dir),
             input_file: Path::new(input),
@@ -537,6 +542,8 @@ fn pipeline_body(
             // exp156: the naming stage's layout — which modules the names
             // mode placed at the index's vendor paths.
             library: &outcome.library_layout.moved,
+            // exp172: the app's own CommonJS modules, by raw name.
+            app_modules: &app_module_vars,
         };
         let _ph = phase("split");
         let span = profiler.pipeline_span("split");
@@ -578,6 +585,7 @@ fn pipeline_body(
             post_split: &post_split,
             content_carry: unpacked.content_carry.as_ref(),
             app_declarations: &unpacked.app_declarations,
+            app_modules: &unpacked.app_modules,
             library_discovery: unpacked.library_discovery.as_ref(),
             library: &library,
         };
@@ -739,6 +747,9 @@ struct RunReports<'a> {
     /// Library declarations read in APP code (finding #95): report-only —
     /// byte ranges of the input bundle and what each declares.
     app_declarations: &'a [humanify_core::modules::identity::AppDeclaration],
+    /// The factories kept in the app as its own CommonJS modules (exp172):
+    /// raw spans, factory var and the reason.
+    app_modules: &'a [humanify_core::unpack::bun::AppModuleRow],
     /// Library discovery (exp095): report-only — claimed statements by
     /// rule, round and evidence, the vetoed seeds, library class, the
     /// candidate queue.
@@ -1062,6 +1073,13 @@ impl RunReports<'_> {
             let json = serde_json::to_string(self.app_declarations).expect("serializable");
             with_placement.insert(
                 "appDeclaredLibraries",
+                JsValue::parse(&json).expect("serde_json writes JSON"),
+            );
+        }
+        if !self.app_modules.is_empty() {
+            let json = serde_json::to_string(self.app_modules).expect("serializable");
+            with_placement.insert(
+                "appModules",
                 JsValue::parse(&json).expect("serde_json writes JSON"),
             );
         }
