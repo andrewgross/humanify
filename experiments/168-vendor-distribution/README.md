@@ -13,8 +13,8 @@
   tables; `--compare` builds the comparison). Re-run it on exp166's hop when
   that lands:
   `npx tsx experiments/168-vendor-distribution/vendor_distribution.ts /tmp/eval-work/exp166-names-hop --json out.json`.
-- **Per-run outputs:** `results/*-2.1.216.md`; the comparison:
-  `results/compare-2.1.216.md`.
+- **Per-run outputs:** `tables/*-2.1.216.md`; the comparison:
+  `tables/compare-2.1.216.md`.
 - Harness additions (card-inert): `lib/diff.ts` `changedLineTexts` (the
   changed lines' text from the one owner) and `vendor-churn.ts` `fileRows`
   (the scorer's per-file rows). Both tested; neither changes a card field.
@@ -121,7 +121,7 @@ by fossil tiers (`fossil:unique-signature` mostly, path carried from the
 prior by hash); they are jose (4 files, 2,072 lines) and zod (3 files, 691
 lines) chiefly — the exp164/165 junk.
 
-Per package (top by bytes; full top-25 + long tail in `results/`):
+Per package (top by bytes; full top-25 + long tail in `tables/`):
 highlight.js 18.4%, the vendor root 7.2% (the record), @grpc/grpc-js 6.1%,
 node-forge 5.8%, @opentelemetry/otlp-transformer 4.0%, @mixmark-io/domino
 3.6%, @opentelemetry/sdk-metrics 3.0%, acorn 2.5%, react 2.2%,
@@ -196,7 +196,7 @@ different.
 
 Band = max−min of the same number across the three same-commit references
 (default mode, commit 0f338ffa: it measures run-to-run draw, not the effect of
-a mode change). `~0 (±b)` = inside it. Full table: `results/compare-2.1.216.md`.
+a mode change). `~0 (±b)` = inside it. Full table: `tables/compare-2.1.216.md`.
 
 | metric                                   | names OFF | exp161 names | exp164 names | Δ exp161 | Δ exp164 | band   |
 | ---------------------------------------- | --------- | ------------ | ------------ | -------- | -------- | ------ |
