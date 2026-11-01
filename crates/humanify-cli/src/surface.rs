@@ -126,9 +126,10 @@ pub struct CommandOptions {
         long,
         value_name = "dir|id",
         help = "The library fingerprint index (a directory, or an id under \
-                library.index_store). Without it, names/report use an index found in \
-                the library-index store and fail before any work when it holds none; \
-                refused with off"
+                library.index_store; one with no slice for the bundle's kind fails the \
+                run). Without it, names/report use an index found in the library-index \
+                store for the bundle's kind (its packing tool) and skip library name \
+                matching, with one line, when it holds none; refused with off"
     )]
     pub library_index: Option<String>,
     #[arg(
@@ -142,10 +143,11 @@ pub struct CommandOptions {
     pub library_index_store: Option<String>,
     #[arg(
         long,
-        help = "When the store holds no index for the bundle, build one at run time from \
-                the npm packages the bundle itself reveals (library banners, inlined \
+        help = "When the store holds no index for the bundle's kind, build one at run time \
+                from the npm packages the bundle itself reveals (library banners, inlined \
                 package.json): installs each from the npm registry and bundles it with \
-                Bun, after printing the estimated disk and time (library.index_from_bundle)"
+                Bun, after printing the estimated disk and time; Bun bundles only \
+                (library.index_from_bundle)"
     )]
     pub library_index_from_bundle: bool,
 }

@@ -950,6 +950,7 @@ impl NamingOutcome {
             provider_errors: None,
             // Set by the CLI from the run's Config (its record).
             config: None,
+            library_matching: None,
             prompt_guard: Some(prompt_guard_stats(
                 &self.processor,
                 self.pre_sweep.as_ref(),

@@ -126,13 +126,16 @@ file layout and vendor names carry across versions), `--endpoint`,
 `--model`, `-v`/`-vv`, `--config <file>`, and the library decision
 (`--library-matching names|report|off`, default `names`: library code the
 library index recognises is placed under `vendor/<package>/` and keeps its
-original names. Names mode NEEDS a library index: pass one with
+original names. Names mode needs a library index for the bundle's kind
+(its packing tool — Bun, esbuild, … — as detected): pass one with
 `--library-index <dir>`, or keep one in the library-index store,
 `.humanify/library-index/` in the directory you run from (one `<id>/`
 directory per index, named by the sha256 of its `manifest.json`;
 `--library-index-store <dir>` names another store). With neither, the run
-FAILS before doing any work and says how to build an index (the offline
-builder, `humanify-index build`), how to point to one, and how to opt out.
+prints one line saying no index for that kind was found and how to get one
+(the offline builder, `humanify-index build`), and goes on with library
+name matching skipped. A `--library-index` that has nothing for the
+bundle's kind fails the run. For a Bun bundle,
 `--library-index-from-bundle` instead builds one at run time from the npm
 packages the bundle itself reveals (library banners, inlined
 `package.json`): it installs them from the npm registry and prints the

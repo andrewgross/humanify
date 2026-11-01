@@ -324,6 +324,15 @@ fn pipeline_body(
     // through the joint (a deadline'd channel, never a poll). The scope
     // below must not end before that: `thread::scope` joins the job thread,
     // and the join IS the wait.
+    //
+    // The recipe — and with it the library-index KIND the run needs
+    // (exp175) — is read off the bundle ONCE, here, and handed to both the
+    // machinery and the library load.
+    let recipe = humanify_core::libindex::recipe::detect_recipe(
+        &bundled_code,
+        toolchain.bundler,
+        toolchain.minifier,
+    );
     let machinery = config.library.runs_index_machinery();
     let stop = AtomicBool::new(false);
     let (prior, naming_config, mut dispatch_log, library) = std::thread::scope(|scope| {
@@ -333,8 +342,7 @@ fn pipeline_body(
                 profiler,
                 bundled_code.as_str(),
                 config,
-                toolchain.bundler,
-                toolchain.minifier,
+                &recipe,
                 &stop,
             )
         });
@@ -378,9 +386,8 @@ fn pipeline_body(
                 }
             };
             let library = load_library_index(
-                &bundled_code,
+                &recipe,
                 config,
-                &toolchain,
                 renderer,
                 profiler,
                 index_job,
@@ -421,7 +428,7 @@ fn pipeline_body(
         // wholly claimed factories at the index's vendor paths, and
         // nothing else reads them. The request builder attaches the
         // answers itself (the discover verb builds the same request).
-        (config.library.matching != LibraryMatching::Off && library.inert.is_none())
+        (config.library.matching != LibraryMatching::Off && library.skipped.is_none())
             .then(|| config.library.discovery_request(library.index.as_ref())),
         profiler,
         renderer,
@@ -602,6 +609,7 @@ fn pipeline_body(
                     split_method,
                     failed_calls: &failed_calls,
                     config,
+                    library: &library,
                 },
                 renderer,
             )?;
@@ -789,51 +797,89 @@ struct LibraryLoad {
     index_id: Option<String>,
     recipe_missing: Option<String>,
     /// The machinery's answer (`indexSource` in the library report): set
-    /// only when the run found or built its index at run time (exp154).
+    /// only when the run searched its store (exp154).
     source: Option<crate::runtime_index::IndexSource>,
-    /// No index can serve this bundle (exp171: not Bun-built, or it reveals
-    /// no package): the run goes on as `off` — discovery never runs — and
-    /// this is the notice it printed.
-    inert: Option<String>,
+    /// No index for the bundle's kind and none to build (exp175): the run
+    /// goes on with library name matching skipped, as `off` — discovery
+    /// never runs — and this is the line it printed.
+    skipped: Option<String>,
+    /// The bundle's library-index kind (`DetectedRecipe::kind`).
+    kind: &'static str,
+}
+
+impl LibraryLoad {
+    /// What the library decision came to (exp175), recorded in the stats'
+    /// `libraryMatching` and the library report's `outcome`, so a run that
+    /// skipped library names can never pass for a names run: `used` (an
+    /// index, `indexFrom` explicit or store), `built` (at run time),
+    /// `skipped` (with the line it printed as `why`), or `off`.
+    fn outcome(&self, matching: LibraryMatching) -> serde_json::Value {
+        let built = self.source.as_ref().is_some_and(|s| s.outcome == "built");
+        let (outcome, index_from) = if matching == LibraryMatching::Off {
+            ("off", None)
+        } else if self.skipped.is_some() || self.recipe_missing.is_some() {
+            ("skipped", None)
+        } else if built {
+            ("built", Some("run-time build"))
+        } else if self.source.is_some() {
+            ("used", Some("store"))
+        } else {
+            ("used", Some("explicit"))
+        };
+        serde_json::json!({
+            "matching": serde_json::to_value(matching).expect("serializable"),
+            "outcome": outcome,
+            "kind": self.kind,
+            "indexFrom": index_from,
+            "indexId": if outcome == "skipped" { None } else { self.index_id.clone() },
+            "why": self.skipped.clone().or_else(|| self.recipe_missing.clone()),
+        })
+    }
 }
 
 /// `--library-matching report`: open the index's slice for the recipe the
 /// bundle was built with (`libindex::recipe`: read once off the bundle and
-/// the toolchain; the slice chosen in one place, `choose_slice`). The
-/// index's stamps were checked before any work
+/// the toolchain, in `pipeline_body`; the slice chosen in one place,
+/// `choose_slice`). The index's stamps were checked before any work
 /// (`Config::library_index_problem`); a missing slice is a WARNING, not a
 /// refusal — report changes no output byte, so a run that cannot look up
 /// has lost only its report.
 ///
 /// The index itself comes one of two ways (exp154): as given
 /// (`--library-index <dir|id>` — an explicit index wins, the machinery
-/// stays off), or from the machinery — `index_job` is the handle to the
+/// stays off; one that does not fit the bundle's kind fails a names run
+/// loudly), or from the machinery — `index_job` is the handle to the
 /// store search / run-time build `pipeline_body` started beside the run;
 /// taking its answer here is the joint. A machinery failure fails the run
-/// loudly; a bundle no index can serve (`Inert`, exp171) runs as `off`.
+/// loudly; no index for the kind (`Skipped`, exp175) runs as `off`.
 fn load_library_index(
-    code: &str,
+    recipe: &humanify_core::libindex::recipe::DetectedRecipe,
     config: &Config,
-    toolchain: &Toolchain,
     renderer: &mut dyn ProgressRenderer,
     profiler: &humanify_core::profiling::Profiler,
     index_job: Option<crate::runtime_index::IndexJob>,
     stop: &std::sync::atomic::AtomicBool,
 ) -> Result<LibraryLoad, Crash> {
     use humanify_core::libindex::lookup::LoadError;
+    let kind = recipe.kind;
     // `names` loads the slice too (its placement answers live beside it);
     // only `off` skips the machinery entirely.
     if config.library.matching == LibraryMatching::Off {
-        return Ok(LibraryLoad::default());
+        return Ok(LibraryLoad {
+            kind,
+            ..LibraryLoad::default()
+        });
     }
     let (dir, source) = match index_job {
         Some(job) => match job.join(profiler, stop) {
             crate::runtime_index::JobAnswer::Found(dir, source)
             | crate::runtime_index::JobAnswer::Built(dir, source) => (dir, Some(source)),
-            crate::runtime_index::JobAnswer::Inert(why) => {
-                renderer.message(&why);
+            crate::runtime_index::JobAnswer::Skipped(line, source) => {
+                renderer.message(&line);
                 return Ok(LibraryLoad {
-                    inert: Some(why),
+                    skipped: Some(line),
+                    source: Some(source),
+                    kind,
                     ..LibraryLoad::default()
                 });
             }
@@ -850,32 +896,34 @@ fn load_library_index(
             None,
         ),
     };
-    let recipe =
-        humanify_core::libindex::recipe::detect_recipe(code, toolchain.bundler, toolchain.minifier);
-    let load = match LibraryIndex::load(&dir, &recipe, config.library.lookup.terser_slices) {
+    let load = match LibraryIndex::load(&dir, recipe, config.library.lookup.terser_slices) {
         Ok(index) => LibraryLoad {
             index_id: Some(index.id.clone()),
             index: Some(index),
-            recipe_missing: None,
             source,
-            inert: None,
+            kind,
+            ..LibraryLoad::default()
         },
         Err(LoadError::NoSlice { id, why }) => {
             // A report run goes on with path/banner detection only; a
             // names run has nothing to place WITH, so it refuses, loudly,
             // with the same reason the report would warn about.
             if config.library.matching == LibraryMatching::Names {
-                return Err(Crash(format!("--library-matching names cannot run: {why}")));
+                return Err(Crash(format!(
+                    "--library-matching names cannot run: the index passed with \
+                     --library-index has no slice for {kind} bundles (it was named, so this \
+                     is not skipped) — {why}"
+                )));
             }
             let warning =
                 format!("WARNING: {why} — library matching reports path/banner detection only");
             renderer.message(&warning);
             LibraryLoad {
-                index: None,
                 index_id: Some(id),
                 recipe_missing: Some(warning),
                 source,
-                inert: None,
+                kind,
+                ..LibraryLoad::default()
             }
         }
         Err(LoadError::Unusable(e)) => {
@@ -978,9 +1026,7 @@ impl RunReports<'_> {
             "indexId": self.library.index_id,
             "recipeMissing": self.library.recipe_missing,
         });
-        if let Some(why) = &self.library.inert {
-            doc["inert"] = serde_json::Value::String(why.clone());
-        }
+        doc["outcome"] = self.library.outcome(self.config.library.matching);
         // The machinery's usage trail — only when it ran (the explicit
         // index path records nothing new, exp154).
         if let Some(source) = &self.library.source {
@@ -1553,6 +1599,8 @@ struct RunLevelStats<'a> {
     failed_calls: &'a crate::provider_failures::ProviderFailures,
     /// The run's configuration: the stats file's `config` block.
     config: &'a Config,
+    /// What the library decision came to: the `libraryMatching` block.
+    library: &'a LibraryLoad,
 }
 
 /// `--stats-json` (writeEvalStats): the naming stage's record + the vendor
@@ -1586,6 +1634,12 @@ fn write_stats_json(
     stats.config = Some(
         humanify_model::js::JsValue::parse(&run.config.record().to_string())
             .expect("serde_json writes JSON"),
+    );
+    stats.library_matching = Some(
+        humanify_model::js::JsValue::parse(
+            &run.library.outcome(run.config.library.matching).to_string(),
+        )
+        .expect("serde_json writes JSON"),
     );
     crate::writers::write_eval_stats(Path::new(dest), &stats)
         .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
