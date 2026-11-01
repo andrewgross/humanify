@@ -322,6 +322,16 @@ pub struct DiscoveryOptions {
     /// module's file: they are dropped, and a module left with no seed is
     /// claimed by no one ([`factory_whole`]).
     pub factory_whole_seed: bool,
+    /// The whole-seed rule's cover exception (exp176; 0 = none; reads
+    /// [`Self::factory_whole_seed`]): a bundled CommonJS module of ONE body
+    /// statement (a UMD or IIFE wrapper: the whole file is one call) is
+    /// backed for a family whose index prints cover at least this share of
+    /// that statement's nodes ([`Containment::covers`]: the whole print,
+    /// else the largest non-overlapping function prints), as a whole print
+    /// would back it. Nearly all of the module's code is the family's; a
+    /// shared helper or an inlined copy covers a part. A module of two or
+    /// more statements keeps the rule.
+    pub factory_whole_cover: f64,
     /// The factory banner check (exp132; default off; reads cut factories):
     /// a `/*!` banner seed on a body statement of a bundled CommonJS module
     /// is refused when another family's index prints cover more of that
@@ -360,6 +370,7 @@ impl Default for DiscoveryOptions {
             factory_bodies: false,
             factory_tie_fence: false,
             factory_whole_seed: false,
+            factory_whole_cover: 0.0,
             factory_banner_index: false,
         }
     }
@@ -1185,11 +1196,7 @@ impl<'c> Containment<'c> {
             return None;
         };
         let query = self.module_bytes[u as usize];
-        let specific = |m: u64| {
-            self.rules
-                .specificity
-                .is_none_or(|(f, slack)| m <= f * query + slack)
-        };
+        let specific = |m: u64| self.specific(m, query);
         // The package's smallest module holding `p`, when `p` is a print
         // the lookup reads (held within the specificity bound by at most
         // `max_packages` owners) and the package is one of its owners: a
@@ -1269,6 +1276,14 @@ impl<'c> Containment<'c> {
         })
     }
 
+    /// Does the lookup's specificity rule read an index module of
+    /// `module_bytes` for a query unit in a module of `query` bytes?
+    fn specific(&self, module_bytes: u64, query: u64) -> bool {
+        self.rules
+            .specificity
+            .is_none_or(|(f, slack)| module_bytes <= f * query + slack)
+    }
+
     /// Does `package`'s family hold unit `u`'s WHOLE print (at or over the
     /// row floor, in a module the lookup's specificity rule reads; however
     /// many other packages hold it too)?
@@ -1280,13 +1295,11 @@ impl<'c> Containment<'c> {
         use crate::matching::store::ReferenceStore;
         let query = self.module_bytes[u as usize];
         prints.whole.nodes >= UNIT_ROW_MIN_NODES
-            && self.index.candidates(&prints.whole.hash).iter().any(|h| {
-                self.owner_is(h.owner, package)
-                    && self
-                        .rules
-                        .specificity
-                        .is_none_or(|(f, slack)| h.module_bytes <= f * query + slack)
-            })
+            && self
+                .index
+                .candidates(&prints.whole.hash)
+                .iter()
+                .any(|h| self.owner_is(h.owner, package) && self.specific(h.module_bytes, query))
     }
 
     /// Does the index contradict unit `u` being `package`'s? (type doc)
@@ -1406,6 +1419,38 @@ impl<'c> Containment<'c> {
             },
         );
         Some((cover, prints.whole.nodes))
+    }
+
+    /// The share of unit `u`'s nodes `package`'s family's index prints cover
+    /// ([`family_cover`] at the row floor: the whole print, else the largest
+    /// non-overlapping function prints), counting only prints the family
+    /// holds in a module the lookup's specificity rule reads — the filter
+    /// [`Self::whole_held`] applies: code the family holds only inside a far
+    /// bigger file (a carrier's bundle) is not its file. 0 for a unit with
+    /// no prints.
+    fn covered_share(&self, u: u32, package: &str) -> f64 {
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        use crate::matching::store::ReferenceStore;
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return 0.0;
+        };
+        let query = self.module_bytes[u as usize];
+        let cover = family_cover(
+            &prints.whole,
+            &prints.functions,
+            UNIT_ROW_MIN_NODES,
+            |hash| {
+                let held = self.index.candidates(hash).iter().any(|h| {
+                    self.owner_is(h.owner, package) && self.specific(h.module_bytes, query)
+                });
+                if held {
+                    BTreeSet::from([OWN])
+                } else {
+                    BTreeSet::new()
+                }
+            },
+        );
+        f64::from(cover.get(OWN).copied().unwrap_or(0)) / f64::from(prints.whole.nodes.max(1))
     }
 
     /// Does another family's evidence outweigh `package`'s family's on unit
@@ -1889,7 +1934,14 @@ fn presence(
         factory_ties(&mut keep, graph, containment, &mut fenced);
     }
     if options.factory_whole_seed {
-        factory_whole(&mut keep, &keys, graph, containment, &mut fenced);
+        factory_whole(
+            &mut keep,
+            &keys,
+            graph,
+            containment,
+            options.factory_whole_cover,
+            &mut fenced,
+        );
     }
     let mut out: Vec<Seed> = keep.into_iter().flatten().collect();
     out.extend(fenced.into_iter().map(|unit| Seed {
@@ -2134,19 +2186,30 @@ fn factory_banners(
 /// [`DiscoveryOptions::factory_whole_seed`] over the kept seeds (see
 /// [`presence`]): per cut factory and package family, the family's seeds
 /// there are kept only when one of them is a declared or banner seed or an
-/// index seed whose whole print the family holds; every other body statement
+/// index seed whose whole print the family holds — or, in a module of one
+/// body statement, whose prints cover at least `cover` of it
+/// ([`DiscoveryOptions::factory_whole_cover`]); every other body statement
 /// of a factory that lost seeds goes to `fenced`.
 fn factory_whole(
     keep: &mut [Option<Seed>],
     keys: &[usize],
     graph: &ReferenceGraph,
     containment: &Containment<'_>,
+    cover: f64,
     fenced: &mut Vec<u32>,
 ) {
     let module_of = |u: u32| match graph.units[u as usize].kind {
         UnitKind::FactoryBody { module } => Some(module),
         _ => None,
     };
+    let mut statements: BTreeMap<u32, u32> = BTreeMap::new();
+    if cover > 0.0 {
+        for u in 0..graph.units.len() as u32 {
+            if let Some(m) = module_of(u) {
+                *statements.entry(m).or_default() += 1;
+            }
+        }
+    }
     let mut backed: BTreeSet<(u32, usize)> = BTreeSet::new();
     for (s, &k) in keep.iter().zip(keys) {
         let Some(s) = s else {
@@ -2155,7 +2218,10 @@ fn factory_whole(
         let Some(m) = module_of(s.unit) else {
             continue;
         };
-        if !s.evidence.is_index() || containment.whole_held(s.unit, &s.package) {
+        let covered = || {
+            statements.get(&m) == Some(&1) && containment.covered_share(s.unit, &s.package) >= cover
+        };
+        if !s.evidence.is_index() || containment.whole_held(s.unit, &s.package) || covered() {
             backed.insert((m, k));
         }
     }

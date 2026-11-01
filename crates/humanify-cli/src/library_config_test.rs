@@ -633,3 +633,23 @@ fn the_exp132_factory_keys_default_on_and_turn_off() {
             && !o.factory_whole_seed
     );
 }
+
+/// exp176: the whole-seed rule's cover exception for single-statement
+/// modules is one float key, read from the file.
+#[test]
+fn the_factory_whole_cover_key_reads_from_the_file() {
+    let set = build(
+        &["in.js"],
+        "[library.discovery]\nfactory_whole_cover = 0.75\n",
+    )
+    .unwrap();
+    assert_eq!(set.library.discovery_options().factory_whole_cover, 0.75);
+    assert!(
+        ConfigFile::check(
+            "cfg.toml",
+            "[library.discovery]\nfactory_whole_cover = 1.5\n"
+        )
+        .is_err(),
+        "a share over 1 is refused"
+    );
+}

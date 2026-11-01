@@ -360,6 +360,7 @@ impl Library {
             factory_bodies: d.factory_bodies,
             factory_tie_fence: d.factory_tie_fence,
             factory_whole_seed: d.factory_whole_seed,
+            factory_whole_cover: d.factory_whole_cover,
             factory_banner_index: d.factory_banner_index,
         }
     }
@@ -517,6 +518,7 @@ pub struct LibraryDiscovery {
     pub factory_bodies: bool,
     pub factory_tie_fence: bool,
     pub factory_whole_seed: bool,
+    pub factory_whole_cover: f64,
     pub factory_banner_index: bool,
 }
 
@@ -777,6 +779,7 @@ fn library_of(r: &Resolved) -> Library {
             factory_bodies: r.flag_on("library.discovery.factory_bodies"),
             factory_tie_fence: r.flag_on("library.discovery.factory_tie_fence"),
             factory_whole_seed: r.flag_on("library.discovery.factory_whole_seed"),
+            factory_whole_cover: r.float("library.discovery.factory_whole_cover"),
             factory_banner_index: r.flag_on("library.discovery.factory_banner_index"),
         },
     }

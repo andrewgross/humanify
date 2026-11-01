@@ -976,6 +976,18 @@ pub static KEYS: &[Key] = &[
     },
     Key {
         section: "library.discovery",
+        name: "factory_whole_cover",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().factory_whole_cover),
+        unset: "",
+        doc: "With factory_whole_seed: a bundled CommonJS module of ONE body statement (a UMD or \
+              IIFE wrapper) is backed for a family whose index prints cover at least this share \
+              of the statement's nodes, as a whole print would back it; modules of two or more \
+              statements keep the rule (exp176; 0 = no exception).",
+    },
+    Key {
+        section: "library.discovery",
         name: "factory_banner_index",
         kind: Kind::Bool,
         flag: None,
