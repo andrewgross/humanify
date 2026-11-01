@@ -394,7 +394,10 @@ impl DiscoveryOptions {
     /// (precision at or above the previous default on every set, F0.5
     /// +29..62 over both scopes); and since 2026-10-22 exp129's
     /// `helper_prints = seed` (experiments/138-helpers-terser-flip:
-    /// precision at or above the previous default on all 21 sets).
+    /// precision at or above the previous default on all 21 sets); and
+    /// since exp176 (experiments/176-whole-seed) `factory_whole_cover =
+    /// 0.95` (bun-dev +2.95 MB named, bun-held +0.79 MB, 0 wrong-family or
+    /// app bytes added on any set).
     /// `helper_families` stays off.
     /// `Default` stays the engine's baseline (every guard off), which the
     /// unit tests compare each guard against.
@@ -420,6 +423,7 @@ impl DiscoveryOptions {
             factory_tie_fence: true,
             factory_banner_index: true,
             factory_whole_seed: true,
+            factory_whole_cover: 0.95,
             helper_prints: HelperPrints::Seed,
             ..DiscoveryOptions::default()
         }

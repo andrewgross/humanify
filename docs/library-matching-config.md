@@ -252,6 +252,8 @@ factory_tie_fence = true       # ON since 2026-10-21; exp132: a cut factory whos
                                #   tie (no untied/declared/banner seed) is claimed by no one (experiments/132-factory-precision)
 factory_whole_seed = true      # ON since 2026-10-21; exp132: a package names a cut factory only with one whole-statement
                                #   index seed (or a declared/banner seed) there; function-print seeds alone are dropped
+factory_whole_cover = 0.95     # ON since exp176: ...unless the family's prints (held in modules the specificity rule
+                               #   reads) cover >= 0.95 of the module's nodes (UMD/IIFE wrappers; experiments/176-whole-seed)
 factory_banner_index = true    # ON since 2026-10-21; exp132: a banner seed on a cut factory's statement another family's
                                #   index prints cover more of is refused
 ```

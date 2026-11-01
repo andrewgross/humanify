@@ -635,9 +635,12 @@ fn the_exp132_factory_keys_default_on_and_turn_off() {
 }
 
 /// exp176: the whole-seed rule's cover exception is one float key (a share
-/// of the module's nodes), read from the file.
+/// of the module's nodes), on by default at 0.95, read from the file.
 #[test]
 fn the_factory_whole_cover_key_reads_from_the_file() {
+    // default since exp176: 0.95 of the module's nodes
+    let d = build(&["in.js"], "").unwrap().library.discovery_options();
+    assert_eq!(d.factory_whole_cover, 0.95);
     let set = build(
         &["in.js"],
         "[library.discovery]\nfactory_whole_cover = 0.75\n",
