@@ -1,7 +1,9 @@
 # exp175 — the bundle's kind decides the library index
 
-STATUS: BUILT (2026-11-01), branch `exp175-index-by-bundle-kind`, on main
-`5a48564bd` (exp174 merged). Gate and neutrality: see "Proof" below.
+STATUS: BUILT and PROVEN (2026-11-01), branch `exp175-index-by-bundle-kind`,
+on main `5a48564bd` (exp174 merged). Gate 13/13 in the worktree and from a
+clean checkout of `c95043550`. Warm neutrality NEUTRAL in names and off mode.
+Not merged.
 
 Andrew's decision (2026-11-01): "use our discovery of the bundle type to
 inform how we build our index, and there is some level of 'no existing index
@@ -133,8 +135,19 @@ with node / cjs where the bundle records none.
 
 ## Proof
 
-Filled in below once run (gate from a clean checkout; warm neutrality names
-and off on Claude Code against main `5a48564bd`).
+| check                                                  | result                                                                      |
+| ------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `npm run check`, worktree                              | ALL 13 STAGES PASSED (e2e: 19 pairs, 7 Bun found, 12 non-Bun skip line)     |
+| `npm run check`, clean checkout `c95043550`            | ALL 13 STAGES PASSED                                                        |
+| neutrality names (both legs `library.index=cb64c1f5…`) | NEUTRAL: 0 files / 0 lines, exit 0 / 0, cache candidate +0, baseline **+0** |
+| neutrality off (`--pipeline-set library.matching=off`) | NEUTRAL: 0 files / 0 lines, exit 0 / 0, cache candidate +0, baseline **+0** |
+
+Both neutrality runs were WARM, on 2.1.85→2.1.86 against main `5a48564bd`,
+run the way exp174 ran them:
+`npm run eval -- neutrality 5a48564bd 2.1.85:2.1.86 --priors /work/exp050-cold --cache /work/neutrality-cache`,
+with `--pipeline-set library.matching=off` added for off mode. Claude Code
+is a Bun bundle, and the eval passes its index explicitly, so its output
+cannot change, and it did not.
 
 ## What this does NOT do
 
