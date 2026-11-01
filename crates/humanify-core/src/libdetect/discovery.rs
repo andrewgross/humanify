@@ -1428,11 +1428,11 @@ impl<'c> Containment<'c> {
     /// [`Self::whole_held`] applies: code the family holds only inside a far
     /// bigger file (a carrier's bundle) is not its file. 0 for a unit with
     /// no prints.
-    fn covered_share(&self, u: u32, package: &str) -> f64 {
+    fn covered_nodes(&self, u: u32, package: &str) -> (u32, u32) {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
         use crate::matching::store::ReferenceStore;
         let Some(Some(prints)) = self.prints.get(u as usize) else {
-            return 0.0;
+            return (0, 0);
         };
         let query = self.module_bytes[u as usize];
         let cover = family_cover(
@@ -1450,7 +1450,7 @@ impl<'c> Containment<'c> {
                 }
             },
         );
-        f64::from(cover.get(OWN).copied().unwrap_or(0)) / f64::from(prints.whole.nodes.max(1))
+        (cover.get(OWN).copied().unwrap_or(0), prints.whole.nodes)
     }
 
     /// Does another family's evidence outweigh `package`'s family's on unit
@@ -2202,11 +2202,11 @@ fn factory_whole(
         UnitKind::FactoryBody { module } => Some(module),
         _ => None,
     };
-    let mut statements: BTreeMap<u32, u32> = BTreeMap::new();
+    let mut statements: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
     if cover > 0.0 {
         for u in 0..graph.units.len() as u32 {
             if let Some(m) = module_of(u) {
-                *statements.entry(m).or_default() += 1;
+                statements.entry(m).or_default().push(u);
             }
         }
     }
@@ -2219,7 +2219,13 @@ fn factory_whole(
             continue;
         };
         let covered = || {
-            statements.get(&m) == Some(&1) && containment.covered_share(s.unit, &s.package) >= cover
+            let (mut c, mut n) = (0u64, 0u64);
+            for &v in statements.get(&m).map_or(&[][..], Vec::as_slice) {
+                let (cv, nv) = containment.covered_nodes(v, &s.package);
+                c += u64::from(cv);
+                n += u64::from(nv);
+            }
+            n > 0 && c as f64 >= cover * n as f64
         };
         if !s.evidence.is_index() || containment.whole_held(s.unit, &s.package) || covered() {
             backed.insert((m, k));
