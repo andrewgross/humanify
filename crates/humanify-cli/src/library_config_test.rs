@@ -634,8 +634,8 @@ fn the_exp132_factory_keys_default_on_and_turn_off() {
     );
 }
 
-/// exp176: the whole-seed rule's cover exception for single-statement
-/// modules is one float key, read from the file.
+/// exp176: the whole-seed rule's cover exception is one float key (a share
+/// of the module's nodes), read from the file.
 #[test]
 fn the_factory_whole_cover_key_reads_from_the_file() {
     let set = build(

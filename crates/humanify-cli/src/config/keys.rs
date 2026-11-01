@@ -981,10 +981,12 @@ pub static KEYS: &[Key] = &[
         flag: None,
         default: || float(discovery().factory_whole_cover),
         unset: "",
-        doc: "With factory_whole_seed: a bundled CommonJS module of ONE body statement (a UMD or \
-              IIFE wrapper) is backed for a family whose index prints cover at least this share \
-              of the statement's nodes, as a whole print would back it; modules of two or more \
-              statements keep the rule (exp176; 0 = no exception).",
+        doc: "With factory_whole_seed: a bundled CommonJS module is backed for a family whose \
+              index prints (each in a module the lookup's specificity rule reads) cover at least \
+              this share of the module's nodes, as a whole print would back it: a UMD or IIFE \
+              wrapper whose functions match while its whole print drifts. A shared helper, an \
+              inlined copy or a carrier's bundle covers less and keeps the rule (exp176; 0 = no \
+              exception).",
     },
     Key {
         section: "library.discovery",

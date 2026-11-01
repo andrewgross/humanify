@@ -1660,22 +1660,26 @@ fn factory_whole_seed_needs_one_whole_statement_of_the_module_in_the_family_s_in
     assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Seed)));
 }
 
-/// exp176: three bundled CommonJS modules. U is ONE statement (a UMD-style
-/// `x.alpha = function () {...}`); M is the same function across two
-/// statements; S is one statement whose function holds an inner helper
-/// (most of the lookup's cover, not nearly all of S) and code of its own; V
-/// is one statement of two functions, the larger first.
-const WHOLE_SEED_MODULES: &str = "var Q = (n, e) => () => (e || n((e = { exports: {} }).exports, e), e.exports);\nvar U = Q((x, m) => { x.alpha = function (t) { var parts = t.split(\",\").map(function (s) { return s.trim() + s.length + t.indexOf(s); }).filter(Boolean); return parts.join(\"|\").concat(t.length, t.trim(), t.toUpperCase(), t.toLowerCase(), t.slice(1), t.charAt(0)); }; });\nvar M = Q((x, m) => { var lib = function (k) { var parts = k.split(\";\").map(function (s) { return s.trim() + s.length + k.indexOf(s); }).filter(Boolean); return parts.join(\"/\").concat(k.length, k.trim(), k.toUpperCase(), k.toLowerCase(), k.slice(2), k.charAt(1)); }; m.exports = lib; });\nvar S = Q((x, m) => { x.gamma = function (z) { var h = function (w) { var parts = w.split(\",\").map(function (s) { return s.trim() + s.length + w.indexOf(s); }).filter(Boolean); return parts.join(\"#\").concat(w.length, w.trim(), w.toUpperCase(), w.toLowerCase(), w.slice(4), w.charAt(3)); }; var e = [z.length, z.trim(), z.toUpperCase(), z.slice(3), z.charAt(2), z.indexOf(\"x\")]; return h(z) + e.join(\"-\"); }; });\nvar V = Q((x, m) => { x.beta = [function (a) { var parts = a.split(\",\").map(function (s) { return s.trim() + s.length + a.indexOf(s); }).filter(Boolean); return parts.join(\"|\").concat(a.length, a.trim(), a.toUpperCase(), a.toLowerCase(), a.slice(1), a.charAt(0), a.slice(5), a.charAt(6)); }, function (b) { return [b, b + 1, b * 2, String(b), b.toFixed(2), b.toString(16)].join(\",\").concat(b.toString(8)); }]; });\nvar app = () => U()(\"a\") + M()(\"b\") + S()(\"c\") + V();\n";
+/// exp176: bundled CommonJS modules whose family's index holds their
+/// FUNCTIONS but no whole statement. U is ONE statement (a UMD-style
+/// `x.alpha = function () {...}`); M is the same function plus a one-line
+/// helper it calls (which supports it against the isolation veto) and a
+/// one-line export; S is one statement whose function holds an inner helper (most of
+/// the lookup's cover, not nearly all of S) and code of its own; V is one
+/// statement of two functions, the larger first; N is a covered helper
+/// statement (with a one-line callee, as M) beside a bigger statement of the
+/// module's own.
+const WHOLE_SEED_MODULES: &str = "var Q = (n, e) => () => (e || n((e = { exports: {} }).exports, e), e.exports);\nvar U = Q((x, m) => { x.alpha = function (t) { var parts = t.split(\",\").map(function (s) { return s.trim() + s.length + t.indexOf(s); }).filter(Boolean); return parts.join(\"|\").concat(t.length, t.trim(), t.toUpperCase(), t.toLowerCase(), t.slice(1), t.charAt(0)); }; });\nvar M = Q((x, m) => { var lib = function (k) { var parts = k.split(\";\").map(function (s) { return s.trim() + s.length + k.indexOf(s); }).filter(Boolean); return parts.join(\"/\").concat(tiny(k.length), k.trim(), k.toUpperCase(), k.toLowerCase(), k.slice(2), k.charAt(1)); }; var tiny = (y) => y + 1; m.exports = lib; });\nvar S = Q((x, m) => { x.gamma = function (z) { var h = function (w) { var parts = w.split(\",\").map(function (s) { return s.trim() + s.length + w.indexOf(s); }).filter(Boolean); return parts.join(\"#\").concat(w.length, w.trim(), w.toUpperCase(), w.toLowerCase(), w.slice(4), w.charAt(3)); }; var e = [z.length, z.trim(), z.toUpperCase(), z.slice(3), z.charAt(2), z.indexOf(\"x\")]; return h(z) + e.join(\"-\"); }; });\nvar V = Q((x, m) => { x.beta = [function (a) { var parts = a.split(\",\").map(function (s) { return s.trim() + s.length + a.indexOf(s); }).filter(Boolean); return parts.join(\"|\").concat(a.length, a.trim(), a.toUpperCase(), a.toLowerCase(), a.slice(1), a.charAt(0), a.slice(5), a.charAt(6)); }, function (b) { return [b, b + 1, b * 2, String(b), b.toFixed(2), b.toString(16)].join(\",\").concat(b.toString(8)); }]; });\nvar N = Q((x, m) => { var helper = function (k) { var parts = k.split(\"!\").map(function (s) { return s.trim() + s.length + k.indexOf(s); }).filter(Boolean); return parts.join(\"~\").concat(edge(k.length), k.trim(), k.toUpperCase(), k.toLowerCase(), k.slice(7), k.charAt(5)); }; var edge = (y) => y - 1; var own = function (z) { var a = z.split(\":\"), b = a.map(Number), c = b.filter(isFinite), d = c.reduce(function (p, q) { return p + q * q - p / (q + 1); }, 0), e = [a.length, b.length, c.length, d, z.length, z.trim(), z.toUpperCase(), z.toLowerCase(), z.slice(3), z.charAt(2), z.indexOf(\"x\"), z.lastIndexOf(\"y\")]; return helper(z) + e.join(\"-\") + a.concat(b, c).reverse().join(\"#\") + [d, d * 2, d / 3, d % 4].join(\"+\"); }; m.exports = own; });\nvar app = () => U()(\"a\") + M()(\"b\") + S()(\"c\") + V() + N()(\"d\");\n";
 
 #[test]
-fn factory_whole_cover_backs_a_single_statement_module_its_function_prints_nearly_cover() {
+fn factory_whole_cover_backs_a_module_its_family_s_prints_nearly_cover() {
     let whole = DiscoveryOptions {
         factory_bodies: true,
         factory_whole_seed: true,
         ..DiscoveryOptions::default()
     };
     let covered = DiscoveryOptions {
-        factory_whole_cover: 0.9,
+        factory_whole_cover: 0.8,
         ..whole
     };
     // P's index holds each module's FUNCTION, never its whole statement
@@ -1684,26 +1688,31 @@ fn factory_whole_cover_backs_a_single_statement_module_its_function_prints_nearl
         Held::inner("x.alpha = ", "function (t)", "P", 100),
         Held::inner("var lib", "function (k)", "P", 100),
         Held::inner("x.gamma = ", "function (w)", "P", 100),
+        Held::inner("var helper", "function (k)", "P", 100),
     ];
     let run = |o| run_indexed_factories(WHOLE_SEED_MODULES, true, &held, vec![], o).2;
-    // The whole-seed rule alone refuses all three.
+    // The whole-seed rule alone refuses every one.
     let rows = run(whole);
-    assert_eq!(claim_of(&rows, "x.alpha = "), None);
-    assert_eq!(claim_of(&rows, "var lib"), None);
-    assert_eq!(claim_of(&rows, "x.gamma = "), None);
-    // U is one statement its family's function prints cover nearly all of:
-    // that is the module's file, as a whole print would be.
+    for head in ["x.alpha = ", "var lib", "x.gamma = ", "var helper"] {
+        assert_eq!(claim_of(&rows, head), None, "{head}");
+    }
     let rows = run(covered);
+    // U: P's function prints cover nearly all of the module — that is the
+    // module's file, as a whole print would be.
     assert_eq!(
         claim_of(&rows, "x.alpha = "),
         Some(("P".into(), Rule::Seed))
     );
-    // M has two statements: the rule stands, cover or not.
-    assert_eq!(claim_of(&rows, "var lib"), None);
-    assert_eq!(claim_of(&rows, "m.exports"), None);
-    // S is one statement, but P's print is an inner helper, part of it.
+    // M: one-line statements beside the function barely dilute it (72 of
+    // its 89 nodes; S's cover is 70 of 121, N's about a third).
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    // S: one statement, but P's print is an inner helper, part of it.
     assert_eq!(claim_of(&rows, "x.gamma = "), None);
-    // The cover is what refuses S (a low bar takes it); M stays refused.
+    // N: P's print covers ALL of one statement and little of the module (a
+    // shared helper beside the module's own code): the rule stands.
+    assert_eq!(claim_of(&rows, "var helper"), None);
+    assert_eq!(claim_of(&rows, "var own"), None);
+    // The cover is what refuses S and N (a low bar takes both).
     let rows = run(DiscoveryOptions {
         factory_whole_cover: 0.05,
         ..whole
@@ -1712,7 +1721,10 @@ fn factory_whole_cover_backs_a_single_statement_module_its_function_prints_nearl
         claim_of(&rows, "x.gamma = "),
         Some(("P".into(), Rule::Seed))
     );
-    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(
+        claim_of(&rows, "var helper"),
+        Some(("P".into(), Rule::Seed))
+    );
     // Cover counts only prints the family holds in a module the lookup's
     // specificity rule reads, as `whole_held` does: V's second function in
     // a far bigger file of P's (a carrier's bundle) does not complete it.

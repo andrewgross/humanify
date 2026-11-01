@@ -323,14 +323,16 @@ pub struct DiscoveryOptions {
     /// claimed by no one ([`factory_whole`]).
     pub factory_whole_seed: bool,
     /// The whole-seed rule's cover exception (exp176; 0 = none; reads
-    /// [`Self::factory_whole_seed`]): a bundled CommonJS module of ONE body
-    /// statement (a UMD or IIFE wrapper: the whole file is one call) is
-    /// backed for a family whose index prints cover at least this share of
-    /// that statement's nodes ([`Containment::covers`]: the whole print,
-    /// else the largest non-overlapping function prints), as a whole print
-    /// would back it. Nearly all of the module's code is the family's; a
-    /// shared helper or an inlined copy covers a part. A module of two or
-    /// more statements keeps the rule.
+    /// [`Self::factory_whole_seed`]): a bundled CommonJS module is backed
+    /// for a family whose index prints cover at least this share of the
+    /// module's nodes (summed over its body statements; per statement the
+    /// whole print, else the largest non-overlapping function prints, each
+    /// held in a module the lookup's specificity rule reads), as a whole
+    /// print would back it. A UMD or IIFE wrapper is one statement whose
+    /// whole print drifts while its functions match; a one-line prologue or
+    /// export beside it barely dilutes it. A shared helper or an inlined
+    /// copy covers a part of a module, and a carrier holds the code only in
+    /// a far bigger file: those keep the rule.
     pub factory_whole_cover: f64,
     /// The factory banner check (exp132; default off; reads cut factories):
     /// a `/*!` banner seed on a body statement of a bundled CommonJS module
@@ -1421,18 +1423,18 @@ impl<'c> Containment<'c> {
         Some((cover, prints.whole.nodes))
     }
 
-    /// The share of unit `u`'s nodes `package`'s family's index prints cover
+    /// The nodes of unit `u` `package`'s family's index prints cover
     /// ([`family_cover`] at the row floor: the whole print, else the largest
-    /// non-overlapping function prints), counting only prints the family
-    /// holds in a module the lookup's specificity rule reads — the filter
-    /// [`Self::whole_held`] applies: code the family holds only inside a far
-    /// bigger file (a carrier's bundle) is not its file. 0 for a unit with
-    /// no prints.
-    fn covered_share(&self, u: u32, package: &str) -> f64 {
+    /// non-overlapping function prints), and `u`'s nodes; counting only
+    /// prints the family holds in a module the lookup's specificity rule
+    /// reads — the filter [`Self::whole_held`] applies: code the family
+    /// holds only inside a far bigger file (a carrier's bundle) is not its
+    /// file. (0, 0) for a unit with no prints.
+    fn covered_nodes(&self, u: u32, package: &str) -> (u32, u32) {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
         use crate::matching::store::ReferenceStore;
         let Some(Some(prints)) = self.prints.get(u as usize) else {
-            return 0.0;
+            return (0, 0);
         };
         let query = self.module_bytes[u as usize];
         let cover = family_cover(
@@ -1450,7 +1452,7 @@ impl<'c> Containment<'c> {
                 }
             },
         );
-        f64::from(cover.get(OWN).copied().unwrap_or(0)) / f64::from(prints.whole.nodes.max(1))
+        (cover.get(OWN).copied().unwrap_or(0), prints.whole.nodes)
     }
 
     /// Does another family's evidence outweigh `package`'s family's on unit
@@ -2186,8 +2188,8 @@ fn factory_banners(
 /// [`DiscoveryOptions::factory_whole_seed`] over the kept seeds (see
 /// [`presence`]): per cut factory and package family, the family's seeds
 /// there are kept only when one of them is a declared or banner seed or an
-/// index seed whose whole print the family holds — or, in a module of one
-/// body statement, whose prints cover at least `cover` of it
+/// index seed whose whole print the family holds — or whose family's prints
+/// cover at least `cover` of the module's nodes
 /// ([`DiscoveryOptions::factory_whole_cover`]); every other body statement
 /// of a factory that lost seeds goes to `fenced`.
 fn factory_whole(
@@ -2202,11 +2204,11 @@ fn factory_whole(
         UnitKind::FactoryBody { module } => Some(module),
         _ => None,
     };
-    let mut statements: BTreeMap<u32, u32> = BTreeMap::new();
+    let mut statements: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
     if cover > 0.0 {
         for u in 0..graph.units.len() as u32 {
             if let Some(m) = module_of(u) {
-                *statements.entry(m).or_default() += 1;
+                statements.entry(m).or_default().push(u);
             }
         }
     }
@@ -2219,7 +2221,13 @@ fn factory_whole(
             continue;
         };
         let covered = || {
-            statements.get(&m) == Some(&1) && containment.covered_share(s.unit, &s.package) >= cover
+            let (mut c, mut n) = (0u64, 0u64);
+            for &v in statements.get(&m).map_or(&[][..], Vec::as_slice) {
+                let (cv, nv) = containment.covered_nodes(v, &s.package);
+                c += u64::from(cv);
+                n += u64::from(nv);
+            }
+            n > 0 && c as f64 >= cover * n as f64
         };
         if !s.evidence.is_index() || containment.whole_held(s.unit, &s.package) || covered() {
             backed.insert((m, k));
