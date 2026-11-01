@@ -165,9 +165,9 @@ impl<'a, 's> TransferRun<'a, 's> {
     /// binding's ORIGINAL name — and by its owner SCOPE, so the row settles
     /// only for the module binding itself (exp178). A nested binding of the
     /// same spelling is another binding: names mode restores library source
-    /// names (fflate's local `dt`) beside a minified module binding `dt`,
-    /// and settling by name alone froze that module row unrenamed, so its
-    /// module vote never ran.
+    /// names (lru-cache's local `dt`) beside a minified module binding `dt`,
+    /// and settling by name alone froze that module row unrenamed when the
+    /// statement-twin tier renamed the local, so its module vote never ran.
     pub fn settle_module_binding_node(&mut self, scope: BScopeId, old_name: &str) {
         if let Some(&i) = self.rows.module_by_name.get(old_name)
             && self.rows.modules[i].scope == scope
