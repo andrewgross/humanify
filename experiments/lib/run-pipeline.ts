@@ -35,6 +35,7 @@ import {
 } from "./pipeline-bin.js";
 import {
   type BaseMode,
+  type LibraryMatchingBlock,
   type PipelineConfigRecord,
   type RunManifest,
   manifestWarnings,
@@ -145,22 +146,31 @@ function readProcTree(): ProcSample[] {
 }
 
 /**
- * The binary's configuration record: the `config` block of the stats file
- * the run promised (an artifact ending `.stats.json`). Undefined when the
- * run wrote none — a crash, or no `--stats-json` — and then the manifest
+ * The binary's configuration record and library outcome: the `config` and
+ * `libraryMatching` blocks of the stats file the run promised (an artifact
+ * ending `.stats.json`). Each undefined when the run wrote none — a crash, or no `--stats-json` — and then the manifest
  * says so (`pipeline-config-missing`) instead of guessing from the argv.
  */
-function pipelineConfigOf(cfg: RunConfig): PipelineConfigRecord | undefined {
+function pipelineConfigOf(cfg: RunConfig): StatsRecords {
   const stats = cfg.artifacts.find((p) => p.endsWith(".stats.json"));
-  if (!stats || !fs.existsSync(stats)) return undefined;
+  if (!stats || !fs.existsSync(stats)) return {};
   try {
     const parsed = JSON.parse(fs.readFileSync(stats, "utf8")) as {
       config?: PipelineConfigRecord;
+      libraryMatching?: LibraryMatchingBlock;
     };
-    return parsed.config;
+    return { config: parsed.config, library: parsed.libraryMatching };
   } catch {
-    return undefined;
+    return {};
   }
+}
+
+/** The binary's own records the manifest copies out of its stats file:
+ *  its resolved configuration, and what the library decision came to
+ *  (exp175). */
+interface StatsRecords {
+  config?: PipelineConfigRecord;
+  library?: LibraryMatchingBlock;
 }
 
 /**
@@ -234,7 +244,7 @@ async function main(): Promise<void> {
   fs.closeSync(out);
 
   const entriesAfter = countFiles(cfg.cacheDir);
-  const resolved = pipelineConfigOf(cfg);
+  const { config: resolved, library } = pipelineConfigOf(cfg);
 
   // Where the split put things. Written by the pipeline beside the ledger;
   // read here so one manifest answers "what happened" including placement,
@@ -298,6 +308,7 @@ async function main(): Promise<void> {
     },
     pipeline: pipelineRecord(cfg, launchedSha),
     placement,
+    ...(library ? { library } : {}),
     outcome: {
       exitCode,
       errors,

@@ -2471,6 +2471,14 @@
       "type": {
         "kind": "any"
       }
+    },
+    {
+      "name": "libraryMatching",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "any"
+      }
     }
   ]
 }

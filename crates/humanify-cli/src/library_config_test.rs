@@ -111,28 +111,19 @@ fn an_absolute_store_dir_is_used_as_given() {
 }
 
 #[test]
-fn names_with_an_empty_store_and_no_index_is_refused_before_work() {
-    // exp174 (Andrew, 2026-10-31): no silent fallback to off. The refusal
-    // names what is missing, where it looked, how to build an index, how
-    // to point to one, the run-time build's flag and the opt-out.
+fn names_with_an_empty_store_and_no_index_is_no_problem_before_work() {
+    // exp175 (Andrew, 2026-11-01): which index a run needs is a question of
+    // the bundle's KIND, and the kind is detection's answer — so the empty
+    // store is not refused at the parse point. The run decides after
+    // detection: no index for its kind skips library name matching with one
+    // line (or builds one, with --library-index-from-bundle).
     let empty = Store::new("empty", false);
     for argv in [
         &["in.js"][..],
         &["in.js", "--library-matching", "report"][..],
     ] {
         let c = build(argv, &empty.toml()).unwrap();
-        let e = c.library_index_problem().expect("refused");
-        for want in [
-            "needs a library index, and none was found",
-            empty.0.to_str().unwrap(),
-            "humanify-index build",
-            "--as-of",
-            "--library-index <index-dir>",
-            "--library-index-from-bundle",
-            "--library-matching off",
-        ] {
-            assert!(e.contains(want), "{argv:?} must say {want:?}: {e}");
-        }
+        assert_eq!(c.library_index_problem(), None, "{argv:?}");
     }
 }
 

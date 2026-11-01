@@ -4,9 +4,64 @@
 use humanify_model::detection::{BundlerType, MinifierType};
 
 use super::recipe::{
-    DetectedRecipe, Format, Recipe, RecipeBundler, Target, choose_slice, detect_recipe,
+    DetectedRecipe, Format, Recipe, RecipeBundler, Target, choose_slice, detect_recipe, index_kind,
     terser_slices,
 };
+
+/// exp175: the library-index KIND a bundle needs is its packing tool — the
+/// key slices are recorded and searched under — named for every bundler
+/// detection can answer, including the ones no index recipe exists for.
+#[test]
+fn the_index_kind_is_the_bundles_packing_tool() {
+    for (bundler, kind) in [
+        (BundlerType::Bun, "bun"),
+        (BundlerType::Esbuild, "esbuild"),
+        (BundlerType::Webpack, "webpack"),
+        (BundlerType::Rollup, "rollup"),
+        (BundlerType::Browserify, "browserify"),
+        (BundlerType::Parcel, "parcel"),
+        (BundlerType::Unknown, "unrecognised"),
+    ] {
+        assert_eq!(index_kind(bundler), kind);
+        assert_eq!(detect_recipe("x", bundler, MinifierType::None).kind, kind);
+    }
+    // A recipe kind is exactly the name its slices are recorded under.
+    assert_eq!(
+        index_kind(BundlerType::Esbuild),
+        RecipeBundler::Esbuild.name()
+    );
+}
+
+/// exp175: the recipe an index for THIS bundle would be built with (what
+/// the skip line tells the user to pass the builder): its bundler and
+/// detected target and format, node / cjs where it records none, minified
+/// as detected, production for the bundlers that take it; None for a kind
+/// no recipe exists for.
+#[test]
+fn the_needed_recipe_is_read_off_detection() {
+    let spell = |code: &str, b, m| {
+        detect_recipe(code, b, m)
+            .needed_recipe()
+            .map(|r| r.spelling())
+    };
+    assert_eq!(
+        spell("// @bun @bun-cjs\nx", BundlerType::Bun, MinifierType::Bun).as_deref(),
+        Some("bun:target=bun,format=cjs,minify,production")
+    );
+    assert_eq!(
+        spell("x", BundlerType::Bun, MinifierType::Bun).as_deref(),
+        Some("bun:target=node,format=cjs,minify,production")
+    );
+    assert_eq!(
+        spell("x", BundlerType::Esbuild, MinifierType::None).as_deref(),
+        Some("esbuild:target=node,format=cjs,production")
+    );
+    assert_eq!(
+        spell("x", BundlerType::Webpack, MinifierType::Terser).as_deref(),
+        Some("webpack:target=node,format=cjs,minify")
+    );
+    assert_eq!(spell("x", BundlerType::Unknown, MinifierType::None), None);
+}
 
 #[test]
 fn a_recipe_is_spelled_with_every_setting_and_reads_back() {
@@ -124,6 +179,7 @@ fn detected(bundler: Option<RecipeBundler>, target: Option<Target>) -> DetectedR
         target_reason: "test",
         format: None,
         minified: true,
+        kind: bundler.map_or("unrecognised", RecipeBundler::name),
     }
 }
 

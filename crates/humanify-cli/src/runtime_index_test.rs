@@ -15,6 +15,7 @@ use humanify_model::detection::{BundlerType, MinifierType};
 use crate::config::Config;
 use crate::runtime_index::{JobAnswer, bundle_revealed_seeds, start};
 use crate::surface::{CommandOptions, PipelineParse};
+use humanify_core::libindex::recipe::detect_recipe;
 
 /// `parse_pipeline` for a run argv (the harness tests' shape).
 fn run_argv(argv: &[&str]) -> (String, CommandOptions) {
@@ -54,7 +55,6 @@ fn machinery_config_with(from_bundle: bool) -> Config {
 fn machinery_config() -> Config {
     machinery_config_with(true)
 }
-
 /// A plain Bundler/Minifier pair: Bun + Terser is what a Bun bundle this
 /// lane walks carries.
 fn bun() -> (BundlerType, MinifierType) {
@@ -93,82 +93,148 @@ fn the_bundle_itself_names_the_build_s_seeds() {
     assert!(seeds[0].evidence.contains("package-json"), "{:?}", seeds[0]);
 }
 
-/// With `--library-index-from-bundle` (exp171's path, opt-in since
-/// exp174): an empty store and a bundle that reveals no package, then a
-/// bundler no index can be built for — neither fails the run: the
-/// machinery answers `Inert` with the notice the run prints, naming the
-/// escapes — through the joint, so the wiring (scope thread → channel →
-/// deadline'd join) is what this test proves.
-#[test]
-fn a_bundle_no_index_can_serve_is_inert_and_says_why() {
-    let config = machinery_config();
+/// Run the machinery on `code` as a bundle of `bundler`/`minifier`, through
+/// the joint (scope thread → channel → deadline'd join): the kind is read
+/// ONCE off detection (`detect_recipe`) and handed to the job.
+fn answer_for(
+    config: &Config,
+    code: &str,
+    (bundler, minifier): (BundlerType, MinifierType),
+) -> JobAnswer {
     let profiler = humanify_core::profiling::Profiler::disabled();
     let stop = AtomicBool::new(false);
-    let code = "console.log(1);\n"; // no banner, no package.json
-    let answer = std::thread::scope(|scope| {
-        let job = start(scope, &profiler, code, &config, bun().0, bun().1, &stop);
+    let detected = detect_recipe(code, bundler, minifier);
+    std::thread::scope(|scope| {
+        let job = start(scope, &profiler, code, config, &detected, &stop);
         job.join(&profiler, &stop)
-    });
-    let JobAnswer::Inert(why) = answer else {
-        panic!("no seed, nothing found: the run goes on as off");
-    };
-    assert!(why.contains("reveals no npm package"), "{why}");
-    assert!(why.contains("--library-index"), "{why}");
-    assert!(why.contains("--library-matching off"), "{why}");
-
-    // A bundler this lane does not walk: inert before the store is even
-    // searched, naming the bundler and the same two escapes.
-    let answer = std::thread::scope(|scope| {
-        let job = start(
-            scope,
-            &profiler,
-            code,
-            &config,
-            BundlerType::Esbuild,
-            MinifierType::Esbuild,
-            &stop,
-        );
-        job.join(&profiler, &stop)
-    });
-    let JobAnswer::Inert(why) = answer else {
-        panic!("esbuild is out of this lane's scope: inert");
-    };
-    assert!(why.contains("esbuild"), "{why}");
-    assert!(why.contains("--library-index"), "{why}");
-    assert!(why.contains("--library-matching off"), "{why}");
+    })
 }
 
-/// WITHOUT the run-time build (the default since exp174): a store with
-/// nothing for the bundle is a loud `Failed` — never `Inert`, never a
-/// build — whatever the bundler, carrying the refusal that says what is
-/// missing and every way out.
-#[test]
-fn by_default_a_store_with_nothing_for_the_bundle_fails_loudly() {
-    let config = machinery_config_with(false);
-    let profiler = humanify_core::profiling::Profiler::disabled();
-    let stop = AtomicBool::new(false);
-    let code = "/*! leftpad v1.2.3 */\nconsole.log(1);\n"; // a seed it must NOT build from
-    for (bundler, minifier) in [bun(), (BundlerType::Esbuild, MinifierType::Esbuild)] {
-        let answer = std::thread::scope(|scope| {
-            let job = start(scope, &profiler, code, &config, bundler, minifier, &stop);
-            job.join(&profiler, &stop)
-        });
-        let JobAnswer::Failed(why) = answer else {
-            panic!("{bundler:?}: nothing found and no build asked for: the run fails");
-        };
-        for want in [
-            "--library-matching report needs a library index, and none was found",
-            "humanify-index build",
-            "--library-index <index-dir>",
-            "--library-index-from-bundle",
-            "--library-matching off",
-        ] {
-            assert!(why.contains(want), "{bundler:?} must say {want:?}: {why}");
-        }
+fn esbuild() -> (BundlerType, MinifierType) {
+    (BundlerType::Esbuild, MinifierType::Esbuild)
+}
+
+/// The skipped answer's line and trail, or a panic naming what came back.
+fn skipped(answer: JobAnswer, what: &str) -> (String, crate::runtime_index::IndexSource) {
+    match answer {
+        JobAnswer::Skipped(line, trail) => (line, trail),
+        JobAnswer::Found(..) => panic!("{what}: found, expected skipped"),
+        JobAnswer::Built(..) => panic!("{what}: built, expected skipped"),
+        JobAnswer::Failed(e) => panic!("{what}: failed, expected skipped: {e}"),
     }
+}
+
+/// exp175 (Andrew 2026-11-01): by DEFAULT, a store with no index for the
+/// bundle's KIND (its packing tool, read off detection) is not a failure:
+/// the run prints ONE line — what is missing, where it looked, that library
+/// name matching is skipped, and how to get an index — and goes on with it
+/// skipped. Never a build, nothing created. The Bun line offers the
+/// run-time build; a kind it cannot build for does not.
+#[test]
+fn by_default_no_index_for_the_bundles_kind_skips_with_one_line() {
+    let config = machinery_config_with(false);
+    let root = config.library.index_store_root();
+    let code = "/*! leftpad v1.2.3 */\nconsole.log(1);\n"; // a seed it must NOT build from
+    for (pair, kind) in [(bun(), "bun"), (esbuild(), "esbuild")] {
+        let (line, trail) = skipped(answer_for(&config, code, pair), kind);
+        let head = format!(
+            "no library index for {kind} bundles in {} — skipping library name matching (",
+            root.display()
+        );
+        assert!(line.starts_with(&head), "{kind}: {line}");
+        assert!(!line.contains('\n'), "ONE line: {line}");
+        assert!(line.contains("humanify-index build"), "{kind}: {line}");
+        assert!(
+            line.contains(&format!("--recipe {kind}:")),
+            "{kind}: {line}"
+        );
+        assert!(line.contains("--library-index <dir>"), "{kind}: {line}");
+        assert_eq!(
+            line.contains("--library-index-from-bundle"),
+            kind == "bun",
+            "the run-time build is offered where it can build: {line}"
+        );
+        assert_eq!(trail.outcome, "skipped");
+        assert_eq!(trail.bundler, kind);
+    }
+    assert!(!root.exists(), "nothing created: no fetch, no build");
+}
+
+/// A bundler no index recipe exists for (a plain script: no bundler
+/// recognised) names its kind too, and is skipped the same way — with no
+/// builder command to offer.
+#[test]
+fn a_bundle_of_a_kind_no_index_can_have_is_skipped_saying_so() {
+    let config = machinery_config_with(false);
+    let (line, trail) = skipped(
+        answer_for(
+            &config,
+            "console.log(1);\n",
+            (BundlerType::Unknown, MinifierType::None),
+        ),
+        "unknown",
+    );
     assert!(
-        !config.library.index_store_root().exists(),
-        "nothing created: no fetch, no build"
+        line.starts_with("no library index for unrecognised bundles in "),
+        "{line}"
+    );
+    assert!(line.contains("skipping library name matching"), "{line}");
+    assert!(!line.contains("--recipe"), "no recipe can build it: {line}");
+    assert_eq!(trail.bundler, "unrecognised");
+}
+
+/// With `--library-index-from-bundle`: a kind the run-time build cannot
+/// build for (esbuild — it builds Bun indexes only) and a Bun bundle that
+/// reveals no package are skipped too, each with one line naming why; the
+/// store is searched first either way (an index FOUND for the kind would
+/// be used), and nothing is created.
+#[test]
+fn from_bundle_skips_what_it_cannot_build_and_says_why() {
+    let config = machinery_config_with(true);
+    let root = config.library.index_store_root();
+    let (line, _) = skipped(
+        answer_for(
+            &config,
+            "/*! leftpad v1.2.3 */\nconsole.log(1);\n",
+            esbuild(),
+        ),
+        "esbuild",
+    );
+    assert!(
+        line.starts_with(&format!(
+            "no library index for esbuild bundles in {}, and --library-index-from-bundle \
+             builds Bun indexes only — skipping library name matching (",
+            root.display()
+        )),
+        "{line}"
+    );
+    assert!(line.contains("--recipe esbuild:"), "{line}");
+    let (line, _) = skipped(answer_for(&config, "console.log(1);\n", bun()), "bun");
+    assert!(
+        line.starts_with(&format!(
+            "no library index for bun bundles in {}",
+            root.display()
+        )),
+        "{line}"
+    );
+    assert!(line.contains("reveals no npm package"), "{line}");
+    assert!(line.contains("skipping library name matching"), "{line}");
+    assert!(!root.exists(), "nothing created: no fetch, no build");
+}
+
+/// The build line (exp175): what the run prints just before the notice
+/// when it builds — the kind, and the store it builds into.
+#[test]
+fn the_building_line_names_the_kind_and_the_store() {
+    let root = std::path::Path::new("/s/store");
+    assert_eq!(
+        crate::runtime_index::building_line("bun", root, false),
+        "no library index for bun bundles — building one from this bundle into /s/store"
+    );
+    assert_eq!(
+        crate::runtime_index::building_line("bun", root, true),
+        "no library index for bun bundles in /s/store covers this bundle's packages — \
+         building one from this bundle into it"
     );
 }
 

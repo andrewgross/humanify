@@ -84,10 +84,14 @@ compatibility — a replaced flag's old spelling is deleted, not aliased.
 ```
 CLI:     --library-matching names | report | off     default names (exp171, 2026-10-31)
          --library-index <dir | index-id>             optional: without it names/report use an index
-                                                      FOUND in the store, else fail before any work
+                                                      of the bundle's KIND found in the store, else
+                                                      skip library name matching with one line
+                                                      (exp175); an explicit index with no slice for
+                                                      the kind fails a names run
          --library-index-store <dir>                  the store (default <cwd>/.humanify/library-index)
          --library-index-from-bundle                  build one at run time from what the bundle
-                                                      reveals when the store has none (exp174: opt-in)
+                                                      reveals when the store has none for its kind
+                                                      (exp174: opt-in; Bun bundles only)
 Config:  [library] section of the one config file (--config <file>)
 ```
 
@@ -120,61 +124,79 @@ is generated from the registry and holds every value below. Which index to
 point `library.index` at: docs/design/library-index.md §10.
 
 **Where a run with no `--library-index` gets its index (exp154/exp171;
-exp174, Andrew 2026-10-31: names mode REQUIRES a real index).** The run
-looks in its library-index STORE, `index_store_dir`
-(`--library-index-store <dir>`), default `.humanify/library-index` resolved
-against the WORKING directory (exp154 resolved it against the output dir;
-exp174 moved it so everything for a run sits where it is launched, and two
-output directories share one store). An index FOUND there — an `<id>/`
-directory (the sha256 of its `manifest.json`) whose manifest carries this
-bundle's slice — is one line
-(`Library index: using <id> from <store> (found; nothing to build)`), and
-the search runs in parallel with ingest under one deadline (span
-`library.index.wait`). When the store holds NO index the run fails before
-any work (`Config::library_index_problem`); when its indexes have no slice
-for the bundle (an esbuild bundle and a Bun-only index; a plain script) it
-fails after detection, before unpack writes anything, naming each index and
-why it was not used. One text (`runtime_index::no_index_error`), as a user
-sees it:
+exp174: the store lives in the working directory; exp175, Andrew
+2026-11-01: the bundle's detected type decides the index).** WHICH index a
+run needs is the bundle's KIND: its packing tool (`bun`, `esbuild`,
+`webpack`, `rollup`; any other bundler, or none recognised, is a kind no
+index can have), read ONCE off detection (`recipe::index_kind`, carried as
+`DetectedRecipe::kind`) — the same key index slices are recorded and
+searched under, not a second one. The run looks in its library-index
+STORE, `index_store_dir` (`--library-index-store <dir>`), default
+`.humanify/library-index` resolved against the WORKING directory, for an
+`<id>/` directory (the sha256 of its `manifest.json`) whose manifest
+carries a slice for that kind and recipe. The search runs in parallel with
+ingest under one deadline (span `library.index.wait`). What a user sees:
 
 ```
-Error: library names (--library-matching names, the default) needs a library index, and none was found.
-  Looked in: <cwd>/.humanify/library-index (the library-index store: library.index_store_dir, resolved against the working directory) — it does not exist, so it holds no index (no <id>/manifest.json in it).
-  Build one with the offline index builder (cargo build --release -p humanify-index; it fetches from the npm registry and bundles with Bun):
-    humanify-index build --packages packages.txt --as-of <YYYY-MM-DD> --names \
-      --registry <dir> --store <dir> --work <dir> --out <index-dir> \
-      --recipe bun:target=bun,format=cjs,minify,production \
-      --recipe bun:target=node,format=cjs,minify,production --bun <bun binary>
-    (packages.txt: one npm package per line, `name` or `name@version`)
-  Point the run at it: --library-index <index-dir>, or move it into the store as <store>/<sha256 of its manifest.json>/ (--library-index-store <dir> names another store).
-  Or build one now from the npm packages this bundle itself reveals (library banners, inlined package.json; installs from the npm registry): --library-index-from-bundle
-  Or run without library names: --library-matching off
+# Bun bundle, an index for Bun bundles in the store: used
+Library index: using 0242134fb663 for bun bundles from <store> (found; nothing to build)
+
+# esbuild bundle, no esbuild index in the store (the default): ONE line, the
+# run goes on with library name matching skipped — off's output bytes
+no library index for esbuild bundles in <cwd>/.humanify/library-index — skipping library name matching (build one with `humanify-index build --names --recipe esbuild:target=node,format=cjs,minify,production …`, or point to one with --library-index <dir>)
+
+# the same for a Bun bundle (the line also offers the run-time build)
+no library index for bun bundles in <store> — skipping library name matching (build one with `humanify-index build --names --recipe bun:target=node,format=cjs,minify,production …`, point to one with --library-index <dir>, or pass --library-index-from-bundle)
+
+# esbuild bundle with --library-index-from-bundle: it builds Bun indexes only
+no library index for esbuild bundles in <store>, and --library-index-from-bundle builds Bun indexes only — skipping library name matching (build one with `humanify-index build --names --recipe esbuild:target=node,format=cjs,minify,production …`, or point to one with --library-index <dir>)
+
+# Bun bundle with --library-index-from-bundle: the build line, then the NOTICE
+no library index for bun bundles — building one from this bundle into <store>
+
+# an EXPLICIT index that does not fit the bundle's kind: a loud failure (it was named)
+Error: --library-matching names cannot run: the index passed with --library-index has no slice for esbuild bundles (it was named, so this is not skipped) — library index 0242134f… has no slice for recipe esbuild:target=?,format=?,minify (has: bun:target=bun,format=cjs,minify,production, bun:target=node,format=cjs,minify,production)
 ```
 
-There is no silent fallback to `off` any more (exp171's default run went on
-as `off` when the bundle revealed no package — on Claude Code, always).
+The builder's `--recipe` in the skip line is the recipe THIS bundle needs
+(`DetectedRecipe::needed_recipe`: detected bundler, target and format, node
+/ cjs where the bundle records none). A skipped run is never mistakable for
+a names run: what the decision came to is recorded in the stats file's
+`libraryMatching` block (`matching`, `outcome` = `used` / `built` /
+`skipped` / `off`, `kind`, `indexFrom` = `explicit` / `store` / `run-time
+build`, `indexId`, and the skip line as `why`), in the library report's
+`outcome`, and copied into the eval's run manifest (`library`; the
+`library-skipped` warning). The eval hands every names launch the prebuilt
+index explicitly, so it never skips — and if a scored leg or a rebuilt base
+ever does, `experiments/lib/invariants.ts` REFUSES the pair's card (exit 3,
+like a run that lost LLM answers).
+
+exp174's refusal of a store with no index (`runtime_index::no_index_error`,
+the parse-time empty-store check) is gone: a missing index for the kind is
+a skip, not an error. exp171's "Library names: off for this run" notice is
+gone with it (the skip lines replace it).
 
 **The run-time build (`--library-index-from-bundle`, key
 `index_from_bundle`; exp154, the default in exp171, opt-in since exp174).**
-Exactly exp171's path: a store index that covers the bundle's revealed
-packages is used; a bundle no index can be built for (not Bun-built, or
-revealing no npm package) is one notice and the run goes on as `off`
-(`Library names: off for this run — …`); a BUILD is preceded by a NOTICE
-naming what is built, the estimated disk and time (calibrated in
-experiments/171-names-default/README.md), where it is stored and how to opt
-out — and then proceeds (no prompt: it would hang batch runs). It builds
-**in-process** from the packages the bundle itself reveals (library
-banners, inlined `package.json`-style declarations) plus their dependency
-closure — **no base-list bootstrap, no LLM**. A store with no Bun gets the
-pinned one (`PINNED_BUN`, 1.4.0) fetched with `npm install --ignore-scripts`;
-names that are not npm package names, or that the registry does not know,
-are dropped and recorded in `build.json` (`dropped`); a version that fails
-is recorded (`failed`) and only an empty index fails the run. The flag is
-refused with `--library-matching off` and with `--library-index` (it would
-be silently ignored). What the machinery did goes to the report's
-`libraryMatching.indexSource` (found vs built, the candidates the store
-search considered and its verdicts, per-stage wall times) and to the
-profile summary's "Library index" block.
+The store is searched first for the kind, as above. For a kind the build
+cannot build (anything but Bun) the run skips with its own line. For a Bun
+bundle, a store index that covers the bundle's revealed packages is used; a
+bundle revealing no npm package is skipped with one line; otherwise the
+build line, then a NOTICE naming what is built, the estimated disk and time
+(calibrated in experiments/171-names-default/README.md), where it is stored
+and how to opt out — and then it proceeds (no prompt: it would hang batch
+runs). It builds **in-process** from the packages the bundle itself
+reveals (library banners, inlined `package.json`-style declarations) plus
+their dependency closure — **no base-list bootstrap, no LLM**. A store
+with no Bun gets the pinned one (`PINNED_BUN`, 1.4.0) fetched with
+`npm install --ignore-scripts`; names that are not npm package names, or
+that the registry does not know, are dropped and recorded in `build.json`
+(`dropped`); a version that fails is recorded (`failed`) and only an empty
+index fails the run. The flag is refused with `--library-matching off` and
+with `--library-index` (it would be silently ignored). What the machinery
+did goes to the report's `libraryMatching.indexSource` (found / built /
+skipped, the candidates the store search considered and its verdicts,
+per-stage wall times) and to the profile summary's "Library index" block.
 
 ```toml
 [library]
@@ -189,9 +211,9 @@ index_store_dir = ".humanify/library-index"   # --library-index-store <dir>: the
                                #   (searched), + store/ shards, registry/, tools/bun-<V>/ and
                                #   build.json sidecars when index_from_bundle builds
 index_from_bundle = false      # --library-index-from-bundle: when the store has no index for
-                               #   the bundle, build one at run time from the packages it
-                               #   reveals (exp171's path); false = no index found -> the run
-                               #   fails before any work
+                               #   the bundle's kind, build one at run time from the packages it
+                               #   reveals (exp171's path; Bun only); false = no index for the
+                               #   kind -> one line, library name matching skipped (exp175)
 index_build_max_packages = 300 # safety cap on a run-time build's package list, refused at the
                                #   parse point when exceeded
 

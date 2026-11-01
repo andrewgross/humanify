@@ -113,26 +113,34 @@ const BIN = path.join(REPO, "target/release/humanify");
 const FIXTURES = path.join(REPO, "test/e2e/fixtures");
 /**
  * The library-index store every launch reads. Names mode is the binary's
- * DEFAULT (exp171) and, since exp174, REQUIRES a real library index: with
- * no `--library-index` it uses one found in its store
- * (`library.index_store_dir`, else `<cwd>/.humanify/library-index`) and
- * FAILS before any work when there is none. This committed, tiny store —
- * one index built from the one real npm package the fixtures bundle
- * (ms@2.1.3; test/e2e/library-index/README.md) — is pointed to explicitly,
- * so every Bun fixture runs the default mode END TO END on the found path
- * (index lookup, vendor placement, restoration). Its slices are Bun's
- * only, so a non-Bun fixture runs with `--library-matching off` (names
- * would refuse it: no index serves its bundler). NOTHING is ever fetched
- * or built: a launch that fails for a missing index fails the stage on its
- * exit code, and one that prints the run-time build's notice (or its inert
- * line — `--library-index-from-bundle` is never passed) fails it too.
+ * DEFAULT (exp171): with no `--library-index` it searches its store
+ * (`library.index_store_dir`, else `<cwd>/.humanify/library-index`) for an
+ * index of the bundle's KIND — its packing tool, read off detection
+ * (exp175) — and, finding none, prints ONE line and runs with library name
+ * matching skipped. This committed, tiny store — one index built from the
+ * one real npm package the fixtures bundle (ms@2.1.3;
+ * test/e2e/library-index/README.md) — is pointed to explicitly, so every
+ * Bun fixture runs the default mode END TO END on the found path (index
+ * lookup, vendor placement, restoration), and every other fixture runs the
+ * SAME default and must print the skip line (the store has Bun slices
+ * only). NOTHING is ever fetched or built: a launch that prints the
+ * run-time build's notice fails the stage (`--library-index-from-bundle`
+ * is never passed).
  */
 const LIBRARY_STORE = path.join(REPO, "test/e2e/library-index");
 /** The notice a run prints before it BUILDS an index (runtime_index.rs). */
 const BUILD_NOTICE =
   "NOTICE: library names (the default) needs a library index";
-/** The run-time build's inert line (runtime_index.rs): never in e2e. */
-const INERT_LINE = "Library names: off for this run";
+/** The skip line a default run prints when the store holds no index for
+ *  the bundle's kind (runtime_index.rs `no_index_line`). */
+const SKIP_LINE = new RegExp(
+  `^no library index for (\\S+) bundles in ${escapeRegExp(LIBRARY_STORE)} — skipping library name matching \\(`,
+  "m"
+);
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 interface VersionPair {
   v1: string;
@@ -465,7 +473,7 @@ async function runBinary(
   if (code !== 0) {
     fail(`${label}: the binary exited ${code}\n${stderr.slice(-2000)}`);
   }
-  if (stderr.includes(BUILD_NOTICE) || stderr.includes(INERT_LINE)) {
+  if (stderr.includes(BUILD_NOTICE)) {
     fail(
       `${label}: the run took the run-time index build path — e2e must never fetch or build one ` +
         `(hermeticity); the committed store ${LIBRARY_STORE} must serve every Bun fixture`
@@ -689,22 +697,31 @@ function inputOf(name: string, version: string): string {
   return p;
 }
 
-/** Which library path a launch took (exp171/exp174), from its stderr. */
-function libraryPath(stderr: string, library: Settings): string {
-  if (/^Library index: using /m.test(stderr))
-    return "names, the committed index FOUND";
-  if (library.length > 0)
-    return "off (not a Bun bundle: the committed store has Bun slices only)";
-  fail(`names ran without the found-index line:\n${stderr.slice(-2000)}`);
-}
-
 /**
- * The library settings of every launch of a pair: none (the default,
- * names, on the committed store) for a Bun bundle; off for any other —
- * the store has no slice for it, and names would refuse to run.
+ * Which library path a launch took (exp171/exp175), from its stderr: a Bun
+ * bundle must FIND the committed index; any other must print the skip line
+ * naming its own kind (the store has Bun slices only). `bundler`: what
+ * detection said.
  */
-function librarySettings(detection: Detection): Settings {
-  return detection.bundler === "bun" ? [] : [["library.matching", "off"]];
+function libraryPath(stderr: string, bundler: string): string {
+  const found = /^Library index: using /m.test(stderr);
+  const skip = SKIP_LINE.exec(stderr);
+  if (bundler === "bun") {
+    if (found && !skip) return "names, the committed index FOUND";
+    fail(
+      `a Bun bundle ran without the found-index line:\n${stderr.slice(-2000)}`
+    );
+  }
+  if (!skip || found) {
+    fail(
+      `a ${bundler} bundle ran without the skip line (the committed store has Bun slices only):\n${stderr.slice(-2000)}`
+    );
+  }
+  const kind = skip[1];
+  if (kind === "bun" || (bundler !== "unknown" && kind !== bundler)) {
+    fail(`the skip line names kind ${kind} for a ${bundler} bundle`);
+  }
+  return `names, SKIPPED: no ${kind} index in the committed store`;
 }
 
 /**
@@ -721,7 +738,7 @@ async function freshLeg(
   bundle: boolean,
   fresh: string,
   split: Settings,
-  library: Settings
+  bundler: string
 ): Promise<string> {
   const label = `${name} ${pair.v1}->${pair.v2}`;
   const stats: Settings = bundle
@@ -733,7 +750,7 @@ async function freshLeg(
     endpoint,
     `${label} fresh`
   );
-  console.log(`  library: ${libraryPath(stderr, library)}`);
+  console.log(`  library: ${libraryPath(stderr, bundler)}`);
   const freshOut = path.join(fresh, "index.js");
   if (!bundle && !fs.existsSync(freshOut)) {
     fail(`${label}: fresh run wrote no index.js`);
@@ -798,7 +815,7 @@ async function checkPair(
   );
   const root = path.join(scratch, `${name}-${pair.v1}-${pair.v2}`);
   const fresh = path.join(root, "fresh");
-  await runPair(name, pair, endpoint, root, bundle, librarySettings(detection));
+  await runPair(name, pair, endpoint, root, bundle, detection.bundler);
   const vendorFiles = bundle ? vendorFileCount(fresh) : 0;
   const splitMethod = bundle ? splitMethodOf(`${fresh}.stats.json`) : undefined;
   if (bundle)
@@ -829,18 +846,15 @@ async function runPair(
   endpoint: string,
   root: string,
   bundle: boolean,
-  library: Settings
+  bundler: string
 ): Promise<void> {
   const label = `${name} ${pair.v1}->${pair.v2}`;
   const fresh = path.join(root, "fresh");
   const prior = path.join(root, "prior-a");
   const again = path.join(root, "prior-b");
   // A bundle fixture's output is the runnable split tree; every launch of
-  // the pair makes the same library decision.
-  const split: Settings = [
-    ...(bundle ? ([["split.enabled", true]] as Settings) : []),
-    ...library
-  ];
+  // the pair runs the default library decision.
+  const split: Settings = bundle ? [["split.enabled", true]] : [];
 
   // The prior the next release diffs against: the split tree's
   // humanified source (or the named file a bundle the split does not read
@@ -852,7 +866,7 @@ async function runPair(
     bundle,
     fresh,
     split,
-    library
+    bundler
   );
   await priorLeg(name, pair, endpoint, priorReference, prior, again, split);
   const seqPriorA = await sequencedLeg(

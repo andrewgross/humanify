@@ -92,6 +92,12 @@ sample of 2.1.216). Rebuild only what Bun needs:
 
 ### 3. The builder as a library, a cache, and run-time builds
 
+> **UPDATE exp175 (2026-11-01):** the store is searched for an index of the
+> bundle's KIND (its packing tool, read off detection: `recipe::index_kind`);
+> finding none, a run prints one line and skips library name matching
+> instead of failing. The run-time build builds Bun indexes only; another
+> kind is skipped with its own line. See docs/library-matching-config.md §2.
+>
 > **UPDATE exp174 (2026-10-31):** `index_build` is deleted. A run with no
 > `--library-index` SEARCHES the store, which now lives under the WORKING
 > directory (`<cwd>/.humanify/library-index`), and fails before any work

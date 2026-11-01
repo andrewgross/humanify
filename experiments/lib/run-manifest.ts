@@ -139,6 +139,24 @@ export interface RunManifest {
     residueLocality: number;
     byTier: Record<string, number>;
   };
+  /**
+   * What the library decision came to (exp175): the stats file's
+   * `libraryMatching` block — `used` (explicit or stored index), `built`,
+   * `skipped` (no index for the bundle's kind: off's bytes) or `off`.
+   * Absent on runs before exp175 and on a run that wrote no stats file.
+   */
+  library?: LibraryMatchingBlock;
+}
+
+/** The binary's `--stats-json` `libraryMatching` block (exp175). */
+export interface LibraryMatchingBlock {
+  matching: string;
+  /** used | built | skipped | off */
+  outcome: string;
+  kind: string;
+  indexFrom: string | null;
+  indexId: string | null;
+  why: string | null;
 }
 
 /** The binary's configuration record (the CLI's `Config::record`); only
@@ -520,6 +538,18 @@ const WARNING_CHECKS: readonly WarningCheck[] = [
     say: () =>
       "the binary wrote no configuration record (no stats file): this " +
       "run's settings, kill switches included, are UNKNOWN."
+  },
+  {
+    // exp175: with no explicit index, names mode SKIPS library name
+    // matching when the store holds no index for the bundle's kind — off's
+    // bytes under a names config. invariants.ts refuses the card; this
+    // says so wherever the manifest is read.
+    name: "library-skipped",
+    fires: (m) => m.library?.outcome === "skipped",
+    say: (m) =>
+      `this run SKIPPED library name matching (no library index for ` +
+      `${m.library?.kind} bundles): its tree is off mode's, whatever its ` +
+      `config says. ${m.library?.why ?? ""}`
   },
   {
     name: "dirty-tree",
