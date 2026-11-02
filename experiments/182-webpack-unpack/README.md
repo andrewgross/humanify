@@ -33,12 +33,14 @@ mtime 2026-11-01 23:58 UTC) was written BY THIS MECHANISM, not deleted here.
 It is the shim's beautified output of a small recipe-built webpack probe
 bundle whose entry requires the `ms` package's index (module 585) and one
 more module (478) and ends with the index recipe's
-`//# sourceMappingURL=out.js.map` marker — i.e. the exp181 run-time-build
-probe ("a bundle that reads the whole package.json"). Written at 23:58, the
-minute exp181's README records the discovery run: the exp181 lane ran it
-with a relative `-o out` against a binary whose `scripts/…` resolved to the
-main checkout, so the shim (cwd = repo root) wrote the folder there and the
-run failed reading it against its own cwd. Left in place.
+`//# sourceMappingURL=out.js.map` marker — a recipe-built probe of the shape
+exp181 used to prove the webpack run-time build ("a bundle that reads the
+whole package.json"; no probe source survives on disk, so the exact bundle
+is inferred from the output's content, not re-run). Written at 23:58:46, the
+minute exp181's README records the discovery run: an exp181 lane run with a
+relative `-o out` against a binary whose `scripts/…` resolved to the main
+checkout, so the shim (cwd = repo root) wrote the folder there and the run
+failed reading it against its own cwd. Left in place.
 
 ## The fix (one owner)
 
