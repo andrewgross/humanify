@@ -322,6 +322,18 @@ pub struct DiscoveryOptions {
     /// module's file: they are dropped, and a module left with no seed is
     /// claimed by no one ([`factory_whole`]).
     pub factory_whole_seed: bool,
+    /// The whole-seed rule's cover exception (exp176; 0 = none; reads
+    /// [`Self::factory_whole_seed`]): a bundled CommonJS module is backed
+    /// for a family whose index prints cover at least this share of the
+    /// module's nodes (summed over its body statements; per statement the
+    /// whole print, else the largest non-overlapping function prints, each
+    /// held in a module the lookup's specificity rule reads), as a whole
+    /// print would back it. A UMD or IIFE wrapper is one statement whose
+    /// whole print drifts while its functions match; a one-line prologue or
+    /// export beside it barely dilutes it. A shared helper or an inlined
+    /// copy covers a part of a module, and a carrier holds the code only in
+    /// a far bigger file: those keep the rule.
+    pub factory_whole_cover: f64,
     /// The factory banner check (exp132; default off; reads cut factories):
     /// a `/*!` banner seed on a body statement of a bundled CommonJS module
     /// is refused when another family's index prints cover more of that
@@ -360,6 +372,7 @@ impl Default for DiscoveryOptions {
             factory_bodies: false,
             factory_tie_fence: false,
             factory_whole_seed: false,
+            factory_whole_cover: 0.0,
             factory_banner_index: false,
         }
     }
@@ -381,7 +394,10 @@ impl DiscoveryOptions {
     /// (precision at or above the previous default on every set, F0.5
     /// +29..62 over both scopes); and since 2026-10-22 exp129's
     /// `helper_prints = seed` (experiments/138-helpers-terser-flip:
-    /// precision at or above the previous default on all 21 sets).
+    /// precision at or above the previous default on all 21 sets); and
+    /// since exp176 (experiments/176-whole-seed) `factory_whole_cover =
+    /// 0.95` (bun-dev +2.95 MB named, bun-held +0.79 MB, 0 wrong-family or
+    /// app bytes added on any set).
     /// `helper_families` stays off.
     /// `Default` stays the engine's baseline (every guard off), which the
     /// unit tests compare each guard against.
@@ -407,6 +423,7 @@ impl DiscoveryOptions {
             factory_tie_fence: true,
             factory_banner_index: true,
             factory_whole_seed: true,
+            factory_whole_cover: 0.95,
             helper_prints: HelperPrints::Seed,
             ..DiscoveryOptions::default()
         }
@@ -1185,11 +1202,7 @@ impl<'c> Containment<'c> {
             return None;
         };
         let query = self.module_bytes[u as usize];
-        let specific = |m: u64| {
-            self.rules
-                .specificity
-                .is_none_or(|(f, slack)| m <= f * query + slack)
-        };
+        let specific = |m: u64| self.specific(m, query);
         // The package's smallest module holding `p`, when `p` is a print
         // the lookup reads (held within the specificity bound by at most
         // `max_packages` owners) and the package is one of its owners: a
@@ -1269,6 +1282,14 @@ impl<'c> Containment<'c> {
         })
     }
 
+    /// Does the lookup's specificity rule read an index module of
+    /// `module_bytes` for a query unit in a module of `query` bytes?
+    fn specific(&self, module_bytes: u64, query: u64) -> bool {
+        self.rules
+            .specificity
+            .is_none_or(|(f, slack)| module_bytes <= f * query + slack)
+    }
+
     /// Does `package`'s family hold unit `u`'s WHOLE print (at or over the
     /// row floor, in a module the lookup's specificity rule reads; however
     /// many other packages hold it too)?
@@ -1280,13 +1301,11 @@ impl<'c> Containment<'c> {
         use crate::matching::store::ReferenceStore;
         let query = self.module_bytes[u as usize];
         prints.whole.nodes >= UNIT_ROW_MIN_NODES
-            && self.index.candidates(&prints.whole.hash).iter().any(|h| {
-                self.owner_is(h.owner, package)
-                    && self
-                        .rules
-                        .specificity
-                        .is_none_or(|(f, slack)| h.module_bytes <= f * query + slack)
-            })
+            && self
+                .index
+                .candidates(&prints.whole.hash)
+                .iter()
+                .any(|h| self.owner_is(h.owner, package) && self.specific(h.module_bytes, query))
     }
 
     /// Does the index contradict unit `u` being `package`'s? (type doc)
@@ -1406,6 +1425,38 @@ impl<'c> Containment<'c> {
             },
         );
         Some((cover, prints.whole.nodes))
+    }
+
+    /// The nodes of unit `u` `package`'s family's index prints cover
+    /// ([`family_cover`] at the row floor: the whole print, else the largest
+    /// non-overlapping function prints), and `u`'s nodes; counting only
+    /// prints the family holds in a module the lookup's specificity rule
+    /// reads — the filter [`Self::whole_held`] applies: code the family
+    /// holds only inside a far bigger file (a carrier's bundle) is not its
+    /// file. (0, 0) for a unit with no prints.
+    fn covered_nodes(&self, u: u32, package: &str) -> (u32, u32) {
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        use crate::matching::store::ReferenceStore;
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return (0, 0);
+        };
+        let query = self.module_bytes[u as usize];
+        let cover = family_cover(
+            &prints.whole,
+            &prints.functions,
+            UNIT_ROW_MIN_NODES,
+            |hash| {
+                let held = self.index.candidates(hash).iter().any(|h| {
+                    self.owner_is(h.owner, package) && self.specific(h.module_bytes, query)
+                });
+                if held {
+                    BTreeSet::from([OWN])
+                } else {
+                    BTreeSet::new()
+                }
+            },
+        );
+        (cover.get(OWN).copied().unwrap_or(0), prints.whole.nodes)
     }
 
     /// Does another family's evidence outweigh `package`'s family's on unit
@@ -1889,7 +1940,14 @@ fn presence(
         factory_ties(&mut keep, graph, containment, &mut fenced);
     }
     if options.factory_whole_seed {
-        factory_whole(&mut keep, &keys, graph, containment, &mut fenced);
+        factory_whole(
+            &mut keep,
+            &keys,
+            graph,
+            containment,
+            options.factory_whole_cover,
+            &mut fenced,
+        );
     }
     let mut out: Vec<Seed> = keep.into_iter().flatten().collect();
     out.extend(fenced.into_iter().map(|unit| Seed {
@@ -2134,19 +2192,30 @@ fn factory_banners(
 /// [`DiscoveryOptions::factory_whole_seed`] over the kept seeds (see
 /// [`presence`]): per cut factory and package family, the family's seeds
 /// there are kept only when one of them is a declared or banner seed or an
-/// index seed whose whole print the family holds; every other body statement
+/// index seed whose whole print the family holds — or whose family's prints
+/// cover at least `cover` of the module's nodes
+/// ([`DiscoveryOptions::factory_whole_cover`]); every other body statement
 /// of a factory that lost seeds goes to `fenced`.
 fn factory_whole(
     keep: &mut [Option<Seed>],
     keys: &[usize],
     graph: &ReferenceGraph,
     containment: &Containment<'_>,
+    cover: f64,
     fenced: &mut Vec<u32>,
 ) {
     let module_of = |u: u32| match graph.units[u as usize].kind {
         UnitKind::FactoryBody { module } => Some(module),
         _ => None,
     };
+    let mut statements: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    if cover > 0.0 {
+        for u in 0..graph.units.len() as u32 {
+            if let Some(m) = module_of(u) {
+                statements.entry(m).or_default().push(u);
+            }
+        }
+    }
     let mut backed: BTreeSet<(u32, usize)> = BTreeSet::new();
     for (s, &k) in keep.iter().zip(keys) {
         let Some(s) = s else {
@@ -2155,7 +2224,16 @@ fn factory_whole(
         let Some(m) = module_of(s.unit) else {
             continue;
         };
-        if !s.evidence.is_index() || containment.whole_held(s.unit, &s.package) {
+        let covered = || {
+            let (mut c, mut n) = (0u64, 0u64);
+            for &v in statements.get(&m).map_or(&[][..], Vec::as_slice) {
+                let (cv, nv) = containment.covered_nodes(v, &s.package);
+                c += u64::from(cv);
+                n += u64::from(nv);
+            }
+            n > 0 && c as f64 >= cover * n as f64
+        };
+        if !s.evidence.is_index() || containment.whole_held(s.unit, &s.package) || covered() {
             backed.insert((m, k));
         }
     }

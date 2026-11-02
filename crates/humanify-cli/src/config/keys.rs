@@ -980,6 +980,20 @@ pub static KEYS: &[Key] = &[
     },
     Key {
         section: "library.discovery",
+        name: "factory_whole_cover",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().factory_whole_cover),
+        unset: "",
+        doc: "With factory_whole_seed: a bundled CommonJS module is backed for a family whose \
+              index prints (each in a module the lookup's specificity rule reads) cover at least \
+              this share of the module's nodes, as a whole print would back it: a UMD or IIFE \
+              wrapper whose functions match while its whole print drifts. A shared helper, an \
+              inlined copy or a carrier's bundle covers less and keeps the rule (exp176; 0 = no \
+              exception).",
+    },
+    Key {
+        section: "library.discovery",
         name: "factory_banner_index",
         kind: Kind::Bool,
         flag: None,
