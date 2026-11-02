@@ -1,0 +1,258 @@
+{
+  "format": "humanify-index-shard/1",
+  "key": "7eaa7d7bbe343c5a598333e54e1b060edae9a894696075fefc6e6a86ac8d65d1",
+  "kind": "esbuild-node-cjs-min",
+  "package": "ms",
+  "version": "2.1.3",
+  "bundler": "esbuild@0.28.2",
+  "recipe": "recipe/4 esbuild:target=node,format=cjs,minify,production",
+  "fingerprint": "vendor-content-key/4+units/3+edges/1+unit-rows/5+unit-names/1",
+  "modules": [
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "key": "e2b770b125899fe7"
+    }
+  ],
+  "units": [
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "024cf6c6f6275f90",
+      "nodes": 29,
+      "content": 0,
+      "moduleBytes": 1328,
+      "names": [
+        { "slot": 0, "name": "s", "kind": "local" },
+        { "slot": 1, "name": "m", "kind": "local" },
+        { "slot": 2, "name": "h", "kind": "local" },
+        { "slot": 3, "name": "d", "kind": "local" },
+        { "slot": 4, "name": "w", "kind": "local" },
+        { "slot": 5, "name": "y", "kind": "local" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "21bfdd4e389bea5f",
+      "nodes": 63,
+      "content": 10,
+      "moduleBytes": 1328,
+      "inside": ["296cbd7745e5ba7a", "9a35b9b164149602", "b5df38c3526bcf0b"],
+      "names": [
+        { "slot": 1, "name": "options", "kind": "param" },
+        { "slot": 2, "name": "type", "kind": "local" },
+        { "slot": 3, "name": "val", "kind": "param" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "8a44939fc51ead6e",
+      "nodes": 58,
+      "content": 9,
+      "moduleBytes": 1328,
+      "inside": ["296cbd7745e5ba7a", "9a35b9b164149602", "b5df38c3526bcf0b"],
+      "names": [
+        { "slot": 0, "name": "options", "kind": "param" },
+        { "slot": 1, "name": "type", "kind": "local" },
+        { "slot": 2, "name": "val", "kind": "param" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "296cbd7745e5ba7a",
+      "nodes": 141,
+      "content": 37,
+      "moduleBytes": 1328,
+      "inside": ["024cf6c6f6275f90"],
+      "names": [
+        { "slot": 0, "name": "match", "kind": "local" },
+        { "slot": 1, "name": "str", "kind": "param" },
+        { "slot": 2, "name": "n", "kind": "local" },
+        { "slot": 3, "name": "type", "kind": "local" },
+        { "slot": 10, "name": "parse", "kind": "function" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "9a35b9b164149602",
+      "nodes": 68,
+      "content": 8,
+      "moduleBytes": 1328,
+      "inside": ["024cf6c6f6275f90"],
+      "names": [
+        { "slot": 0, "name": "msAbs", "kind": "local" },
+        { "slot": 1, "name": "ms", "kind": "param" },
+        { "slot": 6, "name": "fmtShort", "kind": "function" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "b5df38c3526bcf0b",
+      "nodes": 56,
+      "content": 7,
+      "moduleBytes": 1328,
+      "inside": ["024cf6c6f6275f90", "b960b3010e3bb5d7"],
+      "names": [
+        { "slot": 0, "name": "msAbs", "kind": "local" },
+        { "slot": 1, "name": "ms", "kind": "param" },
+        { "slot": 7, "name": "fmtLong", "kind": "function" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "b960b3010e3bb5d7",
+      "nodes": 33,
+      "content": 5,
+      "moduleBytes": 1328,
+      "names": [
+        { "slot": 0, "name": "isPlural", "kind": "local" },
+        { "slot": 1, "name": "msAbs", "kind": "param" },
+        { "slot": 2, "name": "n", "kind": "param" },
+        { "slot": 3, "name": "ms", "kind": "param" },
+        { "slot": 4, "name": "name", "kind": "param" },
+        { "slot": 5, "name": "plural", "kind": "function" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "024cf6c6f6275f90",
+      "nodes": 29,
+      "content": 0,
+      "moduleBytes": 1328,
+      "names": [
+        { "slot": 0, "name": "s", "kind": "local" },
+        { "slot": 1, "name": "m", "kind": "local" },
+        { "slot": 2, "name": "h", "kind": "local" },
+        { "slot": 3, "name": "d", "kind": "local" },
+        { "slot": 4, "name": "w", "kind": "local" },
+        { "slot": 5, "name": "y", "kind": "local" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "21bfdd4e389bea5f",
+      "nodes": 63,
+      "content": 10,
+      "moduleBytes": 1328,
+      "inside": ["296cbd7745e5ba7a", "9a35b9b164149602", "b5df38c3526bcf0b"],
+      "names": [
+        { "slot": 1, "name": "options", "kind": "param" },
+        { "slot": 2, "name": "type", "kind": "local" },
+        { "slot": 3, "name": "val", "kind": "param" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "8a44939fc51ead6e",
+      "nodes": 58,
+      "content": 9,
+      "moduleBytes": 1328,
+      "inside": ["296cbd7745e5ba7a", "9a35b9b164149602", "b5df38c3526bcf0b"],
+      "names": [
+        { "slot": 0, "name": "options", "kind": "param" },
+        { "slot": 1, "name": "type", "kind": "local" },
+        { "slot": 2, "name": "val", "kind": "param" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "296cbd7745e5ba7a",
+      "nodes": 141,
+      "content": 37,
+      "moduleBytes": 1328,
+      "inside": ["024cf6c6f6275f90"],
+      "names": [
+        { "slot": 0, "name": "match", "kind": "local" },
+        { "slot": 1, "name": "str", "kind": "param" },
+        { "slot": 2, "name": "n", "kind": "local" },
+        { "slot": 3, "name": "type", "kind": "local" },
+        { "slot": 10, "name": "parse", "kind": "function" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "9a35b9b164149602",
+      "nodes": 68,
+      "content": 8,
+      "moduleBytes": 1328,
+      "inside": ["024cf6c6f6275f90"],
+      "names": [
+        { "slot": 0, "name": "msAbs", "kind": "local" },
+        { "slot": 1, "name": "ms", "kind": "param" },
+        { "slot": 6, "name": "fmtShort", "kind": "function" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "b5df38c3526bcf0b",
+      "nodes": 56,
+      "content": 7,
+      "moduleBytes": 1328,
+      "inside": ["024cf6c6f6275f90", "b960b3010e3bb5d7"],
+      "names": [
+        { "slot": 0, "name": "msAbs", "kind": "local" },
+        { "slot": 1, "name": "ms", "kind": "param" },
+        { "slot": 7, "name": "fmtLong", "kind": "function" }
+      ]
+    },
+    {
+      "owner": "ms",
+      "version": "2.1.3",
+      "file": "index.js",
+      "hash": "b960b3010e3bb5d7",
+      "nodes": 33,
+      "content": 5,
+      "moduleBytes": 1328,
+      "names": [
+        { "slot": 0, "name": "isPlural", "kind": "local" },
+        { "slot": 1, "name": "msAbs", "kind": "param" },
+        { "slot": 2, "name": "n", "kind": "param" },
+        { "slot": 3, "name": "ms", "kind": "param" },
+        { "slot": 4, "name": "name", "kind": "param" },
+        { "slot": 5, "name": "plural", "kind": "function" }
+      ]
+    }
+  ],
+  "literals": [],
+  "notes": {
+    "builds": { "dyn": "ok", "req": "ok" },
+    "mixedSpans": 0,
+    "unowned": 0,
+    "unkeyed": 0,
+    "unreadFiles": 0,
+    "spongeFiles": 0,
+    "unitMixedSpans": 0,
+    "multiModuleFiles": 0,
+    "multiModuleDropped": 0,
+    "multiModuleUnitsDropped": 0,
+    "unbundledFiles": 0,
+    "spongeUnitFiles": {},
+    "spongeUnitRows": 0
+  }
+}

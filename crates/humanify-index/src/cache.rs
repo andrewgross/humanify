@@ -16,21 +16,19 @@
 //! - `registry/` — the packument snapshot the build reads (and fills, by
 //!   fetching, when a seed's package is not recorded yet).
 //! - `work/` — the build's install directories.
-//! - `tools/bun-<version>/` — the pinned Bun installs the build uses (a
-//!   `bun` npm package installed under the directory). Since exp171 (names
-//!   is the default) a build that finds none FETCHES the pinned one
-//!   ([`fetch_bun`], [`PINNED_BUN`]) — announced in the run's notice, once
-//!   per store.
+//! - `tools/<bundler>-<version>/` — the pinned bundler tools the build
+//!   runs, one per recipe bundler (Bun, esbuild, webpack, rollup; owned by
+//!   [`crate::tools`], exp181). A build that finds none for its recipe
+//!   FETCHES the pinned one — announced in the run's notice, once per
+//!   store.
 //!
 //! Nothing outside this root is ever autoloaded.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use humanify_core::libindex::format::{
-    INDEX_FORMAT, Manifest, check_manifest_stamps, compare_versions,
-};
-use humanify_core::libindex::recipe::{DetectedRecipe, Recipe, choose_slice};
+use humanify_core::libindex::format::{INDEX_FORMAT, Manifest, check_manifest_stamps};
+use humanify_core::libindex::recipe::{DetectedRecipe, Recipe, RecipeBundler, choose_slice};
 use serde::{Deserialize, Serialize};
 
 use crate::asof::{VersionPolicy, parse_as_of, select_versions};
@@ -350,127 +348,6 @@ pub fn search_store(root: &Path, detected: &DetectedRecipe) -> StoreSearch {
     out
 }
 
-/// The Bun a run-time build fetches when its store holds none (exp171):
-/// the version every recorded slice of the full index was built with.
-pub const PINNED_BUN: &str = "1.4.0";
-
-/// What fetching the pinned Bun costs on disk (the `bun` npm package and
-/// its one platform binary, measured on linux-x64: 78 MB).
-pub const BUN_FETCH_BYTES: u64 = 82_000_000;
-
-/// The Bun binary the run-time build uses: `<root>/tools/bun-<V>/`, an
-/// npm `bun` package install whose binary is at
-/// `node_modules/.bin/bun` (the layout exp152 pinned). `version` None —
-/// the run does not know the bundle's own Bun version in this lane —
-/// takes the NEWEST installed, which the run records in its diagnostics.
-/// Err: none installed (the run then fetches [`PINNED_BUN`] with
-/// [`fetch_bun`]; the error names the exact command for doing it by hand).
-pub fn bun_binary(root: &Path, version: Option<&str>) -> Result<(PathBuf, String), String> {
-    let tools = root.join(TOOLS_DIR);
-    let bin_of = |v: &str| tools.join(format!("bun-{v}")).join("node_modules/.bin/bun");
-    if let Some(v) = version {
-        if bin_of(v).is_file() {
-            return Ok((bin_of(v), v.to_string()));
-        }
-    } else {
-        let mut found: Vec<String> = std::fs::read_dir(&tools)
-            .into_iter()
-            .flatten()
-            .filter_map(|e| e.ok())
-            .filter_map(|e| e.file_name().into_string().ok())
-            .filter(|n| {
-                n.starts_with("bun-") && tools.join(n).join("node_modules/.bin/bun").is_file()
-            })
-            .filter_map(|n| n.strip_prefix("bun-").map(str::to_string))
-            .collect();
-        // newest first (semver, not text: 1.10.0 > 1.4.0)
-        found.sort_by(|a, b| compare_versions(b, a));
-        if let Some(v) = found.into_iter().next() {
-            return Ok((bin_of(&v), v));
-        }
-    }
-    Err(format!(
-        "no Bun under {} (the build looks for \
-         {0}/bun-<version>/node_modules/.bin/bun; by hand: \
-         npm install bun@{PINNED_BUN} --prefix {0}/bun-{PINNED_BUN})",
-        tools.display()
-    ))
-}
-
-/// The deadline over fetching Bun (one npm install of a ~80 MB package)
-/// and over its `--version` check.
-const BUN_FETCH_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15 * 60);
-
-/// Fetch Bun `version` into `<root>/tools/bun-<version>/` (exp171: names
-/// is the default, so a store with no Bun gets one instead of failing the
-/// run). `npm install` runs with `--ignore-scripts` — the index builder's
-/// rule for every package it installs — so Bun's own postinstall, which
-/// only copies the platform binary over the package's placeholder, is done
-/// here: the one `@oven/bun-*` binary npm installed for this platform is
-/// linked over `node_modules/bun/bin/bun.exe` (what `.bin/bun` points at).
-/// The result must answer `--version` with `version`, else the fetch
-/// fails loudly and leaves nothing behind.
-pub fn fetch_bun(root: &Path, version: &str) -> Result<(PathBuf, String), String> {
-    use std::process::Command;
-    let dir = root.join(TOOLS_DIR).join(format!("bun-{version}"));
-    let fail = |what: String| -> String {
-        let _ = std::fs::remove_dir_all(&dir);
-        format!("fetching Bun {version} into {}: {what}", dir.display())
-    };
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).map_err(|e| fail(e.to_string()))?;
-    let out = humanify_core::subprocess::run(
-        Command::new("npm").args([
-            "install",
-            &format!("bun@{version}"),
-            "--prefix",
-            &dir.to_string_lossy(),
-            "--ignore-scripts",
-            "--no-audit",
-            "--no-fund",
-            "--loglevel=error",
-        ]),
-        None,
-        BUN_FETCH_DEADLINE,
-    )
-    .map_err(|e| fail(format!("npm install: {e}")))?;
-    if !out.status.success() {
-        return Err(fail(format!(
-            "npm install: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        )));
-    }
-    let oven = dir.join("node_modules/@oven");
-    let platform = std::fs::read_dir(&oven)
-        .into_iter()
-        .flatten()
-        .filter_map(|e| e.ok())
-        .map(|e| e.path().join("bin/bun"))
-        .find(|p| p.is_file())
-        .ok_or_else(|| fail(format!("no platform binary under {}", oven.display())))?;
-    let placeholder = dir.join("node_modules/bun/bin/bun.exe");
-    let _ = std::fs::remove_file(&placeholder);
-    std::fs::hard_link(&platform, &placeholder)
-        .or_else(|_| std::fs::copy(&platform, &placeholder).map(|_| ()))
-        .map_err(|e| fail(format!("placing {}: {e}", platform.display())))?;
-    let bin = dir.join("node_modules/.bin/bun");
-    let check = humanify_core::subprocess::run(
-        Command::new(&bin).arg("--version"),
-        None,
-        BUN_FETCH_DEADLINE,
-    )
-    .map_err(|e| fail(format!("{} --version: {e}", bin.display())))?;
-    let said = String::from_utf8_lossy(&check.stdout).trim().to_string();
-    if !check.status.success() || said != version {
-        return Err(fail(format!(
-            "{} --version answered {said:?} (exit {:?})",
-            bin.display(),
-            check.status.code()
-        )));
-    }
-    Ok((bin, version.to_string()))
-}
-
 /// Whether `name` can be an npm package name (npm's own rules: at most
 /// 214 characters, lowercase URL-safe characters, an optional `@scope/`,
 /// no leading `.` or `_`). The seed scan reads banners, so it offers URLs
@@ -674,7 +551,7 @@ pub fn plan_build(
 /// to cost — what the run's notice prints before it starts (exp171).
 /// Per-version figures CALIBRATED on measured builds (exp171's README,
 /// "What the index costs"), at the builder's 4 jobs. A fetch of the
-/// pinned Bun adds [`BUN_FETCH_BYTES`].
+/// recipe's tool adds its [`crate::tools::ToolPin::fetch_bytes`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BuildEstimate {
     pub bytes_low: u64,
@@ -683,28 +560,56 @@ pub struct BuildEstimate {
     pub seconds_high: u64,
 }
 
-/// Measured per-version disk (store shards + merged index + install
-/// work directory), bytes — the low and high ends of the per-app means
-/// measured on three Bun-built apps (exp171: 1.5, 12.5 and 39 MB per built
-/// version; 17 versions built). The prebuilt full index is 0.65 MB per
-/// version for the merged index alone (43 GB / 65,839 versions).
-pub const VERSION_BYTES: (u64, u64) = (12_000_000, 40_000_000);
-/// Measured per-version wall time at the builder's 4 jobs, seconds — the
-/// same three apps (0.5, 2 and 14 s per built version).
-pub const VERSION_SECONDS: (u64, u64) = (2, 15);
+/// What one built version costs for a recipe bundler: disk (store shards,
+/// merged index, install work directory) and wall time at the
+/// builder's 4 jobs, each (low, high) — the per-app means of measured
+/// run-time builds. Bun: three Bun-built apps (exp171: 1.5, 12.5 and 39 MB
+/// and 0.5, 2 and 14 s per built version; 17 versions built). esbuild,
+/// webpack, rollup: Bun's range scaled by each kind's measured ratio to
+/// Bun on the same 30 versions built once per kind (exp181 calib.sh: disk
+/// 0.62 / 0.95 / 0.58 of Bun's, wall time 0.56 / 2.3 / 2.1 of Bun's).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VersionCost {
+    pub bytes: (u64, u64),
+    pub seconds: (u64, u64),
+}
+
+/// [`VersionCost`] of `bundler`.
+pub fn version_cost(bundler: RecipeBundler) -> VersionCost {
+    match bundler {
+        RecipeBundler::Bun => VersionCost {
+            bytes: (12_000_000, 40_000_000),
+            seconds: (2, 15),
+        },
+        RecipeBundler::Esbuild => VersionCost {
+            bytes: (8_000_000, 25_000_000),
+            seconds: (1, 9),
+        },
+        RecipeBundler::Webpack => VersionCost {
+            bytes: (11_000_000, 38_000_000),
+            seconds: (5, 35),
+        },
+        RecipeBundler::Rollup => VersionCost {
+            bytes: (7_000_000, 23_000_000),
+            seconds: (4, 32),
+        },
+    }
+}
+
 /// The fixed part of every build (registry, plan, merge), seconds.
 pub const BUILD_FIXED_SECONDS: u64 = 10;
 
-/// [`BuildEstimate`] for `to_build` versions (and a Bun fetch when the
-/// store holds no Bun).
-pub fn estimate_build(to_build: usize, fetch_bun: bool) -> BuildEstimate {
+/// [`BuildEstimate`] for `to_build` versions built by `bundler`'s recipe,
+/// plus `fetch_bytes` for the tool the build fetches first (0: the store
+/// holds it).
+pub fn estimate_build(bundler: RecipeBundler, to_build: usize, fetch_bytes: u64) -> BuildEstimate {
     let n = to_build as u64;
-    let bun = if fetch_bun { BUN_FETCH_BYTES } else { 0 };
+    let c = version_cost(bundler);
     BuildEstimate {
-        bytes_low: n * VERSION_BYTES.0 + bun,
-        bytes_high: n * VERSION_BYTES.1 + bun,
-        seconds_low: BUILD_FIXED_SECONDS + n * VERSION_SECONDS.0,
-        seconds_high: BUILD_FIXED_SECONDS + n * VERSION_SECONDS.1,
+        bytes_low: n * c.bytes.0 + fetch_bytes,
+        bytes_high: n * c.bytes.1 + fetch_bytes,
+        seconds_low: BUILD_FIXED_SECONDS + n * c.seconds.0,
+        seconds_high: BUILD_FIXED_SECONDS + n * c.seconds.1,
     }
 }
 

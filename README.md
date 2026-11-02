@@ -135,11 +135,13 @@ directory per index, named by the sha256 of its `manifest.json`;
 prints one line saying no index for that kind was found and how to get one
 (the offline builder, `humanify-index build`), and goes on with library
 name matching skipped. A `--library-index` that has nothing for the
-bundle's kind fails the run. For a Bun bundle,
-`--library-index-from-bundle` instead builds one at run time from the npm
-packages the bundle itself reveals (library banners, inlined
-`package.json`): it installs them from the npm registry and prints the
-estimated disk and time first. `--library-matching off` opts out, and
+bundle's kind fails the run. `--library-index-from-bundle` instead builds
+one at run time from the npm packages the bundle itself reveals (library
+banners, inlined `package.json`), for any kind the index has a recipe for
+(Bun, esbuild, webpack, rollup): it installs them from the npm registry,
+bundles them with the pinned tool for that kind (fetched once into the
+store's `tools/`), and prints the estimated disk and time first. A bundler
+with no recipe yet (browserify, parcel, unrecognised) gets the one line. `--library-matching off` opts out, and
 `report` writes `.humanify/library-report.json` and changes no other output
 byte). Everything else is a key in
 the TOML config file; [`humanify.example.toml`](./humanify.example.toml)

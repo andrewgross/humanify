@@ -290,10 +290,10 @@
     },
     {
       "file": "crates/humanify-index/src/recipe.rs",
-      "scope": "RecipeBuild::version_command",
+      "scope": "version_command_of",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "`<bundler> --version` (`node <recipe script> --version` for webpack and rollup, exp105) for the index manifest, built here and run by bundler_version through humanify_core::subprocess::run under VERSION_DEADLINE (1 min; it answers in ms); a non-zero exit, empty answer or timeout is an error"
+      "reason": "`<bundler> --version` (`node <recipe script> --version` for webpack and rollup, exp105) for the index manifest and the tool fetch's check (exp181), built here and run by bundler_version_of through humanify_core::subprocess::run under VERSION_DEADLINE (1 min; it answers in ms); a non-zero exit, empty answer or timeout is an error"
     },
     {
       "file": "crates/humanify-index/src/recipe.rs",
@@ -303,11 +303,11 @@
       "reason": "one minified bun/esbuild build (or `node <recipe script>` for webpack and rollup, exp105) of a package entry, built here and run by RecipeBuild::build through humanify_core::subprocess::run under BUILD_DEADLINE (30 min; seconds in the exp095 builds); a non-zero exit or timeout returns the error text and the build contributes no files (the module shard records it)"
     },
     {
-      "file": "crates/humanify-index/src/cache.rs",
-      "scope": "fetch_bun",
+      "file": "crates/humanify-index/src/tools.rs",
+      "scope": "fetch_tool",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "exp171: a default (names-mode) run whose store holds no Bun fetches the pinned one — `npm install bun@<v> --ignore-scripts` then `<bin> --version` — each through humanify_core::subprocess::run (pipes drained) under BUN_FETCH_DEADLINE (15 min); a non-zero exit, a timeout, no platform binary or a wrong version is a loud error that removes the half-made directory"
+      "reason": "exp171/exp181: a run-time index build whose store holds no tool for the bundle's recipe fetches the pinned one (Bun, esbuild, webpack or rollup) — `npm install <specs> --before=<date> --prefix <store>/tools/<bundler>-<v> --ignore-scripts` — through humanify_core::subprocess::run (pipes drained) under FETCH_DEADLINE (15 min); a non-zero exit, a timeout, no platform binary or a wrong version is a loud error that removes the half-made directory"
     },
     {
       "file": "crates/humanify-index/src/registry.rs",

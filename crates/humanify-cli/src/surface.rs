@@ -146,8 +146,9 @@ pub struct CommandOptions {
         help = "When the store holds no index for the bundle's kind, build one at run time \
                 from the npm packages the bundle itself reveals (library banners, inlined \
                 package.json): installs each from the npm registry and bundles it with \
-                Bun, after printing the estimated disk and time; Bun bundles only \
-                (library.index_from_bundle)"
+                the recipe the bundle needs (Bun, esbuild, webpack or rollup; the pinned \
+                tool is fetched into the store's tools/), after printing the estimated \
+                disk and time (library.index_from_bundle)"
     )]
     pub library_index_from_bundle: bool,
 }

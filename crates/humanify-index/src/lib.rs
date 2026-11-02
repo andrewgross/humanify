@@ -9,6 +9,7 @@ pub mod registry;
 pub mod shard;
 pub mod slim;
 pub mod sourcemap;
+pub mod tools;
 
 #[cfg(test)]
 mod asof_test;
@@ -30,6 +31,8 @@ mod shard_test;
 mod slim_test;
 #[cfg(test)]
 mod sourcemap_test;
+#[cfg(test)]
+mod tools_test;
 
 /// The recipe the index-crate tests build under (index v2's Bun slice).
 #[cfg(test)]

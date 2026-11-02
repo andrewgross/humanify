@@ -1343,7 +1343,7 @@ fn assert_found_trail(report: &serde_json::Value, root: &Path) {
         "reading the bundle's own Bun version is out of this lane's scope"
     );
     assert_eq!(source["store"], root.display().to_string(), "{report}");
-    assert!(source["pickedBun"].is_null(), "nothing was built: {report}");
+    assert!(source["tool"].is_null(), "nothing was built: {report}");
     assert!(source["seeds"].is_null(), "nothing was built: {report}");
     let candidates = source["candidates"].as_array().expect("a list");
     assert!(
@@ -1412,4 +1412,178 @@ fn the_from_bundle_flag_takes_the_run_time_build_path() {
         snapshot(&off_dir),
         "a skipped from-bundle run must write exactly the opt-out's bytes"
     );
+}
+
+/// exp181 (Andrew 2026-11-01: "we have discovery and the ability to specify
+/// the bundler"): the bundler verdict the library index decision reads is
+/// the ONE the unpacker uses — detection, or the user's forced
+/// `unpack.bundler` / `unpack.minifier` — never a second detection. Forcing
+/// the bundler changes the kind searched, the recipe offered and the skip
+/// line, in step with the verdict the unpack stage logs (`Bundle
+/// detection: bundler=…`); a forced kind no recipe exists for says so.
+#[test]
+fn a_forced_bundler_is_the_verdict_the_library_index_decision_reads() {
+    let s = Scratch::new("ix-forced");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let cwd = fresh_cwd(&s, "cwd");
+    let root = cwd_store(&cwd);
+    for (forced, minifier, kind, recipe) in [
+        (
+            None,
+            None,
+            "bun",
+            Some("bun:target=node,format=cjs,minify,production"),
+        ),
+        (
+            Some("esbuild"),
+            None,
+            "esbuild",
+            Some("esbuild:target=node,format=cjs,minify,production"),
+        ),
+        (
+            Some("webpack"),
+            Some("none"),
+            "webpack",
+            Some("webpack:target=node,format=cjs "),
+        ),
+        (
+            Some("rollup"),
+            None,
+            "rollup",
+            Some("rollup:target=node,format=cjs,minify "),
+        ),
+        (Some("parcel"), None, "parcel", None),
+    ] {
+        let tag = forced.unwrap_or("detected");
+        let stats = s.0.join(format!("{tag}.stats.json"));
+        let out = s.0.join(format!("out-{tag}"));
+        let mut settings = vec![stats_setting(&stats)];
+        if let Some(b) = forced {
+            settings.push(format!("unpack.bundler = {b:?}"));
+        }
+        if let Some(m) = minifier {
+            settings.push(format!("unpack.minifier = {m:?}"));
+        }
+        let settings: Vec<&str> = settings.iter().map(String::as_str).collect();
+        let o = launch(
+            &cwd,
+            &[&input, "-o", out.to_str().unwrap(), "-v"],
+            &settings,
+        );
+        let err = stderr(&o);
+        // The webpack adapter (webcrack) runs through npx, absent from the
+        // test's PATH: that run fails at unpack, AFTER the index decision.
+        if kind != "webpack" {
+            assert_eq!(o.status.code(), Some(0), "{tag}: {err}");
+            assert_eq!(stats_library(&stats)["kind"], kind, "{tag}");
+        }
+        let head = skip_head(kind, &root);
+        let lines: Vec<&str> = err.lines().filter(|l| l.starts_with(&head)).collect();
+        assert_eq!(lines.len(), 1, "{tag}: ONE skip line naming {kind}: {err}");
+        match recipe {
+            Some(r) => assert!(
+                lines[0].contains(&format!("--recipe {r}")),
+                "{tag}: the recipe {r}: {}",
+                lines[0]
+            ),
+            None => assert!(
+                lines[0].contains(&format!("no index recipe exists for {kind} bundles yet")),
+                "{tag}: {}",
+                lines[0]
+            ),
+        }
+        let said = format!("{}{err}", String::from_utf8_lossy(&o.stdout));
+        assert!(
+            said.contains(&format!("Bundle detection: bundler={kind} ")),
+            "{tag}: the unpacker's verdict is the index decision's: {said}"
+        );
+    }
+}
+
+/// Copy `from` (a directory tree) to `to`.
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for e in std::fs::read_dir(from).unwrap() {
+        let e = e.unwrap();
+        let dst = to.join(e.file_name());
+        if e.file_type().unwrap().is_dir() {
+            copy_tree(&e.path(), &dst);
+        } else {
+            std::fs::copy(e.path(), &dst).unwrap();
+        }
+    }
+}
+
+/// exp181 (Andrew 2026-11-01: "our library interface should be usable for
+/// all of the bundlers we support"): `--library-index-from-bundle` builds
+/// an index for an ESBUILD bundle, with the recipe the bundle needs and the
+/// tool the store holds for it, entirely inside the store — hermetic: the
+/// committed fixture (`tests/fixtures/runtime-build-esbuild/`, README there)
+/// holds the packument snapshots and the one shard (ms@2.1.3, esbuild
+/// 0.28.2's recipe) the build needs, and the store's esbuild is a stub that
+/// answers `--version` and refuses to build — so nothing is fetched,
+/// installed or bundled, and the plan / reuse / merge / load / restore path
+/// runs for real on the release-shaped binary.
+#[test]
+fn from_bundle_builds_an_esbuild_index_from_the_store_s_own_tool() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/runtime-build-esbuild");
+    let s = Scratch::new("ix-esbuild-build");
+    let input = s.0.join("bundle.js");
+    std::fs::copy(fixture.join("bundle.js"), &input).unwrap();
+    let cwd = fresh_cwd(&s, "cwd");
+    let root = cwd_store(&cwd);
+    copy_tree(&fixture.join("store"), &root);
+    let bin = root.join("tools/esbuild-0.28.2/node_modules/.bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::copy(fixture.join("stub-esbuild.sh"), bin.join("esbuild")).unwrap();
+    let stats = s.0.join("stats.json");
+    let out = s.out();
+    let o = launch(
+        &cwd,
+        &[
+            input.to_str().unwrap(),
+            "-o",
+            out.to_str().unwrap(),
+            "--library-index-from-bundle",
+        ],
+        &[&stats_setting(&stats)],
+    );
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    assert!(
+        err.contains(&format!(
+            "no library index for esbuild bundles — building one from this bundle into {}",
+            root.display()
+        )),
+        "{err}"
+    );
+    assert!(!err.contains("fetching"), "the store's tool is used: {err}");
+    assert!(
+        err.contains("assembling one from 1 version(s) already in"),
+        "the committed shard serves: {err}"
+    );
+    let rec = stats_library(&stats);
+    assert_eq!(rec["outcome"], "built", "{rec}");
+    assert_eq!(rec["kind"], "esbuild", "{rec}");
+    assert_eq!(rec["indexFrom"], "run-time build", "{rec}");
+    let id = rec["indexId"].as_str().expect("an index id").to_string();
+    let sidecar: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(root.join(&id).join("build.json")).expect("the sidecar"),
+    )
+    .unwrap();
+    assert_eq!(
+        sidecar["slices"][0]["recipe"], "esbuild:target=node,format=cjs,minify,production",
+        "the recipe the bundle needs: {sidecar}"
+    );
+    assert_eq!(
+        sidecar["slices"][0]["bundlerVersion"], "0.28.2",
+        "{sidecar}"
+    );
+    // The index served the run: ms's code is placed under vendor/ms/ with
+    // its original names restored.
+    let ms = std::fs::read_to_string(out.join("vendor/ms/index.js")).expect("ms placed");
+    for name in ["fmtLong", "fmtShort", "options"] {
+        assert!(ms.contains(name), "{name} restored: {ms}");
+    }
 }

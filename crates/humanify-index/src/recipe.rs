@@ -80,31 +80,44 @@ pub struct RecipeBuild {
     pub bin: PathBuf,
 }
 
+/// The command that prints `bundler`'s version: the binary's `--version`,
+/// or the recipe script's (`node <script> --version`).
+pub fn version_command_of(bundler: RecipeBundler, bin: &Path) -> Command {
+    let mut cmd = if runs_as_node_script(bundler) {
+        let mut c = Command::new("node");
+        c.arg(bin);
+        c
+    } else {
+        Command::new(bin)
+    };
+    cmd.arg("--version");
+    cmd
+}
+
+/// `bundler`'s `--version` from `bin` (trimmed), under `deadline`.
+pub fn bundler_version_of(
+    bundler: RecipeBundler,
+    bin: &Path,
+    deadline: std::time::Duration,
+) -> Result<String, String> {
+    let out = humanify_core::subprocess::run(&mut version_command_of(bundler, bin), None, deadline)
+        .map_err(|e| format!("{}: {e}", bin.display()))?;
+    let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if !out.status.success() || v.is_empty() {
+        return Err(format!("{} --version failed", bin.display()));
+    }
+    Ok(v)
+}
+
 impl RecipeBuild {
-    /// The command that prints the bundler's version: the binary's
-    /// `--version`, or the recipe script's (`node <script> --version`).
+    /// The command that prints the bundler's version.
     pub fn version_command(&self) -> Command {
-        let mut cmd = if runs_as_node_script(self.recipe.bundler) {
-            let mut c = Command::new("node");
-            c.arg(&self.bin);
-            c
-        } else {
-            Command::new(&self.bin)
-        };
-        cmd.arg("--version");
-        cmd
+        version_command_of(self.recipe.bundler, &self.bin)
     }
 
     /// The bundler's `--version` (trimmed).
     pub fn bundler_version(&self) -> Result<String, String> {
-        let out =
-            humanify_core::subprocess::run(&mut self.version_command(), None, VERSION_DEADLINE)
-                .map_err(|e| format!("{}: {e}", self.bin.display()))?;
-        let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if !out.status.success() || v.is_empty() {
-            return Err(format!("{} --version failed", self.bin.display()));
-        }
-        Ok(v)
+        bundler_version_of(self.recipe.bundler, &self.bin, VERSION_DEADLINE)
     }
 
     /// The command that builds `entry` (relative to `cwd`) by the recipe

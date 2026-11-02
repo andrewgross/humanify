@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "name": "ms-app",
+  "dependencies": {
+    "ms": "2.1.3"
+  }
+}

@@ -1,0 +1,994 @@
+{
+  "corpus": "kind-rollup",
+  "entries": [
+    {
+      "appPackage": "ember-cli",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:ember-cli: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 829,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_ember-cli-afb389/entry.js",
+          "sha256": "db205a52e0b952242045bd02e7cc9b56da830737f4ac5e83ca95335df8ab81d2"
+        },
+        "map": {
+          "bytes": 1219,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_ember-cli-afb389/entry.js.map",
+          "sha256": "0374a4cf5c5d5a3ed47ecde2d1d5ccc3623c98f1eebb8dea586f84e5a7728ef3"
+        }
+      },
+      "id": "kind-rollup-cli_ember-cli-afb389",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9f3d4b2b15f74c8bedc18fbe785b21bd293039a70b71ab2c1be5fc264afc570d"
+      }
+    },
+    {
+      "appPackage": "babel-istanbul",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:babel-istanbul: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 17737,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_babel-istanbul-f3b1f1/entry.js",
+          "sha256": "1b3e69a79c5f4112db8e01c2b44ece6b451c05870abc801c5536a3fde643140c"
+        },
+        "map": {
+          "bytes": 29798,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_babel-istanbul-f3b1f1/entry.js.map",
+          "sha256": "66202f3bfa39b92028fd17e5144c2f72db2f533ebdd8c300869ce5a7633de6e7"
+        }
+      },
+      "id": "kind-rollup-cli_babel-istanbul-f3b1f1",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "02c4a29e38d57e9c567588ad718a61dcf7c8156275d868e726315d0033b3b593"
+      }
+    },
+    {
+      "appPackage": "doctoc",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:doctoc: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 363350,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_doctoc-fa09a2/entry.js",
+          "sha256": "811eb829cf427bfc7b8c50bc68c67df294db780398f634fc5c7e7ef6d78a4bd0"
+        },
+        "map": {
+          "bytes": 408242,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_doctoc-fa09a2/entry.js.map",
+          "sha256": "6b294663058a8754b7c3a9cfbd338a0ec8845961c7e30d8bff7ad9a3e103dbd2"
+        }
+      },
+      "id": "kind-rollup-cli_doctoc-fa09a2",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d311147d919670a1dbf74763addcb611908fa30ff835e174c47d7eeb97f46370"
+      }
+    },
+    {
+      "appPackage": "just-bash",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:just-bash: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 6216837,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_just-bash-6676e9/entry.js",
+          "sha256": "cb8de4260ba69835ac67e248974819f9d9e85dacaaf3225e38e87ae948645e2e"
+        },
+        "map": {
+          "bytes": 5999694,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_just-bash-6676e9/entry.js.map",
+          "sha256": "96db7320c74335af5a9c7570b9f574d14e212a5c2008eaf17afafa8e948a22a9"
+        }
+      },
+      "id": "kind-rollup-cli_just-bash-6676e9",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "65e84f9d23e7ce0b96385a59fbce565db6c54b64aa9dfabba2e4775da4d9afb3"
+      }
+    },
+    {
+      "appPackage": "@umijs/fabric",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:@umijs/fabric: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 95889,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_umijs_fabric-f601b5/entry.js",
+          "sha256": "b0920fc2527e6d681ea461af6c7c48d37374b3aeb0a54acee02dc5f691ce10b1"
+        },
+        "map": {
+          "bytes": 141010,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_umijs_fabric-f601b5/entry.js.map",
+          "sha256": "94487ff4a271358d13e2e5684d6fd3c344e525c505fdcfdc35b3dea68e3e9e5f"
+        }
+      },
+      "id": "kind-rollup-cli_umijs_fabric-f601b5",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "76cbba567bfdba543c31cebf98a0bc3c6e0cb9bbc1c17e641aa153dc89c22011"
+      }
+    },
+    {
+      "appPackage": "ts-patch",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:ts-patch: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 132522,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_ts-patch-3ab5bd/entry.js",
+          "sha256": "803b5c9ef2c531b3db007559eafd4f8e32b91f974a8525117ddd4b1635199a1e"
+        },
+        "map": {
+          "bytes": 184761,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_ts-patch-3ab5bd/entry.js.map",
+          "sha256": "1c19676937eee709775c99f6611928ee4b79900a9a0b953b34ceb6a939258b91"
+        }
+      },
+      "id": "kind-rollup-cli_ts-patch-3ab5bd",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "982fdeb2b6900aa377e6dfd8567762a022c7a2c4549bd8f87a18c7803f0ce781"
+      }
+    },
+    {
+      "appPackage": "cz-customizable",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:cz-customizable: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 608821,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_cz-customizable-36f649/entry.js",
+          "sha256": "063deb1eb99a059382cbbc4b9c0877fd7ecbc3dd5c0a12f5a08fd4baf45ea05f"
+        },
+        "map": {
+          "bytes": 606177,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_cz-customizable-36f649/entry.js.map",
+          "sha256": "a1df52c7f021b84e801e7d471ec6f90d9a7a81b8ac1b6d633a10b7dd0396cda8"
+        }
+      },
+      "id": "kind-rollup-cli_cz-customizable-36f649",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "77574fdb300d11a459ca18757f0df11b4a650e99bd52a3e1c75f005be50d0c2e"
+      }
+    },
+    {
+      "appPackage": "cross-var",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:cross-var: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 580632,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_cross-var-efce52/entry.js",
+          "sha256": "ea9b94ac6c9f3303dd3cd34d3f970a2873cd4991641090ba60a6adb42bff533b"
+        },
+        "map": {
+          "bytes": 766861,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_cross-var-efce52/entry.js.map",
+          "sha256": "06d684d71df5037ecfae79a3092193abdb2b47c20ad49a5c4c3f08a3441110d6"
+        }
+      },
+      "id": "kind-rollup-cli_cross-var-efce52",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "31ca46860fd7cbfadab5bbb08e8c69f8391ad796cc50c56582216ec99e115665"
+      }
+    },
+    {
+      "appPackage": "ts-json-schema-generator",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:ts-json-schema-generator: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 3803739,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_ts-json-schema-generator-1165fe/entry.js",
+          "sha256": "23bf0a5f948c033cb454f0b8fddc6bf57790e128e6ad8199bedf30ce6e292d40"
+        },
+        "map": {
+          "bytes": 5263012,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_ts-json-schema-generator-1165fe/entry.js.map",
+          "sha256": "56cf0cefa63b5f1cc69806ca33fda2cc237d9f1e4b41863da0b7392e95f9bdae"
+        }
+      },
+      "id": "kind-rollup-cli_ts-json-schema-generator-1165fe",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "483849d7e23fafc0280b17eed3071eb166bfa88adecd61740fa3e2ebe00fa7c0"
+      }
+    },
+    {
+      "appPackage": "jsforce",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:jsforce: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 288,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_jsforce-566556/entry.js",
+          "sha256": "7f02d63c9ef5554e0a4ec7ce6433d909462aa2da0b495d091e9250299d1d3749"
+        },
+        "map": {
+          "bytes": 578,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_jsforce-566556/entry.js.map",
+          "sha256": "22e74baa088f5af3e542317f7ef0a1ab8609cbc005de4ff3c6266047379a0275"
+        }
+      },
+      "id": "kind-rollup-cli_jsforce-566556",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "13f95b9cf594fd1a5044d0914d75280fb9355e15f361365eb840a048d8e43e1a"
+      }
+    },
+    {
+      "appPackage": "ts-standard",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:ts-standard: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 1536644,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_ts-standard-e79c0d/entry.js",
+          "sha256": "0e6b1ba55a1bf6b6453be5473c0d1814cb4c83424373de1fff19ddcc05b8a987"
+        },
+        "map": {
+          "bytes": 1921401,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_ts-standard-e79c0d/entry.js.map",
+          "sha256": "eee962d6facf477853c3b627cabde6912ac72222e3d91804c265698991fc826c"
+        }
+      },
+      "id": "kind-rollup-cli_ts-standard-e79c0d",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "dc50bbd18daa36a1f522be13ea2f1b804d522585b430b9728cddfad02463f663"
+      }
+    },
+    {
+      "appPackage": "health",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:health: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 226,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_health-88539c/entry.js",
+          "sha256": "d6a501622874b5938a8d08e4d0d61b30f47a922d2576fc610016f89a57608674"
+        },
+        "map": {
+          "bytes": 424,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_health-88539c/entry.js.map",
+          "sha256": "96009a31a176acfb4f86d77599f780ada5b271fe3f6fb68a48a965880ad69a21"
+        }
+      },
+      "id": "kind-rollup-cli_health-88539c",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7925c590ce850cb3fe72a1c70114c140f683d61118e51a69f9d4c271efca7b77"
+      }
+    },
+    {
+      "appPackage": "@lingui/cli",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app cli:@lingui/cli: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 41040,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/cli_lingui_cli-33be9c/entry.js",
+          "sha256": "556c38e55b6eaeb3939fa923e1dcca86bbe3c57aac029dc4d9fd2bf82319444f"
+        },
+        "map": {
+          "bytes": 52395,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/cli_lingui_cli-33be9c/entry.js.map",
+          "sha256": "5d8255cd0e7dfebfa0c301eb3778797ee44ff8c39653994562c35fd0700aabd3"
+        }
+      },
+      "id": "kind-rollup-cli_lingui_cli-33be9c",
+      "kind": "cli",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c69384f07140fd26509c972a736f2667e3bca5c05f93e5769cdb0c07551afdee"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app electron:gh-dfarm6__prism-browser-community: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 11821317,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-dfarm6__prism-browser-community-d453ee/entry.js",
+          "sha256": "d3c180a3d792212a9894e6b4c962a5e8554791a73815c4db1730c27059dcd181"
+        },
+        "map": {
+          "bytes": 7429516,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-dfarm6__prism-browser-community-d453ee/entry.js.map",
+          "sha256": "c624e1046659bb5c6b07abe98899aad1b5c9c837cae013baafb6c116b7d2196a"
+        }
+      },
+      "id": "kind-rollup-electron_gh-dfarm6__prism-browser-community-d453ee",
+      "kind": "electron",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "dd22af879c4d0f2747cede0a719c48aa610685c94899b0c4a302e42a894df3c4"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app electron:gh-shotheadman__mdcz: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 920029,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-shotheadman__mdcz-d7405c/entry.js",
+          "sha256": "309a4c3257ae9af39b00ec11f95c428bd04edcabd3e7bcdea8043e9d686fa034"
+        },
+        "map": {
+          "bytes": 1057871,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-shotheadman__mdcz-d7405c/entry.js.map",
+          "sha256": "6a268d358b3534a3333de5c5572e5208f6d6c2700670d509715ddaa9d587ece5"
+        }
+      },
+      "id": "kind-rollup-electron_gh-shotheadman__mdcz-d7405c",
+      "kind": "electron",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7974903882da11386ab25a23d306aabbf9a5bb248e42b0df9883911769aed701"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app electron:gh-cclank__quickshot: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 993424,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-cclank__quickshot-6f4904/entry.js",
+          "sha256": "2645aa27773367c328ba71b3e396ae2924f8b1c6b89038a95d07e1fb588719f7"
+        },
+        "map": {
+          "bytes": 1202958,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-cclank__quickshot-6f4904/entry.js.map",
+          "sha256": "598f21d35e6f8e9d2f3c8834eae4f59973be0ca31a008ce6fd0452201c64e5ca"
+        }
+      },
+      "id": "kind-rollup-electron_gh-cclank__quickshot-6f4904",
+      "kind": "electron",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8cf7740be74ce42d1b1552bc7f4b8cdb4cc4a63e2597cef85c6fea904ec03877"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app electron:gh-sanlinhtik3__thalika-voice-clone: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 917497,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-sanlinhtik3__thalika-voice-clone-9c854e/entry.js",
+          "sha256": "313dc1863b3b5338d4e911961c4334add5069ee63458afd090d7cbbf51b0e09f"
+        },
+        "map": {
+          "bytes": 967535,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-sanlinhtik3__thalika-voice-clone-9c854e/entry.js.map",
+          "sha256": "497656db81f6754f47823e58238b5650a817403de93767878b83cdcff230eaa7"
+        }
+      },
+      "id": "kind-rollup-electron_gh-sanlinhtik3__thalika-voice-clone-9c854e",
+      "kind": "electron",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c6330bcbd8feb79fbf00fcfcb6c590d99c47b83f97947e6905093808e39608b8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app electron:gh-dotenorio__clipboard-manager-electron: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 141689,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-dotenorio__clipboard-manager-electron-cc055f/entry.js",
+          "sha256": "66dfabeacd12b86150b763262132b7020c5278ed656c78a0f517cafab5eac813"
+        },
+        "map": {
+          "bytes": 245333,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-dotenorio__clipboard-manager-electron-cc055f/entry.js.map",
+          "sha256": "f53513267b2788b3498e6efab81f79e7a6b47549164770b25ca22afed7169549"
+        }
+      },
+      "id": "kind-rollup-electron_gh-dotenorio__clipboard-manager-electron-cc055f",
+      "kind": "electron",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "35b8a3f4e49f10e65a909f63bce81a703933718aa2559777ff8f74ac60a248ff"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app electron:gh-toantranmei__electron-vite-starter: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 2689161,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-toantranmei__electron-vite-starter-16153e/entry.js",
+          "sha256": "8cae6a62f2456bad57f526bc475513febd053056063653950eadb54bf3754e42"
+        },
+        "map": {
+          "bytes": 3195118,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-toantranmei__electron-vite-starter-16153e/entry.js.map",
+          "sha256": "fed1b6148a6931aea85a05c6894e34bfb90d44615043a14a79151991158fd31d"
+        }
+      },
+      "id": "kind-rollup-electron_gh-toantranmei__electron-vite-starter-16153e",
+      "kind": "electron",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a09a511f6748282a044cb1956406e83a25972760c4a7afdf52ab17cad1bbb21c"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app electron:gh-yaonieyo__doubao-account-pool: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 663021,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-yaonieyo__doubao-account-pool-220bd1/entry.js",
+          "sha256": "10090166b35fa35f9381bb3e7f89cff4300fdd8685969412b1a07e61553b1668"
+        },
+        "map": {
+          "bytes": 863361,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-yaonieyo__doubao-account-pool-220bd1/entry.js.map",
+          "sha256": "9120061c6baf1a829a237f0836b4272e8f127b9813aff20098922d20b819097f"
+        }
+      },
+      "id": "kind-rollup-electron_gh-yaonieyo__doubao-account-pool-220bd1",
+      "kind": "electron",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "91734bd1f08f23779bcac517dabfdcbea22a1da1f0420a30e20d781d01b2fa15"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app electron:gh-z-------------__cpod: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 2273558,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-z-------------__cpod-e10580/entry.js",
+          "sha256": "1181877cb49b37bc95ac807c264d4360abf9a41533af57d55dce98c72393e3a0"
+        },
+        "map": {
+          "bytes": 2542128,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-z-------------__cpod-e10580/entry.js.map",
+          "sha256": "421b059b92d26fd45083c2fcf74e9f50c8905d7dc8e031a4f8e12d485dab4f35"
+        }
+      },
+      "id": "kind-rollup-electron_gh-z-------------__cpod-e10580",
+      "kind": "electron",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3e534ded858a3bdea1e7f2b5a39134f721e14acd7d2fbefde1c04c312995874e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app electron:gh-simon-fraser__musictube-player: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 69640,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-simon-fraser__musictube-player-904ca4/entry.js",
+          "sha256": "3855f2b79dd4fe66de13635ad823371101148952245fbb0f4d7371cc49d2f1e7"
+        },
+        "map": {
+          "bytes": 103212,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-simon-fraser__musictube-player-904ca4/entry.js.map",
+          "sha256": "d276110617793fac64aab98328189cc6794d6d897efd821447d91e5866080ad3"
+        }
+      },
+      "id": "kind-rollup-electron_gh-simon-fraser__musictube-player-904ca4",
+      "kind": "electron",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "88c025e84bc41020b3cbc0bc9d580b7886097f86815fe5af937e2fc9949c658a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app electron:gh-rhysd__tui: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 80958,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-rhysd__tui-a8566f/entry.js",
+          "sha256": "6e53421f48aa0b161f01da810d13fb53d503e12e2562dc4397ef14ac5b566d61"
+        },
+        "map": {
+          "bytes": 129248,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/electron_gh-rhysd__tui-a8566f/entry.js.map",
+          "sha256": "a9e84e5e32c0c7ccb419828808734d2e475d3ce0b63021616a39dfe43a4b54eb"
+        }
+      },
+      "id": "kind-rollup-electron_gh-rhysd__tui-a8566f",
+      "kind": "electron",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d2ea0aa2e99b47c608392e2979cfff15c2c4aa3511a2cdebb855e7607c27136b"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app vscode:gh-midudev__better-svg: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 2540200,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-midudev__better-svg-2d5738/entry.js",
+          "sha256": "ebd1589938a18f0cd7a50d7a3a76a511e55499b4486a83889b1f359c0be079d9"
+        },
+        "map": {
+          "bytes": 2330066,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-midudev__better-svg-2d5738/entry.js.map",
+          "sha256": "bf82cda7ca3be79369230399e45d7b95c291025214dbef852aba52be03b94b45"
+        }
+      },
+      "id": "kind-rollup-vscode_gh-midudev__better-svg-2d5738",
+      "kind": "vscode",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "dea670003a0432f916a12f2a28a03fdb7d29222cd4993c154b5d2b7a144e1743"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app vscode:gh-nuxtrdev__nuxtr-vscode: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 3194014,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-nuxtrdev__nuxtr-vscode-1fe62a/entry.js",
+          "sha256": "24ab1ff19b8f8ac6fa19aab8a12427a93b15dd70fd25fdd9a2a51d063d1d00b4"
+        },
+        "map": {
+          "bytes": 3523221,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-nuxtrdev__nuxtr-vscode-1fe62a/entry.js.map",
+          "sha256": "911c27940357c66153b263813b34279ea87020471106c725f259870708fe0377"
+        }
+      },
+      "id": "kind-rollup-vscode_gh-nuxtrdev__nuxtr-vscode-1fe62a",
+      "kind": "vscode",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3ea44c79a7364bcd45e2a21a1acee7611c6ba42563d56808fdff6fb28a992061"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app vscode:gh-mrmlnc__vscode-scss: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 1127614,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-mrmlnc__vscode-scss-ef9914/entry.js",
+          "sha256": "09668f99e25bd9e1b6cbdd920c70210079d2eca53a78a31f33433a6592610c59"
+        },
+        "map": {
+          "bytes": 1043530,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-mrmlnc__vscode-scss-ef9914/entry.js.map",
+          "sha256": "a120d95444e5f4c5e209a44cf4d7082d4af5e7bafeff90a3721b866b46e3d4be"
+        }
+      },
+      "id": "kind-rollup-vscode_gh-mrmlnc__vscode-scss-ef9914",
+      "kind": "vscode",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bc3c780b9401ce01aa6f73c51e10240f0497ba653f77981bd03e67c96abb70de"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app vscode:gh-yessglory17__argus: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 2722604,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-yessglory17__argus-c36d36/entry.js",
+          "sha256": "6d9e00075ff366956269ccd0626028f36a9f51538ef443813b6bd796f83210dd"
+        },
+        "map": {
+          "bytes": 2994499,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-yessglory17__argus-c36d36/entry.js.map",
+          "sha256": "1511035138745360962a30126a6e5906cc585b9f7b7c237647d588c164e567a8"
+        }
+      },
+      "id": "kind-rollup-vscode_gh-yessglory17__argus-c36d36",
+      "kind": "vscode",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "324979dc8006941fa87e3d863c3b4513c8a3b417af9c9236be2791a048377185"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app vscode:gh-panoply__vscode-liquid: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 2026736,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-panoply__vscode-liquid-26655d/entry.js",
+          "sha256": "f1ba1c8bb932728d146d0e7dafea2e76bab1d2d3ac78307b85d47b802479843a"
+        },
+        "map": {
+          "bytes": 1182612,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-panoply__vscode-liquid-26655d/entry.js.map",
+          "sha256": "342bc0435897edab6bdc4d71e3fbf9d852155f7d3de83bcd021f7b2bc6f89666"
+        }
+      },
+      "id": "kind-rollup-vscode_gh-panoply__vscode-liquid-26655d",
+      "kind": "vscode",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7b6ff34ec718907cd6f88442eb91288f0f95cd8ccb66872b4898c9c77e331aaf"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app vscode:gh-rudreshveerkhare__catalyst: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 3860663,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-rudreshveerkhare__catalyst-05cf16/entry.js",
+          "sha256": "cb8dbda3eb4409056017f7f2aa05b6dba088e332ce0b51dccfcc7680b6fbb148"
+        },
+        "map": {
+          "bytes": 4161609,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-rudreshveerkhare__catalyst-05cf16/entry.js.map",
+          "sha256": "786e176d679215b6a2dfcdb7baaf9461c6abf541441b75bd1a60c595f8fe591a"
+        }
+      },
+      "id": "kind-rollup-vscode_gh-rudreshveerkhare__catalyst-05cf16",
+      "kind": "vscode",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9ece1498e0f5098aa42241dbfb348cfd379292b75d2881fa2f11c79836d38460"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app vscode:gh-cschlosser__doxdocgen: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 147094,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-cschlosser__doxdocgen-435b5b/entry.js",
+          "sha256": "290cd5276ca204cc79c275aeec5a637ed2369f90b1140548f29a5021edb00b04"
+        },
+        "map": {
+          "bytes": 222948,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-cschlosser__doxdocgen-435b5b/entry.js.map",
+          "sha256": "eb7ab4d6144895b41a2b91ecdf9bddc5f14d2223cebbb47ca7b2a36f1f9bf705"
+        }
+      },
+      "id": "kind-rollup-vscode_gh-cschlosser__doxdocgen-435b5b",
+      "kind": "vscode",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "dd685b6cd0efc784ca0bcbddec89465b8158510587c4194e05cab9dbce8b20ad"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app vscode:gh-ducphamngoc08__codevisualizer: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 704764,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-ducphamngoc08__codevisualizer-16f73c/entry.js",
+          "sha256": "485a2ecb3844938de353dc68314578bdaa5bd92c226a09770fdf719def412d1a"
+        },
+        "map": {
+          "bytes": 868362,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-ducphamngoc08__codevisualizer-16f73c/entry.js.map",
+          "sha256": "28ef85e9dd7299be5752f696fe216dfbb88b4330b861d5fb9bc609aa8a510ec8"
+        }
+      },
+      "id": "kind-rollup-vscode_gh-ducphamngoc08__codevisualizer-16f73c",
+      "kind": "vscode",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8176d87683cda42b4ff3b9b55daf2c25a6d1eaa5c939d1cbe5b71de13fe67888"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app vscode:gh-github__vscode-github-actions: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 9651626,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-github__vscode-github-actions-a3e642/entry.js",
+          "sha256": "6ffccd82c8d723ce59e437779a0848f036b7b20912ae4ca67e3b286b945b9aaa"
+        },
+        "map": {
+          "bytes": 10162405,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-github__vscode-github-actions-a3e642/entry.js.map",
+          "sha256": "7d9a989c46d2191ab981e3e38566d064743f06c402a9aa965d0929f948379940"
+        }
+      },
+      "id": "kind-rollup-vscode_gh-github__vscode-github-actions-a3e642",
+      "kind": "vscode",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8d1429da563a8649b1956f631e984293420a760c0c66431c00ea93fb5d2ff120"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app vscode:gh-lostintangent__gistpad: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 7192785,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-lostintangent__gistpad-447521/entry.js",
+          "sha256": "b53ea6e915abdb76077f41bce7efc50df0399b2aaadba7e8a62abcc530005e8b"
+        },
+        "map": {
+          "bytes": 8313879,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-lostintangent__gistpad-447521/entry.js.map",
+          "sha256": "946296f22ecbe767fbb5b629dd77ba2377e73458a067c599f2140b7b7775e617"
+        }
+      },
+      "id": "kind-rollup-vscode_gh-lostintangent__gistpad-447521",
+      "kind": "vscode",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "783ff651691537b92e31b44ceff15cc321151e4e634f16140f461644a7a6cd1e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp181 app vscode:gh-tim-koehler__helm-intellisense: rollup 4.64.5 + node-resolve + commonjs + json + terser, cjs (the index's rollup recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 713115,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-tim-koehler__helm-intellisense-296441/entry.js",
+          "sha256": "55258380795158cee66b980d05aee9808042b854d87660efbb552dd68e7d17c2"
+        },
+        "map": {
+          "bytes": 1064086,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/rollup/vscode_gh-tim-koehler__helm-intellisense-296441/entry.js.map",
+          "sha256": "958fd4db21a5e149656ec7d4dbddea2e7dc67963b10c11ce491400e124f4c15c"
+        }
+      },
+      "id": "kind-rollup-vscode_gh-tim-koehler__helm-intellisense-296441",
+      "kind": "vscode",
+      "set": "kind-rollup",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "614b04a180111f1cc25092c73afbffaa61955146a61158c46506de3563f35213"
+      }
+    }
+  ],
+  "frozen": true,
+  "note": "exp181 DEV corpus of rollup builds of exp150's 45 bun-dev apps (experiments/181-index-all-bundlers/scripts/kind_corpus.py)",
+  "schema": "exp096-corpus/1"
+}

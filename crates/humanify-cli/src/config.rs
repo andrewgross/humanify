@@ -291,7 +291,7 @@ pub struct Library {
     pub index_store_dir: String,
     /// `--library-index-from-bundle` (exp174): build the index at run time
     /// from the packages the bundle reveals when the store holds none
-    /// (exp154/exp171's build, now opt-in; Bun bundles only). Off: a run
+    /// (exp154/exp171's build, now opt-in; every recipe kind, exp181). Off: a run
     /// with no index and nothing in the store for the bundle's kind skips
     /// library name matching with one line (exp175).
     pub index_from_bundle: bool,

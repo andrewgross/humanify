@@ -128,14 +128,19 @@ fn skipped(answer: JobAnswer, what: &str) -> (String, crate::runtime_index::Inde
 /// bundle's KIND (its packing tool, read off detection) is not a failure:
 /// the run prints ONE line — what is missing, where it looked, that library
 /// name matching is skipped, and how to get an index — and goes on with it
-/// skipped. Never a build, nothing created. The Bun line offers the
-/// run-time build; a kind it cannot build for does not.
+/// skipped. Never a build, nothing created. Every recipe kind's line
+/// offers the run-time build (exp181: it builds for all of them).
 #[test]
 fn by_default_no_index_for_the_bundles_kind_skips_with_one_line() {
     let config = machinery_config_with(false);
     let root = config.library.index_store_root();
     let code = "/*! leftpad v1.2.3 */\nconsole.log(1);\n"; // a seed it must NOT build from
-    for (pair, kind) in [(bun(), "bun"), (esbuild(), "esbuild")] {
+    for (pair, kind) in [
+        (bun(), "bun"),
+        (esbuild(), "esbuild"),
+        ((BundlerType::Webpack, MinifierType::Terser), "webpack"),
+        ((BundlerType::Rollup, MinifierType::Terser), "rollup"),
+    ] {
         let (line, trail) = skipped(answer_for(&config, code, pair), kind);
         let head = format!(
             "no library index for {kind} bundles in {} — skipping library name matching (",
@@ -149,10 +154,9 @@ fn by_default_no_index_for_the_bundles_kind_skips_with_one_line() {
             "{kind}: {line}"
         );
         assert!(line.contains("--library-index <dir>"), "{kind}: {line}");
-        assert_eq!(
+        assert!(
             line.contains("--library-index-from-bundle"),
-            kind == "bun",
-            "the run-time build is offered where it can build: {line}"
+            "the run-time build is offered for every recipe kind: {line}"
         );
         assert_eq!(trail.outcome, "skipped");
         assert_eq!(trail.bundler, kind);
@@ -160,65 +164,67 @@ fn by_default_no_index_for_the_bundles_kind_skips_with_one_line() {
     assert!(!root.exists(), "nothing created: no fetch, no build");
 }
 
-/// A bundler no index recipe exists for (a plain script: no bundler
-/// recognised) names its kind too, and is skipped the same way — with no
-/// builder command to offer.
+/// A bundler no index recipe exists for (browserify, parcel, a plain
+/// script: no bundler recognised) names its kind too, and is skipped the
+/// same way, with or without the run-time build — saying no recipe exists
+/// for that kind yet, and offering nothing that could not serve it.
 #[test]
 fn a_bundle_of_a_kind_no_index_can_have_is_skipped_saying_so() {
-    let config = machinery_config_with(false);
-    let (line, trail) = skipped(
-        answer_for(
-            &config,
-            "console.log(1);\n",
-            (BundlerType::Unknown, MinifierType::None),
-        ),
-        "unknown",
-    );
-    assert!(
-        line.starts_with("no library index for unrecognised bundles in "),
-        "{line}"
-    );
-    assert!(line.contains("skipping library name matching"), "{line}");
-    assert!(!line.contains("--recipe"), "no recipe can build it: {line}");
-    assert_eq!(trail.bundler, "unrecognised");
+    for from_bundle in [false, true] {
+        let config = machinery_config_with(from_bundle);
+        let root = config.library.index_store_root();
+        for (bundler, kind) in [
+            (BundlerType::Unknown, "unrecognised"),
+            (BundlerType::Browserify, "browserify"),
+            (BundlerType::Parcel, "parcel"),
+        ] {
+            let code = "/*! leftpad v1.2.3 */\nconsole.log(1);\n";
+            let (line, trail) = skipped(
+                answer_for(&config, code, (bundler, MinifierType::None)),
+                kind,
+            );
+            assert_eq!(
+                line,
+                format!(
+                    "no library index for {kind} bundles in {} — skipping library name \
+                     matching (no index recipe exists for {kind} bundles yet)",
+                    root.display()
+                )
+            );
+            assert_eq!(trail.bundler, kind);
+            assert!(!root.exists(), "nothing created: no fetch, no build");
+        }
+    }
 }
 
-/// With `--library-index-from-bundle`: a kind the run-time build cannot
-/// build for (esbuild — it builds Bun indexes only) and a Bun bundle that
-/// reveals no package are skipped too, each with one line naming why; the
-/// store is searched first either way (an index FOUND for the kind would
-/// be used), and nothing is created.
+/// With `--library-index-from-bundle`, a bundle of ANY recipe kind that
+/// reveals no package is skipped with one line naming why, and the line
+/// still names the recipe this bundle needs; the store is searched first
+/// (an index FOUND for the kind would be used), and nothing is created —
+/// no tool is fetched for a build that has nothing to build.
 #[test]
-fn from_bundle_skips_what_it_cannot_build_and_says_why() {
+fn from_bundle_skips_a_bundle_that_reveals_no_package_of_every_kind() {
     let config = machinery_config_with(true);
     let root = config.library.index_store_root();
-    let (line, _) = skipped(
-        answer_for(
-            &config,
-            "/*! leftpad v1.2.3 */\nconsole.log(1);\n",
-            esbuild(),
-        ),
-        "esbuild",
-    );
-    assert!(
-        line.starts_with(&format!(
-            "no library index for esbuild bundles in {}, and --library-index-from-bundle \
-             builds Bun indexes only — skipping library name matching (",
-            root.display()
-        )),
-        "{line}"
-    );
-    assert!(line.contains("--recipe esbuild:"), "{line}");
-    let (line, _) = skipped(answer_for(&config, "console.log(1);\n", bun()), "bun");
-    assert!(
-        line.starts_with(&format!(
-            "no library index for bun bundles in {}",
-            root.display()
-        )),
-        "{line}"
-    );
-    assert!(line.contains("reveals no npm package"), "{line}");
-    assert!(line.contains("skipping library name matching"), "{line}");
+    for (pair, kind) in [
+        (bun(), "bun"),
+        (esbuild(), "esbuild"),
+        ((BundlerType::Webpack, MinifierType::Terser), "webpack"),
+        ((BundlerType::Rollup, MinifierType::Terser), "rollup"),
+    ] {
+        let (line, _) = skipped(answer_for(&config, "console.log(1);\n", pair), kind);
+        assert!(
+            line.starts_with(&format!(
+                "no library index for {kind} bundles in {}, and this bundle reveals no npm \
+                 package",
+                root.display()
+            )),
+            "{line}"
+        );
+        assert!(line.contains("skipping library name matching"), "{line}");
+        assert!(line.contains(&format!("--recipe {kind}:")), "{line}");
+        assert!(!line.contains("Bun indexes only"), "{line}");
+    }
     assert!(!root.exists(), "nothing created: no fetch, no build");
 }
 
@@ -304,29 +310,47 @@ fn the_build_notice_says_what_how_much_where_and_how_to_opt_out() {
         to_build: 3,
         reused: 1,
     };
-    let text = crate::runtime_index::build_notice(&root, &plan, false);
-    assert!(
-        text.starts_with("NOTICE: library names (the default)"),
-        "{text}"
-    );
-    assert!(
-        text.contains("3 to build, 1 already in the store"),
-        "{text}"
-    );
-    let est = estimate_build(3, false);
-    assert!(
-        text.contains(&crate::runtime_index::humanize_bytes(est.bytes_high)),
-        "the estimate is printed: {text}"
-    );
-    assert!(text.contains(&root.display().to_string()), "where: {text}");
-    assert!(
-        text.contains("--library-matching off"),
-        "the opt-out: {text}"
-    );
-    assert!(
-        text.contains("http://mths.be/fromcodepoint"),
-        "skipped names: {text}"
-    );
+    for bundler in humanify_index::tools::ALL_RECIPE_BUNDLERS {
+        let p = humanify_index::tools::pin(bundler);
+        let tool = humanify_index::tools::Tool {
+            bundler,
+            version: p.version.to_string(),
+            bin: root.join("tool"),
+        };
+        let text = crate::runtime_index::build_notice(&root, &plan, &tool, true);
+        assert!(
+            text.starts_with("NOTICE: library names (the default)"),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!(
+                "bundled with {} {} (just fetched into the store)",
+                p.label, p.version
+            )),
+            "the kind's own tool: {text}"
+        );
+        if bundler != humanify_core::libindex::recipe::RecipeBundler::Bun {
+            assert!(!text.contains("Bun"), "no other kind's wording: {text}");
+        }
+        assert!(
+            text.contains("3 to build, 1 already in the store"),
+            "{text}"
+        );
+        let est = estimate_build(bundler, 3, 0);
+        assert!(
+            text.contains(&crate::runtime_index::humanize_bytes(est.bytes_high)),
+            "the estimate is printed: {text}"
+        );
+        assert!(text.contains(&root.display().to_string()), "where: {text}");
+        assert!(
+            text.contains("--library-matching off"),
+            "the opt-out: {text}"
+        );
+        assert!(
+            text.contains("http://mths.be/fromcodepoint"),
+            "skipped names: {text}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&root);
 }
 

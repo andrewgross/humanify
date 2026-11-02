@@ -76,6 +76,13 @@ CORPORA = {
                  "origins": os.path.join(HERE, "origins-bun-held.json"),
                  "copies": os.path.join(HERE, "copies-bun-held.json"),
                  "chained": os.path.join(HERE, "chained-bun-held.json"), "data": "/work/exp150-data/bun-held/frozen"},
+    # exp181's bundler-kind beds: exp150's 45 bun-dev APPS built by esbuild 0.28.2, webpack 5.111.1 and rollup 4.64.5
+    # with the run-time build's pinned tools (experiments/181-index-all-bundlers/scripts/kind_corpus.py); dev corpora
+    **{f"kind-{k}": {"manifest": os.path.join(HERE, f"corpus-kind-{k}.json"),
+                     "origins": os.path.join(HERE, f"origins-kind-{k}.json"),
+                     "copies": os.path.join(HERE, f"copies-kind-{k}.json"),
+                     "chained": os.path.join(HERE, f"chained-kind-{k}.json"),
+                     "data": f"/work/exp181-data/kind-{k}/frozen"} for k in ("esbuild", "webpack", "rollup")},
     # exp150's Claude Code corpus: 2.1.216 with the exp095 negatives sample re-labelled (seed 95 redraw). Its truth
     # quotes no code but sits beside the labels, which do: under /work/cc-library-truth/, never committed
     "cc": {"manifest": os.path.join(HERE, "corpus-cc.json"), "origins": os.path.join(HERE, "origins-cc.json"),
@@ -102,12 +109,12 @@ def use(corpus):
 
 
 def corpus_flag(argv):
-    """`--corpus dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4|bun-dev|bun-held|cc` from an argv (default dev), applied with use(); returns argv without it."""
+    """`--corpus dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4|bun-dev|bun-held|kind-esbuild|kind-webpack|kind-rollup|cc` from an argv (default dev), applied with use(); returns argv without it."""
     if "--corpus" not in argv:
         return list(argv)
     i = argv.index("--corpus")
     if i + 1 >= len(argv):
-        raise SystemExit("--corpus needs a value: dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4|bun-dev|bun-held|cc")
+        raise SystemExit("--corpus needs a value: dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4|bun-dev|bun-held|kind-esbuild|kind-webpack|kind-rollup|cc")
     use(argv[i + 1])
     return list(argv[:i]) + list(argv[i + 2:])
 # numpy/scipy for libix (family()); the exp095 labs' venv

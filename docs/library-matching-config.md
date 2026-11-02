@@ -91,7 +91,8 @@ CLI:     --library-matching names | report | off     default names (exp171, 2026
          --library-index-store <dir>                  the store (default <cwd>/.humanify/library-index)
          --library-index-from-bundle                  build one at run time from what the bundle
                                                       reveals when the store has none for its kind
-                                                      (exp174: opt-in; Bun bundles only)
+                                                      (exp174: opt-in; exp181: every recipe
+                                                      kind — Bun, esbuild, webpack, rollup)
 Config:  [library] section of the one config file (--config <file>)
 ```
 
@@ -145,18 +146,33 @@ Library index: using 0242134fb663 for bun bundles from <store> (found; nothing t
 # run goes on with library name matching skipped — off's output bytes
 no library index for esbuild bundles in <cwd>/.humanify/library-index — skipping library name matching (build one with `humanify-index build --names --recipe esbuild:target=node,format=cjs,minify,production …`, or point to one with --library-index <dir>)
 
-# the same for a Bun bundle (the line also offers the run-time build)
-no library index for bun bundles in <store> — skipping library name matching (build one with `humanify-index build --names --recipe bun:target=node,format=cjs,minify,production …`, point to one with --library-index <dir>, or pass --library-index-from-bundle)
+# a bundle of a kind no index recipe exists for yet (browserify, parcel, unrecognised)
+no library index for parcel bundles in <store> — skipping library name matching (no index recipe exists for parcel bundles yet)
 
-# esbuild bundle with --library-index-from-bundle: it builds Bun indexes only
-no library index for esbuild bundles in <store>, and --library-index-from-bundle builds Bun indexes only — skipping library name matching (build one with `humanify-index build --names --recipe esbuild:target=node,format=cjs,minify,production …`, or point to one with --library-index <dir>)
-
-# Bun bundle with --library-index-from-bundle: the build line, then the NOTICE
-no library index for bun bundles — building one from this bundle into <store>
+# esbuild (or Bun, webpack, rollup) bundle with --library-index-from-bundle:
+# the build line, the store's tool for the recipe this bundle needs (fetched
+# into <store>/tools/ when absent, announced with its size), then the NOTICE
+no library index for esbuild bundles — building one from this bundle into <store>
+Library index: fetching esbuild 0.28.2 (~12 MB) into <store>/tools to build one (--library-matching off skips library names)
 
 # an EXPLICIT index that does not fit the bundle's kind: a loud failure (it was named)
 Error: --library-matching names cannot run: the index passed with --library-index has no slice for esbuild bundles (it was named, so this is not skipped) — library index 0242134f… has no slice for recipe esbuild:target=?,format=?,minify (has: bun:target=bun,format=cjs,minify,production, bun:target=node,format=cjs,minify,production)
 ```
+
+**The run-time build serves every recipe kind (exp181, Andrew 2026-11-01:
+"our library interface should be usable for all of the bundlers we
+support").** `--library-index-from-bundle` builds the recipe the bundle
+needs (`DetectedRecipe::needed_recipe`) with the store's tool for its
+bundler, through the offline builder's own plan / build / merge
+(`humanify_index::cache::plan_build` + `build_planned`). Every tool lives in
+the store — `<store>/tools/<bundler>-<version>/`, beside `registry/`,
+`store/` and the merged indexes — and is fetched there once, pinned
+(`humanify_index::tools`: Bun 1.4.0, esbuild 0.28.2, webpack 5.111.1,
+rollup 4.64.5 + its plugins, each `npm install --before=2026-10-16`; webpack
+and rollup run as the builder's recipe scripts, written beside their
+install). The bundler verdict is the unpacker's: detection, or a forced
+`unpack.bundler` / `unpack.minifier`. A kind no recipe exists for yet is
+skipped with a line saying so. Precision per kind: experiments/181-index-all-bundlers.
 
 The builder's `--recipe` in the skip line is the recipe THIS bundle needs
 (`DetectedRecipe::needed_recipe`: detected bundler, target and format, node
