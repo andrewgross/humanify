@@ -129,6 +129,8 @@ def main():
             p = subprocess.Popen(["taskset", "-c", cpus, ix, "build", "--packages", cr, "--pinned", cp, *common,
                                   "--jobs", "4", "--offline", "--out", f"{ld}/{i:04d}.ix"], stdout=log, stderr=log)
             running[p.pid] = (i, time.time(), p)
+        if not running:  # draining before any chunk of this wave started: hand the lock over (exp177: was wait4 with no child)
+            continue
         pid, status, ru = os.wait4(-1, 0)
         if pid not in running:
             continue
