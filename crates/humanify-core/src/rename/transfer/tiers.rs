@@ -384,7 +384,7 @@ fn settle_same_name_match(
         run.rename.record_carried(b);
     }
     run.register_with_owner(scope, name);
-    run.settle_module_binding_node(name);
+    run.settle_module_binding_node(scope, name);
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +453,7 @@ impl TransferRun<'_, '_> {
                 new_name,
                 declared_fn,
             } => {
-                self.settle_module_binding_node(old_name);
+                self.settle_module_binding_node(*scope, old_name);
                 self.register_with_owner(*scope, new_name);
                 if let Some(f) = declared_fn {
                     self.fn_transferred[*f].insert(new_name.clone());
@@ -465,7 +465,7 @@ impl TransferRun<'_, '_> {
                 old_name,
             } => {
                 self.register_with_owner(*scope, new_name);
-                self.settle_module_binding_node(old_name);
+                self.settle_module_binding_node(*scope, old_name);
             }
             OnApplied::Propagated { row } => self.mark_binding_propagated(*row),
         }

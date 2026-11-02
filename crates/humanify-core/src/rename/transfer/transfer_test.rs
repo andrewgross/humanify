@@ -206,3 +206,56 @@ fn the_owned_binding_map_keeps_first_names_and_skips_nested_functions() {
         assert_eq!(names, ["p", "v", "g", "blk", "it", "err", "f"]);
     });
 }
+
+#[test]
+fn a_nested_binding_sharing_a_module_bindings_name_never_settles_that_module_row() {
+    // Names mode restores library source names inside nested scopes
+    // (fflate's `var dt` in a function), and the minified bundle may hold a
+    // module binding of the same spelling (`var dt = __esm(...)`). A
+    // transfer of the NESTED binding settles the nested binding only: the
+    // module row keeps its pending state, so its module vote still runs.
+    let code = "var dt = 1; function f() { var dt = 2; return dt; } function g() { return dt; }";
+    with_run(code, |run| {
+        let row = run.rows.module_by_name["dt"];
+        let f = run
+            .rows
+            .fns
+            .iter()
+            .position(|r| r.session_id.ends_with(":1:12"))
+            .expect("f row");
+        let nested = run
+            .rename
+            .binding_in(run.rows.fns[f].scope, "dt")
+            .expect("nested dt");
+        let nested_scope = run.rename.scope_of_binding(nested);
+        assert_ne!(nested_scope, run.rows.modules[row].scope);
+        for on_applied in [
+            OnApplied::Cascade {
+                scope: nested_scope,
+                new_name: "distanceTable".to_string(),
+                old_name: "dt".to_string(),
+            },
+            OnApplied::Twin {
+                old_name: "dt".to_string(),
+                scope: nested_scope,
+                new_name: "distanceTable".to_string(),
+                declared_fn: None,
+            },
+        ] {
+            run.apply_on_applied(&on_applied);
+            assert!(
+                run.binding_state[row].is_pending(),
+                "a nested binding's transfer settled the module row: {:?}",
+                run.binding_state[row]
+            );
+        }
+        // The module binding's own transfer still settles its row.
+        let module_scope = run.rows.modules[row].scope;
+        run.apply_on_applied(&OnApplied::Cascade {
+            scope: module_scope,
+            new_name: "initErrorUtils".to_string(),
+            old_name: "dt".to_string(),
+        });
+        assert!(!run.binding_state[row].is_pending());
+    });
+}

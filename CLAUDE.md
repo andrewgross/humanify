@@ -264,7 +264,13 @@ new code into `vendor/` (exp166: 4 statements, 71 lines). The TOTAL
 **Names mode is the DEFAULT since exp171 (2026-10-31).** Library code the index
 recognises goes under `vendor/<package>/` with its names restored, and the rest
 of vendor code is named like app code (exp169). `--library-matching off` is the
-opt-out. `npm run eval` always hands names launches the prebuilt full index
+opt-out. Which index a names run needs is the bundle's KIND, its detected packing tool
+(exp175): with no `--library-index` the run uses an index of that kind found in
+`<cwd>/.humanify/library-index`, and when there is none it prints one
+`no library index for <kind> bundles … — skipping library name matching` line and
+writes off mode's bytes (recorded as `libraryMatching` `outcome: skipped`, which
+the eval refuses to score). An explicit `--library-index` that does not fit the
+kind fails. `npm run eval` always hands names launches the prebuilt full index
 (pairs.json `libraryIndex`) and never a run-time build. **Every label has a
 NAMING MODE** (`pipeline.json` `namingMode`; labels before exp171 read as
 `off`). The leaderboard REFUSES mixed naming modes unless `--force-mixed`,
@@ -281,11 +287,14 @@ UNKNOWN, not passing.
   8/8/8. novel 4,188 / realLn 416,377, byte-equal to every reference. These
   runs set `noise-bands.json` `byMode.names` and the names self-hop range.
   **Names-mode bands are WIDE: noiseLn ±15,709, noise ±397, treeLn ±2,116.**
-  All of it comes from one bimodal pair, 2.1.197→198: one app binding (the
-  error-classes lazy init, 275 callers) that names mode fails to settle by
-  module vote, so on a tie the model re-rolls it (exp173). Judge names-mode
-  changes on novel/realLn (band 0) and the per-surface columns, not on total
-  noise. vendorReal reads ~10,850 against off mode's ~1,320. That gap is REAL
+  All of it came from one bimodal pair, 2.1.197→198: the error-classes lazy
+  init (275 callers) was frozen unrenamed because a library's restored local
+  of the same spelling settled its module row by name (exp178, fixed: a row
+  settles only for its own binding). From exp178 on, that binding settles by
+  module vote in every run and names-mode noise lands in the low mode
+  (~2,745 / ~50,900); the bands still carry the old bimodality until they
+  are re-measured on three cold repeats. Judge names-mode changes on
+  novel/realLn (band 0) and the per-surface columns, not on total noise. vendorReal reads ~10,850 against off mode's ~1,320. That gap is REAL
   dependency change, mostly highlight.js 11 at 2.1.198: names mode prints
   vendor code formatted, while off mode prints one minified line per file
   (exp173 corrects exp171's "defect" reading). In names mode, real change can
