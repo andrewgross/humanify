@@ -1,6 +1,6 @@
 # exp178 — names mode left one app binding unsettled (the 2.1.197→198 bimodality)
 
-STATUS: BUILT (2026-11-01), gate green, NOT merged. Branch `exp178-names-vote-settle`, cut from
+STATUS: BUILT (2026-11-01), full gate PENDING (lock deadlocked by another lane), NOT merged. Branch `exp178-names-vote-settle`, cut from
 main `5a48564bd`. Code commit `761f46f3f` (+ `57bae356a`, a comment-only
 correction); every run below was scored on `57bae356a`. Not merged.
 
@@ -86,17 +86,17 @@ were never tallied for it.
 
 ## Gate table
 
-| check                                                          | result                                                        |
-| -------------------------------------------------------------- | ------------------------------------------------------------- |
-| new unit test (red first, then green)                          | **pass**                                                      |
-| `cargo test -p humanify-core`                                  | 1,540 pass, 0 fail                                            |
-| `npm run check` from a clean checkout                          | GATERESULT                                                    |
-| neutrality, OFF mode, warm, 2.1.85→86, vs main `5a48564bd`     | **NEUTRAL**: 0 files / 0 lines; cache +0 / **+0**; exit 0 / 0 |
-| eval `exp178-names-198-c1` (197→198, names, cold, no self-hop) | exit 0, cache +0, boot OK                                     |
-| eval `exp178-names-198-c2` (same)                              | exit 0, cache +0, boot OK                                     |
-| eval `exp178-names-r1` (4 pairs, names, scratch, cold)         | 4/4 exit 0, cache +0, 4/4 boot OK                             |
-| warm self-hop (2.1.216)                                        | **byte-identical, 0 cache writes**                            |
-| cold self-hop (2.1.216)                                        | 8 lines (names range 8–8) ✓                                   |
+| check                                                          | result                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| new unit test (red first, then green)                          | **pass**                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `cargo test -p humanify-core`                                  | 1,540 pass, 0 fail                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `npm run check` from a clean checkout                          | **PENDING**: queued under `/work/heavy.lock` on a clean checkout of `7d857344d` (`/work/exp178-clean`, log `/work/exp178-data/check-clean.log`); the lock is held by a deadlocked exp176 job (its `pipe.sh` holds the lock and its inner `bundev-precision.sh` waits on the same lock). Run so far: `cargo fmt --check` and `cargo clippy --workspace --all-targets -D warnings` clean, `cargo test -p humanify-core` green |
+| neutrality, OFF mode, warm, 2.1.85→86, vs main `5a48564bd`     | **NEUTRAL**: 0 files / 0 lines; cache +0 / **+0**; exit 0 / 0                                                                                                                                                                                                                                                                                                                                                               |
+| eval `exp178-names-198-c1` (197→198, names, cold, no self-hop) | exit 0, cache +0, boot OK                                                                                                                                                                                                                                                                                                                                                                                                   |
+| eval `exp178-names-198-c2` (same)                              | exit 0, cache +0, boot OK                                                                                                                                                                                                                                                                                                                                                                                                   |
+| eval `exp178-names-r1` (4 pairs, names, scratch, cold)         | 4/4 exit 0, cache +0, 4/4 boot OK                                                                                                                                                                                                                                                                                                                                                                                           |
+| warm self-hop (2.1.216)                                        | **byte-identical, 0 cache writes**                                                                                                                                                                                                                                                                                                                                                                                          |
+| cold self-hop (2.1.216)                                        | 8 lines (names range 8–8) ✓                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ## Results table
 
