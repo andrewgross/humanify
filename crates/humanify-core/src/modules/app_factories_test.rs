@@ -5,21 +5,22 @@ use std::collections::BTreeSet;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::Statement;
 
-use super::{AppReason, FactoryEvidence, decide, entry_factories};
+use super::{AppReason, decide, entry_factories};
 use crate::ingest::Ingest;
+use crate::modules::own_package::ModuleEvidence;
 
-fn module(packages: &[&str], requires: &[usize]) -> FactoryEvidence {
-    FactoryEvidence {
+fn module(packages: &[&str], requires: &[usize]) -> ModuleEvidence {
+    ModuleEvidence {
         packages: packages
             .iter()
             .map(|p| p.to_string())
             .collect::<BTreeSet<_>>(),
         requires: requires.to_vec(),
-        ..FactoryEvidence::default()
+        ..ModuleEvidence::default()
     }
 }
 
-fn accepted(e: &[FactoryEvidence], entries: Option<&[usize]>) -> Vec<(usize, AppReason)> {
+fn accepted(e: &[ModuleEvidence], entries: Option<&[usize]>) -> Vec<(usize, AppReason)> {
     decide(e, entries).modules
 }
 
@@ -141,10 +142,10 @@ fn an_excluded_entry_is_not_accepted() {
 
 #[test]
 fn a_kept_source_path_is_library_evidence_under_node_modules_and_nothing_else() {
-    let path = |p: &str, requires: &[usize]| FactoryEvidence {
+    let path = |p: &str, requires: &[usize]| ModuleEvidence {
         source_path: Some(p.to_string()),
         requires: requires.to_vec(),
-        ..FactoryEvidence::default()
+        ..ModuleEvidence::default()
     };
     // No entry: a local path alone moves nothing.
     let e = vec![path("src/a.js", &[1]), path("src/b.js", &[])];

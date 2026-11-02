@@ -29,14 +29,15 @@
 //!   `node_modules/` and nothing otherwise: the e2e fixtures stand their
 //!   vendored dependencies in as local `src/vendor/*.cjs` files, and the
 //!   key is recorded metadata, never a behavioural switch on its own.
-//! - **The own package**: a package P whose modules and the entry's
-//!   unattributed modules require each other (the app's code calls into
-//!   P's and P's calls back), or whose inlined `package.json` the entry's
-//!   unattributed modules require (a CLI reading its own version). P is
-//!   refused when any module of another package requires one of P's (a
-//!   library depends on it). The bun-dev apps are published packages the
-//!   index knows; a private app is not in the index, and then only the
-//!   entry and the modules above it are accepted.
+//! - **The own package**: asked of the ONE owner,
+//!   [`super::own_package`] (exp183; the manifest and mutual-require rules
+//!   began here in exp172), over this view of the factories: the
+//!   entry's package when the index claims most of every entry, a
+//!   package whose inlined `package.json` the entry's unattributed
+//!   modules require, or one whose modules and theirs require each other.
+//!   The bun-dev apps are published packages the index knows; a private
+//!   app is not in the index, and then only the entry and the modules
+//!   above it are accepted.
 //! - **Upward closure**: a factory reachable from the seeds that requires
 //!   an accepted module is accepted (libraries never require app code).
 //!   Nothing is accepted DOWNWARD: an unattributed module the app
@@ -52,31 +53,12 @@
 
 use std::collections::{BTreeSet, HashSet};
 
+use super::own_package::{ModuleEvidence, library_evidence, own_packages, reach, required_by};
+
 use oxc_ast::ast::{
     AssignmentTarget, ExportDefaultDeclarationKind, Expression, Statement, VariableDeclaration,
 };
 use serde::Serialize;
-
-/// What the unpack knows about one extracted factory, gathered before any
-/// name is chosen.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct FactoryEvidence {
-    /// The packages library evidence names: the index's claims on the
-    /// module's statements and its placement path (names mode), its
-    /// declared identity's package.
-    pub packages: BTreeSet<String>,
-    /// The package an inlined `package.json` module declares (its declared
-    /// identity's member is `package.json`).
-    pub manifest_of: Option<String>,
-    /// The module's original source path, when the bundler kept it.
-    pub source_path: Option<String>,
-    /// Never accepted: an app text asset (already written under
-    /// `src/_assets/`), or a factory whose references cannot be planned.
-    pub excluded: bool,
-    /// The factories this module's body requires (indices into the same
-    /// list).
-    pub requires: Vec<usize>,
-}
 
 /// Why a factory was accepted as an app module.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -100,30 +82,18 @@ pub struct AppDecision {
     pub modules: Vec<(usize, AppReason)>,
 }
 
-fn is_node_modules_path(path: &str) -> bool {
-    path.split(['/', '\\'])
-        .any(|segment| segment == "node_modules")
-}
-
 /// The decision. `entries`: the factories the app text runs, when that
 /// text is only glue ([`entry_factories`]); None otherwise.
-pub fn decide(evidence: &[FactoryEvidence], entries: Option<&[usize]>) -> AppDecision {
+pub fn decide(evidence: &[ModuleEvidence], entries: Option<&[usize]>) -> AppDecision {
     let n = evidence.len();
-    let mut required_by: Vec<Vec<usize>> = vec![Vec::new(); n];
-    for (i, e) in evidence.iter().enumerate() {
-        for &j in &e.requires {
-            if j < n && j != i {
-                required_by[j].push(i);
-            }
-        }
-    }
+    let required_by = required_by(evidence);
     let entries: Vec<usize> = entries
         .unwrap_or_default()
         .iter()
         .copied()
         .filter(|&i| i < n && !evidence[i].excluded)
         .collect();
-    let own = own_packages(evidence, &entries, &required_by);
+    let own = own_packages(evidence, &entries);
     let library = library_closure(evidence, &own);
     let region = reach(evidence, &entries, |i| !library[i] && !evidence[i].excluded);
     let mut reason: Vec<Option<AppReason>> = vec![None; n];
@@ -177,33 +147,8 @@ pub fn decide(evidence: &[FactoryEvidence], entries: Option<&[usize]>) -> AppDec
     }
 }
 
-/// Every factory reachable from `seeds` through factories `pass` admits
-/// (a seed it refuses is not entered).
-fn reach(
-    evidence: &[FactoryEvidence],
-    seeds: &[usize],
-    pass: impl Fn(usize) -> bool,
-) -> BTreeSet<usize> {
-    let mut seen = BTreeSet::new();
-    let mut stack: Vec<usize> = seeds.to_vec();
-    while let Some(i) = stack.pop() {
-        if i >= evidence.len() || seen.contains(&i) || !pass(i) {
-            continue;
-        }
-        seen.insert(i);
-        stack.extend(evidence[i].requires.iter().copied());
-    }
-    seen
-}
-
-/// Library evidence for a module, `own` the app's own packages.
-fn library_evidence(e: &FactoryEvidence, own: &BTreeSet<String>) -> bool {
-    e.packages.iter().any(|p| !own.contains(p))
-        || e.source_path.as_deref().is_some_and(is_node_modules_path)
-}
-
 /// Library evidence and everything it requires.
-fn library_closure(evidence: &[FactoryEvidence], own: &BTreeSet<String>) -> Vec<bool> {
+fn library_closure(evidence: &[ModuleEvidence], own: &BTreeSet<String>) -> Vec<bool> {
     let seeds: Vec<usize> = (0..evidence.len())
         .filter(|&i| library_evidence(&evidence[i], own))
         .collect();
@@ -212,50 +157,6 @@ fn library_closure(evidence: &[FactoryEvidence], own: &BTreeSet<String>) -> Vec<
         library[i] = true;
     }
     library
-}
-
-/// The app's own packages (see the module doc).
-fn own_packages(
-    evidence: &[FactoryEvidence],
-    entries: &[usize],
-    required_by: &[Vec<usize>],
-) -> BTreeSet<String> {
-    let none = BTreeSet::new();
-    // The entry's unattributed modules.
-    let front = reach(evidence, entries, |i| {
-        let e = &evidence[i];
-        !e.excluded && e.packages.is_empty() && !library_evidence(e, &none)
-    });
-    let mut candidates: BTreeSet<String> = BTreeSet::new();
-    for &u in &front {
-        for &j in &evidence[u].requires {
-            let e = &evidence[j];
-            if let Some(p) = &e.manifest_of {
-                candidates.insert(p.clone());
-            }
-            // Mutual: P requires the front module that requires P.
-            for p in &e.packages {
-                let calls_back = required_by[u]
-                    .iter()
-                    .any(|&r| evidence[r].packages.contains(p));
-                if calls_back {
-                    candidates.insert(p.clone());
-                }
-            }
-        }
-    }
-    candidates
-        .into_iter()
-        .filter(|p| {
-            // Refused when another package's module requires one of P's.
-            !evidence.iter().enumerate().any(|(i, e)| {
-                e.packages.contains(p)
-                    && required_by[i]
-                        .iter()
-                        .any(|&r| evidence[r].packages.iter().any(|q| q != p))
-            })
-        })
-        .collect()
 }
 
 /// The factories the app text RUNS, when that text is only glue — the

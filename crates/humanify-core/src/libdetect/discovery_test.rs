@@ -1918,3 +1918,85 @@ fn placement_groups_list_a_group_with_no_claims_at_all() {
          the exporter, decides it stays"
     );
 }
+
+// ---- exp183 the bundle's own package ------------------------------------
+
+/// A Bun build of a published CLI (`cli`) that uses `lodash`: the bundle's
+/// trailing glue runs the CLI's entry module. `tail` replaces that glue.
+fn own_package_run(tail: &str) -> (String, ReferenceGraph, Discovery) {
+    use crate::libdetect::discovery::{BundlePieces, discover_in_bundle};
+    use crate::toolchain::{BundleLayout, InteropHelpers, ModuleWrapperGrammar};
+    let code = format!(
+        "var he=(e,t)=>()=>(e&&(t=e(e=0)),t);\nvar l1;\nvar initLodash=he(()=>{{l1=[1,2,3].map(String).join(\",\");}});\nvar c1,c2;\nfunction cliMain(a){{return a.split(\" \").map((w)=>w.trim()).filter(Boolean);}}\nvar initCli=he(()=>{{initLodash();c1=cliMain(process.argv.join(\" \"));c2=l1+c1.length;}});\n{tail}\n"
+    );
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, &code, "input.js");
+    assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
+    let pieces = BundlePieces {
+        layout: BundleLayout::SingleWrapperFunction,
+        grammar: ModuleWrapperGrammar::BunAndEsbuild,
+        interop: InteropHelpers::Bun,
+    };
+    // The index knows the CLI's code (a dependency of another package).
+    let at = |text: &str| code.find(text).expect("seed text") as u32;
+    let claims = vec![
+        (at("l1=[1,2,3]"), "lodash".to_string()),
+        (at("function cliMain"), "cli".to_string()),
+        (at("c1=cliMain"), "cli".to_string()),
+        (at("c2=l1"), "cli".to_string()),
+    ];
+    let (graph, found) = discover_in_bundle(
+        &code,
+        &ingest,
+        pieces,
+        &[],
+        &claims,
+        None,
+        DiscoveryOptions::default(),
+    );
+    (code, graph, found)
+}
+
+fn packages_of(
+    claims: &std::collections::BTreeMap<u32, crate::libdetect::discovery::Claim>,
+) -> Vec<String> {
+    let set: std::collections::BTreeSet<String> =
+        claims.values().map(|c| c.package.clone()).collect();
+    set.into_iter().collect()
+}
+
+#[test]
+fn a_bundle_never_claims_its_own_package() {
+    let (_, _, found) = own_package_run("module.exports={};initCli();");
+    assert_eq!(packages_of(&found.claims), vec!["lodash".to_string()]);
+    assert_eq!(packages_of(&found.self_claims), vec!["cli".to_string()]);
+    assert_eq!(
+        found.own_packages.iter().cloned().collect::<Vec<_>>(),
+        vec!["cli".to_string()]
+    );
+}
+
+#[test]
+fn a_package_the_app_only_uses_is_still_claimed() {
+    // The app's own code runs at the top level (no glue-only entry): the
+    // CLI's package is a library here, and keeps its claims.
+    let (_, _, found) = own_package_run("var out=initCli();console.log(out,c2);");
+    assert_eq!(
+        packages_of(&found.claims),
+        vec!["cli".to_string(), "lodash".to_string()]
+    );
+    assert!(found.self_claims.is_empty() && found.own_packages.is_empty());
+}
+
+#[test]
+fn the_report_lists_the_own_package_and_its_rows_apart() {
+    use crate::libdetect::discovery::DiscoveryReport;
+    let (_, graph, found) = own_package_run("module.exports={};initCli();");
+    let report = DiscoveryReport::new(&graph, &found, true);
+    assert_eq!(report.own_packages, vec!["cli".to_string()]);
+    assert!(report.claims.iter().all(|c| c.package == "lodash"));
+    assert!(
+        !report.self_claims.is_empty() && report.self_claims.iter().all(|c| c.package == "cli")
+    );
+    assert!(report.packages.iter().all(|p| p.package != "cli"));
+}

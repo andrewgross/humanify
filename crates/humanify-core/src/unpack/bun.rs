@@ -936,7 +936,8 @@ fn keep_app_factories(
     planner: &IdentifierPlanner,
     claims: Option<&crate::libdetect::discovery::DiscoveryReport>,
 ) -> Vec<AppModuleRow> {
-    use crate::modules::app_factories::{FactoryEvidence, decide};
+    use crate::modules::app_factories::decide;
+    use crate::modules::own_package::ModuleEvidence;
     // Retained position ↔ classification index (the retain kept order).
     let pre_of_post: Vec<usize> = (0..c.factories.len() + graph.kept.len())
         .filter(|i| !graph.kept.contains(i))
@@ -945,26 +946,35 @@ fn keep_app_factories(
     for (post, &pre) in pre_of_post.iter().enumerate() {
         post_of_pre.insert(pre, post);
     }
+    // The bundle's own package's rows too (exp183): set apart from the
+    // claims, they are still the index's evidence of which modules are
+    // the app's.
     let mut rows: Vec<&crate::libdetect::discovery::ClaimRow> = claims
-        .map(|r| r.claims.iter().collect())
+        .map(|r| r.claims.iter().chain(&r.self_claims).collect())
         .unwrap_or_default();
     rows.sort_by_key(|row| row.start);
-    let evidence: Vec<FactoryEvidence> = c
+    let evidence: Vec<ModuleEvidence> = c
         .factories
         .iter()
         .enumerate()
         .map(|(post, f)| {
-            let mut packages: std::collections::BTreeSet<String> =
-                std::collections::BTreeSet::new();
             let first = rows.partition_point(|row| row.start < f.span.start);
-            for row in rows[first..]
+            let inside: Vec<&crate::libdetect::discovery::ClaimRow> = rows[first..]
                 .iter()
                 .take_while(|row| row.start < f.span.end)
-            {
-                if row.end <= f.span.end {
-                    packages.insert(row.package.clone());
-                }
-            }
+                .filter(|row| row.end <= f.span.end)
+                .copied()
+                .collect();
+            let mut packages: std::collections::BTreeSet<String> =
+                inside.iter().map(|row| row.package.clone()).collect();
+            let majority = crate::modules::own_package::majority(
+                crate::modules::own_package::innermost_bytes(
+                    inside
+                        .iter()
+                        .map(|row| (row.package.as_str(), row.start, row.end)),
+                ),
+                u64::from(f.span.end - f.span.start),
+            );
             if let Some(p) = f.index_path.as_deref().and_then(package_of_vendor_path) {
                 packages.insert(p);
             }
@@ -987,8 +997,9 @@ fn keep_app_factories(
                     deps
                 })
                 .unwrap_or_default();
-            FactoryEvidence {
+            ModuleEvidence {
                 packages,
+                majority,
                 manifest_of,
                 source_path: f.source_path.clone(),
                 excluded: f.name_source == Some(NameSource::Asset)
