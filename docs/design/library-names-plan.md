@@ -92,6 +92,12 @@ sample of 2.1.216). Rebuild only what Bun needs:
 
 ### 3. The builder as a library, a cache, and run-time builds
 
+> **UPDATE exp181 (2026-11-02):** the run-time build builds for every
+> recipe kind (Bun, esbuild, webpack, rollup): the recipe the bundle needs,
+> run by the pinned tool for its bundler, fetched into `<store>/tools/`
+> (`humanify_index::tools`). A kind no recipe exists for yet is skipped with
+> a line saying so. See docs/library-matching-config.md §2.
+>
 > **UPDATE exp175 (2026-11-01):** the store is searched for an index of the
 > bundle's KIND (its packing tool, read off detection: `recipe::index_kind`);
 > finding none, a run prints one line and skips library name matching

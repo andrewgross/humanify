@@ -21,10 +21,15 @@
 //!   with library name matching SKIPPED — vendor code still placed and
 //!   named like app code, off's bytes. Not a failure (exp174's refusal is
 //!   gone), and recorded as `skipped` so it cannot pass for a names run.
-//! - with `--library-index-from-bundle` (exp171's path, opt-in): a kind the
-//!   run-time build cannot build for (it builds Bun indexes only) or a Bun
-//!   bundle that reveals no npm package is skipped the same way, with its
-//!   own line; otherwise [`building_line`], then the notice
+//! - a kind no index recipe exists for yet (browserify, parcel, a bundle
+//!   whose bundler detection does not recognise) is skipped with a line
+//!   saying so, with or without the run-time build;
+//! - with `--library-index-from-bundle` (exp171's path, opt-in; every
+//!   recipe kind since exp181 — Bun, esbuild, webpack, rollup): a bundle
+//!   that reveals no npm package is skipped the same way, with its own
+//!   line; otherwise [`building_line`], then the store's tool for the
+//!   recipe the bundle needs (`DetectedRecipe::needed_recipe`), fetched into
+//!   `<store>/tools/` when absent (`humanify_index::tools`), then the notice
 //!   ([`build_notice`]: what is built, the estimated disk and time, where it
 //!   is stored, how to opt out) — then the build. The run does not wait for
 //!   a confirmation: a prompt would hang every batch run.
@@ -38,7 +43,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
-use humanify_core::libindex::recipe::{DetectedRecipe, Recipe, RecipeBundler};
+use humanify_core::libindex::recipe::DetectedRecipe;
 use humanify_core::profiling::Profiler;
 use humanify_model::profiling::trace_tid::LIBRARY_INDEX;
 use serde::Serialize;
@@ -46,10 +51,11 @@ use serde::Serialize;
 use crate::config::Config;
 use humanify_index::build::Trace;
 use humanify_index::cache::{
-    PINNED_BUN, Seed, StoreSearch, build_planned, bun_binary, estimate_build, fetch_bun,
-    plan_build, read_build_sidecar, search_store, uncovered, valid_package_name,
+    Seed, StoreSearch, build_planned, estimate_build, plan_build, read_build_sidecar, search_store,
+    uncovered, valid_package_name,
 };
 use humanify_index::recipe::RecipeBuild;
+use humanify_index::tools::{Tool, fetch_tool, find_tool, pin};
 
 /// How long the run waits for the machinery before it stops the build and
 /// fails (one deadline over the whole wait, docs/concurrency.md).
@@ -95,15 +101,15 @@ pub struct IndexSource {
     /// built index, the kind its slice was recorded under — the same name).
     pub bundler: String,
     /// The bundler version the chosen slice was built with (the slice
-    /// record's npm `bun` version — NOT the bundle's own, which this lane
-    /// does not detect).
+    /// record's — NOT the bundle's own, which is not detected).
     pub bundler_version: String,
-    /// Always "unknown" in this lane: reading a JS bundle's own Bun
-    /// version out of the bundle is not in scope.
+    /// Always "unknown": reading a bundle's own bundler version out of
+    /// the bundle is not in scope.
     pub detected_bundler_version: String,
-    /// The pinned Bun the run-time build used (built only).
+    /// The store's tool the run-time build ran (`esbuild 0.28.2`; built
+    /// only).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub picked_bun: Option<String>,
+    pub tool: Option<String>,
     /// The index's as-of, recorded (freshness deliberately not judged).
     pub as_of: String,
     /// The seed rows the bundle's own evidence gave the build (built only).
@@ -242,57 +248,45 @@ const FROM_BUNDLE: &str = "--library-index-from-bundle";
 
 /// What the skip lines end with: where an index for this bundle's kind
 /// comes from — the offline builder with the recipe this bundle needs
-/// (`DetectedRecipe::needed_recipe`; none for a kind no recipe exists for),
-/// pointing to one, and the run-time build where it can build.
+/// (`DetectedRecipe::needed_recipe`), pointing to one, and the run-time
+/// build. A kind no recipe exists for has none of these: it says so.
 fn ways_to_an_index(detected: &DetectedRecipe, offer_from_bundle: bool) -> String {
-    let mut ways = Vec::new();
-    if let Some(recipe) = detected.needed_recipe() {
-        ways.push(format!(
+    let Some(recipe) = detected.needed_recipe() else {
+        return format!("no index recipe exists for {} bundles yet", detected.kind);
+    };
+    let mut ways = vec![
+        format!(
             "build one with `humanify-index build --names --recipe {} …`",
             recipe.spelling()
-        ));
-    }
-    ways.push("point to one with --library-index <dir>".to_string());
+        ),
+        "point to one with --library-index <dir>".to_string(),
+    ];
     if offer_from_bundle {
         ways.push(format!("pass {FROM_BUNDLE}"));
     }
-    match ways.len() {
-        1 => ways.remove(0),
-        n => format!("{}, or {}", ways[..n - 1].join(", "), ways[n - 1]),
-    }
+    let n = ways.len();
+    format!("{}, or {}", ways[..n - 1].join(", "), ways[n - 1])
 }
 
-/// Whether the run-time build (`--library-index-from-bundle`) can build an
-/// index of this kind: Bun only so far (it fetches and runs a pinned Bun).
-fn run_time_buildable(detected: &DetectedRecipe) -> bool {
-    detected.bundler == Some(RecipeBundler::Bun)
-}
-
-/// The ONE line a default run prints when its store holds no index for
-/// the bundle's kind (exp175): the run goes on with library name matching
-/// skipped.
-pub fn no_index_line(detected: &DetectedRecipe, root: &std::path::Path) -> String {
+/// The ONE line a run prints when its store holds no index for the
+/// bundle's kind and nothing will be built (exp175): the run goes on with
+/// library name matching skipped. `from_bundle`: the run-time build is
+/// already on (then it is not offered again).
+pub fn no_index_line(
+    detected: &DetectedRecipe,
+    root: &std::path::Path,
+    from_bundle: bool,
+) -> String {
     format!(
         "no library index for {} bundles in {} — skipping library name matching ({})",
         detected.kind,
         root.display(),
-        ways_to_an_index(detected, run_time_buildable(detected))
+        ways_to_an_index(detected, !from_bundle)
     )
 }
 
-/// `--library-index-from-bundle`, a kind it cannot build for.
-fn cannot_build_line(detected: &DetectedRecipe, root: &std::path::Path) -> String {
-    format!(
-        "no library index for {} bundles in {}, and {FROM_BUNDLE} builds Bun indexes only — \
-         skipping library name matching ({})",
-        detected.kind,
-        root.display(),
-        ways_to_an_index(detected, false)
-    )
-}
-
-/// `--library-index-from-bundle`, a Bun bundle that reveals no npm package
-/// to build from. `dropped`: names it offered that the registry does not
+/// `--library-index-from-bundle`, a bundle that reveals no npm package to
+/// build from. `dropped`: names it offered that the registry does not
 /// know (0: it offered none that can be a package).
 fn no_package_line(detected: &DetectedRecipe, root: &std::path::Path, dropped: usize) -> String {
     format!(
@@ -415,22 +409,18 @@ fn job(
             verdict: verdict.clone(),
         })
         .collect::<Vec<_>>();
-    if !library.index_from_bundle || !run_time_buildable(detected) {
-        return match search.usable.first() {
-            Some(found) => found_answer(root, found, candidates, search.note.clone()),
-            None => {
-                let line = if library.index_from_bundle {
-                    cannot_build_line(detected, root)
-                } else {
-                    no_index_line(detected, root)
-                };
-                JobAnswer::Skipped(
-                    line,
+    let recipe = match detected.needed_recipe() {
+        Some(recipe) if library.index_from_bundle => recipe,
+        _ => {
+            return match search.usable.first() {
+                Some(found) => found_answer(root, found, candidates, search.note.clone()),
+                None => JobAnswer::Skipped(
+                    no_index_line(detected, root, library.index_from_bundle),
                     skipped_trail(root, detected, candidates, search.note.clone()),
-                )
-            }
-        };
-    }
+                ),
+            };
+        }
+    };
     // The bundle's own packages: what a build would index, and what a
     // found RUN-TIME index must cover to serve it (exp171 — the search
     // matches on the slice alone, so app A's index would otherwise serve
@@ -491,33 +481,17 @@ fn job(
         root,
         !search.usable.is_empty(),
     ));
-    // The plan asks the bundler its version: a store with no Bun gets the
-    // pinned one first, announced before the download.
-    let fetched_bun = bun_binary(root, None).is_err();
-    let (bin, picked_bun) = match bun_binary(root, None) {
+    // The recipe the bundle needs, run by the store's tool for its
+    // bundler: a store without one gets the pinned tool first, announced
+    // before the download.
+    let (tool, fetched) = match store_tool(root, recipe.bundler) {
         Ok(found) => found,
-        Err(_) => {
-            notice(&format!(
-                "Library index: none in {} serves this bundle — fetching Bun {PINNED_BUN} \
-                 (~{}) into it to build one ({OPT_OUT} skips library names)",
-                root.display(),
-                humanize_bytes(humanify_index::cache::BUN_FETCH_BYTES)
-            ));
-            match fetch_bun(root, PINNED_BUN) {
-                Ok(fetched) => fetched,
-                Err(e) => return JobAnswer::Failed(format!("run-time index build (bun): {e}")),
-            }
-        }
+        Err(e) => return JobAnswer::Failed(format!("run-time index build (tool): {e}")),
     };
-    let mut recipes = Vec::new();
-    for target in ["bun", "node"] {
-        let recipe = Recipe::parse(&format!("bun:target={target},format=cjs,minify,production"))
-            .expect("a literal recipe of this build");
-        recipes.push(RecipeBuild {
-            recipe,
-            bin: bin.clone(),
-        });
-    }
+    let recipes = vec![RecipeBuild {
+        recipe,
+        bin: tool.bin.clone(),
+    }];
     let stage = std::sync::Mutex::new(String::new());
     let stages = std::sync::Mutex::new(BTreeMap::new());
     let trace = Trace {
@@ -557,7 +531,7 @@ fn job(
             root.display()
         ));
     } else {
-        notice(&build_notice(root, &plan, fetched_bun));
+        notice(&build_notice(root, &plan, &tool, fetched));
     }
     let started = std::time::Instant::now();
     let built = match build_planned(root, plan, trace) {
@@ -600,7 +574,7 @@ fn job(
             .unwrap_or_default(),
         s.as_of.clone(),
     );
-    trail.picked_bun = Some(picked_bun);
+    trail.tool = Some(tool.describe());
     trail.seeds = s.seeds.clone();
     trail.versions_in_index = Some(s.versions_in_index);
     trail.packages = Some(s.packages);
@@ -616,9 +590,10 @@ fn job(
 pub(crate) fn build_notice(
     root: &std::path::Path,
     plan: &humanify_index::cache::RuntimePlan,
-    fetched_bun: bool,
+    tool: &Tool,
+    fetched: bool,
 ) -> String {
-    let est = estimate_build(plan.to_build, false);
+    let est = estimate_build(tool.bundler, plan.to_build, 0);
     let mut lines = vec![
         "NOTICE: library names (the default) needs a library index for this bundle, and \
          none was found."
@@ -626,23 +601,25 @@ pub(crate) fn build_notice(
         format!(
             "  Building one now from the {} npm package(s) this bundle reveals ({} to build, \
              {} already in the store): each is installed from the npm registry (install \
-             scripts skipped) and bundled with Bun{}.",
+             scripts skipped) and bundled with {}{}.",
             plan.planned.len(),
             plan.to_build,
             plan.reused,
-            if fetched_bun {
-                format!(" {PINNED_BUN} (just fetched into the store)")
+            tool.describe(),
+            if fetched {
+                " (just fetched into the store)"
             } else {
-                String::new()
+                ""
             }
         ),
         format!(
-            "  Estimated: {} to {} of disk, {} to {} (measured on Bun-built apps; the run \
-             waits for it, then goes on).",
+            "  Estimated: {} to {} of disk, {} to {} (from measured {} builds; the run waits \
+             for it, then goes on).",
             humanize_bytes(est.bytes_low),
             humanize_bytes(est.bytes_high),
             humanize_seconds(est.seconds_low),
-            humanize_seconds(est.seconds_high)
+            humanize_seconds(est.seconds_high),
+            pin(tool.bundler).label
         ),
         format!(
             "  Stored in: {} (later runs with this store reuse it).",
@@ -662,6 +639,27 @@ pub(crate) fn build_notice(
         ));
     }
     lines.join("\n")
+}
+
+/// The store's tool for `bundler` (the newest it holds), else the pinned
+/// one fetched into `<root>/tools/` — announced first, with its size.
+/// The bool: it was fetched by this run.
+fn store_tool(
+    root: &std::path::Path,
+    bundler: humanify_core::libindex::recipe::RecipeBundler,
+) -> Result<(Tool, bool), String> {
+    if let Ok(tool) = find_tool(root, bundler) {
+        return Ok((tool, false));
+    }
+    let p = pin(bundler);
+    notice(&format!(
+        "Library index: fetching {} {} (~{}) into {} to build one ({OPT_OUT} skips library names)",
+        p.label,
+        p.version,
+        humanize_bytes(p.fetch_bytes),
+        root.join(humanify_index::cache::TOOLS_DIR).display()
+    ));
+    fetch_tool(root, bundler).map(|tool| (tool, true))
 }
 
 /// The first 12 hex digits of an index id (enough to find it on disk).

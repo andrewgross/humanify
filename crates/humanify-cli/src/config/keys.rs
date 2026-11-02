@@ -521,9 +521,11 @@ pub static KEYS: &[Key] = &[
               reveals (its library banner comments and inlined package.json files) when \
               index_store_dir holds none for the bundle's kind (exp154/exp171; opt-in since \
               exp174): each package is installed from the npm registry (install scripts \
-              skipped) and bundled with Bun, after a notice with the estimated disk and time. \
-              Bun bundles only: a bundle of another kind, or one that reveals no package, \
-              skips library name matching with one line. Without it, names/report with no \
+              skipped) and bundled with the recipe the bundle needs — Bun, esbuild, webpack or \
+              rollup, by the pinned tool fetched into index_store_dir's tools/ (exp181) — \
+              after a notice with the estimated disk and time. A bundle of a kind no index \
+              recipe exists for yet (browserify, parcel, unrecognised), or one that reveals no \
+              package, skips library name matching with one line. Without it, names/report with no \
               --library-index use an index FOUND in index_store_dir for the bundle's kind, \
               and skip library name matching with one line when there is none (exp175).",
     },

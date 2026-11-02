@@ -1,0 +1,994 @@
+{
+  "corpus": "kind-webpack",
+  "entries": [
+    {
+      "appPackage": "ember-cli",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:ember-cli: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 51725,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_ember-cli-afb389/entry.js",
+          "sha256": "cea86661044dd665be09d15397e294fd261805900c5c941d438b2b8ff8565bb9"
+        },
+        "map": {
+          "bytes": 62648,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_ember-cli-afb389/entry.js.map",
+          "sha256": "ead67786af80c8083a86d8068268a823ebc3b50273ff934097fe51a1900c254a"
+        }
+      },
+      "id": "kind-webpack-cli_ember-cli-afb389",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "801b9bd944439ac7376a67a51d5d833603d94c7583716767c329d53b05acbda3"
+      }
+    },
+    {
+      "appPackage": "babel-istanbul",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:babel-istanbul: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 17877,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_babel-istanbul-f3b1f1/entry.js",
+          "sha256": "0664ba1d04a4347575555faf6af05abaf02eac06768b3e8be2eaa8eab76ba946"
+        },
+        "map": {
+          "bytes": 30069,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_babel-istanbul-f3b1f1/entry.js.map",
+          "sha256": "cfa90190565e521d3a2b0c64938b8908e49723294a7a4aa80c97c79e58f68565"
+        }
+      },
+      "id": "kind-webpack-cli_babel-istanbul-f3b1f1",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "71af836a215c521f9aa02c2f3e486fb89becaa1ce3b597e88d89b173ad543e17"
+      }
+    },
+    {
+      "appPackage": "doctoc",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:doctoc: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 368727,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_doctoc-fa09a2/entry.js",
+          "sha256": "1ab51e0b2882e70b70855736b8b90b05d374055cce6b280b7ef0b4e51a6551ef"
+        },
+        "map": {
+          "bytes": 302572,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_doctoc-fa09a2/entry.js.map",
+          "sha256": "7e7bbfec5f5858533be7a49eedc3386e789a2ff7a6fcbcb8ea4760992a35738d"
+        }
+      },
+      "id": "kind-webpack-cli_doctoc-fa09a2",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9c1f9a456736dafa94c85cc67831091f09abda000b6dcf5aaa4fdf9fd91b4d7d"
+      }
+    },
+    {
+      "appPackage": "@umijs/fabric",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:@umijs/fabric: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 94929,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_umijs_fabric-f601b5/entry.js",
+          "sha256": "2e79817908d3cb1f3793106ebcd02f9aedf026ce7986d8cac838053cffd4f2da"
+        },
+        "map": {
+          "bytes": 134116,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_umijs_fabric-f601b5/entry.js.map",
+          "sha256": "4a560da41f787caa2b2579d3cf01baed15df0fd19c026df25f018dc397b9ae0e"
+        }
+      },
+      "id": "kind-webpack-cli_umijs_fabric-f601b5",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "db4843c17f79f0c0347136c3452d22605f0d458c696f6c215cbda791af665433"
+      }
+    },
+    {
+      "appPackage": "ts-patch",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:ts-patch: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 129356,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_ts-patch-3ab5bd/entry.js",
+          "sha256": "74faea7817c64d16e8cf85ff11a7eebd8275e11c0fec07662c1821c2e13c061c"
+        },
+        "map": {
+          "bytes": 174614,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_ts-patch-3ab5bd/entry.js.map",
+          "sha256": "6797865c431d42e0167eaed0d905e9e474bb731cfe7312f17710b0a2155519c8"
+        }
+      },
+      "id": "kind-webpack-cli_ts-patch-3ab5bd",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2f5363ed7b4f72844837c1a01bd82037339078afc4c53d626ba1ba1f63d5233d"
+      }
+    },
+    {
+      "appPackage": "cz-customizable",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:cz-customizable: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 520991,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_cz-customizable-36f649/entry.js",
+          "sha256": "78986a4c28fe2ec4433664956b161fa85a0edaffd0ce5088806a9995eda49518"
+        },
+        "map": {
+          "bytes": 423254,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_cz-customizable-36f649/entry.js.map",
+          "sha256": "bab56a49e5a570b884ae3ac161df53cdd800463d4c489fa866d83f70a3650b56"
+        }
+      },
+      "id": "kind-webpack-cli_cz-customizable-36f649",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b9106b5134301cdc6c2ae4b44f670246f423542897bc3d30d30125b38e619df1"
+      }
+    },
+    {
+      "appPackage": "cross-var",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:cross-var: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 579213,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_cross-var-efce52/entry.js",
+          "sha256": "d354484e2f0712c37c6f642e7a2828591a764340b7664937172bfa54684b98b6"
+        },
+        "map": {
+          "bytes": 727255,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_cross-var-efce52/entry.js.map",
+          "sha256": "080651086c47a261707505ac701d9a92da9dc63c45bb510a039beec811eb7ee9"
+        }
+      },
+      "id": "kind-webpack-cli_cross-var-efce52",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "fc58bcfc90160698041df05f100edb644a2714217913ceb27fc403926e6aaa1f"
+      }
+    },
+    {
+      "appPackage": "ts-json-schema-generator",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:ts-json-schema-generator: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 3772772,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_ts-json-schema-generator-1165fe/entry.js",
+          "sha256": "0f3fa99ba73c602079fd3a9b5989496627c124f7e9cea01fa0af7081de788de4"
+        },
+        "map": {
+          "bytes": 4825057,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_ts-json-schema-generator-1165fe/entry.js.map",
+          "sha256": "51b7479b04eb58333e56bd3ea9eea00144f38e68007e0ca70656e17d17c30c3d"
+        }
+      },
+      "id": "kind-webpack-cli_ts-json-schema-generator-1165fe",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6309050ef17fcbb11df5615efb1f63b50f90f8db266740b67127ca69e7d13fc4"
+      }
+    },
+    {
+      "appPackage": "jsforce",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:jsforce: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 2380869,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_jsforce-566556/entry.js",
+          "sha256": "4a35a07d0c12635741e2b7ade3b9cc6938a70449404e122986a0e0f7ce2d05a1"
+        },
+        "map": {
+          "bytes": 2017569,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_jsforce-566556/entry.js.map",
+          "sha256": "e630340fb3ded8c623dc342794611cc1a299d22a04755ca55b4598afdd45e94b"
+        }
+      },
+      "id": "kind-webpack-cli_jsforce-566556",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "708df30a9abed65ae2b06434d4813b847589a9fcf6885800c58e9e02d1a3f208"
+      }
+    },
+    {
+      "appPackage": "ts-standard",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:ts-standard: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 1530487,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_ts-standard-e79c0d/entry.js",
+          "sha256": "3d8f6ccb2d9016a30c3661315dd998705fa1da1eec7745393415581f4b8953d2"
+        },
+        "map": {
+          "bytes": 1793172,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_ts-standard-e79c0d/entry.js.map",
+          "sha256": "e9aaced84c1c56420759db4f4af0c85bdb33147e8ea53fafbd92747d9f5509b8"
+        }
+      },
+      "id": "kind-webpack-cli_ts-standard-e79c0d",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bc2f2e133de0bd49ef100ecb05013c89f39825ff5e09fa93818dfa8097b095db"
+      }
+    },
+    {
+      "appPackage": "health",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:health: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 1677924,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_health-88539c/entry.js",
+          "sha256": "a21c5c88092beb3e85dd07a6ca3ca882d78075a73d6fb6ec2286631c401227dc"
+        },
+        "map": {
+          "bytes": 1903687,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_health-88539c/entry.js.map",
+          "sha256": "74a5420f807b3161757e610690be7646ae3960030b525db7eee0d7b3c613a2a7"
+        }
+      },
+      "id": "kind-webpack-cli_health-88539c",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2839e4f282a7ee99e79bd6ba2e15f9e54531cd2d2897aed475846f7b97288817"
+      }
+    },
+    {
+      "appPackage": "@lingui/cli",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app cli:@lingui/cli: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 40836,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/cli_lingui_cli-33be9c/entry.js",
+          "sha256": "36e5bcc633071622b65ab0f53f81ebc21bfc10cebcd95a6221d590d86b875ce8"
+        },
+        "map": {
+          "bytes": 50884,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/cli_lingui_cli-33be9c/entry.js.map",
+          "sha256": "166dedb23c7399d6217bc544f6b4edf715fa8ae4509b34a180196543f43ef0b4"
+        }
+      },
+      "id": "kind-webpack-cli_lingui_cli-33be9c",
+      "kind": "cli",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9a292d803af8417185c40e8c125c9b886366a3881bd4044d83806bc0d95fb3da"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-dfarm6__prism-browser-community: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 10178835,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-dfarm6__prism-browser-community-d453ee/entry.js",
+          "sha256": "27ae906c28a470bd9e00262c97c8ad21a8b68fbadb7001e79d3172cc51b6659b"
+        },
+        "map": {
+          "bytes": 6514814,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-dfarm6__prism-browser-community-d453ee/entry.js.map",
+          "sha256": "30f8d02c1191d26503f8af59f0b0d7aace90eb5b26120a6f014809c3bd4e368d"
+        }
+      },
+      "id": "kind-webpack-electron_gh-dfarm6__prism-browser-community-d453ee",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2122594e241f81c4c7ecf08305a5125db95d58ed73946aad3ceb6613c57861ba"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-shotheadman__mdcz: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 938944,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-shotheadman__mdcz-d7405c/entry.js",
+          "sha256": "5bbb842da7a5b8bc75a23db6119fdab3ce0ae9ed376ca9328fa7ea48daabb6b7"
+        },
+        "map": {
+          "bytes": 967812,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-shotheadman__mdcz-d7405c/entry.js.map",
+          "sha256": "13d8473ece91b97a7e0cdc9f78e185172b2abe6a371a28259659129b0ee05c86"
+        }
+      },
+      "id": "kind-webpack-electron_gh-shotheadman__mdcz-d7405c",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0229d666d03fa3b162e2cbc4e2f3c90c55ea7c0f50e17151efe977cdf812dc5f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-cclank__quickshot: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 717422,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-cclank__quickshot-6f4904/entry.js",
+          "sha256": "b8f4c3e4b620e5cbf1ae6f2a56329ee003972d2c67804ed6d085ce95a5478f2f"
+        },
+        "map": {
+          "bytes": 699907,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-cclank__quickshot-6f4904/entry.js.map",
+          "sha256": "5a8b2511fb6609d52f82d8dae7b7a2bbdc0a7ffe36ee59bf710e0181f92d5b73"
+        }
+      },
+      "id": "kind-webpack-electron_gh-cclank__quickshot-6f4904",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "59b87c6045b091ab3615d730a81d3ed47f52a5ccfcfae0709babdbd12e6db354"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-sanlinhtik3__thalika-voice-clone: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 902814,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-sanlinhtik3__thalika-voice-clone-9c854e/entry.js",
+          "sha256": "8bf7c2f1149bcfa19c814cb6690389ae7d6ef5fffa03a2397afd7a7071b3624d"
+        },
+        "map": {
+          "bytes": 823603,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-sanlinhtik3__thalika-voice-clone-9c854e/entry.js.map",
+          "sha256": "eca3254deb0f74e6ac4d4cb0065838261a409cbcfb31d0578821f4a5f5d08067"
+        }
+      },
+      "id": "kind-webpack-electron_gh-sanlinhtik3__thalika-voice-clone-9c854e",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0394e062ae58bbee25dd468208e55d9e18b9a86f52e3725159337ee09bacd7f2"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-agustinmista__positron: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 539166,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-agustinmista__positron-7412d5/entry.js",
+          "sha256": "641f926a49bf13c7b7a821e7bd0c4b2e89ebfbe2a1a0c4514a4bb38d67d61993"
+        },
+        "map": {
+          "bytes": 565944,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-agustinmista__positron-7412d5/entry.js.map",
+          "sha256": "e703b3a4cd43342d9231fa5c989f28cbccef8bd13d4677182a7deb929060298e"
+        }
+      },
+      "id": "kind-webpack-electron_gh-agustinmista__positron-7412d5",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "fb46d76be2f84573dee87d945ace547533f0c90517b4a731eb90f3913e7d46b8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-dotenorio__clipboard-manager-electron: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 137696,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-dotenorio__clipboard-manager-electron-cc055f/entry.js",
+          "sha256": "9785b1644ca9f2d3fab7770b1f214d258a61f6dd6393055a7b10d298bb90e71f"
+        },
+        "map": {
+          "bytes": 230609,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-dotenorio__clipboard-manager-electron-cc055f/entry.js.map",
+          "sha256": "988cf623ce840c85bb884347e1ff5a6b27d918b5897c576bf74148c090d3a32a"
+        }
+      },
+      "id": "kind-webpack-electron_gh-dotenorio__clipboard-manager-electron-cc055f",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5f497629cbcd3c4ced33ddebd2f617efbbd00407d685770fc4f119e396aecd2c"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-hamedgitty__bloks: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 1941247,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-hamedgitty__bloks-5da2e6/entry.js",
+          "sha256": "cde4d45cdad70cbab7ab00f900f60cebf82b158c26d36048900593c4e218e5a4"
+        },
+        "map": {
+          "bytes": 2502778,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-hamedgitty__bloks-5da2e6/entry.js.map",
+          "sha256": "c7ffb8e630542704ba9183d0fb79573efcb9ac079b93d630f628bbe5685c09ac"
+        }
+      },
+      "id": "kind-webpack-electron_gh-hamedgitty__bloks-5da2e6",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5cbd29ae27709d30d91fdf1fa3bc291e98a668c4a56e2461af46d5ff53f9d47c"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-john-paul-ruf__novel-engine: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 6930597,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-john-paul-ruf__novel-engine-3b897e/entry.js",
+          "sha256": "e071f24ecc9df48a0381316cc92b4e8a9ce096c39c48e061b3997bc8b202ceb3"
+        },
+        "map": {
+          "bytes": 6664388,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-john-paul-ruf__novel-engine-3b897e/entry.js.map",
+          "sha256": "4e8cc96ac6ffdc48ac9acafc228232b4c165dee4d4c87262b53d970dc1b04896"
+        }
+      },
+      "id": "kind-webpack-electron_gh-john-paul-ruf__novel-engine-3b897e",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d2b570daf257919748da17ceabaf611812ef15abd108688b3d8922de6e865a23"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-yaonieyo__doubao-account-pool: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 660296,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-yaonieyo__doubao-account-pool-220bd1/entry.js",
+          "sha256": "c769b8a5d54df188aafe11fb390cc585af135832ab54aa7ce6de21cad1f041c6"
+        },
+        "map": {
+          "bytes": 808126,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-yaonieyo__doubao-account-pool-220bd1/entry.js.map",
+          "sha256": "a2d0bfe855ff53056d3c3b16037d3359a3e804d27892982a5de76ac0d1214c5a"
+        }
+      },
+      "id": "kind-webpack-electron_gh-yaonieyo__doubao-account-pool-220bd1",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a46f1131ef7dbaeff0dd8b1080206db9af35a18547f1761132f671cba21673e4"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-z-------------__cpod: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 2678804,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-z-------------__cpod-e10580/entry.js",
+          "sha256": "eb3f35cf8be6a4ca11185c38c242245a3e59f4ce221a91b62797540e32841c82"
+        },
+        "map": {
+          "bytes": 2645710,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-z-------------__cpod-e10580/entry.js.map",
+          "sha256": "3c3e8f80cdbd4b51b3c4dd2cd8ae62a3e54df742945f660acbb3dc6a3412e5e5"
+        }
+      },
+      "id": "kind-webpack-electron_gh-z-------------__cpod-e10580",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e915ea7f4dbd5201e5bdda34bd3d03309023eb90a5c1f405577923fccbf5c24b"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-simon-fraser__musictube-player: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 68264,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-simon-fraser__musictube-player-904ca4/entry.js",
+          "sha256": "07bfc75827b7a095cefdb706974488468201fda1bef49041603cdd758364a1cc"
+        },
+        "map": {
+          "bytes": 98902,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-simon-fraser__musictube-player-904ca4/entry.js.map",
+          "sha256": "783520bbbfbb5780f5d6b643de5cca7b539bacaf6c9759228399df04e61a0d52"
+        }
+      },
+      "id": "kind-webpack-electron_gh-simon-fraser__musictube-player-904ca4",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e91ddd55f06f8a2131fcc629993436a51555811914e0f74a16b67cfa182a785f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app electron:gh-rhysd__tui: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 80197,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-rhysd__tui-a8566f/entry.js",
+          "sha256": "f16d8d7b9eeae099fc179c6e9708fe3f55204918e496014743a2515d7c6c8887"
+        },
+        "map": {
+          "bytes": 122794,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/electron_gh-rhysd__tui-a8566f/entry.js.map",
+          "sha256": "22abe583842b904175591c5f9a08636fa6c2286685af61fc58a30dca2de700ac"
+        }
+      },
+      "id": "kind-webpack-electron_gh-rhysd__tui-a8566f",
+      "kind": "electron",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0fa197858954a5e1a9defbe7b8d6f8fffe7b43c9c23627a33bc8346674cb3962"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app vscode:gh-nuxtrdev__nuxtr-vscode: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 3164069,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-nuxtrdev__nuxtr-vscode-1fe62a/entry.js",
+          "sha256": "6596e720a4b3428cc9259c689090311969dedf2b0c720ef3335633e4aaf77bde"
+        },
+        "map": {
+          "bytes": 3296767,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-nuxtrdev__nuxtr-vscode-1fe62a/entry.js.map",
+          "sha256": "b008ec2cf228f9c988f7ded713ed360e5e99f7ae9b8478c730ae19d473be4922"
+        }
+      },
+      "id": "kind-webpack-vscode_gh-nuxtrdev__nuxtr-vscode-1fe62a",
+      "kind": "vscode",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2b6a557c5dc99cb58debb43b0cc2f2d2e4a2a33911421f04e91cab3bac5b81bf"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app vscode:gh-mrmlnc__vscode-scss: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 1114225,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-mrmlnc__vscode-scss-ef9914/entry.js",
+          "sha256": "2a3809ba0f3c5b2a77044b06300637c877368d5d186f8e5b2c3d73fee6476e17"
+        },
+        "map": {
+          "bytes": 988236,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-mrmlnc__vscode-scss-ef9914/entry.js.map",
+          "sha256": "97116af9628faa961d2fd0000b37c092551ad84f305a35ba6f2ba1366673d65f"
+        }
+      },
+      "id": "kind-webpack-vscode_gh-mrmlnc__vscode-scss-ef9914",
+      "kind": "vscode",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6d0283f02df5bf0699a1477918ac4ec7fe1f536ef7e0a2be70ac71f9aa0f7126"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app vscode:gh-yessglory17__argus: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 2682081,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-yessglory17__argus-c36d36/entry.js",
+          "sha256": "bb0ebe8973b4ad6bce3f272818eaeb8ff100cb2a10841ccb7a133d7f981e755d"
+        },
+        "map": {
+          "bytes": 2819599,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-yessglory17__argus-c36d36/entry.js.map",
+          "sha256": "0904c38454b03f0e0a9dbeeaf3a53d4a5af13d604c4c41313481a964e6bdd59b"
+        }
+      },
+      "id": "kind-webpack-vscode_gh-yessglory17__argus-c36d36",
+      "kind": "vscode",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "70bb01c5ed82c0c352c5e13fa461bf358587ba2e973d7ba58c01d1ada14b8978"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app vscode:gh-panoply__vscode-liquid: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 2026014,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-panoply__vscode-liquid-26655d/entry.js",
+          "sha256": "8e9f49749d4c45fa8ae7bba5bce9bd4f596fc6650aa9ee6b385c34943d92d4cf"
+        },
+        "map": {
+          "bytes": 1134973,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-panoply__vscode-liquid-26655d/entry.js.map",
+          "sha256": "a643ba93ba669c8606ae92ea0c45dfb55addd5250ba610f8a4b8c92ab74a6b98"
+        }
+      },
+      "id": "kind-webpack-vscode_gh-panoply__vscode-liquid-26655d",
+      "kind": "vscode",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5c335c0f524b4f8e44afa112932e96c3ab805616fba9e3af8a2dde3eef27ddd5"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app vscode:gh-rusiaaman__chat.md: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 2047290,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-rusiaaman__chat.md-331c54/entry.js",
+          "sha256": "b4bc87e36e4f23aa78b8b8db728588ef273ef3b0a0ef08d1abd119514d25ed71"
+        },
+        "map": {
+          "bytes": 2398772,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-rusiaaman__chat.md-331c54/entry.js.map",
+          "sha256": "2e4443793605be43a4307c9fbb467cdc56799df8b1ffdd85a4cd1322c6b7a511"
+        }
+      },
+      "id": "kind-webpack-vscode_gh-rusiaaman__chat.md-331c54",
+      "kind": "vscode",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "799ef1c7e9af021fdb09ec4e836d244c86fcf74be304e819ff1ede1c859bd08d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app vscode:gh-cschlosser__doxdocgen: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 393229,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-cschlosser__doxdocgen-435b5b/entry.js",
+          "sha256": "777fc2bc1c91d435b4e0ca9366fd7b09b2200707ac63b19bb6b0d8491864ad28"
+        },
+        "map": {
+          "bytes": 362784,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-cschlosser__doxdocgen-435b5b/entry.js.map",
+          "sha256": "bf8fc3607f3bf555629de75836d836533c4ab9802b789689bf8de7b908e3c904"
+        }
+      },
+      "id": "kind-webpack-vscode_gh-cschlosser__doxdocgen-435b5b",
+      "kind": "vscode",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "eb4fb43c8f71f6a4dae5aca21a0128fcc64dbe5978e35e67f17bfb987b5c8afa"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app vscode:gh-ducphamngoc08__codevisualizer: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 666741,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-ducphamngoc08__codevisualizer-16f73c/entry.js",
+          "sha256": "e392e9ae9da1e4e28af5c45072ba46346bf97070825c7be9fcbf20e511ed81ff"
+        },
+        "map": {
+          "bytes": 829901,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-ducphamngoc08__codevisualizer-16f73c/entry.js.map",
+          "sha256": "54ef1f0d7770bf48bb84d940f91c1e4e241c0e781a06be9252d0ec4bc3f36470"
+        }
+      },
+      "id": "kind-webpack-vscode_gh-ducphamngoc08__codevisualizer-16f73c",
+      "kind": "vscode",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1447b45e0a335e754e2dc3b04e8c52d8096cf54a4e07147da65f200d8e14a128"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app vscode:gh-github__vscode-github-actions: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 9407623,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-github__vscode-github-actions-a3e642/entry.js",
+          "sha256": "8776d08d173dc6d29c4b72aba2cb3375a78162d7367254a1cf3db72e3446cfa4"
+        },
+        "map": {
+          "bytes": 9487519,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-github__vscode-github-actions-a3e642/entry.js.map",
+          "sha256": "c053ef51c3ac412f348260f18b694d781ea63d18f93176d0fefbf23a9da1a2ce"
+        }
+      },
+      "id": "kind-webpack-vscode_gh-github__vscode-github-actions-a3e642",
+      "kind": "vscode",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1b4203ff9230c3236b7981cd63988b9f390949502f2e89d63c50dbf37c82a8d8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app vscode:gh-deepmyst__mysti: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 12796706,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-deepmyst__mysti-4faa9b/entry.js",
+          "sha256": "39e3122c40a893fa1031af597e6076842586fa74c0b7d769f572c16a2ecf48ba"
+        },
+        "map": {
+          "bytes": 15521328,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-deepmyst__mysti-4faa9b/entry.js.map",
+          "sha256": "6b1849b43f8d1b7111819f27bed2a954fa7929ce10a4cf2db13533a659316631"
+        }
+      },
+      "id": "kind-webpack-vscode_gh-deepmyst__mysti-4faa9b",
+      "kind": "vscode",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "319372f8c3982a4356b1af4166f20b6104165805f8e8efedda12609656a6d834"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp181 app vscode:gh-tim-koehler__helm-intellisense: webpack 5.111.1 production + terser, target node, one chunk (the index's webpack recipe script)",
+      "files": {
+        "bundle": {
+          "bytes": 839983,
+          "name": "entry.js",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-tim-koehler__helm-intellisense-296441/entry.js",
+          "sha256": "463ff291e7aa952f0eff287237aa29c2c85eb8dfd9a5565ea8e3724c7cc8d9a9"
+        },
+        "map": {
+          "bytes": 1147659,
+          "name": "entry.js.map",
+          "origin": "/work/exp181-data/build/webpack/vscode_gh-tim-koehler__helm-intellisense-296441/entry.js.map",
+          "sha256": "64c555c237ae1b45dd672d7b44bd6554edf17944d496db83978f8861414fa83e"
+        }
+      },
+      "id": "kind-webpack-vscode_gh-tim-koehler__helm-intellisense-296441",
+      "kind": "vscode",
+      "set": "kind-webpack",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b02e9c41bd1f3d4f209551f18cf3629d5f75b8cc53f0f0895f995f6087ab2ca9"
+      }
+    }
+  ],
+  "frozen": true,
+  "note": "exp181 DEV corpus of webpack builds of exp150's 45 bun-dev apps (experiments/181-index-all-bundlers/scripts/kind_corpus.py)",
+  "schema": "exp096-corpus/1"
+}

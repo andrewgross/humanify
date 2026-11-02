@@ -18,9 +18,8 @@ use humanify_core::libindex::recipe::{DetectedRecipe, RecipeBundler, Target};
 
 use crate::build::Trace;
 use crate::cache::{
-    BUN_FETCH_BYTES, BuildSidecar, PINNED_BUN, STORE_DIR, Seed, SidecarSlice, TOOLS_DIR,
-    bun_binary, estimate_build, looks_like_id, plan_runtime, search_store, uncovered,
-    valid_package_name, write_build_sidecar,
+    BuildSidecar, STORE_DIR, Seed, SidecarSlice, TOOLS_DIR, estimate_build, looks_like_id,
+    plan_runtime, search_store, uncovered, valid_package_name, write_build_sidecar,
 };
 use crate::recipe::RecipeBuild;
 
@@ -300,40 +299,6 @@ fn the_sidecar_round_trips() {
     );
 }
 
-/// The pinned-Bun lookup: the NEWEST installed wins when the run does not
-/// know the bundle's own version, and a cache with none says exactly how
-/// to fetch one.
-#[test]
-fn the_bun_lookup_picks_the_newest_and_names_the_fetch_command() {
-    let root = temp("bun");
-    let install = |v: &str| {
-        let bin = root
-            .join(TOOLS_DIR)
-            .join(format!("bun-{v}"))
-            .join("node_modules/.bin");
-        std::fs::create_dir_all(&bin).expect("mkdir");
-        std::fs::write(bin.join("bun"), "#!/bin/sh\nexit 0\n").expect("stub");
-    };
-    install("1.4.0");
-    install("1.10.0");
-    let (bin, version) = bun_binary(&root, None).expect("the newest");
-    assert_eq!(version, "1.10.0");
-    assert!(bin.ends_with("node_modules/.bin/bun"), "{})", bin.display());
-    let (too, v2) = bun_binary(&root, Some("1.4.0")).expect("the exact");
-    assert_eq!(v2, "1.4.0");
-    assert!(too.ends_with("bun-1.4.0/node_modules/.bin/bun"));
-    let bare = temp("bun-none");
-    let err = bun_binary(&bare, None).expect_err("nothing installed");
-    assert!(
-        err.contains(&format!("npm install bun@{PINNED_BUN}")),
-        "{err}"
-    );
-    assert!(
-        err.contains(bare.join(TOOLS_DIR).display().to_string().as_str()),
-        "{err}"
-    );
-}
-
 /// The run-time plan: declared versions pin as declared, undeclared ones
 /// take the newest at as-of, and the bundle's evidence is recorded.
 fn recorded_registry(root: &Path) -> PathBuf {
@@ -537,11 +502,11 @@ fn npm_package_names_are_told_apart_from_prose() {
 /// cost nothing) and a Bun fetch adds its download.
 #[test]
 fn the_estimate_scales_with_the_versions_to_build() {
-    let none = estimate_build(0, false);
+    let none = estimate_build(RecipeBundler::Bun, 0, 0);
     assert_eq!(none.bytes_low, 0);
     assert_eq!(none.bytes_high, 0);
-    let ten = estimate_build(10, false);
-    let twenty = estimate_build(20, false);
+    let ten = estimate_build(RecipeBundler::Bun, 10, 0);
+    let twenty = estimate_build(RecipeBundler::Bun, 20, 0);
     assert!(
         ten.bytes_low > 0 && ten.bytes_low <= ten.bytes_high,
         "{ten:?}"
@@ -552,8 +517,8 @@ fn the_estimate_scales_with_the_versions_to_build() {
     );
     assert_eq!(twenty.bytes_low, 2 * ten.bytes_low);
     assert!(twenty.seconds_high > ten.seconds_high);
-    let with_bun = estimate_build(10, true);
-    assert_eq!(with_bun.bytes_low, ten.bytes_low + BUN_FETCH_BYTES);
+    let with_tool = estimate_build(RecipeBundler::Bun, 10, 11_000_000);
+    assert_eq!(with_tool.bytes_low, ten.bytes_low + 11_000_000);
 }
 
 /// exp171: the store search matches on the bundle's SLICE only, so a store
@@ -618,4 +583,25 @@ fn only_id_named_directories_are_candidates() {
         std::cmp::Ordering::Greater,
         "the newest-pick compares semantically"
     );
+}
+
+/// exp181: the estimate is the kind's own — each recipe bundler's measured
+/// per-version cost (webpack builds slower than esbuild on the same 30
+/// versions; esbuild and rollup builds take less disk than Bun's).
+#[test]
+fn each_kind_estimates_with_its_own_measured_cost() {
+    use crate::cache::version_cost;
+    let est = |b| estimate_build(b, 10, 0);
+    assert!(est(RecipeBundler::Webpack).seconds_high > est(RecipeBundler::Esbuild).seconds_high);
+    assert!(est(RecipeBundler::Esbuild).bytes_high < est(RecipeBundler::Bun).bytes_high);
+    assert!(est(RecipeBundler::Rollup).bytes_high < est(RecipeBundler::Bun).bytes_high);
+    for b in crate::tools::ALL_RECIPE_BUNDLERS {
+        let c = version_cost(b);
+        assert!(c.bytes.0 > 0 && c.bytes.0 <= c.bytes.1, "{}", b.name());
+        assert!(
+            c.seconds.0 > 0 && c.seconds.0 <= c.seconds.1,
+            "{}",
+            b.name()
+        );
+    }
 }

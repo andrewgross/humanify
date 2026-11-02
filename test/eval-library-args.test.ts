@@ -59,8 +59,19 @@ describe("eval library argument parsing", () => {
           "heldout"
         ])
       ),
-      /--corpus dev\|test\|test2\|bundlers\|apps\|pop\|remin\|remin2\|remin3\|remin4\|bun-dev\|bun-held\|cc/
+      /--corpus dev\|test\|test2\|bundlers\|apps\|pop\|remin\|remin2\|remin3\|remin4\|bun-dev\|bun-held\|kind-esbuild\|kind-webpack\|kind-rollup\|cc/
     );
+    const k = libraryArgs([
+      "kind-lbl",
+      "--index",
+      "/ix",
+      "--rule",
+      "structural",
+      "--corpus",
+      "kind-esbuild"
+    ]);
+    assert.ok(typeof k !== "string", String(k));
+    assert.deepStrictEqual(k.slice(-2), ["--corpus", "kind-esbuild"]);
     const b = libraryArgs([
       "dev-lbl",
       "--index",
