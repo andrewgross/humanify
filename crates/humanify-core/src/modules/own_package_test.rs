@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use super::{ModuleEvidence, innermost_bytes, majority, own_packages};
+use super::{ModuleEvidence, innermost_bytes, majority, own_packages, own_packages_from_entries};
 
 fn module(packages: &[&str], requires: &[usize]) -> ModuleEvidence {
     ModuleEvidence {
@@ -85,6 +85,30 @@ fn the_mutual_and_manifest_rules_still_name_the_own_package() {
     manifest.manifest_of = Some("cli".to_string());
     let e = vec![module(&[], &[1]), manifest];
     assert_eq!(own(&e, &[0]), vec!["cli".to_string()]);
+}
+
+/// The fence's asker: the entry rule ALONE — the front's manifest and
+/// mutual candidates name nothing here (at discovery scope an unclaimed
+/// module is no proof of app code; workflow_nest's node build).
+#[test]
+fn the_fence_asks_only_the_entry_rule() {
+    let mut manifest = module(&["cli"], &[]);
+    manifest.manifest_of = Some("cli".to_string());
+    let e = vec![module(&[], &[1]), manifest];
+    assert_eq!(
+        own_packages_from_entries(&e, &[0])
+            .into_iter()
+            .collect::<Vec<_>>(),
+        Vec::<String>::new()
+    );
+    // ...but the entry rule still holds for it.
+    let e = vec![claimed_mostly("cli", &[1]), module(&["cli"], &[])];
+    assert_eq!(
+        own_packages_from_entries(&e, &[0])
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec!["cli".to_string()]
+    );
 }
 
 #[test]

@@ -3,6 +3,14 @@
 //! ([`crate::modules::own_package`]), and the fence that sets the own
 //! package's claims apart.
 //!
+//! The fence asks the entry rule ALONE
+//! ([`crate::modules::own_package::own_packages_from_entries`]): the
+//! front's manifest and mutual rules answer the app-module decision's
+//! question, and at discovery scope they are unsound (an unclaimed
+//! module is no proof of app code — a library reads its own
+//! `package.json` inside the bundle, and unclaimed helpers relay the
+//! entry's requires to it).
+//!
 //! The view: one module per module group ([`super::module_groups`]: a
 //! lazy ES module or a bundled CommonJS module, with its hoisted
 //! statements and its body), its claims, the inlined `package.json` a
@@ -27,7 +35,7 @@ use super::{Discovery, Evidence, Groups, module_groups};
 use crate::cut::units::UnitKind;
 use crate::graph::edges::EdgeKind;
 use crate::graph::references::ReferenceGraph;
-use crate::modules::own_package::{ModuleEvidence, majority, own_packages};
+use crate::modules::own_package::{ModuleEvidence, majority, own_packages_from_entries};
 
 /// The reader whose declared seed is an inlined `package.json`.
 const PACKAGE_JSON_READER: &str = "package-json";
@@ -157,10 +165,11 @@ pub(super) fn own_packages_of(
 ) -> BTreeSet<String> {
     let groups = module_groups(graph);
     let entries = entry_groups(ingest, graph, &groups, statements);
+    let evidence = module_evidence(graph, &groups, found);
     if entries.is_empty() {
         return BTreeSet::new();
     }
-    own_packages(&module_evidence(graph, &groups, found), &entries)
+    own_packages_from_entries(&evidence, &entries)
 }
 
 /// `found` with the own packages' claims set apart (module doc).

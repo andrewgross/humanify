@@ -2000,3 +2000,50 @@ fn the_report_lists_the_own_package_and_its_rows_apart() {
     );
     assert!(report.packages.iter().all(|p| p.package != "cli"));
 }
+
+/// A library that reads its OWN `package.json` inside the bundle
+/// (workflow_nest's node build: `@swc/core` inlines its manifest, an
+/// unclaimed helper relays the entry's require to it) is NOT the bundle's
+/// own package: the fence asks only the entry rule — the front's manifest
+/// and mutual rules answer the app-module decision's question, and at
+/// discovery scope an unclaimed module is no proof of app code.
+#[test]
+fn a_library_reading_its_own_manifest_inside_the_bundle_stays_claimed() {
+    use crate::libdetect::discovery::{BundlePieces, discover_in_bundle};
+    use crate::toolchain::{BundleLayout, InteropHelpers, ModuleWrapperGrammar};
+    let code = concat!(
+        "var he=(e,t)=>()=>(e&&(t=e(e=0)),t);\n",
+        "var l1;\n",
+        "var initLodash=he(()=>{l1=[1,2,3].map(String).join(\",\");});\n",
+        "var s1;\n",
+        "var initSwc=he(()=>{s1={name:\"swc\",version:\"1.0.0\",main:\"swc.js\"};});\n",
+        "var h1;\n",
+        "var initHelper=he(()=>{h1=s1;});\n",
+        "var initCli=he(()=>{initLodash();h1.length;});\n",
+        "module.exports={};initCli();\n"
+    );
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, code, "input.js");
+    assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
+    let pieces = BundlePieces {
+        layout: BundleLayout::SingleWrapperFunction,
+        grammar: ModuleWrapperGrammar::BunAndEsbuild,
+        interop: InteropHelpers::Bun,
+    };
+    let at = |text: &str| code.find(text).expect("seed text") as u32;
+    let claims = vec![(at("l1=[1,2,3]"), "lodash".to_string())];
+    let (_, found) = discover_in_bundle(
+        code,
+        &ingest,
+        pieces,
+        &[],
+        &claims,
+        None,
+        DiscoveryOptions::default(),
+    );
+    assert_eq!(
+        packages_of(&found.claims),
+        vec!["lodash".to_string(), "swc".to_string()]
+    );
+    assert!(found.self_claims.is_empty() && found.own_packages.is_empty());
+}

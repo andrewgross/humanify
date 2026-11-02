@@ -23,7 +23,10 @@
 //!   X();`). When the index claims MOST of every entry module's bytes as
 //!   one package P, the bundle is P — a library is never the program
 //!   itself. All entries must agree: an app whose last statements run a
-//!   library's register module and its own main names nothing.
+//!   library's register module and its own main names nothing. This is
+//!   the rule the fence asks
+//!   ([`own_packages_from_entries`]): at discovery scope the front rules
+//!   are unsound — an unclaimed module is no proof of app code there.
 //! - **The front's manifest** (exp172): the entry's unattributed modules
 //!   require P's inlined `package.json` (a CLI reading its own version).
 //! - **Mutual require** (exp172): P's modules and the entry's
@@ -32,7 +35,9 @@
 //!
 //! The front rules are refused when any module of another package
 //! requires one of P's (a library depends on P, so P is a dependency).
-//! The entry rule is not: the entry is the app by construction.
+//! The entry rule is not: the entry is the app by construction. The
+//! front rules answer the app-module decision's question (exp172, where
+//! their census validated them) and only that asker uses them.
 //!
 //! Name-blind on purpose: a package is own only through the bundle's
 //! structure, never because its name resembles the app's, so a bundle
@@ -175,6 +180,26 @@ pub fn own_packages(evidence: &[ModuleEvidence], entries: &[usize]) -> BTreeSet<
     let mut own = front_packages(evidence, &entries);
     own.extend(entry_package(evidence, &entries));
     own
+}
+
+/// The bundle's own packages by the entry rule alone — the ask the fence
+/// uses. The front's manifest and mutual rules are NOT sound here: at
+/// discovery scope an unclaimed module is no proof of app code (a library
+/// reads its own `package.json` inside the bundle — workflow_nest's node
+/// build — and an unclaimed helper relays the entry's require to it, so
+/// the front named `@swc/core` the bundle's own and the fence unclaimed
+/// 11,238 bytes of real `@swc/core` code). The entry rule stays: a
+/// library is never the program itself.
+pub fn own_packages_from_entries(
+    evidence: &[ModuleEvidence],
+    entries: &[usize],
+) -> BTreeSet<String> {
+    let entries: Vec<usize> = entries
+        .iter()
+        .copied()
+        .filter(|&i| i < evidence.len() && !evidence[i].excluded)
+        .collect();
+    entry_package(evidence, &entries).into_iter().collect()
 }
 
 /// The entry rule: the one package claiming most of every entry module.
