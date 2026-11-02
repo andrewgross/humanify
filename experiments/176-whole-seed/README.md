@@ -1,9 +1,12 @@
 # exp176 — the whole-seed rule's cover exception (exp167 recall lever #1)
 
-STATUS: BUILT (2026-11-01), branch `exp176-whole-seed` off main `5a48564bd`. Default ON at
+STATUS: BUILT, judged (2026-11-02), branch `exp176-whole-seed` off main `5a48564bd`. Default ON at
 `library.discovery.factory_whole_cover = 0.95`. Library score judged on bun-dev (dev), bun-held (held-out, one
 shot) and cc. The re-minified terser/esbuild sets were NOT judged: their frozen corpora are not on this box
-(see "What was not proven"). Pipeline effect: EVAL_PENDING.
+(see "What was not proven"). Pipeline effect on Claude Code: none — discovery claims identical on all eight eval
+versions, warm neutrality NEUTRAL in names mode on 2.1.215→2.1.216; the cold eval label was NOT run (see "The
+pipeline effect"). Names-mode vendor placement on bun-dev: +1.81 MB placed under the right package, +159 B in a wrong
+package's folder, app bytes in vendor/ unchanged. Gate 13/13 from a clean checkout of `4cad27670`.
 
 ## Totals first
 
@@ -116,7 +119,38 @@ candidate, same binary, names-mode config (`humanify discover --bundle-order`): 
 `bundleOrder` (the names-mode placement answers). No Claude Code module in the walk is a UMD/IIFE factory the rule
 refused, so the rule cannot reach the eval's output on these inputs.
 
-EVAL_RESULT
+**Warm neutrality, names mode (the default), 2.1.215→2.1.216** (`npm run eval -- neutrality 5a48564bd 2.1.215:2.1.216
+--cache /work/neutrality-cache --priors /work/exp050-cold`, candidate `c0a6d3557`, crates = `4cad27670`):
+**NEUTRAL** — 0 differing files, 0 differing lines, exit codes 0 / 0, cache writes candidate +11,155, **baseline +0**.
+
+**Why no cold eval label.** The brief asked for one names-mode label against `ref-names-0357696e-r1`, on the
+expectation that output changes. It does not change on these inputs: the claims and placement answers above are
+identical on every version the eval walks, and the warm neutrality run shows byte-identical output. A cold label
+would differ from the reference only by the LLM's re-rolls; it cannot resolve an effect of zero and would still
+print a sign (rule 11; CLAUDE.md: "for a change that is supposed to alter NOTHING … the eval is the wrong
+instrument"). novel/realLn cannot move: no claim moves. If a cold label is still wanted for the record, it is
+`npm run eval -- score <label>` at `4cad27670`, ~1 h+, alone under the heavy lock.
+
+**Names-mode vendor placement on bun-dev** (exp166's instrument, `npm run eval -- vendor-precision bun-dev <bin>
+<label>`, main `5a48564bd` vs candidate `4cad27670`; 71 of 90 bundles judged — the same 10 stub runs fail on BOTH
+binaries with `stable split failed before any tree was written: wrapper detected … absent from the estree json`, a
+main defect this change does not touch, and 9 more have no truth-labelled vendor bytes):
+
+| quantity (factory placement)          |        main |   candidate |          Δ |
+| ------------------------------------- | ----------: | ----------: | ---------: |
+| library bytes under the right package | 135,132,767 | 136,942,686 | +1,809,919 |
+| library bytes left at `vendor/` root  |  26,862,705 |  25,052,627 | −1,810,078 |
+| library bytes under a WRONG package   |   1,466,646 |   1,466,805 |       +159 |
+| app bytes under vendor/ (bar 0 new)   |         378 |         378 |         +0 |
+| era (exact) placement, every column   |           – |           – |  identical |
+
+The +159 B sit in six newly placed files (libsodium, sanitize-html, mousetrap ×2, @xterm/addon-fit, map-stream,
+remove-markdown; ~27 B each, consistent with wrapper/boundary bytes the truth labels as a neighbour — not
+hand-read). The 378 app bytes are main's, unchanged.
+
+**Instrument fix on the way:** `experiments/166-restore-or-ask/stub-run.mts` still wrote `library.names_unlocked`,
+refused since exp171, so every bun-dev vendor-precision run failed on current main; the key is dropped (commit
+`c0a6d3557`).
 
 ## Gate
 
@@ -134,6 +168,9 @@ census:clones, census:concurrency, unit, rust:unit, rust:build, rust:format-gold
 - **cc's CommonJS factories** (5.05 MB) sit outside the cc sample (rule 8); the claims on cc 2.1.216 are byte-equal
   anyway (22,674 claims, 8,233,138 bytes, before and after).
 - The multi-statement wrong side at high cover was read first-order only; no measured run reached it.
+- Vendor placement on the 10 bun-dev bundles whose stub run fails on main (three of them are bundles this rule
+  gains on: dbt-power-user, mysti, hugin-desktop).
+- A cold names-mode eval label (not run; see above).
 
 ## Files
 
