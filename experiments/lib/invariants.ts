@@ -33,6 +33,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { LibraryMatchingBlock } from "./run-manifest.js";
 
 export interface PairRunStatus {
   /** The `to` version of the pair, e.g. "2.1.86". */
@@ -44,6 +45,26 @@ export interface PairRunStatus {
   /** LLM calls the run lost (2026-10-12). Absent on statuses recorded
    *  before then — UNKNOWN, not zero. */
   providerErrors?: ProviderErrorsRecord;
+  /** What the library decision came to (exp175). Absent on statuses
+   *  recorded before then — UNKNOWN. */
+  libraryMatching?: LibraryMatchingStatus;
+}
+
+/**
+ * Whether a pair's runs SKIPPED library name matching (exp175): no index
+ * for the bundle's kind, so the run wrote off's bytes. The eval hands names
+ * launches the prebuilt index explicitly and should never get here, but a
+ * skipped leg scored under a names label is an off-mode card wearing a
+ * names label — so the card is REFUSED, like a run that lost LLM answers.
+ */
+export interface LibraryMatchingStatus {
+  /** The scored leg's block; null = its stats carry none (a binary from
+   *  before exp175): unknown, never refused. */
+  scored: LibraryMatchingBlock | null;
+  /** The rebuilt base's skip line, or null (none, or no base rebuilt). */
+  rebaseSkipped: string | null;
+  refused: boolean;
+  pair?: string;
 }
 
 /** The binary's `--stats-json` `providerErrors` block: calls that failed
@@ -113,6 +134,68 @@ function rebaseProviderErrors(stdoutPath: string): number | null {
   if (!fs.existsSync(stdoutPath)) return null;
   const m = FAILED_CALLS_LINE.exec(fs.readFileSync(stdoutPath, "utf8"));
   return m ? Number(m[1]) : 0;
+}
+
+/** The scored leg's `libraryMatching` block, or null when the stats carry
+ *  none (or cannot be read). */
+function readLibraryMatching(statsPath: string): LibraryMatchingBlock | null {
+  try {
+    const block = JSON.parse(
+      fs.readFileSync(statsPath, "utf8")
+    )?.libraryMatching;
+    if (typeof block?.outcome !== "string") return null;
+    return block as LibraryMatchingBlock;
+  } catch {
+    return null;
+  }
+}
+
+/** The binary's skip line (crates/humanify-cli/src/runtime_index.rs
+ *  `no_index_line` and its from-bundle twins). */
+const SKIP_LINE =
+  /^no library index for \S+ bundles in .* skipping library name matching \(.*$/m;
+
+function rebaseSkipLine(stdoutPath: string): string | null {
+  if (!fs.existsSync(stdoutPath)) return null;
+  return SKIP_LINE.exec(fs.readFileSync(stdoutPath, "utf8"))?.[0] ?? null;
+}
+
+function libraryMatchingStatus(src: RunStatusSources): LibraryMatchingStatus {
+  const scored = src.stats ? readLibraryMatching(src.stats) : null;
+  const rebaseSkipped = src.rebaseStdout
+    ? rebaseSkipLine(src.rebaseStdout)
+    : null;
+  return {
+    scored,
+    rebaseSkipped,
+    refused: scored?.outcome === "skipped" || rebaseSkipped !== null,
+    ...(src.pair ? { pair: src.pair } : {})
+  };
+}
+
+/**
+ * Why a pair's card is refused for a skipped library decision, in lines to
+ * print — empty when it is not.
+ */
+export function libraryRefusal(status: PairRunStatus, label: string): string[] {
+  const lm = status.libraryMatching;
+  if (!lm?.refused) return [];
+  const lines = [
+    `!! REFUSED to score ${lm.pair ?? status.version}: a run SKIPPED library name matching (no library index for the bundle's kind) — its tree is off mode's, and scoring it under this label would pass it off as a names run.`
+  ];
+  if (lm.scored?.outcome === "skipped") {
+    lines.push(
+      `   scored leg (${lm.scored.kind} bundle): ${lm.scored.why ?? "skipped"}`
+    );
+  }
+  if (lm.rebaseSkipped) {
+    lines.push(`   rebuilt base: ${lm.rebaseSkipped}`);
+  }
+  lines.push(
+    "   No card was written. Pass the library index explicitly (pairs.json libraryIndex, or --library-index), then re-run the pair:",
+    `     npm run eval -- score ${label}${lm.pair ? ` --pairs ${lm.pair}` : ""}`
+  );
+  return lines;
 }
 
 export interface RunStatusSources {
@@ -241,7 +324,12 @@ export function writeRunStatus(
     version,
     exitCode,
     errors,
-    ...(sources ? { providerErrors: providerErrorsRecord(sources) } : {})
+    ...(sources
+      ? {
+          providerErrors: providerErrorsRecord(sources),
+          libraryMatching: libraryMatchingStatus(sources)
+        }
+      : {})
   };
   fs.writeFileSync(
     path.join(resultsDir, `${version}${STATUS_SUFFIX}`),
@@ -262,6 +350,9 @@ function parseRunStatus(j: any): PairRunStatus | undefined {
     errors: Array.isArray(j.errors) ? j.errors : [],
     ...(typeof j.providerErrors?.refused === "boolean"
       ? { providerErrors: j.providerErrors }
+      : {}),
+    ...(typeof j.libraryMatching?.refused === "boolean"
+      ? { libraryMatching: j.libraryMatching }
       : {})
   };
 }
@@ -303,13 +394,24 @@ export function loadRunStatuses(resultsDir: string): PairRunStatus[] {
 /** The pairs whose cards were refused for lost LLM answers (they have no
  *  card, so the table cannot show them; this line does). */
 function refusedBanner(statuses: readonly PairRunStatus[]): string[] {
-  const refused = statuses.filter((s) => s.providerErrors?.refused);
-  if (refused.length === 0) return [];
-  return [
-    `!! ${refused.length} pair(s) REFUSED — their runs lost LLM answers (providerErrors), so no card was scored: ` +
-      refused.map((s) => s.providerErrors?.pair ?? s.version).join(", "),
-    "   See each pair's <v>-run-status.json; re-run them when the endpoint is healthy."
-  ];
+  const lost = statuses.filter((s) => s.providerErrors?.refused);
+  const skipped = statuses.filter((s) => s.libraryMatching?.refused);
+  const lines: string[] = [];
+  if (lost.length > 0) {
+    lines.push(
+      `!! ${lost.length} pair(s) REFUSED — their runs lost LLM answers (providerErrors), so no card was scored: ` +
+        lost.map((s) => s.providerErrors?.pair ?? s.version).join(", "),
+      "   See each pair's <v>-run-status.json; re-run them when the endpoint is healthy."
+    );
+  }
+  if (skipped.length > 0) {
+    lines.push(
+      `!! ${skipped.length} pair(s) REFUSED — their runs SKIPPED library name matching (no index for the bundle's kind), so no card was scored: ` +
+        skipped.map((s) => s.libraryMatching?.pair ?? s.version).join(", "),
+      "   See each pair's <v>-run-status.json; pass the library index explicitly and re-run them."
+    );
+  }
+  return lines;
 }
 
 export function runStatusBanner(statuses: readonly PairRunStatus[]): string[] {
@@ -648,10 +750,11 @@ if (
     process.exit(2);
   }
   const status = writeRunStatus(resultsDir, version, Number(code), sources);
-  const refusal = providerErrorRefusal(
-    status,
-    path.basename(path.resolve(resultsDir))
-  );
+  const label = path.basename(path.resolve(resultsDir));
+  const refusal = [
+    ...providerErrorRefusal(status, label),
+    ...libraryRefusal(status, label)
+  ];
   if (refusal.length > 0) {
     for (const line of refusal) console.log(line);
     process.exit(3);

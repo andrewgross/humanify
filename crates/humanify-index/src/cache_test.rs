@@ -56,6 +56,7 @@ fn detected(target: Option<Target>) -> DetectedRecipe {
         target_reason: "test",
         format: None,
         minified: true,
+        kind: "bun",
     }
 }
 

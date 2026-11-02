@@ -318,15 +318,16 @@ pub struct Library {
     pub index: Option<String>,
     pub index_store: Option<String>,
     /// The run's index store (`library.index_store_dir`): the merged
-    /// indexes a run with no `--library-index` searches (and, with
+    /// indexes a run with no `--library-index` searches for its kind (and, with
     /// `index_from_bundle`, the shard store, packument snapshot and pinned
     /// bundler tools its build uses) — resolved against the WORKING
     /// directory (exp174; exp154 resolved it against the output dir).
     pub index_store_dir: String,
     /// `--library-index-from-bundle` (exp174): build the index at run time
     /// from the packages the bundle reveals when the store holds none
-    /// (exp154/exp171's build, now opt-in). Off: a run with no index and
-    /// nothing in the store fails before any work.
+    /// (exp154/exp171's build, now opt-in; Bun bundles only). Off: a run
+    /// with no index and nothing in the store for the bundle's kind skips
+    /// library name matching with one line (exp175).
     pub index_from_bundle: bool,
     /// The safety cap on a run-time build's package list (exp154).
     pub index_build_max_packages: usize,
@@ -807,9 +808,9 @@ pub fn library_from_file(file: Option<&ConfigFile>) -> Result<Library, Vec<Strin
 }
 
 /// The library decision's rules (docs/library-matching-config.md §2).
-/// With no index, names/report search the store (the default) — whether it
-/// holds one is a filesystem question, asked by
-/// `Config::library_index_problem`. `index_from_bundle` is refused where
+/// With no index, names/report search the store (the default) for the
+/// bundle's kind after detection, and skip library names when it holds
+/// none (exp175, `runtime_index`). `index_from_bundle` is refused where
 /// it would be silently ignored, as an index with `off` is.
 fn library_violations(r: &Resolved) -> Vec<String> {
     let mode = r.text("library.matching").unwrap_or_default();
@@ -1010,33 +1011,10 @@ impl Config {
         if self.library.matching == LibraryMatching::Off {
             return None;
         }
-        if self.library.runs_index_machinery() {
-            // No index passed: the store must hold one (exp174, Andrew
-            // 2026-10-31 — names mode needs a real index), unless the run
-            // may build one from the bundle (`--library-index-from-bundle`,
-            // which owns its own answers at run time). WHICH stored index
-            // serves the bundle needs its recipe (detection, later); an
-            // empty store is refused here, before any work.
-            if self.library.index_from_bundle {
-                return None;
-            }
-            let root = self.library.index_store_root();
-            if humanify_index::cache::stored_index_ids(&root).is_empty() {
-                return Some(crate::runtime_index::no_index_error(
-                    self.library.matching,
-                    &root,
-                    &format!(
-                        "{} holds no index (no <id>/manifest.json in it)",
-                        if root.is_dir() {
-                            "it exists but"
-                        } else {
-                            "it does not exist, so it"
-                        }
-                    ),
-                ));
-            }
-            return None;
-        }
+        // No index passed: which stored index serves the run is a question
+        // of the bundle's KIND, detection's answer (exp175) — the run-time
+        // machinery searches the store after detection and skips library
+        // names when it holds none for the kind. Nothing to refuse here.
         let dir = match self.library.index_dir()? {
             Ok(d) => d,
             Err(e) => return Some(e),

@@ -1,16 +1,17 @@
 # The e2e library-index store
 
-Names mode is the binary's default (exp171) and needs a real library index
-(exp174): with no `--library-index`, a run uses an index it finds in its store
-(`library.index_store_dir`, default `.humanify/library-index` under the working
-directory) and FAILS before any work when there is none; only
+Names mode is the binary's default (exp171): with no `--library-index`, a run
+uses an index of the bundle's KIND (its packing tool, read off detection) that
+it finds in its store (`library.index_store_dir`, default
+`.humanify/library-index` under the working directory), and when there is none
+prints one line and skips library name matching (exp175); only
 `--library-index-from-bundle` builds one at run time. The e2e stage
-(`scripts/e2e.ts`) points every launch at this committed store explicitly so
-that every Bun fixture takes the FOUND path (no fetch, no build: a launch that
-fails for a missing index, or prints the run-time build's notice, fails the
-stage), and the default mode runs end to end — index lookup, vendor placement,
-restoration — on the release binary. Its slices are Bun's only, so the non-Bun
-fixtures run with `--library-matching off`.
+(`scripts/e2e.ts`) points every launch at this committed store explicitly and
+runs every fixture in the default mode: every Bun fixture takes the FOUND path
+(no fetch, no build: a launch that prints the run-time build's notice fails the
+stage), so the default mode runs end to end — index lookup, vendor placement,
+restoration — on the release binary. Its slices are Bun's only, so every
+non-Bun fixture must print the skip line naming its own kind.
 
 `0242134fb663347fed2bd6740f5ca4842d8c0af617e57f9957a8dccc5bdf50aa/` is one merged index (its directory name is its
 `manifest.json`'s sha256, the store's convention): `ms`, the one real npm

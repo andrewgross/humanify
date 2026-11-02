@@ -8,22 +8,29 @@
 //!
 //! `unified::pipeline_body` reaches this module through
 //! `Config::library::runs_index_machinery`; `--library-matching off` (the
-//! opt-out) and an explicit `--library-index` never do. What the user sees
-//! (exp174, Andrew 2026-10-31: names mode REQUIRES a real index):
+//! opt-out) and an explicit `--library-index` never do. WHICH index the run
+//! needs is the bundle's KIND (exp175, Andrew 2026-11-01: "use our discovery
+//! of the bundle type to inform how we build our index"): its packing tool,
+//! read once off detection (`DetectedRecipe::kind`, `recipe::index_kind`),
+//! the key index slices are already recorded under. What the user sees:
 //!
-//! - an index FOUND in the store: one line naming it — nothing is built;
-//! - by DEFAULT, no stored index serves the bundle: the run FAILS
-//!   ([`no_index_error`]: what is missing, how to build one, how to point
-//!   to one, how to opt out). An empty store is refused before any work
-//!   (`Config::library_index_problem`); a store whose indexes lack the
-//!   bundle's slice is refused here, before unpack writes anything.
-//! - with `--library-index-from-bundle` (exp171's path, opt-in): a bundle
-//!   no index can be built for (not a Bun bundle, or one that reveals no
-//!   npm package) prints one notice and goes on as `off`
-//!   (`JobAnswer::Inert`); otherwise the notice ([`build_notice`]) before
-//!   anything is installed — what is built, the estimated disk and time,
-//!   where it is stored, how to opt out — then the build. The run does not
-//!   wait for a confirmation: a prompt would hang every batch run.
+//! - an index FOUND in the store for the kind: one line naming it — nothing
+//!   is built;
+//! - by DEFAULT, no stored index for the kind: ONE line ([`no_index_line`]:
+//!   what is missing, where it looked, how to get one) and the run goes on
+//!   with library name matching SKIPPED — vendor code still placed and
+//!   named like app code, off's bytes. Not a failure (exp174's refusal is
+//!   gone), and recorded as `skipped` so it cannot pass for a names run.
+//! - with `--library-index-from-bundle` (exp171's path, opt-in): a kind the
+//!   run-time build cannot build for (it builds Bun indexes only) or a Bun
+//!   bundle that reveals no npm package is skipped the same way, with its
+//!   own line; otherwise [`building_line`], then the notice
+//!   ([`build_notice`]: what is built, the estimated disk and time, where it
+//!   is stored, how to opt out) — then the build. The run does not wait for
+//!   a confirmation: a prompt would hang every batch run.
+//!
+//! An EXPLICIT index that does not fit the kind is not this module's: the
+//! library load refuses it loudly (the user named it).
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -31,9 +38,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
-use humanify_core::libindex::recipe::{Recipe, RecipeBundler, detect_recipe};
+use humanify_core::libindex::recipe::{DetectedRecipe, Recipe, RecipeBundler};
 use humanify_core::profiling::Profiler;
-use humanify_model::detection::{BundlerType, MinifierType};
 use humanify_model::profiling::trace_tid::LIBRARY_INDEX;
 use serde::Serialize;
 
@@ -64,10 +70,10 @@ pub enum JobAnswer {
     Found(PathBuf, IndexSource),
     /// The run built one at run time (its fresh directory + trail).
     Built(PathBuf, IndexSource),
-    /// No index can serve this bundle (not Bun-built, or it reveals no
-    /// package): the run goes on as `--library-matching off`, and says so
-    /// (the notice is the text).
-    Inert(String),
+    /// No index for the bundle's kind, and none to build (exp175): the run
+    /// goes on with library name matching skipped — as `off` — having
+    /// printed the line (the text), and records the skip (the trail).
+    Skipped(String, IndexSource),
     /// Why the machinery failed — the run fails loudly with it.
     Failed(String),
 }
@@ -78,13 +84,15 @@ pub enum JobAnswer {
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexSource {
-    /// "found" / "built".
+    /// "found" / "built" / "skipped".
     pub outcome: String,
     pub index_id: String,
     /// The store's root, as the run resolved it.
     pub store: String,
     /// The slice the bundle's recipe picked.
     pub slice: String,
+    /// The bundle's index kind (`DetectedRecipe::kind`; for a found or
+    /// built index, the kind its slice was recorded under — the same name).
     pub bundler: String,
     /// The bundler version the chosen slice was built with (the slice
     /// record's npm `bun` version — NOT the bundle's own, which this lane
@@ -181,8 +189,8 @@ fn outcome_metadata(answer: &JobAnswer) -> humanify_model::profiling::JsObject {
             set("reused", n(&trail.reused));
             set("refused", n(&trail.refused));
         }
-        JobAnswer::Inert(why) => {
-            set("outcome", Value::String("inert".into()));
+        JobAnswer::Skipped(why, _) => {
+            set("outcome", Value::String("skipped".into()));
             set("why", Value::String(why.clone()));
         }
         JobAnswer::Failed(error) => {
@@ -201,25 +209,26 @@ pub struct IndexJob {
 }
 
 /// Start the machinery on the caller's `thread::scope`: search the store
-/// for an index with the bundle's slice, and when there is none, build one
-/// from the packages the bundle itself reveals. Called by
-/// `unified::pipeline_body` right after detection resolves the bundler, so
-/// the search/build overlaps the run's own ingest; the answer is taken at
-/// `IndexJob::join`.
+/// for an index of the bundle's kind (`detected`: the recipe detection read
+/// off the bundle, once, in `unified::pipeline_body`), and when there is
+/// none, skip — or, with `--library-index-from-bundle`, build one from the
+/// packages the bundle itself reveals. Called right after detection
+/// resolves the bundler, so the search/build overlaps the run's own
+/// ingest; the answer is taken at `IndexJob::join`.
 pub fn start<'scope>(
     scope: &'scope std::thread::Scope<'scope, '_>,
     profiler: &'scope Profiler,
     code: &'scope str,
     config: &Config,
-    bundler: BundlerType,
-    minifier: MinifierType,
+    detected: &DetectedRecipe,
     stop: &'scope AtomicBool,
 ) -> IndexJob {
     let (tx, rx) = mpsc::sync_channel(1);
     let library = config.library.clone();
     let root = library.index_store_root();
+    let detected = detected.clone();
     scope.spawn(move || {
-        let answer = job(profiler, code, &library, &root, bundler, minifier, stop);
+        let answer = job(profiler, code, &library, &root, &detected, stop);
         let _ = tx.send(answer);
     });
     IndexJob { rx }
@@ -231,81 +240,111 @@ const OPT_OUT: &str = "--library-matching off";
 /// The flag that opts into the run-time build (exp174).
 const FROM_BUNDLE: &str = "--library-index-from-bundle";
 
-/// The loud refusal of a run that needs a library index and has none
-/// (exp174, Andrew 2026-10-31): what is missing and where it looked
-/// (`why`), how to build one (the offline builder's real invocation), how
-/// to point a run at one, the run-time build's flag, and the opt-out. ONE
-/// text for both places that refuse: an empty store before any work
-/// (`Config::library_index_problem`) and a store none of whose indexes
-/// serves the bundle (the job, after detection).
-pub fn no_index_error(
-    mode: crate::config::LibraryMatching,
-    root: &std::path::Path,
-    why: &str,
-) -> String {
-    let mode = match mode {
-        crate::config::LibraryMatching::Report => "--library-matching report",
-        _ => "library names (--library-matching names, the default)",
-    };
-    [
-        format!("{mode} needs a library index, and none was found."),
-        format!(
-            "  Looked in: {} (the library-index store: library.index_store_dir, resolved \
-             against the working directory) — {why}.",
-            root.display()
-        ),
-        "  Build one with the offline index builder (cargo build --release -p \
-         humanify-index; it fetches from the npm registry and bundles with Bun):"
-            .to_string(),
-        "    humanify-index build --packages packages.txt --as-of <YYYY-MM-DD> --names \\"
-            .to_string(),
-        "      --registry <dir> --store <dir> --work <dir> --out <index-dir> \\".to_string(),
-        "      --recipe bun:target=bun,format=cjs,minify,production \\".to_string(),
-        "      --recipe bun:target=node,format=cjs,minify,production --bun <bun binary>"
-            .to_string(),
-        "    (packages.txt: one npm package per line, `name` or `name@version`)".to_string(),
-        "  Point the run at it: --library-index <index-dir>, or move it into the store as \
-         <store>/<sha256 of its manifest.json>/ (--library-index-store <dir> names another \
-         store)."
-            .to_string(),
-        format!(
-            "  Or build one now from the npm packages this bundle itself reveals (library \
-             banners, inlined package.json; installs from the npm registry): {FROM_BUNDLE}"
-        ),
-        format!("  Or run without library names: {OPT_OUT}"),
-    ]
-    .join("\n")
+/// What the skip lines end with: where an index for this bundle's kind
+/// comes from — the offline builder with the recipe this bundle needs
+/// (`DetectedRecipe::needed_recipe`; none for a kind no recipe exists for),
+/// pointing to one, and the run-time build where it can build.
+fn ways_to_an_index(detected: &DetectedRecipe, offer_from_bundle: bool) -> String {
+    let mut ways = Vec::new();
+    if let Some(recipe) = detected.needed_recipe() {
+        ways.push(format!(
+            "build one with `humanify-index build --names --recipe {} …`",
+            recipe.spelling()
+        ));
+    }
+    ways.push("point to one with --library-index <dir>".to_string());
+    if offer_from_bundle {
+        ways.push(format!("pass {FROM_BUNDLE}"));
+    }
+    match ways.len() {
+        1 => ways.remove(0),
+        n => format!("{}, or {}", ways[..n - 1].join(", "), ways[n - 1]),
+    }
 }
 
-/// By default (no `--library-index-from-bundle`): the store's indexes
-/// exist (`Config::library_index_problem` refused an empty store before
-/// any work) but none may serve THIS bundle — then the run fails loudly,
-/// naming each index and why it was not used. Never a build, never `off`.
-fn found_or_refused(
-    library: &crate::config::Library,
-    root: &std::path::Path,
-    search: &StoreSearch,
-    candidates: Vec<StoreCandidate>,
-) -> JobAnswer {
-    let Some(found) = search.usable.first() else {
-        let verdicts: Vec<String> = candidates
-            .iter()
-            .map(|c| format!("{}: {}", short_id(&c.id), c.verdict))
-            .collect();
-        let why = if verdicts.is_empty() {
-            search
-                .note
-                .clone()
-                .unwrap_or_else(|| "it holds no index".to_string())
+/// Whether the run-time build (`--library-index-from-bundle`) can build an
+/// index of this kind: Bun only so far (it fetches and runs a pinned Bun).
+fn run_time_buildable(detected: &DetectedRecipe) -> bool {
+    detected.bundler == Some(RecipeBundler::Bun)
+}
+
+/// The ONE line a default run prints when its store holds no index for
+/// the bundle's kind (exp175): the run goes on with library name matching
+/// skipped.
+pub fn no_index_line(detected: &DetectedRecipe, root: &std::path::Path) -> String {
+    format!(
+        "no library index for {} bundles in {} — skipping library name matching ({})",
+        detected.kind,
+        root.display(),
+        ways_to_an_index(detected, run_time_buildable(detected))
+    )
+}
+
+/// `--library-index-from-bundle`, a kind it cannot build for.
+fn cannot_build_line(detected: &DetectedRecipe, root: &std::path::Path) -> String {
+    format!(
+        "no library index for {} bundles in {}, and {FROM_BUNDLE} builds Bun indexes only — \
+         skipping library name matching ({})",
+        detected.kind,
+        root.display(),
+        ways_to_an_index(detected, false)
+    )
+}
+
+/// `--library-index-from-bundle`, a Bun bundle that reveals no npm package
+/// to build from. `dropped`: names it offered that the registry does not
+/// know (0: it offered none that can be a package).
+fn no_package_line(detected: &DetectedRecipe, root: &std::path::Path, dropped: usize) -> String {
+    format!(
+        "no library index for {} bundles in {}, and this bundle reveals no npm package name \
+         to build one from (its library banners and inlined package.json files name none{}) — \
+         skipping library name matching ({})",
+        detected.kind,
+        root.display(),
+        if dropped == 0 {
+            String::new()
         } else {
-            format!(
-                "no index in it serves this bundle ({})",
-                verdicts.join("; ")
-            )
-        };
-        return JobAnswer::Failed(no_index_error(library.matching, root, &why));
-    };
-    found_answer(root, found, candidates, search.note.clone())
+            format!("; {dropped} name(s) it offered are not packages the npm registry knows")
+        },
+        ways_to_an_index(detected, false)
+    )
+}
+
+/// The line a `--library-index-from-bundle` run prints just before it
+/// builds (exp175), then the notice. `stored`: the store holds indexes of
+/// this kind, none built from this bundle's packages.
+pub fn building_line(kind: &str, root: &std::path::Path, stored: bool) -> String {
+    if stored {
+        format!(
+            "no library index for {kind} bundles in {} covers this bundle's packages — building \
+             one from this bundle into it",
+            root.display()
+        )
+    } else {
+        format!(
+            "no library index for {kind} bundles — building one from this bundle into {}",
+            root.display()
+        )
+    }
+}
+
+/// The trail of a skipped run (the report's `indexSource`): the kind, the
+/// store, and what the search looked at and why none served.
+fn skipped_trail(
+    root: &std::path::Path,
+    detected: &DetectedRecipe,
+    candidates: Vec<StoreCandidate>,
+    note: Option<String>,
+) -> IndexSource {
+    IndexSource {
+        outcome: "skipped".to_string(),
+        store: root.display().to_string(),
+        bundler: detected.kind.to_string(),
+        detected_bundler_version: "unknown".to_string(),
+        candidates,
+        note,
+        ..Default::default()
+    }
 }
 
 /// A stored index the run uses: the one quiet line, and the trail.
@@ -316,8 +355,9 @@ fn found_answer(
     note: Option<String>,
 ) -> JobAnswer {
     notice(&format!(
-        "Library index: using {} from {} (found; nothing to build)",
+        "Library index: using {} for {} bundles from {} (found; nothing to build)",
         short_id(&found.id),
+        found.bundler,
         root.display()
     ));
     JobAnswer::Found(
@@ -345,65 +385,28 @@ fn notice(text: &str) {
 }
 
 /// The job thread's whole body: every failure is a loud `Failed` naming its
-/// stage; a bundle no index can serve is `Inert`.
+/// stage; no index for the bundle's kind, and none to build, is `Skipped`.
 fn job(
     profiler: &Profiler,
     code: &str,
     library: &crate::config::Library,
     root: &std::path::Path,
-    bundler: BundlerType,
-    minifier: MinifierType,
+    detected: &DetectedRecipe,
     stop: &AtomicBool,
 ) -> JobAnswer {
     if stop.load(Ordering::SeqCst) {
         return JobAnswer::Failed("the run stopped before the index machinery started".into());
     }
-    let detected = detect_recipe(code, bundler, minifier);
-    if !library.index_from_bundle {
-        let span = profiler.start_span(
-            "library.index.search-store",
-            "library-index",
-            LIBRARY_INDEX,
-            None,
-        );
-        let search = search_store(root, &detected);
-        span.end(None);
-        let candidates = search
-            .candidates
-            .iter()
-            .map(|(id, verdict)| StoreCandidate {
-                id: id.clone(),
-                verdict: verdict.clone(),
-            })
-            .collect();
-        return found_or_refused(library, root, &search, candidates);
-    }
-    if detected.bundler != Some(RecipeBundler::Bun) {
-        let has = detected
-            .bundler
-            .map(|b| b.name())
-            .unwrap_or("an unknown bundler");
-        return JobAnswer::Inert(format!(
-            "Library names: off for this run — this bundle was built with {has}, and a \
-             library index can only be built for Bun bundles so far (pass --library-index \
-             <dir|id> with an index that has its slice, or {OPT_OUT} to silence this)"
-        ));
-    }
-    // Search the store: one span over the whole look (the verdicts it
-    // collected go to the trail even when it finds nothing).
+    // Search the store for the kind: one span over the whole look (the
+    // verdicts it collected go to the trail even when it finds nothing).
     let span = profiler.start_span(
         "library.index.search-store",
         "library-index",
         LIBRARY_INDEX,
         None,
     );
-    let search: StoreSearch = search_store(root, &detected);
+    let search: StoreSearch = search_store(root, detected);
     span.end(None);
-    // The bundle's own packages: what a build would index, and what a
-    // found RUN-TIME index must cover to serve it (exp171 — the search
-    // matches on the slice alone, so app A's index would otherwise serve
-    // app B forever and B's packages would never be indexed).
-    let seeds = bundle_revealed_seeds(code);
     let mut candidates = search
         .candidates
         .iter()
@@ -412,6 +415,27 @@ fn job(
             verdict: verdict.clone(),
         })
         .collect::<Vec<_>>();
+    if !library.index_from_bundle || !run_time_buildable(detected) {
+        return match search.usable.first() {
+            Some(found) => found_answer(root, found, candidates, search.note.clone()),
+            None => {
+                let line = if library.index_from_bundle {
+                    cannot_build_line(detected, root)
+                } else {
+                    no_index_line(detected, root)
+                };
+                JobAnswer::Skipped(
+                    line,
+                    skipped_trail(root, detected, candidates, search.note.clone()),
+                )
+            }
+        };
+    }
+    // The bundle's own packages: what a build would index, and what a
+    // found RUN-TIME index must cover to serve it (exp171 — the search
+    // matches on the slice alone, so app A's index would otherwise serve
+    // app B forever and B's packages would never be indexed).
+    let seeds = bundle_revealed_seeds(code);
     let covering = search.usable.iter().find(|found| {
         let side = read_build_sidecar(&found.dir).ok().flatten();
         let missing = uncovered(side.as_ref(), &seeds);
@@ -433,7 +457,7 @@ fn job(
                 index_id,
                 store: root.display().to_string(),
                 slice,
-                bundler: "bun".to_string(),
+                bundler: detected.kind.to_string(),
                 bundler_version,
                 detected_bundler_version: "unknown".to_string(),
                 as_of,
@@ -451,8 +475,22 @@ fn job(
     // (Claude Code 2.1.216 offers two, both `azure/msal-…` without the `@`:
     // nothing to build, so nothing is created, fetched or asked).
     if !seeds.iter().any(|s| valid_package_name(&s.name)) {
-        return JobAnswer::Inert(no_package_notice(root));
+        return JobAnswer::Skipped(
+            no_package_line(detected, root, 0),
+            base(
+                "skipped",
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+            ),
+        );
     }
+    notice(&building_line(
+        detected.kind,
+        root,
+        !search.usable.is_empty(),
+    ));
     // The plan asks the bundler its version: a store with no Bun gets the
     // pinned one first, announced before the download.
     let fetched_bun = bun_binary(root, None).is_err();
@@ -500,11 +538,16 @@ fn job(
         Err(e) => return JobAnswer::Failed(format!("run-time index build (plan): {e}")),
     };
     if plan.planned.is_empty() {
-        return JobAnswer::Inert(format!(
-            "{} ({} name(s) it offered are not packages the npm registry knows)",
-            no_package_notice(root),
-            plan.dropped.len()
-        ));
+        return JobAnswer::Skipped(
+            no_package_line(detected, root, plan.dropped.len()),
+            base(
+                "skipped",
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+            ),
+        );
     }
     if plan.to_build == 0 {
         notice(&format!(
@@ -566,17 +609,6 @@ fn job(
     trail.refused = Some(s.refused);
     trail.stage_ms = s.stage_ms.clone();
     JobAnswer::Built(built.dir.clone(), trail)
-}
-
-/// The notice for a Bun bundle that reveals no npm package to index.
-fn no_package_notice(root: &std::path::Path) -> String {
-    format!(
-        "Library names: off for this run — no library index in {} serves this bundle, \
-         and it reveals no npm package name to build one from (its library banners and \
-         inlined package.json files name none). Pass --library-index <dir|id> to use a prebuilt index, or \
-         {OPT_OUT} to silence this",
-        root.display()
-    )
 }
 
 /// The notice a run prints BEFORE it builds an index (exp171): what is

@@ -69,13 +69,11 @@ fn run(dir: &Path, args: &[&str]) -> Output {
 /// `run`, plus `--config` settings (dotted TOML lines, `split.enabled =
 /// true`) beside the no-retries one. A launch that makes NO library
 /// choice (no `--library-*` flag, no `library.matching`/`library.index*`
-/// setting) runs with
-/// `library.matching = "off"`: since exp174 names mode (the default)
-/// needs a real library index and refuses to run without one, and these
-/// tests are about the other stages. (Before exp174 such a launch ran
-/// names mode INERT on these non-library inputs, which writes exactly
-/// off's bytes.) The library tests make their choice explicitly, and
-/// [`launch`] runs the true default.
+/// setting) runs with `library.matching = "off"`: these tests are about
+/// the other stages, and names mode (the default) with no index for the
+/// bundle's kind only adds its skip line (exp175) to the same off bytes.
+/// The library tests make their choice explicitly, and [`launch`] runs the
+/// true default.
 fn run_with(dir: &Path, args: &[&str], settings: &[&str]) -> Output {
     let chooses = args.iter().any(|a| a.starts_with("--library"))
         || settings
@@ -91,9 +89,10 @@ fn run_with(dir: &Path, args: &[&str], settings: &[&str]) -> Output {
 }
 
 /// The binary exactly as configured: the default library decision
-/// included (names, which needs an index). A launch that does not choose
-/// the split runs it OFF: the split is on by default since exp179, and
-/// these launches keep the configuration they were written for.
+/// included (names: an index of the bundle's kind, or the skip line). A
+/// launch that does not choose the split runs it OFF: the split is on by
+/// default since exp179, and these launches keep the configuration they
+/// were written for.
 fn launch(dir: &Path, args: &[&str], settings: &[&str]) -> Output {
     let config = dir.join("humanify.toml");
     let chooses_split = args.iter().any(|a| *a == "--split" || *a == "--no-split")
@@ -892,11 +891,13 @@ fn an_index_with_no_slice_for_the_bundles_recipe_warns_naming_both() {
 // Names (the default) and report with NO index: the run looks in its store
 // (library.index_store_dir, default `.humanify/library-index` under the
 // WORKING directory since exp174 — the disk convention: one id-named
-// directory per merged index, the id the manifest's sha256) and uses what
-// it finds without building anything. A store that holds nothing for the
-// bundle FAILS the run loudly before any work (Andrew 2026-10-31: names
-// mode needs a real index). Only `--library-index-from-bundle` builds one
-// at run time (exp171's path). The opt-out never reads the store.
+// directory per merged index, the id the manifest's sha256) for an index of
+// the bundle's KIND (its packing tool, read off detection) and uses what it
+// finds without building anything. A store that holds nothing for the kind
+// SKIPS library name matching with one line (exp175, Andrew 2026-11-01);
+// only `--library-index-from-bundle` builds one at run time (exp171's
+// path, Bun only). An explicit index that does not fit fails loudly. The
+// opt-out never reads the store.
 
 /// Move a fresh copy of the tiny node-target index (BUN_BUNDLE has no
 /// `// @bun` banner) into the store at `root`, named by its manifest's
@@ -932,42 +933,142 @@ fn library_report(out: &Path) -> serde_json::Value {
     .unwrap()
 }
 
-/// exp174: names mode (the default) with no `--library-index` and an
-/// empty store FAILS before any work — exit 1, nothing created (not the
-/// output dir, not the store: no network, no fetch), and the error says
-/// what is missing and where it looked, how to build an index, how to
-/// point to one, the run-time build's flag and the opt-out. No silent
-/// fallback to off.
+/// The `libraryMatching` record the run wrote into its `--stats-json`
+/// (exp175): what the library decision came to — used / built / skipped /
+/// off — the bundle's kind, and the index.
+fn stats_library(stats: &Path) -> serde_json::Value {
+    let doc: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(stats).expect("stats written")).unwrap();
+    doc["libraryMatching"].clone()
+}
+
+/// The `--config` line that asks for the stats file at `path`.
+fn stats_setting(path: &Path) -> String {
+    format!("diagnostics.stats_json = {:?}", path.display().to_string())
+}
+
+/// The skip line (exp175) for `kind` and the store at `root`.
+fn skip_head(kind: &str, root: &Path) -> String {
+    format!(
+        "no library index for {kind} bundles in {} — skipping library name matching (",
+        root.display()
+    )
+}
+
+/// exp175 (Andrew 2026-11-01): names mode (the default) with no
+/// `--library-index` and no index in the store for the bundle's KIND does
+/// not fail: ONE line says what is missing, where it looked, that library
+/// name matching is skipped and how to get an index; the run goes on with
+/// it skipped — exactly off's output bytes — creates nothing in the
+/// working directory, and records the skip (the stats' `libraryMatching`)
+/// so it cannot be mistaken for a names run. report does the same.
 #[test]
-fn names_with_no_index_fails_loudly_before_any_work() {
+fn no_index_for_the_bundles_kind_skips_library_names_with_one_line() {
     let s = Scratch::new("ix-none");
     let input = s.write("bundle.js", BUN_BUNDLE);
     let cwd = fresh_cwd(&s, "cwd");
     let out = s.out();
-    let o = launch(&cwd, &[&input, "-o", out.to_str().unwrap()], &[]);
+    let stats = s.0.join("names.stats.json");
+    let o = launch(
+        &cwd,
+        &[&input, "-o", out.to_str().unwrap()],
+        &[&stats_setting(&stats)],
+    );
     let err = stderr(&o);
-    assert_eq!(o.status.code(), Some(1), "{err}");
-    for want in [
-        "library names (--library-matching names, the default) needs a library index, and none \
-         was found.",
-        &format!("Looked in: {}", cwd_store(&cwd).display()),
-        "it does not exist, so it holds no index",
-        "humanify-index build --packages packages.txt --as-of <YYYY-MM-DD> --names",
-        "--library-index <index-dir>",
-        "--library-index-store <dir>",
-        "--library-index-from-bundle",
-        "Or run without library names: --library-matching off",
-    ] {
-        assert!(err.contains(want), "must say {want:?}: {err}");
-    }
-    assert!(!err.contains("Library names: off for this run"), "{err}");
-    assert!(!out.exists(), "refused before any work: no output");
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    let head = skip_head("bun", &cwd_store(&cwd));
+    let line = the_one_skip_line(&err, &head);
+    assert!(!err.contains("needs a library index"), "no failure: {err}");
     assert!(
         !cwd.join(".humanify").exists(),
         "nothing created in the working directory (no store, no fetch)"
     );
+    let rec = stats_library(&stats);
+    assert_eq!(rec["matching"], "names", "{rec}");
+    assert_eq!(rec["outcome"], "skipped", "{rec}");
+    assert_eq!(rec["kind"], "bun", "{rec}");
+    assert!(rec["indexId"].is_null(), "{rec}");
+    assert_eq!(rec["why"], line.as_str(), "{rec}");
+    off_leg_writes_the_same_bytes(&s, &cwd, &input, &out);
+    report_leg_skips_too(&s, &cwd, &input, &head);
+}
 
-    // report asks the same question and gets the same answer.
+/// The one line in `err` starting with `head`, holding every way to an
+/// index a Bun bundle has.
+fn the_one_skip_line(err: &str, head: &str) -> String {
+    let lines: Vec<&str> = err.lines().filter(|l| l.starts_with(head)).collect();
+    assert_eq!(lines.len(), 1, "ONE skip line: {err}");
+    for want in [
+        "humanify-index build",
+        "--library-index <dir>",
+        "--library-index-from-bundle",
+    ] {
+        assert!(lines[0].contains(want), "must say {want:?}: {}", lines[0]);
+    }
+    lines[0].to_string()
+}
+
+/// The opt-out on the same input writes the skipped run's bytes exactly,
+/// and records `off`.
+fn off_leg_writes_the_same_bytes(s: &Scratch, cwd: &Path, input: &str, skipped: &Path) {
+    let off_dir = s.0.join("off");
+    let off_stats = s.0.join("off.stats.json");
+    let o = launch(
+        cwd,
+        &[
+            input,
+            "-o",
+            off_dir.to_str().unwrap(),
+            "--library-matching",
+            "off",
+        ],
+        &[&stats_setting(&off_stats)],
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
+    assert_eq!(
+        snapshot(skipped),
+        snapshot(&off_dir),
+        "a skipped names run must write exactly the opt-out's bytes"
+    );
+    let rec = stats_library(&off_stats);
+    assert_eq!(rec["matching"], "off", "{rec}");
+    assert_eq!(rec["outcome"], "off", "{rec}");
+}
+
+/// report asks the same question and gets the same answer, recorded in
+/// its report.
+fn report_leg_skips_too(s: &Scratch, cwd: &Path, input: &str, head: &str) {
+    let report_dir = s.0.join("report");
+    let o = launch(
+        cwd,
+        &[
+            input,
+            "-o",
+            report_dir.to_str().unwrap(),
+            "--library-matching",
+            "report",
+        ],
+        &[],
+    );
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    assert!(err.contains(head), "{err}");
+    let report = library_report(&report_dir);
+    assert_eq!(report["outcome"]["outcome"], "skipped", "{report}");
+    assert_eq!(report["indexSource"]["outcome"], "skipped", "{report}");
+}
+
+/// A store whose only index is of another kind (a Bun index; the input a
+/// plain script, whose bundler no index kind has) is skipped the same way:
+/// the line names the bundle's kind, and the report's trail names the
+/// index it looked at and why it was not used.
+#[test]
+fn a_store_holding_only_another_kinds_index_is_skipped() {
+    let s = Scratch::new("ix-noslice");
+    let input = s.write("plain.js", PLAIN);
+    let cwd = fresh_cwd(&s, "cwd");
+    let id = prepopulated_store(&cwd_store(&cwd));
+    let out = s.out();
     let o = launch(
         &cwd,
         &[
@@ -980,35 +1081,50 @@ fn names_with_no_index_fails_loudly_before_any_work() {
         &[],
     );
     let err = stderr(&o);
-    assert_eq!(o.status.code(), Some(1), "{err}");
+    assert_eq!(o.status.code(), Some(0), "{err}");
     assert!(
-        err.contains("--library-matching report needs a library index"),
+        err.contains(&skip_head("unrecognised", &cwd_store(&cwd))),
         "{err}"
     );
-    assert!(!out.exists(), "refused before any work: no output");
+    let report = library_report(&out);
+    let candidates = report["indexSource"]["candidates"]
+        .as_array()
+        .expect("a list");
+    assert!(
+        candidates.iter().any(|c| c["id"] == id.as_str()
+            && c["verdict"]
+                .as_str()
+                .unwrap()
+                .contains("no slice for recipe")),
+        "{report}"
+    );
 }
 
-/// A store that holds indexes, none of which serves the bundle (no slice
-/// for its recipe): refused loudly after detection — still before unpack
-/// writes anything — naming each index and why it was not used.
+/// An EXPLICIT `--library-index` that does not fit the bundle's kind still
+/// FAILS loudly in names mode (exp175): the user named it, so a mismatch is
+/// a mistake to surface, never a skip.
 #[test]
-fn a_store_with_nothing_for_this_bundle_fails_loudly_naming_why() {
-    let s = Scratch::new("ix-noslice");
+fn an_explicit_index_that_does_not_fit_the_bundles_kind_fails_loudly() {
+    let s = Scratch::new("ix-explicit-unfit");
     let input = s.write("plain.js", PLAIN);
-    let cwd = fresh_cwd(&s, "cwd");
-    let id = prepopulated_store(&cwd_store(&cwd));
+    let ix = library_index(&s.0.join("ix"), true);
     let out = s.out();
-    let o = launch(&cwd, &[&input, "-o", out.to_str().unwrap()], &[]);
+    let o = launch(
+        &s.0,
+        &[&input, "-o", out.to_str().unwrap(), "--library-index", &ix],
+        &[],
+    );
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(1), "{err}");
     assert!(
-        err.contains("needs a library index, and none was found"),
+        err.contains(
+            "--library-matching names cannot run: the index passed with --library-index has \
+             no slice for unrecognised bundles"
+        ),
         "{err}"
     );
-    assert!(err.contains("no index in it serves this bundle"), "{err}");
-    assert!(err.contains(&id[..12]), "names the index it skipped: {err}");
     assert!(err.contains("no slice for recipe"), "{err}");
-    assert!(!out.exists(), "nothing written: {err}");
+    assert!(!err.contains("skipping library name matching"), "{err}");
 }
 
 /// The opt-out (`--library-matching off`) and an explicit index never
@@ -1087,6 +1203,7 @@ fn an_index_in_the_working_directory_store_is_found_and_used() {
     let root = cwd_store(&cwd);
     let id = prepopulated_store(&root);
     let found_dir = s.0.join("found");
+    let stats = s.0.join("found.stats.json");
     let o = launch(
         &cwd,
         &[
@@ -1096,18 +1213,24 @@ fn an_index_in_the_working_directory_store_is_found_and_used() {
             "--library-matching",
             "report",
         ],
-        &[],
+        &[&stats_setting(&stats)],
     );
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     assert!(
         err.contains(&format!(
-            "Library index: using {} from {} (found; nothing to build)",
+            "Library index: using {} for bun bundles from {} (found; nothing to build)",
             &id[..12],
             root.display()
         )),
         "{err}"
     );
+    let rec = stats_library(&stats);
+    assert_eq!(rec["matching"], "report", "{rec}");
+    assert_eq!(rec["outcome"], "used", "{rec}");
+    assert_eq!(rec["indexFrom"], "store", "{rec}");
+    assert_eq!(rec["kind"], "bun", "{rec}");
+    assert_eq!(rec["indexId"], id.as_str(), "{rec}");
     assert!(!err.contains("NOTICE"), "nothing is built: {err}");
 
     let report = library_report(&found_dir);
@@ -1173,7 +1296,7 @@ fn a_pointed_store_is_used() {
         assert_eq!(o.status.code(), Some(0), "{given}: {err}");
         assert!(
             err.contains(&format!(
-                "Library index: using {} from {}",
+                "Library index: using {} for bun bundles from {}",
                 &id[..12],
                 root.display()
             )),
@@ -1193,6 +1316,7 @@ fn a_pointed_store_is_used() {
 /// what the found leg must match byte for byte.
 fn explicit_index_leg(dir: &Path, input: &str, ix: &str) -> PathBuf {
     let explicit_dir = dir.join("explicit");
+    let stats = dir.join("explicit.stats.json");
     let o = launch(
         dir,
         &[
@@ -1204,9 +1328,13 @@ fn explicit_index_leg(dir: &Path, input: &str, ix: &str) -> PathBuf {
             "--library-index",
             ix,
         ],
-        &[],
+        &[&stats_setting(&stats)],
     );
     assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
+    let rec = stats_library(&stats);
+    assert_eq!(rec["outcome"], "used", "{rec}");
+    assert_eq!(rec["indexFrom"], "explicit", "{rec}");
+    assert_eq!(rec["kind"], "bun", "{rec}");
     explicit_dir
 }
 
@@ -1240,7 +1368,7 @@ fn assert_found_trail(report: &serde_json::Value, root: &Path) {
 
 /// `--library-index-from-bundle` takes exp171's run-time build path, and
 /// only it: BUN_BUNDLE reveals no package and the store is empty, so the
-/// run says so in exp171's notice and goes on as `--library-matching off`
+/// run says so in one line and goes on with library names skipped
 /// — its output tree byte-identical to the opt-out's — and creates nothing
 /// in the store (no process was spawned).
 #[test]
@@ -1261,10 +1389,14 @@ fn the_from_bundle_flag_takes_the_run_time_build_path() {
     );
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
-    assert!(err.contains("Library names: off for this run"), "{err}");
-    assert!(err.contains("reveals no npm package"), "{err}");
-    assert!(err.contains("--library-matching off"), "{err}");
-    assert!(!err.contains("needs a library index"), "{err}");
+    assert!(
+        err.contains(&format!(
+            "no library index for bun bundles in {}, and this bundle reveals no npm package",
+            cwd_store(&cwd).display()
+        )),
+        "{err}"
+    );
+    assert!(err.contains("skipping library name matching"), "{err}");
     assert!(
         !err.contains("NOTICE: library names"),
         "nothing to build: {err}"
@@ -1289,6 +1421,6 @@ fn the_from_bundle_flag_takes_the_run_time_build_path() {
     assert_eq!(
         snapshot(&built_dir),
         snapshot(&off_dir),
-        "an inert from-bundle run must write exactly the opt-out's bytes"
+        "a skipped from-bundle run must write exactly the opt-out's bytes"
     );
 }

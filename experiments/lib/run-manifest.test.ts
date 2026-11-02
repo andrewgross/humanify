@@ -369,6 +369,23 @@ describe("manifest warnings — the combinations that produced wrong numbers", (
     assert.deepStrictEqual(manifestWarnings(base()), []);
   });
 
+  it("flags a run that SKIPPED library name matching (exp175), naming the kind", () => {
+    const library = {
+      matching: "names",
+      outcome: "skipped",
+      kind: "esbuild",
+      indexFrom: null,
+      indexId: null,
+      why: "no library index for esbuild bundles in /s — skipping library name matching (…)"
+    };
+    const w = manifestWarnings(base({ library }));
+    assert.strictEqual(w.length, 1, w.join("\n"));
+    assert.match(w[0], /SKIPPED library name matching/);
+    assert.match(w[0], /esbuild/);
+    const used = { ...library, outcome: "used", indexFrom: "explicit" };
+    assert.deepStrictEqual(manifestWarnings(base({ library: used })), []);
+  });
+
   it("flags a cache that was ON and wrote NOTHING (rule 10)", () => {
     const w = manifestWarnings(
       base({

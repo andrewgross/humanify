@@ -205,6 +205,27 @@ pub struct DetectedRecipe {
     /// format, and a format changes only the entry's own wrapper.
     pub format: Option<Format>,
     pub minified: bool,
+    /// The library-index KIND this bundle needs ([`index_kind`], exp175):
+    /// read here, once, off detection — every index decision a run makes
+    /// (search, skip, build, the recorded outcome) names this.
+    pub kind: &'static str,
+}
+
+/// The library-index KIND a bundle of `bundler` needs (exp175, Andrew
+/// 2026-11-01: the bundle's detected type decides the index): its packing
+/// tool's name — for a recipe bundler exactly [`RecipeBundler::name`], the
+/// key index slices are recorded and searched under (`SliceRecord.bundler`),
+/// never a second key. A bundler no recipe exists for still names its kind,
+/// one no index can have ("unrecognised": detection named no bundler).
+pub fn index_kind(bundler: BundlerType) -> &'static str {
+    match RecipeBundler::for_bundler(bundler) {
+        Some(b) => b.name(),
+        None => match bundler {
+            BundlerType::Browserify => "browserify",
+            BundlerType::Parcel => "parcel",
+            _ => "unrecognised",
+        },
+    }
 }
 
 /// `// @bun …` at the very start: Bun writes it for every `--target bun`
@@ -219,6 +240,7 @@ fn bun_banner(code: &str) -> Option<&str> {
 /// The recipe a bundle was built with, as far as it says: the bundler from
 /// the toolchain (resolved once), the target and format from Bun's banner.
 pub fn detect_recipe(code: &str, bundler: BundlerType, minifier: MinifierType) -> DetectedRecipe {
+    let bundler_type = bundler;
     let bundler = RecipeBundler::for_bundler(bundler);
     let banner = bun_banner(code);
     let (target, target_reason, format) = match (bundler, banner) {
@@ -244,10 +266,28 @@ pub fn detect_recipe(code: &str, bundler: BundlerType, minifier: MinifierType) -
         target_reason,
         format,
         minified: !matches!(minifier, MinifierType::None),
+        kind: index_kind(bundler_type),
     }
 }
 
 impl DetectedRecipe {
+    /// The recipe an index slice for THIS bundle would be built with — what
+    /// a run that has no index for its kind tells the user to hand the
+    /// offline builder (exp175): the detected bundler, target and format
+    /// (node / cjs where the bundle records none), minified as detected,
+    /// `production` for the bundlers whose command line takes it. None: a
+    /// kind no recipe exists for.
+    pub fn needed_recipe(&self) -> Option<Recipe> {
+        let bundler = self.bundler?;
+        Some(Recipe {
+            bundler,
+            target: self.target.unwrap_or(Target::Node),
+            format: self.format.unwrap_or(Format::Cjs),
+            minify: self.minified,
+            production: matches!(bundler, RecipeBundler::Bun | RecipeBundler::Esbuild),
+        })
+    }
+
     /// `bun:target=bun,format=cjs` (unknowns as `?`), for messages.
     pub fn describe(&self) -> String {
         format!(

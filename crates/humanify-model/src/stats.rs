@@ -524,6 +524,14 @@ js_record! {
         /// this writer; ABSENT on every earlier recorded scorecard — the
         /// `reask` precedent, verbatim.
         config: Option<JsValue> = "config",
+        /// The `libraryMatching` block (2026-11-01, exp175): what the
+        /// library decision came to — `used` (an explicit or stored index),
+        /// `built`, `skipped` (no index for the bundle's kind) or `off` —
+        /// with the bundle's kind and the index id, so a run that skipped
+        /// library names cannot pass for a names run. ALWAYS written on
+        /// runs from this writer; ABSENT on every earlier recorded
+        /// scorecard — the `reask` precedent, verbatim.
+        library_matching: Option<JsValue> = "libraryMatching",
     }
 }
 

@@ -464,8 +464,9 @@ pub static KEYS: &[Key] = &[
         doc: "What library matching does: \"names\" (the default since exp171: code the \
               library index recognises is placed under vendor/<package>/ and its original \
               identifier names are restored; with no --library-index the run uses an index \
-              it finds in index_store_dir and fails before any work when there is none, see \
-              index_from_bundle), \"report\" (the index lookup + graph \
+              it finds in index_store_dir for the bundle's kind — its packing tool, read off \
+              detection — and, finding none, prints one line and skips library name \
+              matching (see index_from_bundle)), \"report\" (the index lookup + graph \
               discovery written to .humanify/library-report.json; output bytes as \"off\") or \
               \"off\" (path/banner detection only — the opt-out: no index is read, searched \
               for or built).",
@@ -476,10 +477,12 @@ pub static KEYS: &[Key] = &[
         kind: Kind::Text,
         flag: Some("--library-index"),
         default: none,
-        unset: "no index: names/report use one found in index_store_dir (or build one with \
-                index_from_bundle), else fail before any work; refused with \"off\"",
+        unset: "no index: names/report use one found in index_store_dir for the bundle's \
+                kind (or build one with index_from_bundle), else skip library name matching \
+                with one line; refused with \"off\"",
         doc: "The library fingerprint index: its directory, or its id (resolved under \
-              index_store).",
+              index_store). One that has no slice for the bundle's kind fails a names run \
+              loudly (it was named, so a mismatch is a mistake, never a skip).",
     },
     Key {
         section: "library",
@@ -516,12 +519,13 @@ pub static KEYS: &[Key] = &[
         unset: "",
         doc: "Build the library index AT RUN TIME from the npm packages the bundle itself \
               reveals (its library banner comments and inlined package.json files) when \
-              index_store_dir holds none that serves it (exp154/exp171; opt-in since exp174): \
-              each package is installed from the npm registry (install scripts skipped) and \
-              bundled with Bun, after a notice with the estimated disk and time; a bundle \
-              that reveals no package, or is not Bun-built, runs as \"off\" with a notice. \
-              Without it, names/report with no --library-index use an index FOUND in \
-              index_store_dir, and a run that finds none fails before any work.",
+              index_store_dir holds none for the bundle's kind (exp154/exp171; opt-in since \
+              exp174): each package is installed from the npm registry (install scripts \
+              skipped) and bundled with Bun, after a notice with the estimated disk and time. \
+              Bun bundles only: a bundle of another kind, or one that reveals no package, \
+              skips library name matching with one line. Without it, names/report with no \
+              --library-index use an index FOUND in index_store_dir for the bundle's kind, \
+              and skip library name matching with one line when there is none (exp175).",
     },
     lib_int(
         "library",
