@@ -1,0 +1,314 @@
+{
+  "aggregate": {
+    "modules:stmts=1:<unmapped>": {
+      ">=1.0": 3512
+    },
+    "modules:stmts=1:family": {
+      ">=1.0": 106809
+    },
+    "modules:stmts=1:right": {
+      "<0.8": 52582,
+      "<0.9": 191509,
+      "<0.95": 109912,
+      "<0.98": 4130,
+      "<0.99": 2080,
+      "<1.0": 750244,
+      ">=1.0": 742696
+    },
+    "modules:stmts=1:wrongFamily": {
+      ">=1.0": 154333
+    },
+    "modules:stmts=2+:<self>": {
+      "<0.8": 338
+    },
+    "modules:stmts=2+:<unmapped>": {
+      "<0.5": 2626,
+      "<0.8": 7001,
+      "<0.9": 2892,
+      "<0.95": 10408,
+      "<0.98": 106,
+      "<0.99": 2768,
+      "<1.0": 411
+    },
+    "modules:stmts=2+:family": {
+      "<0.5": 15015,
+      "<0.8": 26992,
+      "<0.9": 16747,
+      "<0.95": 6282,
+      "<0.98": 5707,
+      "<0.99": 7788
+    },
+    "modules:stmts=2+:origin": {
+      "<0.98": 2188
+    },
+    "modules:stmts=2+:right": {
+      "<0.5": 200214,
+      "<0.8": 2347170,
+      "<0.9": 708174,
+      "<0.95": 470174,
+      "<0.98": 1469977,
+      "<0.99": 640424,
+      "<1.0": 2880140,
+      ">=1.0": 5660
+    },
+    "modules:stmts=2+:wrongFamily": {
+      "<0.5": 54481,
+      "<0.8": 165469,
+      "<0.9": 228863,
+      "<0.95": 69623,
+      "<0.98": 75307,
+      "<0.99": 10643,
+      "<1.0": 4088,
+      ">=1.0": 30884
+    },
+    "presence:mcover": {
+      "<0.5": 11272,
+      "<0.8": 694726,
+      "<0.9": 286661,
+      "<0.95": 117645,
+      "<0.98": 666060,
+      "<0.99": 317178,
+      "<1.0": 1945510,
+      ">=1.0": 3280
+    },
+    "presence:stmts=1": {
+      "<0.8": 52582,
+      "<0.9": 191119,
+      "<0.95": 109912,
+      "<0.98": 4130,
+      "<0.99": 2080,
+      "<1.0": 750244,
+      ">=1.0": 3280
+    },
+    "presence:stmts=2": {
+      "<0.9": 1203,
+      "<0.98": 781,
+      "<0.99": 1864,
+      "<1.0": 937479,
+      ">=1.0": 675
+    },
+    "presence:stmts=3+": {
+      "<0.8": 632078,
+      "<0.9": 58415,
+      "<0.95": 871,
+      "<0.98": 415382,
+      "<0.99": 596178,
+      "<1.0": 262466,
+      ">=1.0": 21593
+    }
+  },
+  "presenceBytesByPackageAndStatements": {
+    "@ant-design/icons": {
+      "3+": 492
+    },
+    "@ant-design/icons-svg": {
+      "3+": 1664
+    },
+    "@azure/core-util": {
+      "3+": 2016
+    },
+    "@inversifyjs/reflect-metadata-utils": {
+      "3+": 200
+    },
+    "@jimp/types": {
+      "3+": 270
+    },
+    "@jupyterlab/statedb": {
+      "3+": 520
+    },
+    "@kurkle/color": {
+      "1": 8374
+    },
+    "@microsoft/1ds-post-js": {
+      "1": 151291
+    },
+    "@modelcontextprotocol/client": {
+      "3+": 295327
+    },
+    "@modelcontextprotocol/server": {
+      "3+": 295327
+    },
+    "@napi-rs/keyring": {
+      "3+": 218
+    },
+    "@noble/hashes": {
+      "3+": 122
+    },
+    "@radix-ui/react-compose-refs": {
+      "3+": 432
+    },
+    "@radix-ui/react-direction": {
+      "3+": 190
+    },
+    "@radix-ui/react-use-callback-ref": {
+      "3+": 362
+    },
+    "@rc-component/mentions": {
+      "3+": 366
+    },
+    "@typescript-eslint/scope-manager": {
+      "3+": 550
+    },
+    "@vscode/debugadapter": {
+      "3+": 9366
+    },
+    "@vscode/test-cli": {
+      "3+": 300
+    },
+    "@vscode/tree-sitter-wasm": {
+      "2": 92168
+    },
+    "@vscode/vsce": {
+      "3+": 6354
+    },
+    "@vscode/zeromq": {
+      "2": 781
+    },
+    "@xterm/addon-fit": {
+      "1": 1437
+    },
+    "@xterm/addon-web-links": {
+      "1": 2968
+    },
+    "@xterm/xterm": {
+      "1": 487033
+    },
+    "acorn-loose": {
+      "1": 36327
+    },
+    "aes-js": {
+      "1": 44779
+    },
+    "ajv": {
+      "1": 1292
+    },
+    "ajv-keywords": {
+      "3+": 588
+    },
+    "autolinker": {
+      "1": 43575
+    },
+    "azure-devops-node-api": {
+      "3+": 1051602
+    },
+    "babel-helpers": {
+      "3+": 264
+    },
+    "babel-runtime": {
+      "2": 304,
+      "3+": 340
+    },
+    "core-js": {
+      "2": 371
+    },
+    "csso": {
+      "3+": 1375
+    },
+    "electron-serve": {
+      "2": 887
+    },
+    "entities": {
+      "3+": 175
+    },
+    "eslint": {
+      "1": 584
+    },
+    "form-data": {
+      "1": 1404
+    },
+    "inversify": {
+      "3+": 864
+    },
+    "jquery": {
+      "1": 191119
+    },
+    "libsodium": {
+      "2": 843071
+    },
+    "libsodium-wrappers": {
+      "1": 109912
+    },
+    "lodash.isarray": {
+      "3+": 578
+    },
+    "lodash.isinteger": {
+      "3+": 1936
+    },
+    "lodash.isplainobject": {
+      "3+": 656
+    },
+    "lodash.istypedarray": {
+      "3+": 611
+    },
+    "lodash.once": {
+      "3+": 2040
+    },
+    "map-stream": {
+      "2": 977
+    },
+    "markdown-it-regex": {
+      "3+": 601
+    },
+    "mousetrap": {
+      "1": 10787
+    },
+    "node-fetch-native": {
+      "3+": 380
+    },
+    "ovsx": {
+      "3+": 732
+    },
+    "parse-diff": {
+      "3+": 3347
+    },
+    "playwright-core": {
+      "3+": 5720
+    },
+    "posthog-js": {
+      "3+": 1680
+    },
+    "react": {
+      "3+": 438
+    },
+    "recharts": {
+      "3+": 1540
+    },
+    "remove-markdown": {
+      "1": 2080
+    },
+    "sanitize-html": {
+      "3+": 260027
+    },
+    "ssh-config": {
+      "3+": 2961
+    },
+    "tailwind-merge": {
+      "3+": 29610
+    },
+    "vsce": {
+      "3+": 3892
+    },
+    "vscode-json-languageservice": {
+      "2": 2240
+    },
+    "vscode-languageclient": {
+      "3+": 300
+    },
+    "vscode-languageserver": {
+      "3+": 210
+    },
+    "vscode-languageserver-protocol": {
+      "3+": 440
+    },
+    "vscode-languageserver-textdocument": {
+      "1": 8260
+    },
+    "vscode-uri": {
+      "1": 12125
+    },
+    "yaml": {
+      "2": 1203
+    }
+  },
+  "presenceTotalBytes": 4042332
+}
