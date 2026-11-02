@@ -1,7 +1,10 @@
 # exp179 — the command-line interface: split on, prior folder, flags = keys, no .env
 
-STATUS: BUILT (2026-11-01), branch `exp179-cli-interface` off main
-`5a48564bd`. NOT merged. Results: see "Gate" and "Neutrality" below.
+STATUS: BUILT + GATED (2026-11-02), branch `exp179-cli-interface` off main
+`5a48564bd`, with main `0e5893f77` (exp175) merged in. NOT merged to main.
+Gate 13/13 (on the merge, and from a clean checkout of the final commit).
+Warm neutrality against main `0e5893f77` is NEUTRAL in names mode and in off
+mode (0 files, 0 lines, baseline cache +0).
 
 Andrew's interface decisions (2026-11-01), all four built:
 
@@ -33,6 +36,43 @@ prior humanified file itself`. The run's `Next release:` line now prints
    and every `.env` mention in the help, messages and README are gone. A new
    integration test (`tests/api_key_source.rs`) proves that a `.env` file
    holding the key is refused as a missing key.
+
+## Gate
+
+| check                                                                                   | result                                                                                                                                        |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| typecheck, lint, rust:fmt, rust:clippy, knip, knip:prod                                 | PASS                                                                                                                                          |
+| census:clones (advisory)                                                                | PASS                                                                                                                                          |
+| census:concurrency                                                                      | PASS. The first run flagged `clap::Command::new` as a subprocess. It is now built with `Command::default().name(..)`, with no allowlist entry |
+| unit, rust:unit (incl. the new bijection, prior-folder, split-default and `.env` tests) | PASS                                                                                                                                          |
+| rust:build, rust:format-golden                                                          | PASS                                                                                                                                          |
+| e2e (19 pairs; the second leg now passes the output FOLDER as `--prior-version`)        | PASS                                                                                                                                          |
+| clean checkout of the final commit                                                      | ALL 13 STAGES PASSED                                                                                                                          |
+
+## Neutrality (item 1: the flip changes no eval output)
+
+Both runs were warm on 2.1.85→2.1.86 against main `0e5893f77`:
+`npm run eval -- neutrality 0e5893f77 2.1.85:2.1.86 --priors /work/exp050-cold --cache /work/neutrality-cache`
+(plus `--pipeline-set library.matching=off` for off mode).
+
+| run                 | differing files | differing lines | exit codes | cache: candidate / baseline | verdict |
+| ------------------- | --------------- | --------------- | ---------- | --------------------------- | ------- |
+| names (the default) | 0               | 0               | 0 / 0      | +0 / **+0**                 | NEUTRAL |
+| off                 | 0               | 0               | 0 / 0      | +0 / **+0**                 | NEUTRAL |
+
+Both legs launched the same argv (`--config <toml> --endpoint ... --model
+... -o ... --prior-version <file>`). The harness's files set
+`split.enabled = true` explicitly, so the default flip cannot reach the
+eval, and the result confirms it did not.
+
+## What this does NOT prove
+
+- Neutrality covers one pair (2.1.85→2.1.86). The launch goldens
+  (`run-launch.test.ts`, unchanged and passing) are what show the other
+  pairs launch the same configuration.
+- The `--prior-version <folder>` form is exercised by the e2e stage and a
+  unit test, not by the eval. The eval still passes the file path.
+- Help readability is a judgment call: `-h` is 120 lines, `--help` 421.
 
 ## The naming scheme (item 3)
 
@@ -227,7 +267,16 @@ Split [split]:
 the key is a boolean. The registry also accepts it for every other boolean,
 for example `--no-naming-floor` and `--no-library-lookup-agreement`.
 
-## Overlap with exp175 (`exp175-index-by-bundle-kind`)
+## Overlap with exp175 (`exp175-index-by-bundle-kind`) — RESOLVED
+
+exp175 was merged to main (`0e5893f77`) while this lane ran. It is merged
+into this branch: conflicts in `surface.rs` (took this branch's generated
+surface; exp175's help wording lives in the registry docs it had already
+updated), `README.md` (exp175's library wording moved into this README's
+library paragraph), `scripts/e2e.ts` (exp175's `bundler` parameter plus
+this branch's explicit `split.enabled`), `pipeline_stages.rs` (a doc
+comment). The help goldens and `humanify.example.toml` were regenerated.
+The notes below were written before the merge.
 
 exp175 edits the library key docs in `keys.rs`, the four `--library-*`
 help strings in `surface.rs`, `config.rs`, the README library paragraph, and
