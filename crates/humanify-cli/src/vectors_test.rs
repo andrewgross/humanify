@@ -360,19 +360,24 @@ fn unified_test_plain_run_has_no_violations() {
 
 #[test]
 fn unified_test_split_dependents_require_split() {
-    let pure = "[split]\npure = true\n";
+    // split.enabled is ON by default since exp179: off, explicitly.
+    let pure = "[split]\nenabled = false\npure = true\n";
     assert_eq!(violations(pure), ["split.pure requires split.enabled"]);
-    let ledger = "[split]\nledger = \"ledger.json\"\n";
+    let ledger = "[split]\nenabled = false\nledger = \"ledger.json\"\n";
     assert_eq!(violations(ledger), ["split.ledger requires split.enabled"]);
     for t in [pure, ledger] {
-        assert!(violations(&format!("{t}enabled = true\n")).is_empty());
+        assert!(violations(&t.replace("enabled = false", "enabled = true")).is_empty());
+        assert!(
+            violations(&t.replace("enabled = false\n", "")).is_empty(),
+            "default on"
+        );
     }
 }
 
 #[test]
 fn unified_test_every_violation_at_once() {
     assert_eq!(
-        violations("[split]\npure = true\nledger = \"ledger.json\"\n"),
+        violations("[split]\nenabled = false\npure = true\nledger = \"ledger.json\"\n"),
         [
             "split.ledger requires split.enabled",
             "split.pure requires split.enabled"
@@ -396,7 +401,9 @@ fn unified_test_enum_flag_values() {
         assert!(violations(&format!("[unpack]\nminifier = \"{m}\"\n")).is_empty());
     }
     assert_eq!(
-        violations("[split]\npure = true\n[unpack]\nbundler = \"foobar\"\nminifier = \"gzip\"\n"),
+        violations(
+            "[split]\nenabled = false\npure = true\n[unpack]\nbundler = \"foobar\"\nminifier = \"gzip\"\n"
+        ),
         [
             "split.pure requires split.enabled",
             "unpack.bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got \"foobar\")",

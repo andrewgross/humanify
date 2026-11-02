@@ -3,18 +3,419 @@ Unminify JavaScript using an OpenAI-compatible API
 Usage: humanify [OPTIONS] <input>
 
 Arguments:
-  <input>  The input minified JavaScript file
+  <input>
+          The input minified JavaScript file
 
 Options:
-      --config <file>              TOML config file: every setting that is not a flag (see humanify.example.toml for each key, its default and meaning). A flag that disagrees with the file is refused
-  -o, --output-dir <output>        Output directory (default: output)
-      --prior-version <path>       Path to a prior humanified file for cross-version rename reuse
-      --endpoint <url>             OpenAI-compatible API endpoint (default: https://api.openai.com/v1). The API key is read from HUMANIFY_API_KEY (the environment or a .env file), never from a flag
-  -m, --model <model>              Model identifier (default: gpt-4o-mini)
-  -v, --verbose...                 Increase verbosity (-v for info, -vv for debug)
-      --library-matching <mode>    Library matching: names (the default: library code the index recognises goes under vendor/<package>/ with its original names restored; needs a library index), report (the index lookup + graph discovery, reported; output as off), off (path/banner detection only; no index read, searched for or built)
-      --library-index <dir|id>     The library fingerprint index (a directory, or an id under library.index_store). Without it, names/report use an index found in the library-index store and fail before any work when it holds none; refused with off
-      --library-index-store <dir>  The library-index store a run with no --library-index searches (library.index_store_dir; default .humanify/library-index, resolved against the working directory): one <id>/ per merged index, plus what --library-index-from-bundle builds with
-      --library-index-from-bundle  When the store holds no index for the bundle, build one at run time from the npm packages the bundle itself reveals (library banners, inlined package.json): installs each from the npm registry and bundles it with Bun, after printing the estimated disk and time (library.index_from_bundle)
-  -h, --help                       Print help
-  -V, --version                    Print version
+      --config <file>
+          TOML config file: any setting below as a key (see humanify.example.toml). A flag that disagrees with the file is refused
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+Run [run]:
+      --run-order <throughput|ordered>
+          "throughput" (the default: work through items as fast as the pool and the semaphore allow; results land in canonical order where they are consumed) or "ordered" (the TEST MODE: the waves' turn driver, the parallel helpers sequential, one-call dispatch windows). Ordered forces the conservative naming schedule and refuses naming.relaxed_levers. Determinism-sensitive tests opt in; regular runs never pay for it (docs/concurrency.md, rule 9).
+          [default: "throughput"] [config: run.order]
+
+Output [io]:
+  -o, --output-dir <dir>
+          Output directory.
+          [default: "output"] [config: io.output_dir]
+
+LLM [llm]:
+      --endpoint <url>
+          OpenAI-compatible API endpoint. The API key is read from HUMANIFY_API_KEY in the environment, never from a flag or this file.
+          [default: "https://api.openai.com/v1"] [config: llm.endpoint]
+
+  -m, --model <model>
+          Model identifier.
+          [default: "gpt-4o-mini"] [config: llm.model]
+
+      --llm-timeout-ms <n>
+          LLM request timeout, milliseconds.
+          [default: 300000] [config: llm.timeout_ms]
+
+      --llm-retries <n>
+          Retry attempts for a failed API call.
+          [default: 3] [config: llm.retries]
+
+      --llm-concurrency <n>
+          Max concurrent function-lane LLM requests (the in-flight cap is this plus module_concurrency).
+          [default: 50] [config: llm.concurrency]
+
+      --llm-module-concurrency <n>
+          Max concurrent module-lane LLM requests.
+          [default: 40] [config: llm.module_concurrency]
+
+      --llm-max-tokens <n>
+          Per-request completion token budget.
+          [unset: requests carry 6000, and the LLM cache key records "unset" — a different key from an explicit 6000] [config: llm.max_tokens]
+
+      --llm-context-tokens <n>
+          Model context window, tokens; sizes the batched split-naming prompts.
+          [default: 32768] [config: llm.context_tokens]
+
+      --llm-reasoning-effort <low|medium|high>
+          Reasoning effort: low, medium or high ('low' is ~8x faster on gpt-oss).
+          [unset: the server's default; only set it for reasoning models] [config: llm.reasoning_effort]
+
+      --llm-cache-dir <dir>
+          Cache LLM responses on disk, keyed by request content (iteration only, never a gate run).
+          [unset: no cache: every prompt is live] [config: llm.cache_dir]
+
+Cross-version matching [matching]:
+      --prior-version <folder|file>
+          The prior release's humanify output folder (or the humanified file in it, .humanify/humanified.js), for cross-version rename reuse.
+          [unset: a fresh run, nothing to reuse] [config: matching.prior_version]
+
+      --matching-reconcile-prior-diff
+          With a prior: snap rename-noise diff hunks back to the prior's names.
+          [default: on; --no-matching-reconcile-prior-diff turns it off] [config: matching.reconcile_prior_diff]
+
+Naming [naming]:
+      --naming-schedule <relaxed|sequential>
+          "relaxed" (both relaxed levers on) or "sequential" (the pre-2026-09-28 default's bytes at the same batch_size).
+          [default: "relaxed"] [config: naming.schedule]
+
+      --naming-relaxed-levers <a,b,...>
+          Lever-sizing knob: the relaxed levers to turn on (relaxed schedule only).
+          [unset: every lever] [config: naming.relaxed_levers]
+
+      --naming-batch-size <n>
+          Identifiers per LLM batch.
+          [default: 25] [config: naming.batch_size]
+
+      --naming-max-retries <n>
+          Per-identifier LLM call limit, initial + retries.
+          [default: 2] [config: naming.max_retries]
+
+      --naming-rename-retries <n>
+          Name-conflict re-asks per rejected suggestion, each disclosing every failed one.
+          [default: 2] [config: naming.rename_retries]
+
+      --naming-max-free-retries <n>
+          Cross-lane collision retry limit.
+          [unset: the processor's own rule (100)] [config: naming.max_free_retries]
+
+      --naming-lane-threshold <n>
+          Min bindings to enable parallel lanes.
+          [default: 25] [config: naming.lane_threshold]
+
+      --naming-code-window-lines <n>
+          Most lines of a function the naming prompt shows (longer functions are windowed around the names asked); lower it for a model with a small context window.
+          [default: 500] [config: naming.code_window_lines]
+
+      --naming-floor
+          The deterministic naming floor (closes minted-token gaps).
+          [default: on; --no-naming-floor turns it off] [config: naming.naming_floor]
+
+      --naming-floor-sweep
+          The LLM sweep of minted survivors (needs naming_floor).
+          [default: on; --no-naming-floor-sweep turns it off] [config: naming.naming_floor_sweep]
+
+Library matching [library]:
+      --library-matching <off|report|names>
+          What library matching does: "names" (the default since exp171: code the library index recognises is placed under vendor/<package>/ and its original identifier names are restored; with no --library-index the run uses an index it finds in index_store_dir and fails before any work when there is none, see index_from_bundle), "report" (the index lookup + graph discovery written to .humanify/library-report.json; output bytes as "off") or "off" (path/banner detection only — the opt-out: no index is read, searched for or built).
+          [default: "names"] [config: library.matching]
+
+      --library-index <dir|id>
+          The library fingerprint index: its directory, or its id (resolved under index_store).
+          [unset: no index: names/report use one found in index_store_dir (or build one with index_from_bundle), else fail before any work; refused with "off"] [config: library.index]
+
+      --library-index-id-store <dir>
+          Where index ids live (<index_store>/<id>/manifest.json).
+          [unset: an index id cannot be resolved: pass the index directory] [config: library.index_store]
+
+      --library-index-store <dir>
+          The run's library-index store, resolved against the WORKING directory (exp174; an absolute path is used as given): every merged index as <id>/ (the sha256 of its manifest.json) — the indexes a run with no --library-index searches — plus, when index_from_bundle builds, the shard store/ (reused across builds), the packument snapshot registry/, the pinned bundler tools tools/ and each built index's build.json sidecar. Nothing outside it is ever autoloaded.
+          [default: ".humanify/library-index"] [config: library.index_store_dir]
+
+      --library-index-from-bundle
+          Build the library index AT RUN TIME from the npm packages the bundle itself reveals (its library banner comments and inlined package.json files) when index_store_dir holds none that serves it (exp154/exp171; opt-in since exp174): each package is installed from the npm registry (install scripts skipped) and bundled with Bun, after a notice with the estimated disk and time; a bundle that reveals no package, or is not Bun-built, runs as "off" with a notice. Without it, names/report with no --library-index use an index FOUND in index_store_dir, and a run that finds none fails before any work.
+          [default: off; --no-library-index-from-bundle turns it off] [config: library.index_from_bundle]
+
+      --library-index-build-max-packages <n>
+          The safety cap on the packages a run-time index build may plan from the bundle's own evidence: over it the run refuses instead of indexing.
+          [default: 300] [config: library.index_build_max_packages]
+
+      --library-unnamed <leave|model>
+          Library code with no index name: "leave" (library files not model-named, library functions in mixed files frozen with the <library>_<name> prefix) or "model" (the model names everything).
+          [default: "leave"] [config: library.unnamed]
+
+      --library-report-units
+          List every claimed, vetoed, library-class and queued unit in the report (default: totals and packages).
+          [default: off; --no-library-report-units turns it off] [config: library.report_units]
+
+Library lookup tuning [library.lookup]:
+      --library-lookup-min-nodes <n>
+          AST nodes a statement needs to be looked up.
+          [default: 30] [config: library.lookup.min_nodes]
+
+      --library-lookup-min-content <n>
+          Content tokens a whole statement needs to be looked up.
+          [default: 3] [config: library.lookup.min_content]
+
+      --library-lookup-min-function-content <n>
+          Content tokens a function needs to be looked up.
+          [default: 0] [config: library.lookup.min_function_content]
+
+      --library-lookup-cover <x>
+          Fraction of a statement's units the index must cover.
+          [default: 0.5] [config: library.lookup.cover]
+
+      --library-lookup-max-packages <n>
+          Most packages a unit may match and still claim.
+          [default: 3] [config: library.lookup.max_packages]
+
+      --library-lookup-support <n>
+          A claim under `strong` nodes needs another claim of its package within this many units (0: none).
+          [default: 10] [config: library.lookup.support]
+
+      --library-lookup-strong <n>
+          Node count at which a claim needs no support.
+          [default: 100] [config: library.lookup.strong]
+
+      --library-lookup-specificity
+          Refuse an index module much bigger than the query's module (factor x + slack).
+          [default: on; --no-library-lookup-specificity turns it off] [config: library.lookup.specificity]
+
+      --library-lookup-specificity-factor <n>
+          Specificity: the index module may be at most this many times the query's.
+          [default: 4] [config: library.lookup.specificity_factor]
+
+      --library-lookup-specificity-slack <n>
+          Specificity: plus this many bytes.
+          [default: 4096] [config: library.lookup.specificity_slack]
+
+      --library-lookup-agreement
+          Require the literal rule to agree (same package family); false = the structural rule.
+          [default: off; --no-library-lookup-agreement turns it off] [config: library.lookup.agreement]
+
+      --library-lookup-min-literals <n>
+          Literals a module needs for the literal rule.
+          [default: 6] [config: library.lookup.min_literals]
+
+      --library-lookup-literal-score <x>
+          The literal rule's score floor (bits).
+          [default: 20.0] [config: library.lookup.literal_score]
+
+      --library-lookup-literal-cover <x>
+          The literal rule's cover floor.
+          [default: 0.9] [config: library.lookup.literal_cover]
+
+      --library-lookup-literal-margin <x>
+          The literal rule's margin over the runner-up (bits).
+          [default: 10.0] [config: library.lookup.literal_margin]
+
+      --library-lookup-literal-margin-by-family
+          Read the literal margin against the best file of another package family, not another package: a sibling holding the same literals is no rival (exp106).
+          [default: on; --no-library-lookup-literal-margin-by-family turns it off] [config: library.lookup.literal_margin_by_family]
+
+      --library-lookup-max-packages-by-family
+          Count a print's owners by package family, not package, against max_packages: a scope's members or a fork and its origin are one identity, and a bigger index's carriers of the same code no longer make it too common (exp125).
+          [default: off; --no-library-lookup-max-packages-by-family turns it off] [config: library.lookup.max_packages_by_family]
+
+      --library-lookup-terser-slices <off|union|fallback|auto>
+          Also read the index's terser-built slices (webpack, rollup) beside the bundle's own: "off", "union" (every print) or "fallback" (a print the bundle's slice does not hold) or "auto" (union for a bundle the terser slices alone hold `terser_share` of) — terser-minified code matches terser rows (exp127).
+          [default: "off"] [config: library.lookup.terser_slices]
+
+      --library-lookup-terser-share <x>
+          terser_slices = "auto": the share of the bundle's looked-up whole-unit nodes the terser-built slices alone must hold for the bundle to read them (exp127).
+          [default: 0.2] [config: library.lookup.terser_share]
+
+      --library-lookup-call-context <name>
+          The call-context rule (exp153, exp155): what a unit's own callees, read against the callees a /4 index records for the matched print (containment), may decide. "off"; "tie-break" (a structural tie goes to the one tied package it confirms); "tie-break-down" (exp155, the edges/2 flat callee-print table: the tie goes to the one tied family whose DOWN-scoped fit confirms it — an unheld callee the index knows nowhere, or the family holds anywhere, is skipped instead of counted against; an older index is silence and the tie stands); "support" / "support-or" (it replaces / joins the position window and the isolation veto's neighbour test); "veto" / "veto-or" (the veto's test only); "relax-floor" (a whole print of 20 nodes up is looked up for the owners it confirms); "relax-common" (a print held by too many owners is narrowed to those it confirms); "relax" (both); "tie-break+relax"; "tie-break+support-or+relax" (every role, all additive).
+          [default: "off"] [config: library.lookup.call_context]
+
+      --library-lookup-call-context-callees <all|rowed>
+          Which callees the call-context rule counts (exp153): "all" with a print, or "rowed" (at or over the index's 20-node row floor).
+          [default: "all"] [config: library.lookup.call_context_callees]
+
+Library targeted-lookup tuning [library.lookup.targeted]:
+      --library-lookup-targeted-min-nodes <n>
+          The targeted round's node floor (the other rules are the lookup's).
+          [default: 20] [config: library.lookup.targeted.min_nodes]
+
+      --library-lookup-targeted-support <n>
+          The targeted round's neighbour support (0: the region's own calls are the context).
+          [default: 0] [config: library.lookup.targeted.support]
+
+Library discovery tuning [library.discovery]:
+      --library-discovery-closure-floor <n>
+          Content floor a down-class start needs.
+          [default: 30] [config: library.discovery.closure_floor]
+
+      --library-discovery-queue-cap-bytes <n>
+          Largest region queued for a targeted index lookup, bytes.
+          [default: 256000] [config: library.discovery.queue_cap_bytes]
+
+      --library-discovery-max-rounds <n>
+          Fixpoint round limit.
+          [default: 50] [config: library.discovery.max_rounds]
+
+      --library-discovery-veto-support <without-module|all-rules>
+          What may support a seed against the isolation veto: "without-module" or "all-rules" (the lab prototype's).
+          [default: "without-module"] [config: library.discovery.veto_support]
+
+      --library-discovery-evidence-conflict
+          Refuse an index seed or a propagated claim when another package family's index prints cover more of the unit than the claimed family's (exp102).
+          [default: on; --no-library-discovery-evidence-conflict turns it off] [config: library.discovery.evidence_conflict]
+
+      --library-discovery-literal-conflict
+          Refuse a propagated claim when the unit carries a long literal the index ties only to other package families (exp102).
+          [default: on; --no-library-discovery-literal-conflict turns it off] [config: library.discovery.literal_conflict]
+
+      --library-discovery-contested-cover <x>
+          Refuse a propagated claim on a unit another package family's prints also cover when the claimed family's prints cover less than this share of it (exp102; 0 = off).
+          [default: 0.05] [config: library.discovery.contested_cover]
+
+      --library-discovery-banner-names <any|known>
+          Which names a kept /*! banner may seed: "any" (the banner reader's) or "known" (with an index, only a package the index knows, in npm's spelling; exp106).
+          [default: "known"] [config: library.discovery.banner_names]
+
+      --library-discovery-helper-families <n>
+          An index print at least this many package families hold is emitted helper code: a unit such prints cover half of is no seed and no propagated claim (exp106; 0 = off).
+          [default: 0] [config: library.discovery.helper_families]
+
+      --library-discovery-helper-prints <off|seed|credit>
+          A unit whose whole print the index's helper table holds (a helper source's own code: tslib, @babel/runtime, @swc/helpers) is no other package's index seed: "off", "seed" (dropped; propagation may still reach it) or "credit" (the helper package's seed when one helper family holds it; exp129).
+          [default: "seed"] [config: library.discovery.helper_prints]
+
+      --library-discovery-payload-min-bytes <n>
+          A propagated unit of at least this many bytes of its own (a module wrapper is not its body), nine tenths string literal (a wasm blob, a data table), needs the claimed family's own index evidence or a base64 payload naming it (exp106, exp113; 0 = off).
+          [default: 4096] [config: library.discovery.payload_min_bytes]
+
+      --library-discovery-specific-rivals
+          Read another family's prints in evidence_conflict / contested_cover under the lookup's specificity rule: a sponge's unspecific print is no rival (exp106).
+          [default: on; --no-library-discovery-specific-rivals turns it off] [config: library.discovery.specific_rivals]
+
+      --library-discovery-derived-families
+          Join package families by the npm-metadata links (libindex/families-derived.json, among the index's packages) wherever discovery asks "one family?" (exp106).
+          [default: on; --no-library-discovery-derived-families turns it off] [config: library.discovery.derived_families]
+
+      --library-discovery-context-presence <x>
+          A package every index seed of which sits in a module group its index holds that code only in modules at least this many times the group's bytes (plus context_presence_slack) is no seed: its copy lives in a dist that inlines the code's origin (exp114; 0 = off).
+          [default: 1.5] [config: library.discovery.context_presence]
+
+      --library-discovery-context-presence-slack <n>
+          The context-presence slack in bytes (exp114).
+          [default: 16384] [config: library.discovery.context_presence_slack]
+
+      --library-discovery-shadow-ties
+          A package whose every index seed is a tie with another family that has a seed of its own in the bundle is that family's shadow: its tied seeds become the rival's, the rest are dropped (exp114).
+          [default: on; --no-library-discovery-shadow-ties turns it off] [config: library.discovery.shadow_ties]
+
+      --library-discovery-presence-fence
+          What context_presence / shadow_ties drop is claimed by no one, the dropped package nor a rival propagating into it: the code is ambiguous between a shipper and its origin, so name neither (exp114).
+          [default: on; --no-library-discovery-presence-fence turns it off] [config: library.discovery.presence_fence]
+
+      --library-discovery-declared-max-bytes <n>
+          A declared seed (an inlined package.json, a scoped error prefix) whose statement is bigger than this many bytes is no seed: a manifest inside a huge statement names one of its packages, not the statement (exp112; 0 = off).
+          [default: 65536] [config: library.discovery.declared_max_bytes]
+
+      --library-discovery-copy-presence <x>
+          A package whose every index seed is a copy seed (another package holds at least this share of the nodes its prints cover there, in index modules copy_presence_factor times smaller: the origin its dist inlined) is no seed: a sponge, not shown in the bundle by code of its own (exp121; 0 = off).
+          [default: 0.1] [config: library.discovery.copy_presence]
+
+      --library-discovery-copy-presence-factor <n>
+          How many times smaller the origin's index module must be than the sponge's for copy_presence (exp121).
+          [default: 4] [config: library.discovery.copy_presence_factor]
+
+      --library-discovery-copy-presence-origin
+          What copy_presence drops becomes the seed of its origin (the package co-holding the most of it in the smaller module) instead of no one's (exp121).
+          [default: on; --no-library-discovery-copy-presence-origin turns it off] [config: library.discovery.copy_presence_origin]
+
+      --library-discovery-copy-presence-own <x>
+          For copy_presence, a package shows in the bundle only when its non-copy index seeds hold at least this share of its index seed bytes; otherwise its copy seeds go (exp121; 0 = any one non-copy seed vouches).
+          [default: 0.1] [config: library.discovery.copy_presence_own]
+
+      --library-discovery-factory-bodies
+          Cut each bundled CommonJS module into its body statements, each judged and propagated as a lazy module's body is (the index's rows already hold factory bodies); off, a factory is one external unit no library claim reaches (exp128).
+          [default: on; --no-library-discovery-factory-bodies turns it off] [config: library.discovery.factory_bodies]
+
+      --library-discovery-factory-tie-fence
+          With factory_bodies: a bundled CommonJS module whose every index seed is a tie the structural rule accepts for two or more families (a fork, a sponge carrying it verbatim, generated code) and which has no untied, declared or banner seed is claimed by no one (exp132).
+          [default: on; --no-library-discovery-factory-tie-fence turns it off] [config: library.discovery.factory_tie_fence]
+
+      --library-discovery-factory-whole-seed
+          With factory_bodies: a package names a bundled CommonJS module's statements only when one of its index seeds there is a whole statement its family's index holds (or a declared or banner seed); function-print seeds alone are dropped, and a module left with no seed is claimed by no one (exp132).
+          [default: on; --no-library-discovery-factory-whole-seed turns it off] [config: library.discovery.factory_whole_seed]
+
+      --library-discovery-factory-banner-index
+          With factory_bodies: a /*! banner seed on a bundled CommonJS module's statement is refused when another family's index prints cover more of that statement than the banner family's (exp132).
+          [default: on; --no-library-discovery-factory-banner-index turns it off] [config: library.discovery.factory_banner_index]
+
+Unpack [unpack]:
+      --bundler <name>
+          Force the bundler verdict.
+          [unset: detected] [config: unpack.bundler]
+
+      --minifier <terser|esbuild|swc|bun|none>
+          Force the minifier verdict.
+          [unset: detected] [config: unpack.minifier]
+
+Split [split]:
+      --split
+          Split the output into a multi-file tree (src/ + vendor/ + run scaffold); off writes one humanified file.
+          [default: on; --no-split turns it off] [config: split.enabled]
+
+      --split-pure
+          Emit the byte-exact review tree instead of the runnable module graph (needs enabled).
+          [default: off; --no-split-pure turns it off] [config: split.pure]
+
+      --split-ledger <path>
+          A prior split ledger, for cross-release file-assignment inheritance (needs enabled).
+          [unset: auto-discovered next to the prior] [config: split.ledger]
+
+Switches [switches]:
+      --switches-disable <a,b,...>
+          Ablation: pass switches to turn OFF (unknown names are refused, listing the valid set).
+          [default: []] [config: switches.disable]
+
+      --switches-probe <a,b,...>
+          Instrumentation probes to turn ON.
+          [default: []] [config: switches.probe]
+
+Diagnostics [diagnostics]:
+  -v, --verbose...
+          0, 1 (info) or 2 (debug); the flag counts: -v is 1, -vv is 2.
+          [default: 0] [config: diagnostics.verbosity]
+
+      --diagnostics-log-file <path>
+          Write debug logs to this file (implies verbosity 2).
+          [unset: no log file] [config: diagnostics.log_file]
+
+      --diagnostics-file <path>
+          Write detailed rename diagnostics to this JSON file.
+          [unset: not written] [config: diagnostics.diagnostics_file]
+
+      --diagnostics-stats-json <path>
+          Write the eval harness's match/rename breakdown (and this config) as JSON.
+          [unset: not written] [config: diagnostics.stats_json]
+
+      --diagnostics-dump-artifacts <dir>
+          Write the span-keyed decision-record dump to this directory.
+          [unset: not written] [config: diagnostics.dump_artifacts]
+
+      --diagnostics-dump-asks <path>
+          Write the reason-labelled ask log (one JSONL row per LLM ask) to this path.
+          [unset: not written] [config: diagnostics.dump_asks]
+
+      --diagnostics-rename-ledger <dir>
+          Write a replayable rename ledger + source snapshot + apply.mjs to this directory.
+          [unset: not written] [config: diagnostics.rename_ledger]
+
+Performance [perf]:
+      --perf-trace <path>
+          Write a Chrome Trace Event performance trace to this JSON file.
+          [unset: not written] [config: perf.perf_trace]
+
+      --perf-simulate-llm-latency <path>
+          Price this run's LLM schedule on a virtual clock; write the simulated wall time here.
+          [unset: not written] [config: perf.simulate_llm_latency]
+
+Every option is also a key of the --config file, shown as [config: section.key] (humanify.example.toml lists them all); a flag that disagrees with the file is refused, naming both. The API key is read from HUMANIFY_API_KEY in the environment, never from a flag or the file.

@@ -2,11 +2,11 @@
  * THE writer of the pipeline's `--config` TOML file, for every harness
  * launch (config sweep step 5, 2026-10-13).
  *
- * The binary takes only its operational flags on the command line (the
- * input, `-o`, `--prior-version`, `--endpoint`, `--model`, `--config`,
- * `-v`); every other setting is a key in the config file
- * (`humanify.example.toml` lists each one). So a launcher that used to pass
- * `--split -c 472 --stats-json s.json` now writes
+ * Every setting is a key in the config file (`humanify.example.toml` lists
+ * each one) — and, since exp179, also a flag of the same name; the harness
+ * keeps writing the file, so its launch lines stay the ones the references
+ * were scored with. A launcher that used to pass
+ * `--split -c 472 --stats-json s.json` writes
  *
  *   [llm]
  *   concurrency = 472

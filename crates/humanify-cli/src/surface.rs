@@ -1,5 +1,5 @@
 //! The pipeline program's command surface: `humanify <input> [options]`,
-//! declared for clap — the parser the stage verbs (main.rs) already use, so
+//! built for clap — the parser the stage verbs (main.rs) already use, so
 //! the binary has ONE argument parser (config sweep step 3, 2026-10-13).
 //!
 //! It replaced a port of the npm `commander` 13 package, kept after the
@@ -10,32 +10,36 @@
 //! - a value option no longer swallows the next flag (`--model --split`
 //!   set the model to "--split"); a value never starts with `-`;
 //! - a repeated option is refused (commander: last wins);
-//! - a short option's value must be a separate argument (`-c 472`, not
-//!   `-c5`); the only combined short form is the `-v` counter (`-vv`);
+//! - a short option's value must be a separate argument (`-o out`, not
+//!   `-oout`); the only combined short form is the `-v` counter (`-vv`);
 //! - numbers are typed: a non-negative integer or a refusal (commander:
-//!   JavaScript `parseInt`, so `-c 12abc` ran at 12);
-//! - `--skip-libraries` with `--no-skip-libraries` was a conflict; both are
-//!   gone since the library decision (config sweep step 6: `[library]
-//!   unnamed`).
+//!   JavaScript `parseInt`, so `-c 12abc` ran at 12).
 //!
-//! Config sweep step 5 (2026-10-13): only the OPERATIONAL flags are flags
-//! — the input, `-o`, `--prior-version`, `--endpoint`, `--model`,
-//! `--config`, `-v`, and the ONE library decision (`--library-matching`,
-//! `--library-index`, step 6; `--library-index-store`,
-//! `--library-index-from-bundle`, exp154/exp174). Every other
-//! setting is a key in the `--config` TOML file; its old flag is refused
-//! naming the key ([`MOVED_FLAGS`]).
+//! exp179 (Andrew, 2026-11-01): FLAGS AND CONFIG KEYS ARE ONE-TO-ONE.
+//! Every key in the registry (`crate::config::keys::KEYS`) is a flag and
+//! every flag but `--config` is a key, GENERATED here from the registry —
+//! the name ([`crate::config::file::Key::flag_name`]: short for the
+//! commonest settings, `--<section>-<name>` otherwise), the value it takes
+//! (from the key's kind; a boolean is `--x` / `--no-x`, a list is
+//! comma-separated), the help (the key's doc, grouped by section). The
+//! config sweep's operational/config split is gone; its rule stays: a flag
+//! that disagrees with the `--config` file is refused, naming both. A
+//! spelling the sweep or exp179 renamed is refused naming its replacement
+//! ([`RENAMED_FLAGS`]).
 //!
 //! Every launch the harness makes parses to the settings the commander
 //! port gave it (launch_parity_test.rs, captured from the port at
 //! 587e211f). Usage errors exit 1, never clap's default 2: the pipeline
 //! keeps exit 2 out of its contract. The rendered help is pinned by
-//! test/golden/help/humanify.txt.
+//! test/golden/help/humanify.txt (`--help`) and humanify-short.txt (`-h`).
 
-use clap::{CommandFactory, FromArgMatches, Parser};
+use std::sync::LazyLock;
+
+use clap::{Arg, ArgAction, ArgMatches};
 use serde_json::Value;
 
-use crate::config::{API_KEY_VAR, DEFAULT_ENDPOINT, DEFAULT_MODEL, DEFAULT_OUTPUT_DIR};
+use crate::config::file::{FlagValue, Key, Kind, Val};
+use crate::config::keys::{COUNTED_FLAG, KEYS, SECTION_TITLES, SHORT_FLAGS, tuning_section};
 
 /// package.json's version — the single source `-V` prints.
 pub fn package_version() -> String {
@@ -47,205 +51,314 @@ pub fn package_version() -> String {
         .to_string()
 }
 
-fn endpoint_help() -> String {
-    format!(
-        "OpenAI-compatible API endpoint (default: {DEFAULT_ENDPOINT}). The API key is read \
-         from {API_KEY_VAR} (the environment or a .env file), never from a flag"
-    )
-}
-
-fn model_help() -> String {
-    format!("Model identifier (default: {DEFAULT_MODEL})")
-}
-
-fn output_help() -> String {
-    format!("Output directory (default: {DEFAULT_OUTPUT_DIR})")
-}
-
-/// The pipeline program: the input and its options.
-#[derive(Parser, Debug)]
-#[command(
-    name = "humanify",
-    about = "Unminify JavaScript using an OpenAI-compatible API"
-)]
-struct PipelineCli {
-    #[arg(value_name = "input", help = "The input minified JavaScript file")]
-    input: String,
-    #[command(flatten)]
-    opts: CommandOptions,
-}
-
-/// The parsed options, exactly as given: `None`/`false` is "not given".
-/// Only the OPERATIONAL flags are flags (config sweep step 5, Andrew
-/// 2026-10-13): what to read, where to write, which model, which config
-/// file. Every other setting is a key in the `--config` file (each moved
-/// flag is refused naming its key, [`MOVED_FLAGS`]). No default lives here
-/// — `crate::config` owns every default, resolves and validates the
-/// options ONCE into the run's `Config`, and nothing else reads these
-/// fields.
-#[derive(clap::Args, Clone, Debug, Default)]
+/// The parsed options, exactly as given: the `--config` file, and the
+/// value of every flag given (a flag not given is absent). No default lives
+/// here — `crate::config` owns every default, resolves and validates the
+/// options ONCE into the run's `Config`, and nothing else reads them.
+#[derive(Clone, Debug, Default)]
 pub struct CommandOptions {
-    #[arg(
-        long,
-        value_name = "file",
-        help = "TOML config file: every setting that is not a flag (see \
-                humanify.example.toml for each key, its default and meaning). A \
-                flag that disagrees with the file is refused"
-    )]
     pub config: Option<String>,
-    #[arg(short = 'o', long, value_name = "output", help = output_help())]
-    pub output_dir: Option<String>,
-    #[arg(
-        long,
-        value_name = "path",
-        help = "Path to a prior humanified file for cross-version rename reuse"
-    )]
-    pub prior_version: Option<String>,
-    #[arg(long, value_name = "url", help = endpoint_help())]
-    pub endpoint: Option<String>,
-    #[arg(short = 'm', long, value_name = "model", help = model_help())]
-    pub model: Option<String>,
-    #[arg(
-        short = 'v',
-        long,
-        action = clap::ArgAction::Count,
-        help = "Increase verbosity (-v for info, -vv for debug)"
-    )]
-    pub verbose: u8,
-    #[arg(
-        long,
-        value_name = "mode",
-        help = "Library matching: names (the default: library code the index recognises \
-                goes under vendor/<package>/ with its original names restored; needs a \
-                library index), report (the index lookup + graph discovery, reported; \
-                output as off), off (path/banner detection only; no index read, searched \
-                for or built)"
-    )]
-    pub library_matching: Option<String>,
-    #[arg(
-        long,
-        value_name = "dir|id",
-        help = "The library fingerprint index (a directory, or an id under \
-                library.index_store). Without it, names/report use an index found in \
-                the library-index store and fail before any work when it holds none; \
-                refused with off"
-    )]
-    pub library_index: Option<String>,
-    #[arg(
-        long,
-        value_name = "dir",
-        help = "The library-index store a run with no --library-index searches \
-                (library.index_store_dir; default .humanify/library-index, resolved \
-                against the working directory): one <id>/ per merged index, plus what \
-                --library-index-from-bundle builds with"
-    )]
-    pub library_index_store: Option<String>,
-    #[arg(
-        long,
-        help = "When the store holds no index for the bundle, build one at run time from \
-                the npm packages the bundle itself reveals (library banners, inlined \
-                package.json): installs each from the npm registry and bundles it with \
-                Bun, after printing the estimated disk and time (library.index_from_bundle)"
-    )]
-    pub library_index_from_bundle: bool,
+    /// (dotted key, value), one per flag given, in registry order.
+    pub flags: Vec<FlagValue>,
 }
 
-/// Flags MOVED into the config file (config sweep step 5, 2026-10-13; no
-/// backwards compatibility): `(old spelling, the key, the value a
-/// no-argument flag meant — empty for a flag that took a value)`. Each is
-/// refused naming its key, never aliased.
-pub const MOVED_FLAGS: &[(&str, &str, &str)] = &[
-    ("-c", "llm.concurrency", ""),
-    ("--concurrency", "llm.concurrency", ""),
-    ("--module-concurrency", "llm.module_concurrency", ""),
-    ("--max-tokens", "llm.max_tokens", ""),
-    ("--context-tokens", "llm.context_tokens", ""),
-    ("--retries", "llm.retries", ""),
-    ("--timeout", "llm.timeout_ms", ""),
-    ("--llm-cache", "llm.cache_dir", ""),
-    ("--reasoning-effort", "llm.reasoning_effort", ""),
-    ("--disable", "switches.disable", ""),
-    ("--probe", "switches.probe", ""),
-    ("--log-file", "diagnostics.log_file", ""),
-    ("--diagnostics", "diagnostics.diagnostics_file", ""),
-    ("--stats-json", "diagnostics.stats_json", ""),
-    ("--dump-artifacts", "diagnostics.dump_artifacts", ""),
-    ("--dump-asks", "diagnostics.dump_asks", ""),
-    ("--rename-ledger", "diagnostics.rename_ledger", ""),
-    ("--bundler", "unpack.bundler", ""),
-    ("--minifier", "unpack.minifier", ""),
-    ("--batch-size", "naming.batch_size", ""),
-    ("--max-retries", "naming.max_retries", ""),
-    ("--rename-retries", "naming.rename_retries", ""),
-    ("--max-free-retries", "naming.max_free_retries", ""),
-    ("--lane-threshold", "naming.lane_threshold", ""),
-    ("--sequential", "naming.schedule", "\"sequential\""),
-    ("--relaxed-levers", "naming.relaxed_levers", ""),
-    ("--no-naming-floor", "naming.naming_floor", "false"),
-    (
-        "--no-naming-floor-sweep",
-        "naming.naming_floor_sweep",
-        "false",
-    ),
-    (
-        "--no-reconcile-prior-diff",
-        "matching.reconcile_prior_diff",
-        "false",
-    ),
-    ("--split", "split.enabled", "true"),
-    ("--split-pure", "split.pure", "true"),
-    ("--split-ledger", "split.ledger", ""),
-    ("--perf-trace", "perf.perf_trace", ""),
-    ("--simulate-llm-latency", "perf.simulate_llm_latency", ""),
-    // The library decision (config sweep step 6): one setting, not two
-    // flags (docs/library-matching-config.md §2).
-    ("--skip-libraries", "library.unnamed", "\"leave\""),
-    ("--no-skip-libraries", "library.unnamed", "\"model\""),
-    ("--library-discovery-units", "library.report_units", "true"),
-];
-
-/// The refusal for a moved flag.
-fn moved_note(key: &str, example: &str) -> String {
-    if example.is_empty() {
-        format!("moved: set {key} in --config")
-    } else {
-        format!("moved: set {key} = {example} in --config")
+impl CommandOptions {
+    /// The value the flag for `dotted` gave, if it was given.
+    pub fn flag(&self, dotted: &str) -> Option<&Val> {
+        self.flags
+            .iter()
+            .find(|(k, _)| *k == dotted)
+            .map(|(_, v)| v)
     }
 }
 
-/// Flags renamed or deleted by the config sweep (2026-10-13; no backwards
-/// compatibility): `(verb, old spelling, what to say instead)`, `None` for
-/// the pipeline program, `Some(verb)` for a clap stage verb (main.rs).
-/// The old spelling is refused, naming its replacement, never aliased.
-pub const RETIRED_FLAGS: &[(Option<&str>, &str, &str)] = &[
+/// One key's flag, as the command line spells it.
+pub struct FlagSpec {
+    pub key: &'static Key,
+    /// The key, dotted (`llm.concurrency`).
+    pub dotted: String,
+    /// The long name without its dashes (`llm-concurrency`).
+    pub long: String,
+    /// A boolean's off switch (`no-split`).
+    pub negated: Option<String>,
+    pub short: Option<char>,
+    /// Its `--help` heading (`LLM [llm]`).
+    pub heading: String,
+    /// A value flag's placeholder (`n`, `off|report|names`).
+    pub value_name: String,
+}
+
+impl FlagSpec {
+    fn of(key: &'static Key) -> FlagSpec {
+        let long = key.flag_name().trim_start_matches("--").to_string();
+        let dotted = key.dotted();
+        FlagSpec {
+            negated: matches!(key.kind, Kind::Bool).then(|| format!("no-{long}")),
+            short: SHORT_FLAGS
+                .iter()
+                .find(|(d, _)| *d == dotted)
+                .map(|(_, c)| *c),
+            long,
+            dotted,
+            heading: heading(key.section),
+            value_name: value_name(key),
+            key,
+        }
+    }
+}
+
+/// Every key's flag, in registry order — built once.
+pub static FLAGS: LazyLock<Vec<FlagSpec>> =
+    LazyLock::new(|| KEYS.iter().map(FlagSpec::of).collect());
+
+/// The flag `--config` is the one flag that is not a key: it names the file.
+pub const CONFIG_FLAG: &str = "config";
+
+/// What a value flag's placeholder says (`<n>`, `<off|report|names>`).
+fn value_name(key: &Key) -> String {
+    match (&key.kind, key.dotted().as_str()) {
+        (_, "library.index") => "dir|id".to_string(),
+        (_, "matching.prior_version") => "folder|file".to_string(),
+        (_, "llm.model") => "model".to_string(),
+        (Kind::Url, _) => "url".to_string(),
+        (Kind::Int { .. }, _) => "n".to_string(),
+        (Kind::Float { .. }, _) => "x".to_string(),
+        (Kind::List(_), _) => "a,b,...".to_string(),
+        (Kind::Choice(names), _) => {
+            let joined = names().join("|");
+            if joined.len() <= 40 {
+                joined
+            } else {
+                "name".to_string()
+            }
+        }
+        (_, d) if d.ends_with("_dir") || d.ends_with("index_store") => "dir".to_string(),
+        (_, "diagnostics.dump_artifacts" | "diagnostics.rename_ledger") => "dir".to_string(),
+        _ => "path".to_string(),
+    }
+}
+
+/// The doc's first sentence, at most ~100 characters: the `-h` line.
+fn summary(doc: &str) -> String {
+    let first = doc.find(". ").map_or(doc, |i| &doc[..=i]);
+    if first.chars().count() <= 100 {
+        return first.trim_end_matches('.').to_string();
+    }
+    let cut: String = first.chars().take(97).collect();
+    let cut = cut.rsplit_once(' ').map_or(cut.as_str(), |(head, _)| head);
+    format!("{cut}...")
+}
+
+/// What `--help` adds after the doc: the default and the config key.
+fn footnote(spec: &FlagSpec) -> String {
+    let key = spec.key;
+    let default = match ((key.default)(), &spec.negated) {
+        (Some(Val::Bool(b)), Some(no)) => {
+            format!(
+                "default: {}; --{no} turns it off",
+                if b { "on" } else { "off" }
+            )
+        }
+        (Some(v), _) => format!("default: {}", v.render()),
+        (None, _) => format!("unset: {}", key.unset),
+    };
+    format!("[{default}] [config: {}]", key.dotted())
+}
+
+fn heading(section: &str) -> String {
+    let title = SECTION_TITLES
+        .iter()
+        .find(|(s, _)| *s == section)
+        .map_or(section, |(_, t)| *t);
+    format!("{title} [{section}]")
+}
+
+fn flag_arg(spec: &'static FlagSpec) -> Arg {
+    let key = spec.key;
+    let mut arg = Arg::new(spec.long.as_str())
+        .long(spec.long.as_str())
+        .help(summary(key.doc))
+        .long_help(format!("{}\n{}", key.doc, footnote(spec)))
+        .help_heading(spec.heading.as_str())
+        .hide_short_help(tuning_section(key.section));
+    if let Some(c) = spec.short {
+        arg = arg.short(c);
+    }
+    match key.kind {
+        Kind::Bool => arg.action(ArgAction::SetTrue).conflicts_with(
+            spec.negated
+                .as_deref()
+                .expect("a boolean has an off switch"),
+        ),
+        _ if key.dotted() == COUNTED_FLAG => arg.action(ArgAction::Count),
+        _ => arg
+            .action(ArgAction::Set)
+            .value_name(spec.value_name.as_str()),
+    }
+}
+
+/// A boolean's `--no-x`: listed by its `--x` line, not on its own.
+fn negated_arg(spec: &'static FlagSpec) -> Option<Arg> {
+    let no = spec.negated.as_deref()?;
+    Some(Arg::new(no).long(no).action(ArgAction::SetTrue).hide(true))
+}
+
+fn pipeline_command() -> clap::Command {
+    // The version is package.json's, read at run time (the crate's own is
+    // 0.0.0); clap wants it 'static, and there is one per process.
+    static VERSION: LazyLock<String> = LazyLock::new(package_version);
+    // (`default().name`, not `new`: a clap command, not a subprocess — the
+    // concurrency census reads `Command::new` as a spawn.)
+    let mut cmd = clap::Command::default()
+        .name("humanify")
+        .about("Unminify JavaScript using an OpenAI-compatible API")
+        .version(VERSION.as_str())
+        .after_help(
+            "A boolean's --no-<flag> turns it off (--no-split). The library tuning flags \
+             (--library-lookup-*, --library-discovery-*) are listed by --help. Every option is \
+             also a key of the --config file (humanify.example.toml); a flag that disagrees \
+             with the file is refused. The API key is read from HUMANIFY_API_KEY in the \
+             environment.",
+        )
+        .after_long_help(
+            "Every option is also a key of the --config file, shown as [config: section.key] \
+             (humanify.example.toml lists them all); a flag that disagrees with the file is \
+             refused, naming both. The API key is read from HUMANIFY_API_KEY in the \
+             environment, never from a flag or the file.",
+        )
+        .arg(
+            Arg::new("input")
+                .value_name("input")
+                .required(true)
+                .help("The input minified JavaScript file"),
+        )
+        .arg(
+            Arg::new(CONFIG_FLAG)
+                .long(CONFIG_FLAG)
+                .value_name("file")
+                .action(ArgAction::Set)
+                .help(
+                    "TOML config file: any setting below as a key (see humanify.example.toml). \
+                     A flag that disagrees with the file is refused",
+                ),
+        );
+    for spec in FLAGS.iter() {
+        cmd = cmd.arg(flag_arg(spec));
+        if let Some(no) = negated_arg(spec) {
+            cmd = cmd.arg(no);
+        }
+    }
+    cmd
+}
+
+/// A flag's text as the key's value: typed by the key's kind (a range is
+/// checked later, by the resolver, under the flag's name).
+fn typed_flag(spec: &FlagSpec, raw: &str) -> Result<Val, String> {
+    let bad = |what: &str| {
+        format!(
+            "error: invalid value '{raw}' for '--{} <{}>': {what}\n",
+            spec.long, spec.value_name
+        )
+    };
+    match spec.key.kind {
+        Kind::Int { .. } => raw
+            .parse::<u64>()
+            .map(Val::Int)
+            .map_err(|_| bad("a non-negative integer is expected")),
+        Kind::Float { .. } => raw
+            .parse::<f64>()
+            .map(Val::Float)
+            .map_err(|_| bad("a number is expected")),
+        Kind::List(_) => Ok(Val::List(
+            raw.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect(),
+        )),
+        _ => Ok(Val::Text(raw.to_string())),
+    }
+}
+
+/// Every flag given, as (key, value).
+fn flag_values(m: &ArgMatches) -> Result<Vec<FlagValue>, String> {
+    let mut out = Vec::new();
+    for spec in FLAGS.iter() {
+        let dotted: &'static str = spec.dotted.as_str();
+        let value = match &spec.negated {
+            Some(no) if m.get_flag(no) => Some(Val::Bool(false)),
+            Some(_) => m.get_flag(&spec.long).then_some(Val::Bool(true)),
+            None if spec.dotted == COUNTED_FLAG => {
+                let n = m.get_count(&spec.long);
+                (n > 0).then(|| Val::Int(u64::from(n)))
+            }
+            None => match m.get_one::<String>(&spec.long) {
+                Some(raw) => Some(typed_flag(spec, raw)?),
+                None => None,
+            },
+        };
+        if let Some(v) = value {
+            out.push((dotted, v));
+        }
+    }
+    Ok(out)
+}
+
+/// Spellings renamed by the config sweep (2026-10-13) or by exp179's
+/// one-to-one flags (no backwards compatibility): `(old spelling, what to
+/// write instead)`. Each is refused naming its replacement, never aliased.
+/// A replacement is today's flag (and, for an old switch, its value).
+pub const RENAMED_FLAGS: &[(&str, &str)] = &[
+    ("-c", "--llm-concurrency"),
+    ("--concurrency", "--llm-concurrency"),
+    ("--module-concurrency", "--llm-module-concurrency"),
+    ("--max-tokens", "--llm-max-tokens"),
+    ("--context-tokens", "--llm-context-tokens"),
+    ("--retries", "--llm-retries"),
+    ("--timeout", "--llm-timeout-ms"),
+    ("--llm-cache", "--llm-cache-dir"),
+    ("--reasoning-effort", "--llm-reasoning-effort"),
+    ("--disable", "--switches-disable"),
+    ("--probe", "--switches-probe"),
+    ("--log-file", "--diagnostics-log-file"),
+    ("--diagnostics", "--diagnostics-file"),
+    ("--stats-json", "--diagnostics-stats-json"),
+    ("--dump-artifacts", "--diagnostics-dump-artifacts"),
+    ("--dump-asks", "--diagnostics-dump-asks"),
+    ("--rename-ledger", "--diagnostics-rename-ledger"),
+    ("--batch-size", "--naming-batch-size"),
+    ("--max-retries", "--naming-max-retries"),
+    ("--rename-retries", "--naming-rename-retries"),
+    ("--max-free-retries", "--naming-max-free-retries"),
+    ("--lane-threshold", "--naming-lane-threshold"),
+    ("--sequential", "--naming-schedule sequential"),
+    ("--relaxed-levers", "--naming-relaxed-levers"),
+    ("--reconcile-prior-diff", "--matching-reconcile-prior-diff"),
     (
-        None,
-        "--profile",
-        "renamed and moved: set perf.perf_trace in --config",
+        "--no-reconcile-prior-diff",
+        "--no-matching-reconcile-prior-diff",
     ),
+    ("--simulate-llm-latency", "--perf-simulate-llm-latency"),
+    ("--profile", "--perf-trace"),
+    // The library decision (config sweep step 6): one setting, not two
+    // flags (docs/library-matching-config.md §2).
+    ("--skip-libraries", "--library-unnamed leave"),
+    ("--no-skip-libraries", "--library-unnamed model"),
+    ("--library-discovery-units", "--library-report-units"),
+];
+
+/// Flags deleted by the config sweep (2026-10-13; no backwards
+/// compatibility), and the stage verbs' renamed flags: `(verb, old
+/// spelling, what to say instead)`, `None` for the pipeline program,
+/// `Some(verb)` for a clap stage verb (main.rs). The old spelling is
+/// refused, naming its replacement, never aliased. (The pipeline's renamed
+/// spellings: [`RENAMED_FLAGS`].)
+pub const RETIRED_FLAGS: &[(Option<&str>, &str, &str)] = &[
     (
         None,
         "--api-key",
         "removed: set HUMANIFY_API_KEY in the environment — a secret never goes on the \
          command line",
-    ),
-    (
-        None,
-        "--naming-floor",
-        "removed: it restated the default (on); naming.naming_floor = false in --config \
-         turns it off",
-    ),
-    (
-        None,
-        "--naming-floor-sweep",
-        "removed: it restated the default (on); naming.naming_floor_sweep = false in \
-         --config turns it off",
-    ),
-    (
-        None,
-        "--reconcile-prior-diff",
-        "removed: it restated the default (on with --prior-version); \
-         matching.reconcile_prior_diff = false in --config turns it off",
     ),
     (Some("detect"), "--profile", "renamed: use --perf-trace"),
     (
@@ -272,14 +385,14 @@ pub fn retired_flag(verb: Option<&str>, args: &[String]) -> Option<String> {
             .iter()
             .find(|(v, flag, _)| *v == verb && *flag == name)
             .map(|(_, flag, note)| (*flag, note.to_string()));
-        let moved = || {
-            MOVED_FLAGS
+        let renamed = || {
+            RENAMED_FLAGS
                 .iter()
-                .find(|(flag, _, _)| verb.is_none() && *flag == name)
-                .map(|(flag, key, example)| (*flag, moved_note(key, example)))
+                .find(|(flag, _)| verb.is_none() && *flag == name)
+                .map(|(flag, new)| (*flag, format!("renamed: use {new}")))
         };
         retired
-            .or_else(moved)
+            .or_else(renamed)
             .map(|(flag, note)| format!("error: unexpected argument '{flag}' ({note})\n"))
     })
 }
@@ -299,20 +412,29 @@ fn attached_short(args: &[String]) -> Option<String> {
         .map(|a| {
             format!(
                 "error: unexpected argument '{a}': a short option's value is a separate \
-                 argument (`-c 472`, not `-c472`), and only -v repeats (`-vv`)\n"
+                 argument (`-o out`, not `-oout`), and only -v repeats (`-vv`)\n"
             )
         })
 }
 
-fn pipeline_command() -> clap::Command {
-    // The version is package.json's, read at run time (the crate's own is
-    // 0.0.0); clap wants it 'static, and there is one per process.
-    let version: &'static str = Box::leak(package_version().into_boxed_str());
-    PipelineCli::command().version(version)
+/// Every long flag the command accepts (`--x` and `--no-x` alike), as
+/// clap holds it — for the bijection test against the registry.
+pub fn accepted_longs() -> Vec<String> {
+    pipeline_command()
+        .get_arguments()
+        .filter_map(|a| a.get_long().map(str::to_string))
+        .collect()
 }
 
-/// The pipeline program's help, as `--help` prints it.
+/// The pipeline program's help, as `--help` prints it: every flag, its
+/// whole doc, default and config key.
 pub fn help_text() -> String {
+    pipeline_command().render_long_help().to_string()
+}
+
+/// The pipeline program's help, as `-h` prints it: one line per flag, the
+/// library tuning sections left out.
+pub fn short_help_text() -> String {
     pipeline_command().render_help().to_string()
 }
 
@@ -346,13 +468,16 @@ pub fn parse_pipeline(argv: &[String]) -> PipelineParse {
         return usage_error(refusal);
     }
     let full = std::iter::once("humanify".to_string()).chain(argv.iter().cloned());
-    let parsed = pipeline_command()
-        .try_get_matches_from(full)
-        .and_then(|m| PipelineCli::from_arg_matches(&m));
-    match parsed {
-        Ok(cli) => PipelineParse::Run {
-            input: cli.input,
-            opts: Box::new(cli.opts),
+    match pipeline_command().try_get_matches_from(full) {
+        Ok(m) => match flag_values(&m) {
+            Ok(flags) => PipelineParse::Run {
+                input: m.get_one::<String>("input").expect("required").clone(),
+                opts: Box::new(CommandOptions {
+                    config: m.get_one::<String>(CONFIG_FLAG).cloned(),
+                    flags,
+                }),
+            },
+            Err(e) => usage_error(e),
         },
         Err(e) => {
             use clap::error::ErrorKind;

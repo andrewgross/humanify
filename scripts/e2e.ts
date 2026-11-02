@@ -435,8 +435,9 @@ async function runBinary(
   endpoint: string,
   label: string
 ): Promise<string> {
-  // Every setting but the operational flags is a `--config` key (config
-  // sweep step 5): one file per launch, beside its output directory.
+  // The settings go in a `--config` file (config sweep step 5; every key
+  // is also a flag since exp179): one file per launch, beside its output
+  // directory.
   const out = args[args.indexOf("-o") + 1];
   const config = `${out}.toml`;
   fs.mkdirSync(path.dirname(config), { recursive: true });
@@ -476,9 +477,10 @@ async function runBinary(
 
 /**
  * The prior the next release diffs against, as the run names it on its
- * `Next release: --prior-version <path>` line: a split tree's
- * `.humanify/humanified.js`, or — a bundle the split does not read — the
- * named file written unsplit.
+ * `Next release: --prior-version <path>` line: a split tree's OUTPUT
+ * FOLDER (exp179: the binary resolves it to its `.humanify/humanified.js`,
+ * so the second leg exercises the folder form), or — a bundle the split
+ * does not read — the named file written unsplit.
  */
 function nextReleasePrior(stderr: string, label: string): string {
   const m = /^Next release: --prior-version (.+)$/m.exec(stderr);
@@ -835,12 +837,11 @@ async function runPair(
   const fresh = path.join(root, "fresh");
   const prior = path.join(root, "prior-a");
   const again = path.join(root, "prior-b");
-  // A bundle fixture's output is the runnable split tree; every launch of
-  // the pair makes the same library decision.
-  const split: Settings = [
-    ...(bundle ? ([["split.enabled", true]] as Settings) : []),
-    ...library
-  ];
+  // A bundle fixture's output is the runnable split tree, any other
+  // fixture's one humanified file — said EXPLICITLY both ways: the split is
+  // on by default since exp179, and a library fixture keeps its one-file
+  // run. Every launch of the pair makes the same library decision.
+  const split: Settings = [["split.enabled", bundle], ...library];
 
   // The prior the next release diffs against: the split tree's
   // humanified source (or the named file a bundle the split does not read

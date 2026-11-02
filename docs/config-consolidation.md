@@ -1,5 +1,14 @@
 # Config consolidation: one parse point, one typed config, one file
 
+> **exp179 (2026-11-01) supersedes the "only operational flags" rule below.**
+> Andrew's interface decisions: every config key is also a flag and every
+> flag a key, both generated from the key registry (`config/keys.rs`;
+> `--<section>-<name>`, short names for the commonest settings); the
+> flag/file conflict refusal stays; the split is on by default;
+> `--prior-version` takes the prior output folder; no `.env` file is read.
+> See `experiments/179-cli-interface/README.md`. The text below is the
+> 2026-10-13 record.
+
 Status: DESIGN + INVENTORY, 2026-10-13 (main @ `872dff10`). Sweep steps 1-4
 landed on main (`df6ace2a`); steps 5 (the `--config` file) and 6 (the
 one library decision) merged (`e6a81298`); **steps 7 (one harness run
