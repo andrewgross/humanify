@@ -1,7 +1,9 @@
 //! THE key registry: every setting the run reads, declared once — section,
-//! name, type and range, compiled-in default, meaning, and the flag for
-//! the few operational settings that are also flags. `Config::build` reads
-//! every value through it; `humanify.example.toml` is rendered from it.
+//! name, type and range, compiled-in default, meaning, and (exp179) its
+//! command-line flag: EVERY key is a flag and every flag is a key, both
+//! generated from this table (`Key::flag_name`; `crate::surface` builds
+//! the clap command from it). `Config::build` reads every value through
+//! it; `humanify.example.toml` and `--help` are rendered from it.
 
 use humanify_core::fast::Lever;
 use humanify_core::naming::waves::batch::WaveTunables;
@@ -181,6 +183,41 @@ const fn unset_text(
     }
 }
 
+/// The single-letter aliases of the commonest flags.
+pub const SHORT_FLAGS: &[(&str, char)] = &[
+    ("io.output_dir", 'o'),
+    ("llm.model", 'm'),
+    ("diagnostics.verbosity", 'v'),
+];
+
+/// The one COUNTED flag: `-v` / `-vv` (or `--verbose` repeated) counts up
+/// to the key's maximum; every other integer flag takes a value.
+pub const COUNTED_FLAG: &str = "diagnostics.verbosity";
+
+/// Each section's `--help` heading (the TOML table is shown beside it).
+pub const SECTION_TITLES: &[(&str, &str)] = &[
+    ("run", "Run"),
+    ("io", "Output"),
+    ("llm", "LLM"),
+    ("matching", "Cross-version matching"),
+    ("naming", "Naming"),
+    ("library", "Library matching"),
+    ("library.lookup", "Library lookup tuning"),
+    ("library.lookup.targeted", "Library targeted-lookup tuning"),
+    ("library.discovery", "Library discovery tuning"),
+    ("unpack", "Unpack"),
+    ("split", "Split"),
+    ("switches", "Switches"),
+    ("diagnostics", "Diagnostics"),
+    ("perf", "Performance"),
+];
+
+/// Sections `-h` leaves out (`--help` lists them): the library engine's
+/// tuning knobs, measured settings few runs touch.
+pub fn tuning_section(section: &str) -> bool {
+    section.starts_with("library.lookup") || section.starts_with("library.discovery")
+}
+
 /// Every setting, in the order the example file lists them.
 pub static KEYS: &[Key] = &[
     // [run]
@@ -217,7 +254,8 @@ pub static KEYS: &[Key] = &[
         flag: Some("--endpoint"),
         default: || text(DEFAULT_ENDPOINT),
         unset: "",
-        doc: "OpenAI-compatible API endpoint (the key: HUMANIFY_API_KEY).",
+        doc: "OpenAI-compatible API endpoint. The API key is read from HUMANIFY_API_KEY in \
+              the environment, never from a flag or this file.",
     },
     Key {
         section: "llm",
@@ -308,7 +346,8 @@ pub static KEYS: &[Key] = &[
         flag: Some("--prior-version"),
         default: none,
         unset: "a fresh run, nothing to reuse",
-        doc: "A prior humanified bundle, for cross-version rename reuse.",
+        doc: "The prior release's humanify output folder (or the humanified file in it, \
+              .humanify/humanified.js), for cross-version rename reuse.",
     },
     Key {
         section: "matching",
@@ -445,12 +484,16 @@ pub static KEYS: &[Key] = &[
               index_store). One that has no slice for the bundle's kind fails a names run \
               loudly (it was named, so a mismatch is a mistake, never a skip).",
     },
-    unset_text(
-        "library",
-        "index_store",
-        "an index id cannot be resolved: pass the index directory",
-        "Where index ids live (<index_store>/<id>/manifest.json).",
-    ),
+    Key {
+        section: "library",
+        name: "index_store",
+        kind: Kind::Text,
+        // The derived --library-index-store is index_store_dir's flag.
+        flag: Some("--library-index-id-store"),
+        default: none,
+        unset: "an index id cannot be resolved: pass the index directory",
+        doc: "Where index ids live (<index_store>/<id>/manifest.json).",
+    },
     // The run's index cache and the run-time build (exp154,
     // docs/design/library-names-plan.md step 3).
     Key {
@@ -1008,7 +1051,7 @@ pub static KEYS: &[Key] = &[
         section: "unpack",
         name: "bundler",
         kind: Kind::Choice(bundlers),
-        flag: None,
+        flag: Some("--bundler"),
         default: none,
         unset: "detected",
         doc: "Force the bundler verdict.",
@@ -1017,7 +1060,7 @@ pub static KEYS: &[Key] = &[
         section: "unpack",
         name: "minifier",
         kind: Kind::Choice(minifiers),
-        flag: None,
+        flag: Some("--minifier"),
         default: none,
         unset: "detected",
         doc: "Force the minifier verdict.",
@@ -1027,10 +1070,13 @@ pub static KEYS: &[Key] = &[
         section: "split",
         name: "enabled",
         kind: Kind::Bool,
-        flag: None,
-        default: off,
+        flag: Some("--split"),
+        // On by default since exp179 (Andrew, 2026-11-01): a plain run
+        // writes the tree.
+        default: on,
         unset: "",
-        doc: "Split the output into a multi-file tree (src/ + vendor/ + run scaffold).",
+        doc: "Split the output into a multi-file tree (src/ + vendor/ + run scaffold); off \
+              writes one humanified file.",
     },
     Key {
         section: "split",
@@ -1074,10 +1120,10 @@ pub static KEYS: &[Key] = &[
         section: "diagnostics",
         name: "verbosity",
         kind: Kind::Int { min: 0, max: 2 },
-        flag: Some("-v"),
+        flag: Some("--verbose"),
         default: || int(0),
         unset: "",
-        doc: "0, 1 (info) or 2 (debug); -v / -vv on the command line.",
+        doc: "0, 1 (info) or 2 (debug); the flag counts: -v is 1, -vv is 2.",
     },
     unset_text(
         "diagnostics",

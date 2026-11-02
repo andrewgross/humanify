@@ -25,7 +25,6 @@ oxc_span.workspace = true
 serde_json.workspace = true
 clap.workspace = true
 mimalloc.workspace = true
-dotenvy.workspace = true
 toml.workspace = true
 
 [lints]

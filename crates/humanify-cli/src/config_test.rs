@@ -191,7 +191,7 @@ fn every_refusal_is_collected_before_any_work() {
     let f = ConfigFile::parse(
         "cfg.toml",
         "[llm]\nendpoint = \"http://b/v1\"\nconcurrency = 0\n[unpack]\nbundler = \"foobar\"\n\
-         [split]\npure = true\n[switches]\ndisable = [\"no-such-switch\"]\n",
+         [split]\nenabled = false\npure = true\n[switches]\ndisable = [\"no-such-switch\"]\n",
     )
     .expect("it is TOML");
     let errs = Config::build(&input, &o, Some(&f), key).expect_err("refused");
@@ -355,4 +355,55 @@ fn run_order_refuses_an_unknown_value() {
     let err = ConfigFile::check("cfg.toml", "[run]\norder = \"serially\"\n")
         .expect_err("must be refused");
     assert!(format!("{err:?}").contains("run.order"), "{err:?}");
+}
+
+/// `--prior-version` takes the prior run's OUTPUT FOLDER (exp179): a
+/// directory resolves to its `.humanify/humanified.js`, the file every
+/// sibling the prior side reads (the vendor manifest, the vendor prior,
+/// the split ledger) is found next to. The file path keeps working.
+#[test]
+fn the_prior_version_accepts_the_prior_output_folder() {
+    let dir = std::env::temp_dir().join(format!("humanify-prior-dir-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".humanify")).unwrap();
+    let file = dir.join(".humanify/humanified.js");
+    std::fs::write(&file, "var a = 1;\n").unwrap();
+    let off = "[library]\nmatching = \"off\"\n";
+    let shown = dir.to_str().unwrap();
+    let c = with_file(&["in.js", "--prior-version", shown], off);
+    assert_eq!(c.matching.prior_version.as_deref(), file.to_str());
+    assert!(c.matching.reconcile_prior_diff);
+    assert!(c.missing_inputs().is_empty(), "{:?}", c.missing_inputs());
+    let by_file = with_file(&["in.js", "--prior-version", file.to_str().unwrap()], off);
+    assert_eq!(by_file.matching.prior_version.as_deref(), file.to_str());
+    // A folder that is not a prior output is refused, naming what it lacks.
+    std::fs::remove_file(&file).unwrap();
+    let c = with_file(&["in.js", "--prior-version", shown], off);
+    assert_eq!(
+        c.missing_inputs(),
+        [format!(
+            "prior version (--prior-version) {shown} is a folder without \
+             .humanify/humanified.js: pass a prior humanify output folder, or the prior \
+             humanified file itself"
+        )]
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The split is ON by default (exp179, Andrew 2026-11-01): a plain run
+/// writes the src/ + vendor/ + runnable scaffold tree; `--no-split` (or
+/// `split.enabled = false`) writes one humanified file.
+#[test]
+fn the_split_is_on_by_default_and_no_split_turns_it_off() {
+    assert!(config(&["in.js"]).split.enabled);
+    assert!(!config(&["in.js", "--no-split"]).split.enabled);
+    assert!(
+        !with_file(&["in.js"], "[split]\nenabled = false\n")
+            .split
+            .enabled
+    );
+    assert!(
+        config(&["in.js", "--split-pure"]).split.pure,
+        "pure needs no --split"
+    );
 }

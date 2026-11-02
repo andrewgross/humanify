@@ -2,10 +2,11 @@
 //! docs/config-consolidation.md §3).
 //!
 //! One typed, immutable [`Config`], built ONCE here from three inputs and
-//! nothing else: the parsed argv (`surface`, clap — only the operational
-//! flags), the `--config <file>` TOML file ([`file`], checked against the
-//! ONE key registry, [`keys`]), and the one environment variable the binary
-//! reads (`HUMANIFY_API_KEY`, through `crate::env`). Every value comes from
+//! nothing else: the parsed argv (`surface`, clap — every key's flag,
+//! generated from the ONE key registry, [`keys`], since exp179), the
+//! `--config <file>` TOML file ([`file`], checked against the same
+//! registry), and the one environment variable the binary reads
+//! (`HUMANIFY_API_KEY`, through `crate::env`; no `.env` file). Every value comes from
 //! its flag, else the file, else the registry's compiled-in default; a flag
 //! and the file that disagree are refused. Everything is validated here —
 //! every refusal before any work starts — and handed down by reference.
@@ -38,7 +39,7 @@ pub mod file;
 pub mod keys;
 
 pub use file::ConfigFile;
-use file::{FlagValue, Resolved, Val};
+use file::Resolved;
 
 /// The OpenAI-compatible endpoint when none is given.
 pub const DEFAULT_ENDPOINT: &str = "https://api.openai.com/v1";
@@ -67,8 +68,7 @@ pub const DEFAULT_MODULE_CONCURRENCY: u32 = 40;
 pub const API_KEY_VAR: &str = "HUMANIFY_API_KEY";
 
 /// Refused when no API key is set.
-pub const MISSING_API_KEY: &str = "API key required: set HUMANIFY_API_KEY in the environment \
-     (or a .env file in the working directory)";
+pub const MISSING_API_KEY: &str = "API key required: set HUMANIFY_API_KEY in the environment";
 
 /// LLM request retries when `--retries` is not given: the rate limiter's
 /// own default (one number).
@@ -205,9 +205,43 @@ impl Llm {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Matching {
+    /// The prior humanified FILE: `--prior-version` as given, or, given the
+    /// prior run's output folder, its [`PRIOR_IN_FOLDER`] (exp179).
     pub prior_version: Option<String>,
+    /// The folder `--prior-version` named, when it named one (for the
+    /// refusal of a folder that holds no prior; not a setting).
+    #[serde(skip)]
+    pub prior_folder: Option<String>,
     /// The prior-diff reconcile pass; implied off with no prior.
     pub reconcile_prior_diff: bool,
+}
+
+/// Where a humanify output folder keeps the file the next release reads as
+/// its prior (`--prior-version <folder>`, exp179) — the split's ONE
+/// constant: every other prior-side file (the vendor manifest,
+/// `.humanify/vendor-humanified.js`, the split ledger) is found next to it.
+pub use humanify_core::place::layout::HUMANIFIED_SOURCE_PATH as PRIOR_IN_FOLDER;
+
+impl Matching {
+    /// `matching.prior_version` as given: a folder resolves to its
+    /// [`PRIOR_IN_FOLDER`], a file stays as it is.
+    fn of(given: Option<String>, reconcile: bool) -> Matching {
+        let folder = given.clone().filter(|p| std::path::Path::new(p).is_dir());
+        let prior_version = match &folder {
+            Some(dir) => Some(
+                std::path::Path::new(dir)
+                    .join(PRIOR_IN_FOLDER)
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            None => given,
+        };
+        Matching {
+            reconcile_prior_diff: reconcile && prior_version.is_some(),
+            prior_version,
+            prior_folder: folder,
+        }
+    }
 }
 
 /// The naming stage's schedule and budgets.
@@ -663,27 +697,6 @@ fn ordered_mode(r: &Resolved) -> bool {
     r.text("run.order").as_deref() == Some("ordered")
 }
 
-/// The operational flags' values, keyed by the setting each also is (the
-/// rest of the run's settings live only in the `--config` file).
-fn flag_values(opts: &CommandOptions) -> Vec<FlagValue> {
-    let text = |k: &'static str, v: &Option<String>| v.clone().map(|s| (k, Val::Text(s)));
-    [
-        text("io.output_dir", &opts.output_dir),
-        text("llm.endpoint", &opts.endpoint),
-        text("llm.model", &opts.model),
-        text("matching.prior_version", &opts.prior_version),
-        text("library.matching", &opts.library_matching),
-        text("library.index", &opts.library_index),
-        text("library.index_store_dir", &opts.library_index_store),
-        opts.library_index_from_bundle
-            .then_some(("library.index_from_bundle", Val::Bool(true))),
-        (opts.verbose > 0).then(|| ("diagnostics.verbosity", Val::Int(u64::from(opts.verbose)))),
-    ]
-    .into_iter()
-    .flatten()
-    .collect()
-}
-
 /// The `[library]` section, resolved.
 fn library_of(r: &Resolved) -> Library {
     let n = |k: &str| r.int(k).expect("defaulted");
@@ -869,8 +882,8 @@ pub fn cross_key_violations(r: &Resolved) -> Vec<String> {
 
 impl Config {
     /// The production build: the `--config` file read from disk, the API
-    /// key from the ONE environment reader (`crate::env`, which also loads
-    /// `.env`).
+    /// key from the ONE environment reader (`crate::env`; no `.env` file is
+    /// read, exp179).
     pub fn from_process(input: &str, opts: &CommandOptions) -> Result<Config, Vec<String>> {
         let file = match &opts.config {
             Some(path) => Some(ConfigFile::read(path)?),
@@ -891,7 +904,7 @@ impl Config {
         file: Option<&ConfigFile>,
         env: impl Fn(&str) -> Option<String>,
     ) -> Result<Config, Vec<String>> {
-        let (r, mut errors) = file::resolve(&flag_values(opts), file);
+        let (r, mut errors) = file::resolve(&opts.flags, file);
         errors.extend(cross_key_violations(&r));
         let list = |k: &str| r.list(k).unwrap_or_default();
         let switches = SwitchState::configure(&list("switches.disable"), &list("switches.probe"))
@@ -923,11 +936,10 @@ impl Config {
                 output_dir: r.text("io.output_dir").expect("defaulted"),
             },
             llm: Config::llm(&r, ApiKey(api_key.expect("checked above"))),
-            matching: Matching {
-                reconcile_prior_diff: r.flag_on("matching.reconcile_prior_diff")
-                    && r.text("matching.prior_version").is_some(),
-                prior_version: r.text("matching.prior_version"),
-            },
+            matching: Matching::of(
+                r.text("matching.prior_version"),
+                r.flag_on("matching.reconcile_prior_diff"),
+            ),
             naming: Config::naming(&r, schedule),
             library: library_of(&r),
             unpack: Unpack {
@@ -1028,8 +1040,13 @@ impl Config {
                 out.push(format!("{what} file not found: {p}"));
             }
         };
-        if let Some(p) = &self.matching.prior_version {
-            file("prior version (--prior-version)", p, &mut out);
+        match (&self.matching.prior_folder, &self.matching.prior_version) {
+            (Some(dir), Some(p)) if !std::path::Path::new(p).is_file() => out.push(format!(
+                "prior version (--prior-version) {dir} is a folder without {PRIOR_IN_FOLDER}: \
+                 pass a prior humanify output folder, or the prior humanified file itself"
+            )),
+            (_, Some(p)) => file("prior version (--prior-version)", p, &mut out),
+            _ => {}
         }
         if let Some(p) = &self.split.ledger {
             file("split.ledger", p, &mut out);

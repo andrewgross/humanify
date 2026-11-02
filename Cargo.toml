@@ -26,7 +26,6 @@ publish = false
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = { version = "=1.0.142", features = ["unbounded_depth"] }
 clap = { version = "=4.5.47", features = ["derive"] }
-dotenvy = "=0.15.7"
 # The --config file (config sweep step 5, 2026-10-13): TOML, parsed ONCE in
 # humanify-cli::config_file into a plain table, then walked against the key
 # registry (strict keys, typed values, ranges) — no serde derive on it.

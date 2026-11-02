@@ -26,11 +26,12 @@
  *   --set <section.key=value>
  *                      one pipeline setting, written into the launch's
  *                      `--config` file (repeatable; e.g. `--set
- *                      split.enabled=true --set naming.batch_size=10`) —
- *                      since config sweep step 5 every setting but the
- *                      operational flags is a config key
+ *                      split.enabled=true --set naming.batch_size=10`;
+ *                      the split is OFF here unless set, as it was before
+ *                      exp179 made it the binary's default)
  *   -- <flags…>        anything after `--` passes to the binary verbatim
- *                      (its operational flags only, e.g. `-- --model m`)
+ *                      (e.g. `-- --model m`; a flag that disagrees with a
+ *                      `--set` is refused by the binary)
  *
  * Prints the per-reason ask summary (TOTAL first) and exits with the
  * binary's exit code. Needs target/release/humanify (rust:build).
@@ -182,8 +183,8 @@ async function main(): Promise<void> {
   const answer = args.collide ? collideAnswer(args.collide) : stubAnswer;
   const { server, url } = await startStubLlm(answer);
 
-  // Every setting but the operational flags is a `--config` key (config
-  // sweep step 5): the runner's own, then `--set`'s.
+  // The settings go in a `--config` file (config sweep step 5): the
+  // runner's own, then `--set`'s.
   const config = path.join(outDir, "humanify.toml");
   writePipelineConfig(config, [
     ["diagnostics.dump_asks", path.join(outDir, "asks.jsonl")],
@@ -191,6 +192,11 @@ async function main(): Promise<void> {
     ...(args.sequential
       ? ([["naming.schedule", "sequential"]] as Array<[string, Setting]>)
       : []),
+    // The one-file run unless `--set split.enabled=true`: the binary's
+    // split is on by default since exp179, this tool's launch is not.
+    ...(args.settings.some(([k]) => k === "split.enabled")
+      ? []
+      : ([["split.enabled", false]] as Array<[string, Setting]>)),
     ...args.settings
   ]);
   const binArgs = [

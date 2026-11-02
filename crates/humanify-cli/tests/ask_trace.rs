@@ -142,7 +142,9 @@ fn start_stub() -> String {
 
 /// One run; `extra` are `--config` settings (dotted TOML lines) beside
 /// no retries, the ask log and library matching off (names, the default,
-/// needs a library index since exp174; these tests are about the asks).
+/// needs a library index since exp174; these tests are about the asks),
+/// and the split off (on by default since exp179; these tests read the
+/// one-file run's `<out>/index.js`).
 fn run(
     dir: &Path,
     input: &str,
@@ -155,6 +157,7 @@ fn run(
     let toml: String = [
         "llm.retries = 0".to_string(),
         "library.matching = \"off\"".to_string(),
+        "split.enabled = false".to_string(),
         format!("diagnostics.dump_asks = {asks:?}"),
     ]
     .into_iter()

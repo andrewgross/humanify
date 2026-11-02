@@ -4,233 +4,332 @@
 # byte-equal to the registry, so it cannot drift. Regenerate with
 #   cargo test -p humanify-cli write_the_example_config -- --ignored
 #
-# A key left out keeps its default. Unknown keys, wrong types, out-of-range
-# values and retired keys are refused before any work, naming the key. The
-# operational flags (input, -o, --prior-version, --endpoint, --model, -v,
-# --config, --library-matching, --library-index) may also be given on the
-# command line; a flag and this file that DISAGREE are refused, naming
-# both. The API key is never a setting: it is read from HUMANIFY_API_KEY.
+# Every line below is commented out at its default: uncomment what this
+# file should set. A key left out keeps its default. Unknown keys, wrong
+# types, out-of-range values and retired keys are refused before any work,
+# naming the key. Every key is also a command-line flag (shown above it;
+# a boolean's `--no-` form turns it off); a flag and this file that
+# DISAGREE are refused, naming both. The API key is never a setting: it is
+# read from HUMANIFY_API_KEY in the environment.
 
 [run]
 # "throughput" (the default: work through items as fast as the pool and the semaphore allow; results land in canonical order where they are consumed) or "ordered" (the TEST MODE: the waves' turn driver, the parallel helpers sequential, one-call dispatch windows). Ordered forces the conservative naming schedule and refuses naming.relaxed_levers. Determinism-sensitive tests opt in; regular runs never pay for it (docs/concurrency.md, rule 9).
-order = "throughput"
+# flag: --run-order
+# order = "throughput"
 
 [io]
 # Output directory.
-# output_dir = "output"   (usually the flag --output-dir)
+# flag: --output-dir
+# output_dir = "output"
 
 [llm]
-# OpenAI-compatible API endpoint (the key: HUMANIFY_API_KEY).
-# endpoint = "https://api.openai.com/v1"   (usually the flag --endpoint)
+# OpenAI-compatible API endpoint. The API key is read from HUMANIFY_API_KEY in the environment, never from a flag or this file.
+# flag: --endpoint
+# endpoint = "https://api.openai.com/v1"
 # Model identifier.
-# model = "gpt-4o-mini"   (usually the flag --model)
+# flag: --model
+# model = "gpt-4o-mini"
 # LLM request timeout, milliseconds.
-timeout_ms = 300000
+# flag: --llm-timeout-ms
+# timeout_ms = 300000
 # Retry attempts for a failed API call.
-retries = 3
+# flag: --llm-retries
+# retries = 3
 # Max concurrent function-lane LLM requests (the in-flight cap is this plus module_concurrency).
-concurrency = 50
+# flag: --llm-concurrency
+# concurrency = 50
 # Max concurrent module-lane LLM requests.
-module_concurrency = 40
+# flag: --llm-module-concurrency
+# module_concurrency = 40
 # Per-request completion token budget.
+# flag: --llm-max-tokens
 # max_tokens =   (unset: requests carry 6000, and the LLM cache key records "unset" — a different key from an explicit 6000)
 # Model context window, tokens; sizes the batched split-naming prompts.
-context_tokens = 32768
+# flag: --llm-context-tokens
+# context_tokens = 32768
 # Reasoning effort: low, medium or high ('low' is ~8x faster on gpt-oss).
+# flag: --llm-reasoning-effort
 # reasoning_effort =   (unset: the server's default; only set it for reasoning models)
 # Cache LLM responses on disk, keyed by request content (iteration only, never a gate run).
+# flag: --llm-cache-dir
 # cache_dir =   (unset: no cache: every prompt is live)
 
 [matching]
-# A prior humanified bundle, for cross-version rename reuse.
-# prior_version =   (unset: a fresh run, nothing to reuse; usually the flag --prior-version)
+# The prior release's humanify output folder (or the humanified file in it, .humanify/humanified.js), for cross-version rename reuse.
+# flag: --prior-version
+# prior_version =   (unset: a fresh run, nothing to reuse)
 # With a prior: snap rename-noise diff hunks back to the prior's names.
-reconcile_prior_diff = true
+# flag: --matching-reconcile-prior-diff
+# reconcile_prior_diff = true
 
 [naming]
 # "relaxed" (both relaxed levers on) or "sequential" (the pre-2026-09-28 default's bytes at the same batch_size).
-schedule = "relaxed"
+# flag: --naming-schedule
+# schedule = "relaxed"
 # Lever-sizing knob: the relaxed levers to turn on (relaxed schedule only).
+# flag: --naming-relaxed-levers
 # relaxed_levers =   (unset: every lever)
 # Identifiers per LLM batch.
-batch_size = 25
+# flag: --naming-batch-size
+# batch_size = 25
 # Per-identifier LLM call limit, initial + retries.
-max_retries = 2
+# flag: --naming-max-retries
+# max_retries = 2
 # Name-conflict re-asks per rejected suggestion, each disclosing every failed one.
-rename_retries = 2
+# flag: --naming-rename-retries
+# rename_retries = 2
 # Cross-lane collision retry limit.
+# flag: --naming-max-free-retries
 # max_free_retries =   (unset: the processor's own rule (100))
 # Min bindings to enable parallel lanes.
-lane_threshold = 25
+# flag: --naming-lane-threshold
+# lane_threshold = 25
 # Most lines of a function the naming prompt shows (longer functions are windowed around the names asked); lower it for a model with a small context window.
-code_window_lines = 500
+# flag: --naming-code-window-lines
+# code_window_lines = 500
 # The deterministic naming floor (closes minted-token gaps).
-naming_floor = true
+# flag: --naming-floor
+# naming_floor = true
 # The LLM sweep of minted survivors (needs naming_floor).
-naming_floor_sweep = true
+# flag: --naming-floor-sweep
+# naming_floor_sweep = true
 
 [library]
 # What library matching does: "names" (the default since exp171: code the library index recognises is placed under vendor/<package>/ and its original identifier names are restored; with no --library-index the run uses an index it finds in index_store_dir for the bundle's kind — its packing tool, read off detection — and, finding none, prints one line and skips library name matching (see index_from_bundle)), "report" (the index lookup + graph discovery written to .humanify/library-report.json; output bytes as "off") or "off" (path/banner detection only — the opt-out: no index is read, searched for or built).
-# matching = "names"   (usually the flag --library-matching)
+# flag: --library-matching
+# matching = "names"
 # The library fingerprint index: its directory, or its id (resolved under index_store). One that has no slice for the bundle's kind fails a names run loudly (it was named, so a mismatch is a mistake, never a skip).
-# index =   (unset: no index: names/report use one found in index_store_dir for the bundle's kind (or build one with index_from_bundle), else skip library name matching with one line; refused with "off"; usually the flag --library-index)
+# flag: --library-index
+# index =   (unset: no index: names/report use one found in index_store_dir for the bundle's kind (or build one with index_from_bundle), else skip library name matching with one line; refused with "off")
 # Where index ids live (<index_store>/<id>/manifest.json).
+# flag: --library-index-id-store
 # index_store =   (unset: an index id cannot be resolved: pass the index directory)
 # The run's library-index store, resolved against the WORKING directory (exp174; an absolute path is used as given): every merged index as <id>/ (the sha256 of its manifest.json) — the indexes a run with no --library-index searches — plus, when index_from_bundle builds, the shard store/ (reused across builds), the packument snapshot registry/, the pinned bundler tools tools/ and each built index's build.json sidecar. Nothing outside it is ever autoloaded.
-# index_store_dir = ".humanify/library-index"   (usually the flag --library-index-store)
+# flag: --library-index-store
+# index_store_dir = ".humanify/library-index"
 # Build the library index AT RUN TIME from the npm packages the bundle itself reveals (its library banner comments and inlined package.json files) when index_store_dir holds none for the bundle's kind (exp154/exp171; opt-in since exp174): each package is installed from the npm registry (install scripts skipped) and bundled with Bun, after a notice with the estimated disk and time. Bun bundles only: a bundle of another kind, or one that reveals no package, skips library name matching with one line. Without it, names/report with no --library-index use an index FOUND in index_store_dir for the bundle's kind, and skip library name matching with one line when there is none (exp175).
-# index_from_bundle = false   (usually the flag --library-index-from-bundle)
+# flag: --library-index-from-bundle
+# index_from_bundle = false
 # The safety cap on the packages a run-time index build may plan from the bundle's own evidence: over it the run refuses instead of indexing.
-index_build_max_packages = 300
+# flag: --library-index-build-max-packages
+# index_build_max_packages = 300
 # Library code with no index name: "leave" (library files not model-named, library functions in mixed files frozen with the <library>_<name> prefix) or "model" (the model names everything).
-unnamed = "leave"
+# flag: --library-unnamed
+# unnamed = "leave"
 # List every claimed, vetoed, library-class and queued unit in the report (default: totals and packages).
-report_units = false
+# flag: --library-report-units
+# report_units = false
 
 [library.lookup]
 # AST nodes a statement needs to be looked up.
-min_nodes = 30
+# flag: --library-lookup-min-nodes
+# min_nodes = 30
 # Content tokens a whole statement needs to be looked up.
-min_content = 3
+# flag: --library-lookup-min-content
+# min_content = 3
 # Content tokens a function needs to be looked up.
-min_function_content = 0
+# flag: --library-lookup-min-function-content
+# min_function_content = 0
 # Fraction of a statement's units the index must cover.
-cover = 0.5
+# flag: --library-lookup-cover
+# cover = 0.5
 # Most packages a unit may match and still claim.
-max_packages = 3
+# flag: --library-lookup-max-packages
+# max_packages = 3
 # A claim under `strong` nodes needs another claim of its package within this many units (0: none).
-support = 10
+# flag: --library-lookup-support
+# support = 10
 # Node count at which a claim needs no support.
-strong = 100
+# flag: --library-lookup-strong
+# strong = 100
 # Refuse an index module much bigger than the query's module (factor x + slack).
-specificity = true
+# flag: --library-lookup-specificity
+# specificity = true
 # Specificity: the index module may be at most this many times the query's.
-specificity_factor = 4
+# flag: --library-lookup-specificity-factor
+# specificity_factor = 4
 # Specificity: plus this many bytes.
-specificity_slack = 4096
+# flag: --library-lookup-specificity-slack
+# specificity_slack = 4096
 # Require the literal rule to agree (same package family); false = the structural rule.
-agreement = false
+# flag: --library-lookup-agreement
+# agreement = false
 # Literals a module needs for the literal rule.
-min_literals = 6
+# flag: --library-lookup-min-literals
+# min_literals = 6
 # The literal rule's score floor (bits).
-literal_score = 20.0
+# flag: --library-lookup-literal-score
+# literal_score = 20.0
 # The literal rule's cover floor.
-literal_cover = 0.9
+# flag: --library-lookup-literal-cover
+# literal_cover = 0.9
 # The literal rule's margin over the runner-up (bits).
-literal_margin = 10.0
+# flag: --library-lookup-literal-margin
+# literal_margin = 10.0
 # Read the literal margin against the best file of another package family, not another package: a sibling holding the same literals is no rival (exp106).
-literal_margin_by_family = true
+# flag: --library-lookup-literal-margin-by-family
+# literal_margin_by_family = true
 # Count a print's owners by package family, not package, against max_packages: a scope's members or a fork and its origin are one identity, and a bigger index's carriers of the same code no longer make it too common (exp125).
-max_packages_by_family = false
+# flag: --library-lookup-max-packages-by-family
+# max_packages_by_family = false
 # Also read the index's terser-built slices (webpack, rollup) beside the bundle's own: "off", "union" (every print) or "fallback" (a print the bundle's slice does not hold) or "auto" (union for a bundle the terser slices alone hold `terser_share` of) — terser-minified code matches terser rows (exp127).
-terser_slices = "off"
+# flag: --library-lookup-terser-slices
+# terser_slices = "off"
 # terser_slices = "auto": the share of the bundle's looked-up whole-unit nodes the terser-built slices alone must hold for the bundle to read them (exp127).
-terser_share = 0.2
+# flag: --library-lookup-terser-share
+# terser_share = 0.2
 # The call-context rule (exp153, exp155): what a unit's own callees, read against the callees a /4 index records for the matched print (containment), may decide. "off"; "tie-break" (a structural tie goes to the one tied package it confirms); "tie-break-down" (exp155, the edges/2 flat callee-print table: the tie goes to the one tied family whose DOWN-scoped fit confirms it — an unheld callee the index knows nowhere, or the family holds anywhere, is skipped instead of counted against; an older index is silence and the tie stands); "support" / "support-or" (it replaces / joins the position window and the isolation veto's neighbour test); "veto" / "veto-or" (the veto's test only); "relax-floor" (a whole print of 20 nodes up is looked up for the owners it confirms); "relax-common" (a print held by too many owners is narrowed to those it confirms); "relax" (both); "tie-break+relax"; "tie-break+support-or+relax" (every role, all additive).
-call_context = "off"
+# flag: --library-lookup-call-context
+# call_context = "off"
 # Which callees the call-context rule counts (exp153): "all" with a print, or "rowed" (at or over the index's 20-node row floor).
-call_context_callees = "all"
+# flag: --library-lookup-call-context-callees
+# call_context_callees = "all"
 
 [library.lookup.targeted]
 # The targeted round's node floor (the other rules are the lookup's).
-min_nodes = 20
+# flag: --library-lookup-targeted-min-nodes
+# min_nodes = 20
 # The targeted round's neighbour support (0: the region's own calls are the context).
-support = 0
+# flag: --library-lookup-targeted-support
+# support = 0
 
 [library.discovery]
 # Content floor a down-class start needs.
-closure_floor = 30
+# flag: --library-discovery-closure-floor
+# closure_floor = 30
 # Largest region queued for a targeted index lookup, bytes.
-queue_cap_bytes = 256000
+# flag: --library-discovery-queue-cap-bytes
+# queue_cap_bytes = 256000
 # Fixpoint round limit.
-max_rounds = 50
+# flag: --library-discovery-max-rounds
+# max_rounds = 50
 # What may support a seed against the isolation veto: "without-module" or "all-rules" (the lab prototype's).
-veto_support = "without-module"
+# flag: --library-discovery-veto-support
+# veto_support = "without-module"
 # Refuse an index seed or a propagated claim when another package family's index prints cover more of the unit than the claimed family's (exp102).
-evidence_conflict = true
+# flag: --library-discovery-evidence-conflict
+# evidence_conflict = true
 # Refuse a propagated claim when the unit carries a long literal the index ties only to other package families (exp102).
-literal_conflict = true
+# flag: --library-discovery-literal-conflict
+# literal_conflict = true
 # Refuse a propagated claim on a unit another package family's prints also cover when the claimed family's prints cover less than this share of it (exp102; 0 = off).
-contested_cover = 0.05
+# flag: --library-discovery-contested-cover
+# contested_cover = 0.05
 # Which names a kept /*! banner may seed: "any" (the banner reader's) or "known" (with an index, only a package the index knows, in npm's spelling; exp106).
-banner_names = "known"
+# flag: --library-discovery-banner-names
+# banner_names = "known"
 # An index print at least this many package families hold is emitted helper code: a unit such prints cover half of is no seed and no propagated claim (exp106; 0 = off).
-helper_families = 0
+# flag: --library-discovery-helper-families
+# helper_families = 0
 # A unit whose whole print the index's helper table holds (a helper source's own code: tslib, @babel/runtime, @swc/helpers) is no other package's index seed: "off", "seed" (dropped; propagation may still reach it) or "credit" (the helper package's seed when one helper family holds it; exp129).
-helper_prints = "seed"
+# flag: --library-discovery-helper-prints
+# helper_prints = "seed"
 # A propagated unit of at least this many bytes of its own (a module wrapper is not its body), nine tenths string literal (a wasm blob, a data table), needs the claimed family's own index evidence or a base64 payload naming it (exp106, exp113; 0 = off).
-payload_min_bytes = 4096
+# flag: --library-discovery-payload-min-bytes
+# payload_min_bytes = 4096
 # Read another family's prints in evidence_conflict / contested_cover under the lookup's specificity rule: a sponge's unspecific print is no rival (exp106).
-specific_rivals = true
+# flag: --library-discovery-specific-rivals
+# specific_rivals = true
 # Join package families by the npm-metadata links (libindex/families-derived.json, among the index's packages) wherever discovery asks "one family?" (exp106).
-derived_families = true
+# flag: --library-discovery-derived-families
+# derived_families = true
 # A package every index seed of which sits in a module group its index holds that code only in modules at least this many times the group's bytes (plus context_presence_slack) is no seed: its copy lives in a dist that inlines the code's origin (exp114; 0 = off).
-context_presence = 1.5
+# flag: --library-discovery-context-presence
+# context_presence = 1.5
 # The context-presence slack in bytes (exp114).
-context_presence_slack = 16384
+# flag: --library-discovery-context-presence-slack
+# context_presence_slack = 16384
 # A package whose every index seed is a tie with another family that has a seed of its own in the bundle is that family's shadow: its tied seeds become the rival's, the rest are dropped (exp114).
-shadow_ties = true
+# flag: --library-discovery-shadow-ties
+# shadow_ties = true
 # What context_presence / shadow_ties drop is claimed by no one, the dropped package nor a rival propagating into it: the code is ambiguous between a shipper and its origin, so name neither (exp114).
-presence_fence = true
+# flag: --library-discovery-presence-fence
+# presence_fence = true
 # A declared seed (an inlined package.json, a scoped error prefix) whose statement is bigger than this many bytes is no seed: a manifest inside a huge statement names one of its packages, not the statement (exp112; 0 = off).
-declared_max_bytes = 65536
+# flag: --library-discovery-declared-max-bytes
+# declared_max_bytes = 65536
 # A package whose every index seed is a copy seed (another package holds at least this share of the nodes its prints cover there, in index modules copy_presence_factor times smaller: the origin its dist inlined) is no seed: a sponge, not shown in the bundle by code of its own (exp121; 0 = off).
-copy_presence = 0.1
+# flag: --library-discovery-copy-presence
+# copy_presence = 0.1
 # How many times smaller the origin's index module must be than the sponge's for copy_presence (exp121).
-copy_presence_factor = 4
+# flag: --library-discovery-copy-presence-factor
+# copy_presence_factor = 4
 # What copy_presence drops becomes the seed of its origin (the package co-holding the most of it in the smaller module) instead of no one's (exp121).
-copy_presence_origin = true
+# flag: --library-discovery-copy-presence-origin
+# copy_presence_origin = true
 # For copy_presence, a package shows in the bundle only when its non-copy index seeds hold at least this share of its index seed bytes; otherwise its copy seeds go (exp121; 0 = any one non-copy seed vouches).
-copy_presence_own = 0.1
+# flag: --library-discovery-copy-presence-own
+# copy_presence_own = 0.1
 # Cut each bundled CommonJS module into its body statements, each judged and propagated as a lazy module's body is (the index's rows already hold factory bodies); off, a factory is one external unit no library claim reaches (exp128).
-factory_bodies = true
+# flag: --library-discovery-factory-bodies
+# factory_bodies = true
 # With factory_bodies: a bundled CommonJS module whose every index seed is a tie the structural rule accepts for two or more families (a fork, a sponge carrying it verbatim, generated code) and which has no untied, declared or banner seed is claimed by no one (exp132).
-factory_tie_fence = true
+# flag: --library-discovery-factory-tie-fence
+# factory_tie_fence = true
 # With factory_bodies: a package names a bundled CommonJS module's statements only when one of its index seeds there is a whole statement its family's index holds (or a declared or banner seed); function-print seeds alone are dropped, and a module left with no seed is claimed by no one (exp132).
-factory_whole_seed = true
+# flag: --library-discovery-factory-whole-seed
+# factory_whole_seed = true
 # With factory_whole_seed: a bundled CommonJS module is backed for a family whose index prints (each in a module the lookup's specificity rule reads) cover at least this share of the module's nodes, as a whole print would back it: a UMD or IIFE wrapper whose functions match while its whole print drifts. A shared helper, an inlined copy or a carrier's bundle covers less and keeps the rule (exp176; 0 = no exception).
-factory_whole_cover = 0.95
+# flag: --library-discovery-factory-whole-cover
+# factory_whole_cover = 0.95
 # With factory_bodies: a /*! banner seed on a bundled CommonJS module's statement is refused when another family's index prints cover more of that statement than the banner family's (exp132).
-factory_banner_index = true
+# flag: --library-discovery-factory-banner-index
+# factory_banner_index = true
 
 [unpack]
 # Force the bundler verdict.
+# flag: --bundler
 # bundler =   (unset: detected)
 # Force the minifier verdict.
+# flag: --minifier
 # minifier =   (unset: detected)
 
 [split]
-# Split the output into a multi-file tree (src/ + vendor/ + run scaffold).
-enabled = false
+# Split the output into a multi-file tree (src/ + vendor/ + run scaffold); off writes one humanified file.
+# flag: --split
+# enabled = true
 # Emit the byte-exact review tree instead of the runnable module graph (needs enabled).
-pure = false
+# flag: --split-pure
+# pure = false
 # A prior split ledger, for cross-release file-assignment inheritance (needs enabled).
+# flag: --split-ledger
 # ledger =   (unset: auto-discovered next to the prior)
 
 [switches]
 # Ablation: pass switches to turn OFF (unknown names are refused, listing the valid set).
-disable = []
+# flag: --switches-disable
+# disable = []
 # Instrumentation probes to turn ON.
-probe = []
+# flag: --switches-probe
+# probe = []
 
 [diagnostics]
-# 0, 1 (info) or 2 (debug); -v / -vv on the command line.
-# verbosity = 0   (usually the flag -v)
+# 0, 1 (info) or 2 (debug); the flag counts: -v is 1, -vv is 2.
+# flag: --verbose
+# verbosity = 0
 # Write debug logs to this file (implies verbosity 2).
+# flag: --diagnostics-log-file
 # log_file =   (unset: no log file)
 # Write detailed rename diagnostics to this JSON file.
+# flag: --diagnostics-file
 # diagnostics_file =   (unset: not written)
 # Write the eval harness's match/rename breakdown (and this config) as JSON.
+# flag: --diagnostics-stats-json
 # stats_json =   (unset: not written)
 # Write the span-keyed decision-record dump to this directory.
+# flag: --diagnostics-dump-artifacts
 # dump_artifacts =   (unset: not written)
 # Write the reason-labelled ask log (one JSONL row per LLM ask) to this path.
+# flag: --diagnostics-dump-asks
 # dump_asks =   (unset: not written)
 # Write a replayable rename ledger + source snapshot + apply.mjs to this directory.
+# flag: --diagnostics-rename-ledger
 # rename_ledger =   (unset: not written)
 
 [perf]
 # Write a Chrome Trace Event performance trace to this JSON file.
+# flag: --perf-trace
 # perf_trace =   (unset: not written)
 # Price this run's LLM schedule on a virtual clock; write the simulated wall time here.
+# flag: --perf-simulate-llm-latency
 # simulate_llm_latency =   (unset: not written)

@@ -2,12 +2,14 @@
 //! docs/config-consolidation.md §3).
 //!
 //! Every setting is a KEY in the [`KEYS`] registry: its section and name,
-//! its type and range, its compiled-in default, its one-line meaning, and —
-//! for the few operational settings that are also flags — the flag. The
-//! registry is the ONE place a setting is declared: the file is checked
-//! against it (strict keys, typed values, ranges), the flag/file conflict
-//! check reads it, and `humanify.example.toml` is rendered from it
-//! ([`render_example`]; a test holds the committed file byte-equal).
+//! its type and range, its compiled-in default, its one-line meaning, and
+//! its flag — every key is a flag, every flag a key (exp179; the name is
+//! derived, [`Key::flag_name`]). The registry is the ONE place a setting is
+//! declared: the file is checked against it (strict keys, typed values,
+//! ranges), the command line is generated from it (`crate::surface`), the
+//! flag/file conflict check reads it, and `humanify.example.toml` is
+//! rendered from it ([`render_example`]; a test holds the committed file
+//! byte-equal).
 //!
 //! Refusals are loud and collected, before any work (§3.1): a file that is
 //! missing or not TOML, an unknown key (with a "did you mean"), a retired
@@ -95,7 +97,9 @@ pub struct Key {
     pub section: &'static str,
     pub name: &'static str,
     pub kind: Kind,
-    /// The operational flag that also sets it (`--endpoint`), if any.
+    /// The flag's spelling when it is not the derived one
+    /// (`--<section>-<name>`, [`Key::flag_name`]): the short names of the
+    /// commonest settings (`--endpoint`, `--split`, `--bundler`).
     pub flag: Option<&'static str>,
     /// The compiled-in default; None = unset (`unset` says what that means).
     pub default: fn() -> Option<Val>,
@@ -108,6 +112,34 @@ pub struct Key {
 impl Key {
     pub fn dotted(&self) -> String {
         format!("{}.{}", self.section, self.name)
+    }
+
+    /// The key's flag (exp179): its override, else `--<section>-<name>`
+    /// with dots and underscores as dashes, the section's last word
+    /// dropped when the name already starts with it (`naming.naming_floor`
+    /// is `--naming-floor`, `llm.concurrency` is `--llm-concurrency`). A
+    /// boolean also has `--no-<flag>`.
+    pub fn flag_name(&self) -> String {
+        if let Some(f) = self.flag {
+            return f.to_string();
+        }
+        let mut words: Vec<&str> = self.section.split('.').collect();
+        if words
+            .last()
+            .is_some_and(|last| self.name.starts_with(&format!("{last}_")))
+        {
+            words.pop();
+        }
+        words.push(self.name);
+        format!("--{}", words.join("-").replace('_', "-"))
+    }
+
+    /// The flag as written for `v`: a boolean's false is its `--no-` form.
+    pub fn flag_for(&self, v: &Val) -> String {
+        match v {
+            Val::Bool(false) => format!("--no-{}", self.flag_name().trim_start_matches("--")),
+            _ => self.flag_name(),
+        }
     }
 }
 
@@ -420,7 +452,7 @@ impl ConfigFile {
     }
 }
 
-/// A value an operational flag gave: (dotted key, value).
+/// A value a flag gave: (dotted key, value).
 pub type FlagValue = (&'static str, Val);
 
 /// Resolve every key: the flag, else the file, else the default. A flag
@@ -435,12 +467,16 @@ pub fn resolve(flags: &[FlagValue], file: Option<&ConfigFile>) -> (Resolved, Vec
         let dotted = key.dotted();
         let flag = flags.iter().find(|(k, _)| *k == dotted).map(|(_, v)| v);
         let from_file = file.and_then(|f| f.values.get(&dotted));
-        let flag_name = key.flag.unwrap_or("a flag");
-        if let Some(e) = flag.and_then(|v| check_range(key, flag_name, v)) {
-            errors.push(e);
-            continue;
-        }
+        let flag_name = flag.map(|v| key.flag_for(v)).unwrap_or_default();
+        // A refused value leaves the key at its default, so the checks
+        // between keys still read every key and report their own refusals
+        // beside this one (the resolution is unusable either way).
+        let refused = || (key.default)().map(|d| (d, Source::Default));
         let entry = match (flag, from_file) {
+            (Some(a), _) if check_range(key, &flag_name, a).is_some() => {
+                errors.extend(check_range(key, &flag_name, a));
+                refused()
+            }
             (Some(a), Some(b)) if a != b => {
                 errors.push(format!(
                     "config conflict: {dotted} = {} ({flag_name}) vs {} ({})",
@@ -448,7 +484,7 @@ pub fn resolve(flags: &[FlagValue], file: Option<&ConfigFile>) -> (Resolved, Vec
                     b.render(),
                     file.map_or("", |f| f.path.as_str())
                 ));
-                continue;
+                refused()
             }
             (Some(a), Some(_)) => Some((a.clone(), Source::Both)),
             (Some(a), None) => Some((a.clone(), Source::Flag)),
@@ -462,8 +498,10 @@ pub fn resolve(flags: &[FlagValue], file: Option<&ConfigFile>) -> (Resolved, Vec
     (Resolved { values }, errors)
 }
 
-/// `humanify.example.toml`: every key, its default and its meaning,
-/// rendered from the registry. A key with no default is commented out.
+/// `humanify.example.toml`: every key, its flag, its default and its
+/// meaning, rendered from the registry. Every key line is commented out
+/// (exp179): every key is also a flag, and a line copied verbatim would
+/// make its flag a conflict — uncomment what the file should set.
 pub fn render_example() -> String {
     let mut out = String::from(HEADER);
     let mut section = "";
@@ -472,19 +510,10 @@ pub fn render_example() -> String {
             section = key.section;
             out.push_str(&format!("\n[{section}]\n"));
         }
-        out.push_str(&format!("# {}\n", key.doc));
-        // A key that is also a flag is commented out: copied verbatim, it
-        // would make its flag a conflict.
-        let line = match ((key.default)(), key.flag) {
-            (Some(v), None) => format!("{} = {}", key.name, v.render()),
-            (Some(v), Some(f)) => {
-                format!("# {} = {}   (usually the flag {f})", key.name, v.render())
-            }
-            (None, Some(f)) => format!(
-                "# {} =   (unset: {}; usually the flag {f})",
-                key.name, key.unset
-            ),
-            (None, None) => format!("# {} =   (unset: {})", key.name, key.unset),
+        out.push_str(&format!("# {}\n# flag: {}\n", key.doc, key.flag_name()));
+        let line = match (key.default)() {
+            Some(v) => format!("# {} = {}", key.name, v.render()),
+            None => format!("# {} =   (unset: {})", key.name, key.unset),
         };
         out.push_str(&line);
         out.push('\n');
@@ -499,10 +528,11 @@ const HEADER: &str = "\
 # byte-equal to the registry, so it cannot drift. Regenerate with
 #   cargo test -p humanify-cli write_the_example_config -- --ignored
 #
-# A key left out keeps its default. Unknown keys, wrong types, out-of-range
-# values and retired keys are refused before any work, naming the key. The
-# operational flags (input, -o, --prior-version, --endpoint, --model, -v,
-# --config, --library-matching, --library-index) may also be given on the
-# command line; a flag and this file that DISAGREE are refused, naming
-# both. The API key is never a setting: it is read from HUMANIFY_API_KEY.
+# Every line below is commented out at its default: uncomment what this
+# file should set. A key left out keeps its default. Unknown keys, wrong
+# types, out-of-range values and retired keys are refused before any work,
+# naming the key. Every key is also a command-line flag (shown above it;
+# a boolean's `--no-` form turns it off); a flag and this file that
+# DISAGREE are refused, naming both. The API key is never a setting: it is
+# read from HUMANIFY_API_KEY in the environment.
 ";

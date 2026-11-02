@@ -27,13 +27,20 @@
 //!
 //! Config sweep step 5 (2026-10-13) moved every non-operational flag into
 //! the `--config` TOML file. The fixture is STILL untouched: each captured
-//! argv is translated ([`to_config`]: kept flags stay, each moved flag
+//! argv was translated (kept flags stay, each moved flag
 //! becomes its key, per `MOVED_FLAGS`) and must resolve to the captured
 //! effective record; a refusal must refuse with the captured message in
 //! today's names (the flag spelled as its key). And every launch in the
 //! re-recorded goldens — argv + the TOML file it carries — must resolve to
 //! the effective record of a captured launch: the harness's new launches
 //! configure the run exactly as the old ones did.
+//!
+//! exp179 (2026-11-01): every key is a flag again (generated from the
+//! registry, one-to-one), and the split is ON by default. A captured argv
+//! is now translated into today's FLAGS ([`to_today`]: each renamed
+//! spelling becomes its flag, per `RENAMED_FLAGS`), and a launch that did
+//! not pass `--split` — split OFF, the old default — gets `--no-split`:
+//! the default flipped, the captured configuration did not.
 //!
 //! exp171 (2026-10-31): names is the binary's default, and every golden
 //! launch now carries the eval's library index (`[library] index`, from
@@ -42,13 +49,11 @@
 
 use serde_json::{Value, json};
 
-use crate::config::file::{Kind, Val};
-use crate::config::keys::KEYS;
 use crate::config::{
     API_KEY_VAR, Config, ConfigFile, DEFAULT_CONTEXT_TOKENS, DEFAULT_MODULE_CONCURRENCY,
 };
 use crate::pipeline_config::enum_name;
-use crate::surface::{CommandOptions, MOVED_FLAGS, PipelineParse, parse_pipeline};
+use crate::surface::{CommandOptions, PipelineParse, RENAMED_FLAGS, parse_pipeline};
 use humanify_core::naming::waves::batch::WaveTunables;
 
 fn repo_file(rel: &str) -> String {
@@ -109,54 +114,38 @@ fn golden_launches(text: &str) -> Vec<Launch> {
     out
 }
 
-/// A captured (pre-step-5) argv in today's form: the operational flags
-/// stay; each moved flag becomes its `--config` key — the translation the
-/// harness launchers made by hand.
-fn to_config(argv: &[String]) -> Launch {
-    let mut kept = Vec::new();
-    let mut sections: std::collections::BTreeMap<&str, Vec<String>> = Default::default();
-    let mut i = 0;
-    while i < argv.len() {
-        let (name, attached) = match argv[i].split_once('=') {
-            Some((n, v)) if n.starts_with('-') => (n.to_string(), Some(v.to_string())),
-            _ => (argv[i].clone(), None),
+/// A captured (commander-era) argv in today's form: each renamed spelling
+/// becomes today's flag (`-c 472` is `--llm-concurrency 472`), and a launch
+/// without `--split` says `--no-split` — the old default, now explicit.
+fn to_today(argv: &[String]) -> Launch {
+    let mut out: Vec<String> = Vec::new();
+    for arg in argv {
+        let (name, attached) = match arg.split_once('=') {
+            Some((n, v)) if n.starts_with('-') => (n, Some(v)),
+            _ => (arg.as_str(), None),
         };
-        let Some((_, dotted, example)) = MOVED_FLAGS.iter().find(|(f, _, _)| *f == name) else {
-            kept.push(argv[i].clone());
-            i += 1;
-            continue;
-        };
-        let key = KEYS.iter().find(|k| k.dotted() == *dotted).unwrap();
-        let literal = if example.is_empty() {
-            let raw = attached.unwrap_or_else(|| {
-                i += 1;
-                argv[i].clone()
-            });
-            match key.kind {
-                Kind::Int { .. } => raw,
-                Kind::List(_) => Val::List(raw.split(',').map(str::to_string).collect()).render(),
-                _ => Val::Text(raw).render(),
+        match RENAMED_FLAGS.iter().find(|(old, _)| *old == name) {
+            Some((_, new)) => {
+                let mut words: Vec<String> = new.split_whitespace().map(str::to_string).collect();
+                if let Some(v) = attached {
+                    let first = format!("{}={v}", words[0]);
+                    words[0] = first;
+                }
+                out.extend(words);
             }
-        } else {
-            example.to_string()
-        };
-        sections
-            .entry(key.section)
-            .or_default()
-            .push(format!("{} = {literal}", key.name));
-        i += 1;
+            None => out.push(arg.clone()),
+        }
+    }
+    if !argv.iter().any(|a| a == "--split") {
+        out.push("--no-split".to_string());
     }
     // Step 6: an index was read only for the diagnostics' report — today
     // that is `--library-matching report` (an index with matching off is
     // refused as a conflict).
-    if kept.iter().any(|a| a == "--library-index") {
-        kept.extend(["--library-matching".to_string(), "report".to_string()]);
+    if out.iter().any(|a| a == "--library-index") {
+        out.extend(["--library-matching".to_string(), "report".to_string()]);
     }
-    let toml: String = sections
-        .iter()
-        .map(|(s, lines)| format!("[{s}]\n{}\n", lines.join("\n")))
-        .collect();
-    (kept, toml)
+    (out, String::new())
 }
 
 fn words(s: &str) -> Vec<String> {
@@ -364,7 +353,6 @@ fn effective(captured: &Value) -> Value {
                     .unwrap()
                     .replace("--split-pure", "split.pure")
                     .replace("--split", "split.enabled")
-                    .replace("--bundler", "unpack.bundler")
             })
             .collect();
         return json!({ "input": captured["input"], "invariants": renamed });
@@ -415,7 +403,7 @@ fn parsed_record((argv, toml): &Launch) -> Value {
 const FIXTURE: &str = "crates/humanify-cli/tests/fixtures/launch-parity.json";
 
 /// THE parity gate, half one: every captured launch, its `--api-key`
-/// removed and its moved flags written as `--config` keys, resolves to the
+/// removed and its renamed flags in today's spelling, resolves to the
 /// EFFECTIVE settings the commander port gave it.
 #[test]
 fn every_captured_launch_resolves_to_its_captured_settings() {
@@ -423,7 +411,7 @@ fn every_captured_launch_resolves_to_its_captured_settings() {
     for row in &rows {
         let argv =
             without_api_key(&serde_json::from_value::<Vec<String>>(row["argv"].clone()).unwrap());
-        let launch = to_config(&argv);
+        let launch = to_today(&argv);
         assert_eq!(
             parsed_record(&launch),
             effective(&row["record"]),

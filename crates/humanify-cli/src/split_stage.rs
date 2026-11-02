@@ -576,10 +576,8 @@ fn commit_and_finish(
         "Stable split: {} file(s) in {} folder(s){runnable}{tail}",
         stats.files, stats.folders
     ));
-    renderer.message(&format!(
-        "Next release: --prior-version {}",
-        out.join(humanify_core::place::layout::HUMANIFIED_SOURCE_PATH)
-            .display()
-    ));
+    // The output FOLDER (exp179): `--prior-version` resolves it to its
+    // `.humanify/humanified.js` (crate::config::PRIOR_IN_FOLDER).
+    renderer.message(&format!("Next release: --prior-version {}", out.display()));
     Ok(())
 }

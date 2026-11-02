@@ -89,10 +89,17 @@ fn run_with(dir: &Path, args: &[&str], settings: &[&str]) -> Output {
 }
 
 /// The binary exactly as configured: the default library decision
-/// included (names: an index of the bundle's kind, or the skip line).
+/// included (names: an index of the bundle's kind, or the skip line). A
+/// launch that does not choose the split runs it OFF: the split is on by
+/// default since exp179, and these launches keep the configuration they
+/// were written for.
 fn launch(dir: &Path, args: &[&str], settings: &[&str]) -> Output {
     let config = dir.join("humanify.toml");
+    let chooses_split = args.iter().any(|a| *a == "--split" || *a == "--no-split")
+        || settings.iter().any(|l| l.contains("split.enabled"));
+    let split_off = (!chooses_split).then_some("split.enabled = false");
     let toml: String = std::iter::once("llm.retries = 0")
+        .chain(split_off)
         .chain(settings.iter().copied())
         .map(|l| format!("{l}\n"))
         .collect();
@@ -489,7 +496,7 @@ fn a_refused_library_decision_creates_nothing() {
         ),
         (
             vec!["--no-skip-libraries"],
-            "moved: set library.unnamed = \"model\"",
+            "renamed: use --library-unnamed model",
         ),
     ] {
         let o = run(
@@ -827,8 +834,12 @@ fn a_refused_configuration_creates_nothing() {
         .unwrap();
     refused(&missing, "--config nope.toml: cannot read the config file");
     refused(
-        &run_with(&s.0, &[&common[..], &["--split"]].concat(), &sinks),
-        "'--split' (moved: set split.enabled = true in --config)",
+        &run_with(
+            &s.0,
+            &[&common[..], &["--stats-json", "s.json"]].concat(),
+            &sinks,
+        ),
+        "'--stats-json' (renamed: use --diagnostics-stats-json)",
     );
     for p in side_effects {
         assert!(!s.0.join(p).exists(), "{p} was created by a refused run");

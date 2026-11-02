@@ -8,7 +8,7 @@ use crate::config::file::{RETIRED_KEYS, Source, render_example};
 use crate::config::keys::KEYS;
 use crate::config::{API_KEY_VAR, Config, ConfigFile};
 use crate::config_test::file;
-use crate::surface::{CommandOptions, MOVED_FLAGS, PipelineParse, parse_pipeline};
+use crate::surface::{CommandOptions, PipelineParse, parse_pipeline};
 
 fn key(name: &str) -> Option<String> {
     (name == API_KEY_VAR).then(|| "env-key".to_string())
@@ -47,12 +47,13 @@ fn a_flag_and_the_file_that_disagree_are_refused_naming_both() {
     let errs = build(&["in.js", "-vv"], "[diagnostics]\nverbosity = 1\n").expect_err("a conflict");
     assert_eq!(
         errs,
-        ["config conflict: diagnostics.verbosity = 2 (-v) vs 1 (cfg.toml)"]
+        ["config conflict: diagnostics.verbosity = 2 (--verbose) vs 1 (cfg.toml)"]
     );
     for (flag, toml) in [
         ("--model", "[llm]\nmodel = \"b\"\n"),
         ("--output-dir", "[io]\noutput_dir = \"b\"\n"),
         ("--prior-version", "[matching]\nprior_version = \"b\"\n"),
+        ("--llm-cache-dir", "[llm]\ncache_dir = \"b\"\n"),
     ] {
         let errs = build(&["in.js", flag, "a"], toml).expect_err("a conflict");
         assert!(
@@ -60,6 +61,22 @@ fn a_flag_and_the_file_that_disagree_are_refused_naming_both() {
             "{errs:?}"
         );
     }
+    // exp179: every key is a flag, and the rule holds for each kind.
+    let errs = build(
+        &["in.js", "--llm-concurrency", "64"],
+        "[llm]\nconcurrency = 9\n",
+    )
+    .expect_err("a conflict");
+    assert_eq!(
+        errs,
+        ["config conflict: llm.concurrency = 64 (--llm-concurrency) vs 9 (cfg.toml)"]
+    );
+    let errs =
+        build(&["in.js", "--no-split"], "[split]\nenabled = true\n").expect_err("a conflict");
+    assert_eq!(
+        errs,
+        ["config conflict: split.enabled = false (--no-split) vs true (cfg.toml)"]
+    );
 }
 
 #[test]
@@ -206,65 +223,7 @@ fn the_record_carries_the_files_path_and_hash() {
     assert!(none.record()["configFile"].is_null());
 }
 
-// --- the moved flags ------------------------------------------------------
-
-#[test]
-fn every_moved_flag_is_refused_naming_its_key() {
-    for (flag, key, _) in MOVED_FLAGS {
-        assert!(
-            KEYS.iter().any(|k| k.dotted() == *key),
-            "{flag} names {key}, which is not a setting"
-        );
-        let argv: Vec<String> = ["in.js", flag, "x"].map(String::from).to_vec();
-        match parse_pipeline(&argv) {
-            PipelineParse::Exit { code, stderr, .. } => {
-                assert_eq!(code, 1, "{flag}");
-                assert!(
-                    stderr.contains(&format!("'{flag}' (moved: set {key}")),
-                    "{flag}: {stderr}"
-                );
-                assert!(stderr.contains("in --config"), "{flag}: {stderr}");
-            }
-            PipelineParse::Run { .. } => panic!("{flag} still parses"),
-        }
-    }
-}
-
-#[test]
-fn every_key_without_a_flag_was_a_flag_that_moved_or_is_new() {
-    // The registry and the moved list agree: a setting no flag sets is in
-    // the moved list (the harness spells its old flag) — nothing silently
-    // lost its spelling.
-    // New in step 6, never flags: the index store, and the lookup's and
-    // discovery's tunables (constants in code and the lab's environment
-    // variables until then; docs/library-matching-config.md §1.3).
-    // New in step 8: the naming prompt's code window (a constant until
-    // then; docs/tuning-values.md).
-    // New in exp154, never a flag: the run-time build's package cap
-    // (docs/design/library-names-plan.md step 3; its switch is the
-    // `--library-index-from-bundle` flag since exp174).
-    // New in exp163, never flags: the ordered test mode (the config sweep's
-    // rule holds — a schedule for tests is a setting, not an operational
-    // flag; docs/concurrency.md rule 9, docs/audits/ordering-2026-10.md §4).
-    let new_keys = |d: &str| {
-        d == "run.order"
-            || d == "library.index_store"
-            || d == "naming.code_window_lines"
-            || d.starts_with("library.lookup.")
-            || d.starts_with("library.discovery.")
-            || d == "library.index_build_max_packages"
-    };
-    for k in KEYS
-        .iter()
-        .filter(|k| k.flag.is_none() && !new_keys(&k.dotted()))
-    {
-        assert!(
-            MOVED_FLAGS.iter().any(|(_, key, _)| *key == k.dotted()),
-            "{} has no flag and no moved-from flag",
-            k.dotted()
-        );
-    }
-}
+// (The renamed flags and the flag/key bijection: surface_test.rs.)
 
 // --- the example file -----------------------------------------------------
 
@@ -291,30 +250,35 @@ fn the_example_config_is_the_registry_byte_for_byte() {
 }
 
 #[test]
-fn the_example_config_sets_every_default_and_nothing_else() {
-    // Loading the example changes NOTHING: every value it sets is the
-    // compiled-in default the run uses without a file.
-    let (input, o) = opts(&["in.js"]);
+fn the_example_config_lists_every_key_at_its_default_and_sets_nothing() {
+    // Loading the example changes NOTHING (exp179: every line is commented
+    // out, since every key is also a flag a copied line would conflict
+    // with) ...
     let example = ConfigFile::check("example", &render_example()).expect("the example parses");
-    let with = Config::build(&input, &o, Some(&example), key).unwrap();
-    let without = Config::build(&input, &o, None, key).unwrap();
-    let strip = |c: &Config| {
-        let mut r = c.record();
-        let m = r.as_object_mut().unwrap();
-        m.remove("configFile");
-        m.remove("sources");
-        r
-    };
-    assert_eq!(strip(&with), strip(&without));
-    // ... and lists every key: set (it has a default) or commented (unset).
+    assert!(example.values.is_empty(), "{:?}", example.values);
+    // ... and every key is listed with its flag and its default, and
+    // uncommenting a key's line gives exactly its default.
     let text = render_example();
+    let (input, o) = opts(&["in.js"]);
+    let defaults = Config::build(&input, &o, None, key).unwrap().record();
     for k in KEYS {
-        let set = format!("\n{} = ", k.name);
-        let commented = format!("\n# {} = ", k.name);
+        let flag = format!("# flag: {}\n# {} = ", k.flag_name(), k.name);
         assert!(
-            text.contains(&set) || text.contains(&commented),
+            text.contains(&flag),
             "{} missing from the example",
             k.dotted()
         );
+        let Some(v) = (k.default)() else { continue };
+        let line = format!("[{}]\n{} = {}\n", k.section, k.name, v.render());
+        let one = ConfigFile::check("one", &line).unwrap_or_else(|e| panic!("{line}: {e:?}"));
+        let mut r = Config::build(&input, &o, Some(&one), key).unwrap().record();
+        let m = r.as_object_mut().unwrap();
+        m.remove("configFile");
+        m.remove("sources");
+        let mut d = defaults.clone();
+        let dm = d.as_object_mut().unwrap();
+        dm.remove("configFile");
+        dm.remove("sources");
+        assert_eq!(r, d, "{line}");
     }
 }

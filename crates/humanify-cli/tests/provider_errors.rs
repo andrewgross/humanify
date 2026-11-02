@@ -38,10 +38,12 @@ fn provider_errors_are_reported_at_the_default_verbosity() {
     std::fs::write(&input, INPUT).unwrap();
     let config = s.0.join("humanify.toml");
     // Library matching off: names (the default) needs a library index
-    // since exp174, and this test is about provider errors.
+    // since exp174, and this test is about provider errors. Split off: on
+    // by default since exp179; this test was written for the one-file run.
     std::fs::write(
         &config,
-        "[llm]\nconcurrency = 4\nretries = 0\n[library]\nmatching = \"off\"\n",
+        "[llm]\nconcurrency = 4\nretries = 0\n[library]\nmatching = \"off\"\n\
+         [split]\nenabled = false\n",
     )
     .unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_humanify"))

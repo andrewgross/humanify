@@ -107,63 +107,81 @@ Humanify talks to any OpenAI-compatible chat-completions endpoint: OpenAI
 itself, or a local server (llama.cpp, vLLM, Ollama's OpenAI endpoint, …).
 
 ```shell
-# OpenAI
+# OpenAI: writes the multi-file tree to out/ (src/ + vendor/ + a runnable scaffold)
 HUMANIFY_API_KEY="$OPENAI_API_KEY" humanify obfuscated.js -o out --model gpt-4o-mini
 
+# One humanified file instead of the tree
+HUMANIFY_API_KEY="$OPENAI_API_KEY" humanify obfuscated.js -o out --no-split
+
 # A local OpenAI-compatible server (any non-empty key), with settings
-# from a config file
+# from a config file and one more on the command line
 HUMANIFY_API_KEY=local humanify obfuscated.js -o out --config humanify.toml \
-  --endpoint http://localhost:8000/v1 --model openai/gpt-oss-20b
+  --endpoint http://localhost:8000/v1 --model openai/gpt-oss-20b --llm-concurrency 64
 ```
 
-The API key comes from the `HUMANIFY_API_KEY` environment variable (or a
-`.env` file in the working directory) and nowhere else: a secret never goes
-on the command line or in the config file.
+The API key comes from the `HUMANIFY_API_KEY` environment variable and
+nowhere else (no `.env` file is read): a secret never goes on the command
+line or in the config file.
 
-Only the operational options are flags: the input, `-o, --output-dir`,
-`--prior-version` (the previous release's `.humanify/humanified.js`: names,
-file layout and vendor names carry across versions), `--endpoint`,
-`--model`, `-v`/`-vv`, `--config <file>`, and the library decision
-(`--library-matching names|report|off`, default `names`: library code the
-library index recognises is placed under `vendor/<package>/` and keeps its
-original names. Names mode needs a library index for the bundle's kind
-(its packing tool — Bun, esbuild, … — as detected): pass one with
-`--library-index <dir>`, or keep one in the library-index store,
-`.humanify/library-index/` in the directory you run from (one `<id>/`
-directory per index, named by the sha256 of its `manifest.json`;
-`--library-index-store <dir>` names another store). With neither, the run
-prints one line saying no index for that kind was found and how to get one
-(the offline builder, `humanify-index build`), and goes on with library
-name matching skipped. A `--library-index` that has nothing for the
-bundle's kind fails the run. For a Bun bundle,
-`--library-index-from-bundle` instead builds one at run time from the npm
-packages the bundle itself reveals (library banners, inlined
-`package.json`): it installs them from the npm registry and prints the
-estimated disk and time first. `--library-matching off` opts out, and
-`report` writes `.humanify/library-report.json` and changes no other output
-byte). Everything else is a key in
-the TOML config file; [`humanify.example.toml`](./humanify.example.toml)
-lists every key with its default and meaning (it is generated from the
-binary's own key registry, so it cannot drift). For example:
+The split is on by default: the output is a multi-file tree — the app's own
+code under `src/`, library code under `vendor/`, and a runnable scaffold —
+plus `.humanify/`, which holds what the next release reads.
+`--no-split` writes one humanified file instead.
+
+**Every setting is both a flag and a config key** — the same setting, the same
+name, generated from the binary's own key registry so the two cannot drift.
+The commonest have short flags (`-o, --output-dir`, `--endpoint`,
+`-m, --model`, `--prior-version`, `--split` / `--no-split`, `--bundler`,
+`--minifier`, `-v` / `-vv`); every other key `<section>.<name>` is the flag
+`--<section>-<name>` (`llm.concurrency` is `--llm-concurrency 64`,
+`naming.batch_size` is `--naming-batch-size 10`). A boolean is `--x` to turn
+it on and `--no-x` to turn it off; a list is comma-separated
+(`--switches-disable a,b`). `humanify -h` lists the flags by section (the
+library tuning flags only in `--help`, which also shows each flag's default
+and config key). [`humanify.example.toml`](./humanify.example.toml) lists
+every key with its flag, default and meaning, all commented out — uncomment
+what your file should set:
 
 ```toml
 [llm]
 reasoning_effort = "low"   # for reasoning models only
 concurrency = 64
 cache_dir = "llm-cache"    # cache model answers on disk: reruns are nearly free
-[split]
-enabled = true             # a multi-file tree (src/ + vendor/ + a runnable scaffold)
 [diagnostics]
 stats_json = "stats.json"  # a compact match/rename breakdown
 ```
 
-Everything is checked before any work starts — an unknown key, a wrong type,
-an out-of-range value, a flag that disagrees with the file, a missing input
-file — and refused, all at once, naming the key; nothing is written.
+A flag and the `--config` file that DISAGREE are refused, naming both; a
+flag and the file that agree are fine. Everything is checked before any work
+starts — an unknown key, a wrong type, an out-of-range value, a conflict, a
+missing input file — and refused, all at once, naming the key or flag;
+nothing is written.
 
-Cross-version use: humanify release N, then humanify release N+1 with
-`--prior-version <N's output>/.humanify/humanified.js`, and the diff between
-the two trees is (as close as it can make it) only the real code change.
+Library matching (`--library-matching names|report|off`, default `names`):
+library code the library index recognises is placed under
+`vendor/<package>/` and keeps its original names. Names mode needs a library
+index for the bundle's kind (its packing tool — Bun, esbuild, … — as
+detected): pass one with `--library-index <dir>`, or keep one in the
+library-index store, `.humanify/library-index/` in the directory you run
+from (one `<id>/` directory per index, named by the sha256 of its
+`manifest.json`; `--library-index-store <dir>` names another store). With
+neither, the run prints one line saying no index for that kind was found and
+how to get one (the offline builder, `humanify-index build`), and goes on
+with library name matching skipped. A `--library-index` that has nothing for
+the bundle's kind fails the run. For a Bun bundle,
+`--library-index-from-bundle` instead builds one at run time from the npm
+packages the bundle itself reveals (library banners, inlined
+`package.json`): it installs them from the npm registry and prints the
+estimated disk and time first. `--library-matching off` opts out, and
+`report` writes `.humanify/library-report.json` and changes no other output
+byte.
+
+Cross-version use: humanify release N into `out-N/`, then humanify release
+N+1 with `--prior-version out-N` — the prior run's output folder (its
+`.humanify/humanified.js`, which may also be passed directly; names, file
+layout and vendor names carry across versions) — and the diff between the
+two trees is (as close as it can make it) only the real code change. A
+folder without `.humanify/humanified.js` is refused, naming what it lacks.
 
 ## Features
 
