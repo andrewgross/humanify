@@ -3,7 +3,8 @@
 
 usage: <exp095 venv python> -I simulate.py <pass dir> <data dir> <out.json> [--plant]
 
-<pass dir>: index_pass.py's candidates.tsv (prints held by at most 3 owners across the whole index, both slices).
+<pass dir>: candidates.tsv in index_pass.py's format (prints held by at most 3 owners across the whole index, both
+            slices) — written by pickle_pass.py for exp180's numbers.
 <data dir>: extract.py's x-<corpus>.json.gz, versions.py's support-<corpus>.json.gz, the text discovery's
             seeds-<corpus>.jsonl and bundles-<corpus>.txt.
 

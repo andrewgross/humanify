@@ -4,6 +4,11 @@ held by at most MAX_OWNERS owners across the whole index (both slices together) 
 
 usage: <exp095 venv python> -I index_pass.py <index dir> <out dir>      (run under flock /work/heavy.lock)
 
+NOT RUN on the full index for exp180's numbers: it was queued on /work/heavy.lock for seven hours behind evals and
+index builds and then cancelled; it was checked on a 50,000-row prefix of both slices and a hand-built group.
+pickle_pass.py wrote the same format from the scorer's pickled unit tables (see its docstring for the one
+difference: the content column).
+
 `units.<slice>.jsonl` is sorted by hash (asserted), so the two slices are merged by hash in one pass and nothing is
 held in memory but one hash group. One row per (owner, print):
 
