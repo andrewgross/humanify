@@ -28,7 +28,6 @@ const library =
   mode === "names"
     ? `[library]
 matching = "names"
-names_unlocked = true
 index = "${INDEX}"
 [library.lookup]
 agreement = false
