@@ -22,7 +22,7 @@ use humanify_core::libindex::format::{
 use humanify_core::libindex::literals::{LiteralMode, code_literals, json_literals};
 use humanify_core::libindex::recipe::Recipe;
 
-use crate::asof::{VersionPolicy, normalize_time, select_versions};
+use crate::asof::{Selected, VersionPolicy, normalize_time, select_versions};
 use crate::merge::{GIANT_SHARD_BYTES, MergeMeta, ShardFlow, finish_workers, stream_parallel};
 use crate::recipe::{
     MAX_SOURCE_BYTES, RECIPE_VERSION, RecipeBuild, bundler_package, entry_specifiers,
@@ -84,6 +84,9 @@ use humanify_core::libindex::units::UNIT_ROW_MIN_NODES;
 pub struct BuildConfig {
     /// `name` or `name@version` (a pin), one per entry.
     pub packages: Vec<String>,
+    /// A RESOLVED spec (exp184, `--spec`): the plan is the resolution's
+    /// selections, and the file path below is unused.
+    pub spec: Option<crate::planner::ResolvedSpec>,
     /// Normalised (`asof::parse_as_of`).
     pub as_of: String,
     pub registry: PathBuf,
@@ -126,6 +129,13 @@ pub struct BuildConfig {
     /// build OOMs workers solo gets one refusal entry, never a
     /// special-case retry path.
     pub refuse: Vec<String>,
+    /// Build only chunk I of N (exp184, a spec build split across
+    /// invocations): the plan is resolved in FULL, the BUILDS limited to
+    /// the chunk's packages (the planned packages sorted, split into N
+    /// contiguous groups), and nothing merged or written. The chunks
+    /// finish with one `--merge-only` run (or `--chunk 0/1`, which skips
+    /// no package) over the whole plan.
+    pub chunk: Option<(usize, usize)>,
 }
 
 /// What the run-time build records into the run's profiler, and the two
@@ -213,6 +223,29 @@ pub struct Task {
     pub published: String,
     pub missing: Vec<ShardInputs>,
     pub reused: Vec<ShardInputs>,
+}
+
+/// One version a plan indexes, with the rule that chose it (exp184: the
+/// attribution goes into the build's sidecar).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlannedVersion {
+    pub version: String,
+    pub role: String,
+    pub published: String,
+    pub attribution: Option<String>,
+}
+
+/// One package's plan: the versions to index and the ones refused, the
+/// resolution's output (a spec's, or a `--packages` file's selections
+/// resolved at plan time).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PackageSelection {
+    pub name: String,
+    pub versions: Vec<PlannedVersion>,
+    /// (version, reason), rule order.
+    pub refused: Vec<(String, String)>,
+    /// Why the package is in the plan at all.
+    pub attribution: Option<String>,
 }
 
 #[derive(Debug)]
@@ -390,40 +423,93 @@ fn refusal_specs(specs: &[String]) -> Result<Vec<(String, String, String)>, Stri
         .collect()
 }
 
+/// One package's resolved plan as `plan` builds it: the chosen versions,
+/// the spec's own (version, reason) refusals.
+type Planned = Vec<(String, Vec<Selected>, Vec<(String, String)>)>;
+
 pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, String> {
     let mut snapshot = RegistrySnapshot::default();
     let slices = slice_records(cfg, &mut snapshot, trace)?;
     let mut tasks = Vec::new();
     let mut refused = Vec::new();
     let refusals = refusal_specs(&cfg.refuse)?;
-    // `--pinned` specs join a listed package's pins, or are indexed at
-    // their pins alone
-    let mut groups: Vec<(String, Vec<String>, VersionPolicy)> = group_specs(&cfg.packages)
-        .into_iter()
-        .map(|(name, pins)| (name, pins, cfg.policy))
-        .collect();
-    for (name, pins) in group_specs(&cfg.pinned) {
-        match groups.iter_mut().find(|g| g.0 == name) {
-            Some(g) => g.1.extend(pins),
-            None => groups.push((name, pins, VersionPolicy::PinsOnly)),
+    // The plan's packages: a resolved spec's selections (exp184), or the
+    // `--packages` file's specs resolved at plan time (`--pinned` specs
+    // join a listed package's pins, or are indexed at their pins alone).
+    let selections: Planned = match &cfg.spec {
+        Some(resolved) => {
+            for (name, sha) in &resolved.packuments {
+                snapshot.packuments.insert(name.clone(), sha.clone());
+            }
+            note_fetch(&mut snapshot, resolved.earliest_fetch.as_deref());
+            note_fetch(&mut snapshot, resolved.latest_fetch.as_deref());
+            resolved
+                .selections
+                .iter()
+                .map(|s| {
+                    (
+                        s.name.clone(),
+                        s.versions
+                            .iter()
+                            .map(|v| Selected {
+                                version: v.version.clone(),
+                                role: v.role.clone(),
+                                published: v.published.clone(),
+                            })
+                            .collect(),
+                        s.refused.clone(),
+                    )
+                })
+                .collect()
         }
-    }
-    for (name, pins, policy) in groups {
-        let (packument, sha) = {
-            let _s = trace.stage("library.index.registry");
-            registry::load(&cfg.registry, &name, cfg.offline)?
-        };
-        snapshot.packuments.insert(name.clone(), sha);
-        note_fetch(&mut snapshot, packument.fetched_at.as_deref());
-        let chosen = select_versions(&packument, &cfg.as_of, &pins, policy);
-        refused.extend(chosen.refused.into_iter().map(|r| RefusedRecord {
-            name: name.clone(),
-            version: r.version,
-            reason: r.reason,
-        }));
-        // an explicit --refuse removes the version from the plan; a version
-        // the plan already refused keeps its first reason (no duplicate rows)
-        let mut selected = chosen.selected;
+        None => {
+            let mut groups: Vec<(String, Vec<String>, VersionPolicy)> = group_specs(&cfg.packages)
+                .into_iter()
+                .map(|(name, pins)| (name, pins, cfg.policy))
+                .collect();
+            for (name, pins) in group_specs(&cfg.pinned) {
+                match groups.iter_mut().find(|g| g.0 == name) {
+                    Some(g) => g.1.extend(pins),
+                    None => groups.push((name, pins, VersionPolicy::PinsOnly)),
+                }
+            }
+            groups
+                .into_iter()
+                .map(|(name, pins, policy)| {
+                    let (packument, sha) = {
+                        let _s = trace.stage("library.index.registry");
+                        registry::load(&cfg.registry, &name, cfg.offline)?
+                    };
+                    snapshot.packuments.insert(name.clone(), sha);
+                    note_fetch(&mut snapshot, packument.fetched_at.as_deref());
+                    let chosen = select_versions(&packument, &cfg.as_of, &pins, policy);
+                    let refused: Vec<(String, String)> = chosen
+                        .refused
+                        .into_iter()
+                        .map(|r| (r.version, r.reason))
+                        .collect();
+                    Ok((name, chosen.selected, refused))
+                })
+                .collect::<Result<Vec<_>, String>>()?
+        }
+    };
+    for (name, selected, sel_refused) in selections {
+        // the resolution's own refusals, then an explicit --refuse
+        // (runtime builds): a version already refused keeps its first
+        // reason (no duplicate rows)
+        for (version, reason) in sel_refused {
+            if !refused
+                .iter()
+                .any(|r: &RefusedRecord| r.name == name && r.version == version)
+            {
+                refused.push(RefusedRecord {
+                    name: name.clone(),
+                    version: version.clone(),
+                    reason: reason.clone(),
+                });
+            }
+        }
+        let mut selected = selected;
         for (rn, rv, reason) in &refusals {
             if rn != &name {
                 continue;
@@ -1519,8 +1605,61 @@ pub struct BuildOutcome {
 /// (exp162) the workers partition the key space into contiguous ranges,
 /// each streaming EVERY shard in label order and keeping its range's
 /// rows; the segments concatenate in range order into the same bytes.
-pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
-    build(cfg, dry_run, Trace::default()).map(|o| o.index_id)
+/// A `--chunk I/N` build: build ONLY the chunk's packages' shards, write
+/// nothing. The plan is full (the same everywhere); the package list is
+/// the plan's sorted and split into N contiguous groups. No merge: the
+/// chunks finish with one `--merge-only` run over the whole plan.
+fn chunk_build(
+    cfg: &BuildConfig,
+    plan: &mut Plan,
+    i: usize,
+    n: usize,
+    trace: Trace<'_>,
+) -> Result<BuildOutcome, String> {
+    let names: Vec<String> = plan
+        .tasks
+        .iter()
+        .map(|t| t.name.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let (lo, hi) = (names.len() * i / n, names.len() * (i + 1) / n);
+    let chunk: BTreeSet<&String> = names[lo..hi].iter().collect();
+    let tasks: Vec<Task> = plan
+        .tasks
+        .iter()
+        .filter(|t| chunk.contains(&t.name))
+        .cloned()
+        .collect();
+    println!(
+        "chunk {i}/{n}: {} of {} packages, {} tasks",
+        chunk.len(),
+        names.len(),
+        tasks.len()
+    );
+    let errors = execute_all(cfg, &tasks, trace);
+    for (label, e) in &errors {
+        eprintln!("FAILED {label}: {e}");
+    }
+    if trace.stopped() {
+        return Err("the run stopped the build: its wait deadline \
+             (library.index.wait) expired"
+            .to_string());
+    }
+    let built = tasks.iter().filter(|t| !t.missing.is_empty()).count();
+    Ok(BuildOutcome {
+        index_id: String::new(),
+        tasks: tasks.len(),
+        reused: tasks.len() - built,
+        built,
+        slices: plan.slices.clone(),
+        errors,
+        refused: plan.refused.clone(),
+    })
+}
+
+pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<BuildOutcome, String> {
+    build(cfg, dry_run, Trace::default())
 }
 
 /// [`run`] with the run-time caller's [`Trace`] (exp154,
@@ -1538,6 +1677,9 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
     }
     if dry_run {
         return Ok(BuildOutcome::default());
+    }
+    if let Some((i, n)) = cfg.chunk {
+        return chunk_build(cfg, &mut plan, i, n, trace);
     }
     let mut errors = Vec::new();
     if !cfg.merge_only {

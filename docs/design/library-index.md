@@ -63,23 +63,37 @@ one place.
 
 ## 2. The build, stage by stage
 
+Since exp184 the build is driven by ONE committed spec file (§2a) instead
+of a package list and flags:
+
 ```
-humanify-index build --packages <list> --as-of <date> --registry <dir> \
-    --store <dir> --work <dir> --out <dir> [--slices bun,esbuild] \
-    [--bun <bin>] [--esbuild <bin>] [--jobs N] [--offline] [--dry-run]
+humanify-index build --spec <file> --registry <dir> \
+    --store <dir> --work <dir> --out <dir> \
+    [--jobs N] [--offline] [--dry-run] [--chunk I/N] [--merge-only]
 ```
 
-1. **Registry snapshot.** For each package (and each bundler, see §3) the
-   builder needs its packument's `time` map and its `versions` list. They
-   are fetched once (`npm view <pkg> time versions --json`) into
-   `--registry <dir>` as `<pkg>.json` with the fetch time, and read from
-   there afterwards. `--offline` refuses to fetch. The snapshot directory
-   is an INPUT: the manifest records every packument's sha256 and the
-   earliest and latest fetch time.
-2. **Plan (as-of selection, §3).** Per package: the versions to index,
-   each with its publish time, and every version refused with the reason.
-   `--dry-run` prints the plan and, per version and slice, whether its
-   shard already exists or would be built — then stops.
+1. **Registry snapshot.** The builder needs each package's registry
+   document — `time`, `versions`, and — the spec's dependency rules, the
+   `dependents` rule and the refusal matchers read them — each version's
+   install-time metadata (`dependencies`, `optionalDependencies`,
+   `peerDependencies` + `peerDependenciesMeta`, `dist.unpackedSize`, an
+   `os`/`cpu` restriction). One `curl` of the FULL document per package
+   (what `npm install` itself resolves against) into `--registry <dir>`
+   as `<pkg>.json`, with the fetch time, read from there afterwards —
+   not `npm view`, whose multi-version output omits sizes and `os`/`cpu`
+   and drops versions defining none of the fields asked for (the first
+   default-spec fetch left the platform and size rules dead, exp184).
+   `--offline` refuses to fetch. The snapshot directory is an INPUT: the
+   manifest records every packument's sha256 and the earliest and latest
+   fetch time. The SPEC resolution itself fetches through the same
+   snapshot, so the resolved plan is a function of (spec, snapshot).
+2. **Plan (§2a).** The spec's package selections (a high-impact list at a
+   pinned version, and the dependency closure of the chosen versions) and
+   version rules (the policy, `dependents`, per-package overrides)
+   resolve against the snapshot into every `pkg@version` to index, each
+   carrying the rule that chose it, plus every refused version with its
+   reason and every skipped package. `--dry-run` prints the plan and
+   stops.
 3. **Install.** Per selected `pkg@version`, in a fresh work directory:
    `npm install --ignore-scripts --before=<that version's publish time>`
    (retried once with `--legacy-peer-deps`). `--before` makes npm resolve
@@ -112,6 +126,48 @@ humanify-index build --packages <list> --as-of <date> --registry <dir> \
    into the index directory (§4). Shards of versions not selected for this
    date are ignored, so one store serves indexes for many dates.
 
+## 2a. The spec: how the default index is made (exp184)
+
+The default index is described by `crates/humanify-index/specs/default.toml`
+(schema `humanify-index-spec/1`), and nothing else: a new user runs
+`scripts/build-index.sh crates/humanify-index/specs/default.toml <registry>
+<store> <work> <out>` against the public npm registry and gets an index of
+the same shape and coverage. Every package and version in the plan is
+there because a RULE chose it; the resolved plan (every `pkg@version` and
+its rule attribution) is written into the index's `build.json` sidecar.
+
+- **As-of date.** `as_of = "2026-10-25"` — matches the hand-built
+  cb64 index, so the two are comparable.
+- **Package universe.** Selection `impact` reads npm-high-impact's union
+  list (`top`) from the package at a pinned version, the list file's
+  sha256 verified against the spec — an immutable npm tarball, so the
+  list replays exactly on any later day (Andrew 2026-11-02: rules, not
+  "here is a list of 25 random packages to also add and if you don't
+  have this hardcoded list then it won't work"). Selection
+  `impact-trees` adds the dependency closure of every chosen version's
+  install tree: each version's dependencies (regular, optional,
+  non-optional peer) resolved as `npm install --before=<its publish
+time>` resolves them, transitively. This is where scoped families come
+  from (@babel/_, @azure/_, …) — no list spells them out.
+- **Versions.** Default policy `as-of` (§3's latest/patch/major-1/2).
+  `dependents = true` adds, for every planned version, the version each
+  of its dependency ranges resolved to as of that version's publish
+  time — the versions real installs got, computed from packuments.
+  Overrides are rules too: `@aws-sdk/*` gets `latest-200` (dozens of
+  releases a week, bundle surface changes only at major boundaries).
+- **Tools.** `[tools] bun = "1.4.0"` — the version every Bun slice was
+  built with; fetched into `<store>/tools/` if not installed.
+- **Refusals.** Rules with reasons: `@types/*` (type declarations), any
+  version restricting `os`/`cpu` (a platform binary), and — the one
+  kind of explicit list allowed — three pinned `pinyin` versions that
+  OOM the build workers solo (exp152).
+
+Deeper-coverage policies are one-line changes with their measured cost
+(experiments/184-index-spec/README.md): `year-last12+major4` (~3.9k
+packages' exact versions, 93.2% bun-dev truth-package hit) costs a
+~260k-version build; `year-all+major` (97.1% / 55.5% bytes) costs
+~326k versions, a 5× cb64 build.
+
 ## 3. As-of builds
 
 **Rule.** `--as-of D` (an RFC 3339 time, or a date meaning the END of that
@@ -134,14 +190,15 @@ refused if it was published after D.
 **Dependencies** are installed as of their dependent's publish time (step 3),
 which is ≤ D. Their versions are therefore ≤ D as well.
 
-**Popularity as of D (designed, not built in v1).** v1 takes an explicit
-package list. A ranked list as of D would sum each candidate's downloads
-over the year before D from
-`api.npmjs.org/downloads/range/<D-365d>:<D>/<pkg>` (bulk for unscoped
-packages, 128 per request; data starts 2015-01-10; ranges of at most 18
-months) and record the list and the API response hashes in the manifest.
-Known limit: the candidate pool has to come from somewhere — a list taken
-today misses packages that were popular at D and have since faded.
+**Popularity as of D (superseded by the spec, exp184).** v1 took an
+explicit package list, and a downloads-API-ranked list was designed here
+but never built — the API responses could not be replayed later. The spec
+replaces it with a REPLAYABLE popularity signal: `npm-high-impact` at a
+pinned, hash-verified version (npm's own "high-impact" definition: ≥ 1M
+weekly downloads or ≥ 500 dependents), plus the `dependents` version rule
+— for every planned version, the version each of its dependency ranges
+resolved to at the dependent's own publish time, computed from packuments.
+Per-version download counts are no longer needed anywhere.
 
 **Bundlers as of D.** The builder runs the bundler binaries it is given.
 For each, it reads the bundler's own packument (`bun`, `esbuild`) and

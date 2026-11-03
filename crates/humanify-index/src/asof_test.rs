@@ -202,3 +202,162 @@ fn year_all_plus_minor_is_every_recent_release_and_each_older_minors_latest_patc
         ]
     );
 }
+
+#[test]
+fn the_policies_are_named_in_the_spec() {
+    let named = |s: &str| VersionPolicy::from_name(s);
+    assert_eq!(named("as-of"), Some(VersionPolicy::AsOf));
+    assert_eq!(named("year-all+minor"), Some(VersionPolicy::YearAllMinor));
+    assert_eq!(named("year-all+major"), Some(VersionPolicy::YearAllMajor));
+    assert_eq!(
+        named("year-last12+major4"),
+        Some(VersionPolicy::YearLast {
+            recent: 12,
+            lines: 4
+        })
+    );
+    // the line cap defaults to 4 (tail_pins')
+    assert_eq!(
+        named("year-last12+major"),
+        Some(VersionPolicy::YearLast {
+            recent: 12,
+            lines: 4
+        })
+    );
+    assert_eq!(named("latest-200"), Some(VersionPolicy::Latest(200)));
+    assert_eq!(named("latest"), Some(VersionPolicy::Latest(1)));
+    assert_eq!(named("year-last"), None);
+    assert_eq!(named("year-last12"), None);
+    assert_eq!(named("year-last12+majorx"), None);
+    assert_eq!(named("latest-x"), None);
+}
+
+#[test]
+fn year_all_plus_major_takes_every_release_of_the_year_and_every_older_line_top() {
+    let plan = select_versions(
+        &ms(),
+        &parse_as_of("2017-12-31").expect("date"),
+        &[],
+        VersionPolicy::YearAllMajor,
+    );
+    let got: Vec<(String, String)> = plan
+        .selected
+        .into_iter()
+        .map(|s| (s.role, s.version))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            // every release of the last year
+            pair("recent", "2.1.1"),
+            pair("recent", "2.1.0"),
+            pair("recent", "2.0.0"),
+            pair("recent", "1.0.0"),
+            pair("recent", "0.7.3"),
+            // the newest of every older line — majors, 0.x minors
+            pair("major", "0.6.2"),
+            pair("major", "0.5.1"),
+            pair("major", "0.4.0"),
+            pair("major", "0.3.0"),
+            pair("major", "0.2.0"),
+            pair("major", "0.1.0"),
+        ]
+    );
+}
+
+#[test]
+fn year_all_plus_major_unbounded_covers_ancient_lines_and_caps_at_nothing() {
+    // the same package a year with no releases: every line's top, however old
+    let plan = select_versions(
+        &ms(),
+        &parse_as_of("2026-10-11").expect("date"),
+        &[],
+        VersionPolicy::YearAllMajor,
+    );
+    let got: Vec<(String, String)> = plan
+        .selected
+        .into_iter()
+        .map(|s| (s.role, s.version))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            pair("major", "2.1.3"),
+            pair("major", "1.0.0"),
+            pair("major", "0.7.3"),
+            pair("major", "0.6.2"),
+            pair("major", "0.5.1"),
+            pair("major", "0.4.0"),
+            pair("major", "0.3.0"),
+            pair("major", "0.2.0"),
+            pair("major", "0.1.0"),
+        ]
+    );
+}
+
+#[test]
+fn year_last_caps_the_recent_releases_and_the_line_tops() {
+    let got = |recent: usize, lines: usize| {
+        select_versions(
+            &ms(),
+            &parse_as_of("2017-12-31").expect("date"),
+            &[],
+            VersionPolicy::YearLast { recent, lines },
+        )
+        .selected
+        .into_iter()
+        .map(|s| (s.role, s.version))
+        .collect::<Vec<_>>()
+    };
+    // twelve in the year (there are five), four lines
+    assert_eq!(
+        got(12, 4),
+        vec![
+            pair("recent", "2.1.1"),
+            pair("recent", "2.1.0"),
+            pair("recent", "2.0.0"),
+            pair("recent", "1.0.0"),
+            pair("recent", "0.7.3"),
+            pair("major", "0.6.2"),
+        ]
+    );
+    // two in the year, four lines
+    assert_eq!(
+        got(2, 4),
+        vec![
+            pair("recent", "2.1.1"),
+            pair("recent", "2.1.0"),
+            pair("major", "1.0.0"),
+            pair("major", "0.7.3"),
+            pair("major", "0.6.2"),
+        ]
+    );
+    // two in the year, one line
+    assert_eq!(
+        got(2, 1),
+        vec![pair("recent", "2.1.1"), pair("recent", "2.1.0"),]
+    );
+}
+
+#[test]
+fn latest_n_takes_the_newest_n_stable_versions() {
+    let got = |n: usize| {
+        select_versions(
+            &ms(),
+            &parse_as_of("2017-12-31").expect("date"),
+            &[],
+            VersionPolicy::Latest(n),
+        )
+        .selected
+        .into_iter()
+        .map(|s| (s.role, s.version))
+        .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        got(2),
+        vec![pair("latest", "2.1.1"), pair("latest", "2.1.0")]
+    );
+    assert_eq!(got(1), vec![pair("latest", "2.1.1")]);
+    // a package with fewer versions than n: all of them
+    assert_eq!(got(50).len(), 17);
+}

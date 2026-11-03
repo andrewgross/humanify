@@ -304,10 +304,10 @@
     },
     {
       "file": "crates/humanify-index/src/tools.rs",
-      "scope": "fetch_tool",
+      "scope": "fetch_tool_at",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "exp171/exp181: a run-time index build whose store holds no tool for the bundle's recipe fetches the pinned one (Bun, esbuild, webpack or rollup) — `npm install <specs> --before=<date> --prefix <store>/tools/<bundler>-<v> --ignore-scripts` — through humanify_core::subprocess::run (pipes drained) under FETCH_DEADLINE (15 min); a non-zero exit, a timeout, no platform binary or a wrong version is a loud error that removes the half-made directory"
+      "reason": "exp171/exp181: a run-time index build whose store holds no tool for the bundle's recipe fetches the pinned one (Bun, esbuild, webpack or rollup) \u2014 `npm install <specs> --before=<date> --prefix <store>/tools/<bundler>-<v> --ignore-scripts` \u2014 through humanify_core::subprocess::run (pipes drained) under FETCH_DEADLINE (15 min); a non-zero exit, a timeout, no platform binary or a wrong version is a loud error that removes the half-made directory"
     },
     {
       "file": "crates/humanify-index/src/registry.rs",
@@ -604,6 +604,41 @@
       "construct": "atomic",
       "pattern": "order-mode",
       "reason": "the ordered test mode's schedule flag (rule 9, docs/concurrency.md#the-ordered-mode-rule-9): set ONCE at startup before any stage runs, read-only during the run; both branches of every helper produce identical results, so nothing that decides OUTPUT reads it"
+    },
+    {
+      "file": "crates/humanify-index/src/planner.rs",
+      "scope": "fetch_high_impact_list",
+      "construct": "subprocess",
+      "pattern": "subprocess",
+      "reason": "the spec's list fetch (exp184): npm pack of the pinned npm-high-impact version and tar -xzf of it, run through humanify_core::subprocess::run (drained pipes, a whole-wait deadline, loud failure); the file's sha256 is verified before the fetched list is used"
+    },
+    {
+      "file": "crates/humanify-index/src/planner.rs",
+      "scope": "struct SnapshotLoader",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "the prefetch memo (one std Mutex<BTreeMap>): taken briefly to insert or peek one packument; never held across a fetch (the fetches run on the scoped threads)"
+    },
+    {
+      "file": "crates/humanify-index/src/planner.rs",
+      "scope": "SnapshotLoader::new",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "constructs the prefetch memo Mutex; nothing held"
+    },
+    {
+      "file": "crates/humanify-index/src/planner.rs",
+      "scope": "SnapshotLoader::prefetch",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "the prefetch memo: taken briefly per packument to insert or peek; never held across the fetch (the fetches run on the scoped threads)"
+    },
+    {
+      "file": "crates/humanify-index/src/planner.rs",
+      "scope": "SnapshotLoader::prefetch",
+      "construct": "thread-scope",
+      "pattern": "subprocess",
+      "reason": "the offline index builder's spec planner (exp184) prefetches the next wave's packuments on up to 16 scoped threads, each one registry::load fetch (an npm view subprocess) under its own deadline, joined before return; results land in a name-keyed memo, so completion order never reaches the plan"
     }
   ]
 }

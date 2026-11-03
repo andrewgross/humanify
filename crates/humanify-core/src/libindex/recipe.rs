@@ -42,7 +42,8 @@ impl RecipeBundler {
         }
     }
 
-    fn from_name(name: &str) -> Option<RecipeBundler> {
+    /// The bundler a spec's `tools` table or a recipe's spelling names.
+    pub fn parse(name: &str) -> Option<RecipeBundler> {
         RECIPE_BUNDLERS.into_iter().find(|b| b.name() == name)
     }
 
@@ -134,7 +135,7 @@ impl Recipe {
             )
         };
         let (bundler, rest) = text.split_once(':').ok_or_else(|| bad("no `:`"))?;
-        let bundler = RecipeBundler::from_name(bundler).ok_or_else(|| bad("unknown bundler"))?;
+        let bundler = RecipeBundler::parse(bundler).ok_or_else(|| bad("unknown bundler"))?;
         let (mut target, mut format, mut minify, mut production) = (None, None, false, false);
         for part in rest.split(',').map(str::trim) {
             match part.split_once('=') {

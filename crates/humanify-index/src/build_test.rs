@@ -23,7 +23,9 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
     .expect("fixture");
     BuildConfig {
         names: false,
+        spec: None,
         refuse: Vec::new(),
+        chunk: None,
         packages: vec!["ms".into()],
         as_of: as_of.into(),
         registry,
@@ -169,7 +171,7 @@ fn merge_only_builds_nothing_and_merges_what_the_store_holds() {
     let id = super::build::run(&cfg, false).expect("merges");
     let manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(out.join("manifest.json")).unwrap()).unwrap();
-    assert_eq!(id.len(), 64);
+    assert_eq!(id.index_id.len(), 64);
     assert_eq!(manifest["packages"].as_array().unwrap().len(), 1);
     let no_shard: Vec<&str> = manifest["refused"]
         .as_array()
@@ -948,7 +950,9 @@ fn exp162_config(
 ) -> BuildConfig {
     BuildConfig {
         names: false,
+        spec: None,
         refuse: Vec::new(),
+        chunk: None,
         packages: vec!["ms".into()],
         as_of: "2020-12-01T23:59:59.999Z".into(),
         registry: root.join("registry"),

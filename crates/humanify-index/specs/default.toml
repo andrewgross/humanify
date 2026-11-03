@@ -1,0 +1,114 @@
+# The default library fingerprint index, made by RULES (exp184).
+#
+# `humanify-index build --spec crates/humanify-index/specs/default.toml …`
+# builds an index from nothing but the public npm registry and this file:
+# every package the plan holds is chosen by a rule over a reproducible
+# signal (npm's own high-impact list at a pinned version, and the
+# dependency closure of the chosen versions), every version by a rule
+# (the as-of policy, what dependent ranges resolve to, per-package
+# overrides that are rules too). No hand-kept package list exists
+# anywhere in the chain — the only explicit lists left are POLICY ones
+# (refusals with reasons, overrides for whole package families), which
+# is the line Andrew drew 2026-11-02.
+#
+# The resolved plan (every package@version and the rule that chose it)
+# is recorded in the built index's `build.json` sidecar; same spec +
+# same registry snapshot ⇒ same plan ⇒ same index id.
+
+schema = "humanify-index-spec/1"
+
+# The as-of date: every version published on or before the end of this
+# UTC day is admissible. This one matches the current full index
+# (cb64c1f5…), so the spec's plan and the hand-built pins are comparable.
+as_of = "2026-10-25"
+
+[build]
+# The two Bun recipes of today's index (slices bun-bun-cjs-min and
+# bun-node-cjs-min), at the pinned Bun below.
+recipes = [
+  "bun:target=bun,format=cjs,minify,production",
+  "bun:target=node,format=cjs,minify,production",
+]
+# exp124/exp130: a pre-bundled file's foreign regions carry rows of the
+# package the marker names, at the version its pnpm path spells.
+sponge_regions = "origin"
+# exp159: recover and store the units' original identifier names.
+names = true
+
+[tools]
+# The pinned Bun (the version every Bun slice of today's index was
+# built with, exp152). Fetched into <store>/tools/ if not installed.
+bun = "1.4.0"
+
+# ---- package selection ----
+
+# The universe, by rules over public replayable signals:
+#
+# 1. npm-high-impact's union list (`top`): every package npm itself
+#    counts as high-impact (>= 1M weekly downloads or >= 500
+#    dependents). The list is read from the package AT A PINNED VERSION
+#    (an immutable npm tarball) and the list file's sha256 is verified,
+#    so the universe replays exactly on any later day.
+# 2. The dependency closure of every chosen version's install tree:
+#    each version's dependencies (regular, optional, and non-optional
+#    peer) resolved the way `npm install --before=<its publish time>`
+#    resolves them, transitively. This is where the scoped families
+#    come from (@babel/*, @azure/*, @workflow/*, …) — packages no list
+#    has to spell out.
+
+[[select]]
+id = "impact"
+source = "npm-high-impact"
+list = "top"
+version = "1.13.0"
+sha256 = "bbc16e783283f23d38559a1322d93af27b8a7a884b1fa9c5a1dd84e810684f0c"
+
+[[select]]
+id = "impact-trees"
+source = "dependencies"
+of = ["impact"]
+
+# ---- version selection ----
+
+[versions]
+# The default: latest, the highest earlier patch of the latest's
+# major.minor, and the highest of each of the two previous major lines —
+# today's index's own policy, at today's scale (~58k versions over the
+# ~19k-package universe).
+policy = "as-of"
+# The replayable popularity signal (exp184): for every planned version,
+# also index the version each of its dependency ranges resolved to as of
+# the dependent's own publish time — the versions real installs
+# actually got, computed from packuments (unlike per-version download
+# counts, which cannot be replayed later).
+dependents = true
+
+# Family overrides — rules, not a list of packages:
+
+[[versions.override]]
+id = "aws-sdks"
+# The AWS SDKs release dozens of versions a week; their bundle surface
+# only changes at major boundaries, so index the 200 newest.
+policy = "latest-200"
+names = ["@aws-sdk/*"]
+
+# ---- refusals ----
+# Each carries its reason; the built index records every refused
+# version with it.
+
+[[refuse]]
+id = "type-decls"
+reason = "type declarations, no JavaScript to fingerprint"
+names = ["@types/*"]
+
+[[refuse]]
+id = "platform-binaries"
+reason = "a platform binary, no JavaScript to fingerprint"
+platform = true
+
+# A policy list (three pinned versions of one package, a measured build
+# problem, exp152) — the one kind of explicit list this spec allows.
+[[refuse]]
+id = "pinyin"
+reason = "OOMs the build workers solo (exp152)"
+versions = ["pinyin@2.11.2", "pinyin@3.1.0", "pinyin@4.0.0"]
