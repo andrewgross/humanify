@@ -1598,3 +1598,71 @@ fn from_bundle_builds_an_esbuild_index_from_the_store_s_own_tool() {
         assert!(ms.contains(name), "{name} restored: {ms}");
     }
 }
+
+/// A minimal webpack 4 bundle (two modules, hand-written in webpack 4's
+/// production shape) that webcrack unpacks into one file per module.
+const WEBPACK4: &str = "!function(e){var t={};function n(r){if(t[r])return t[r].exports;var o=t[r]={i:r,l:!1,exports:{}};return e[r].call(o.exports,o,o.exports,n),o.l=!0,o.exports}n.m=e,n.c=t,n.d=function(e,t,r){n.o(e,t)||Object.defineProperty(e,t,{enumerable:!0,get:r})},n.r=function(e){\"undefined\"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:\"Module\"}),Object.defineProperty(e,\"__esModule\",{value:!0})},n.o=function(e,t){return Object.prototype.hasOwnProperty.call(e,t)},n.p=\"\",n(n.s=0)}([function(e,t,n){var r=n(1);console.log(r.add(2,3))},function(e,t){e.exports={add:function(e,t){return e+t}}}]);\n";
+
+/// exp182: a webpack run with a RELATIVE output dir (`-o out`, the shape
+/// every hand launch has) failed at unpack — "read out/deobfuscated.js: No
+/// such file" — because the webcrack shim runs in the repo root and
+/// resolved `out` there: the files landed in `<repo>/out/` (a stray folder
+/// in the main checkout) and the run looked in `<cwd>/out/`. The real
+/// shim, through the binary: the run unpacks, everything it writes is
+/// under `<cwd>/out`, and the repo gains no `out-…` folder. Every other
+/// test passes an absolute `-o`, which is why nothing caught it.
+#[test]
+fn a_webpack_run_with_a_relative_output_dir_writes_only_there() {
+    let s = Scratch::new("webpack-relative-out");
+    s.write("bundle.js", WEBPACK4);
+    let rel = format!("out-exp182-{}", std::process::id());
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let stray = repo.join(&rel);
+    let _ = std::fs::remove_dir_all(&stray);
+    let config = s.write(
+        "humanify.toml",
+        "llm.retries = 0\nsplit.enabled = false\nlibrary.matching = \"off\"\n",
+    );
+    // The shim runs through npx: the caller's environment (PATH, HOME),
+    // not the hermetic one `launch` sets. The binary reads only
+    // HUMANIFY_API_KEY from it.
+    let o = Command::new(env!("CARGO_BIN_EXE_humanify"))
+        .current_dir(&s.0)
+        .env("HUMANIFY_API_KEY", "k")
+        .args([
+            "bundle.js",
+            "-o",
+            &rel,
+            "-v",
+            "--endpoint",
+            "http://127.0.0.1:9/v1",
+        ])
+        .args(["--config", &config])
+        .output()
+        .unwrap();
+    let in_repo = stray.exists();
+    let _ = std::fs::remove_dir_all(&stray);
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    let said = format!("{}{err}", String::from_utf8_lossy(&o.stdout));
+    assert!(
+        said.contains("Bundle detection: bundler=webpack "),
+        "the webcrack path ran: {said}"
+    );
+    assert!(
+        !in_repo,
+        "the shim wrote into the repo: {}",
+        stray.display()
+    );
+    let mut top: Vec<String> = std::fs::read_dir(&s.0)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    top.sort();
+    assert_eq!(
+        top,
+        ["bundle.js", "humanify.toml", rel.as_str()],
+        "nothing in the cwd outside the output dir"
+    );
+    assert!(s.0.join(&rel).join("deobfuscated.js").is_file());
+}
