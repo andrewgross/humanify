@@ -78,27 +78,50 @@ directory`), GREEN after; asserts exit 0, the webcrack path ran
 
 ## Results — the exp181 kind-webpack corpus (34 bundles)
 
-The `unpack` VERB (no LLM) on every corpus bundle, relative out dir,
-launched from a fresh scratch cwd; timeout 900 s each:
+**How many of its bundles unpack** (the unpack stage completes and the
+unpacked files are in the RUN'S out dir), every bundle through the full
+pipeline with `-o out` (relative), `split.enabled = false`,
+`library.matching = "off"`, a dead LLM endpoint, launched from a fresh
+scratch cwd:
 
-| run                  | unpacked | failed | note                                                            |
-| -------------------- | -------- | ------ | --------------------------------------------------------------- |
-| before (main binary) | 0        | 34     | every one `read out/deobfuscated.js: No such file or directory` |
-| after (this branch)  | 34       | 0      | see below                                                       |
+| run                  | unpacked | failed at unpack | note                                                                                                        |
+| -------------------- | -------- | ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| before (main binary) | 0        | 34               | every one `Error: read out/deobfuscated.js: No such file or directory (os error 2)`                         |
+| after (this branch)  | 33       | 1                | the 4 runs the 1,200 s harness timeout cut were past unpack ("Unpacked N file(s) via webcrack") — see below |
 
-(A first full-pipeline sweep at a 180 s harness timeout is superseded by the
-verb sweep: its 14 `124`s were the harness timeout racing the pipeline's
-300 s LLM timeout against a dead endpoint — not unpack failures. One bundle,
-`cli_ts-json-schema-generator-1165fe`, also reads 0 files under the VERB at
-900 s on the after binary — see "What this does NOT prove".)
+After the fix, 30 runs exit 0 end to end; 4 are cut by the harness timeout,
+and for 3 of them (dfarm6 10.2 MB, mysti 12.8 MB, vscode-github-actions
+9.4 MB) the log shows the unpack stage COMPLETED ("Unpacked 1/9/1 file(s)
+via webcrack") before the timeout — the cut is the per-file stages on a
+9-13 MB bundle against a dead endpoint, not unpack. The fourth,
+`cli_ts-json-schema-generator-1165fe`, is webcrack's own wall: its
+deobfuscated.js (7.2 MB, complete, ends on the entry's
+`sourceMappingURL`) landed at +21 min — webcrack spent >20 min inside the
+shim's 30-minute deadline; the run was killed first and never read the
+files. Unpack, not the path bug.
+
+**Verb runs are NOT this metric.** An earlier sweep used the `unpack` VERB
+(no LLM): it reads 33/34 "unpacked" on the BEFORE binary too — because the
+verb's Files branch prints the count WITHOUT reading the reported paths, so
+the before run "succeeded" while the file had landed in
+`<shim cwd>/unpack-out/deobfuscated.js` (reproducing the stray-write shape
+in the worktree; deleted). Only a run that READS the shim's file list
+exercises the bug.
 
 ## Gate
 
-| check                                       | result                        |
-| ------------------------------------------- | ----------------------------- |
-| `npm run check`, worktree (before commit)   | ALL 13 STAGES PASSED          |
-| `npm run check`, clean checkout             | (see the lane's final report) |
-| warm neutrality names + off (exp175 launch) | (see the lane's final report) |
+| check                                                       | result                                                                        |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `npm run check`, worktree `19faa5d0b`                       | ALL 13 STAGES PASSED                                                          |
+| `npm run check`, clean checkout `3d306a1b9`                 | ALL 13 STAGES PASSED                                                          |
+| warm neutrality names (exp175 launch)                       | NEUTRAL: 0 files / 0 lines, exit 0 / 0, cache candidate +991, baseline **+0** |
+| warm neutrality off (`--pipeline-set library.matching=off`) | NEUTRAL: 0 files / 0 lines, exit 0 / 0, cache candidate +0, baseline **+0**   |
+
+Neutrality: WARM, 2.1.85→2.1.86 vs main `3218b7b8d`, launched as exp175's
+(`--priors /work/exp050-cold --cache /work/neutrality-cache`, own
+`--workdir`). Claude Code is a Bun bundle and the eval passes its index
+explicitly, so nothing here can reach it, and the byte-identity verdict
+agrees on both modes.
 
 ## What this does NOT prove
 
