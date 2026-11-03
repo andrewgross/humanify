@@ -1502,7 +1502,7 @@ fn module_shard(
 
 /// Build every missing shard of `task`: the module shards first, since the
 /// literal shard reads their builds (any build not yet made is made).
-fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), String> {
+pub(crate) fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), String> {
     let dir = install(&cfg.work, task, trace)?;
     // the entries are the recipe's: rewritten on every build
     write_entries(&dir, &task.name)?;
@@ -1536,6 +1536,13 @@ fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), Strin
         };
         write_shard(&cfg.store, &shard)?;
     }
+    // The install tree is SCRATCH: the store's shards are the durable
+    // artifact, and a whole default spec's trees are millions of files —
+    // the 2026-11-03 build exhausted the filesystem's INODES (244M, 0
+    // free) long before its bytes. A later run reinstalls what a missing
+    // shard needs (npm's own cache makes that cheap); a FAILED task keeps
+    // its tree (usually small, and what a bundle failure is debugged in).
+    let _ = std::fs::remove_dir_all(&dir);
     Ok(())
 }
 

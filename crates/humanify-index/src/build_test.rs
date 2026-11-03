@@ -1075,3 +1075,28 @@ fn exp162_anchor() {
         assert_eq!(&dirs[0], d, "dir {i} differs from the serial merge");
     }
 }
+
+#[test]
+fn a_tasks_install_tree_is_scratch_gone_once_its_shards_are_written() {
+    let cfg = config("work-cleanup", "2020-12-01T23:59:59.999Z");
+    let planned = plan(&cfg, Default::default()).expect("plan");
+    let mut task = planned.tasks[0].clone();
+    task.missing.clear();
+    // a PRE-INSTALLED tree (its .installed stamp): install() must not
+    // reach npm for this task
+    let dir = cfg.work.join(format!("{}@{}", task.name, task.version));
+    std::fs::create_dir_all(dir.join("node_modules/ms")).expect("mkdir");
+    std::fs::write(dir.join(".installed"), "").expect("stamp");
+    std::fs::write(
+        dir.join("node_modules/ms/package.json"),
+        r#"{"name":"ms","version":"2.1.2"}"#,
+    )
+    .expect("pkg");
+    crate::build::execute(&cfg, &task, Default::default()).expect("execute");
+    assert!(
+        !dir.exists(),
+        "the install tree is scratch: gone once the task's shards are \
+         written (165k trees are terabytes the build does not need; a \
+         later run reinstalls what a missing shard needs)"
+    );
+}
