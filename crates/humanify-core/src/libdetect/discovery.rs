@@ -42,6 +42,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use serde::Serialize;
 
 use crate::cut::units::UnitKind;
+
+#[path = "own_fence.rs"]
+mod own_fence;
 use crate::graph::edges::Scope;
 use crate::graph::references::ReferenceGraph;
 use crate::libindex::families::PackageFamilies;
@@ -484,6 +487,11 @@ pub struct Discovery {
     /// The call-context census, when the lookup asked for it
     /// ([`IndexLookup::census`]).
     pub call_context: Vec<CallContextRow>,
+    /// The bundle's own packages ([`crate::modules::own_package`], exp183).
+    pub own_packages: BTreeSet<String>,
+    /// The own packages' claims, set apart from [`Self::claims`]: the
+    /// app's code, which the index knows as a package (`own_fence`).
+    pub self_claims: BTreeMap<u32, Claim>,
 }
 
 impl Discovery {
@@ -2653,6 +2661,8 @@ pub fn discover_with(
         call_context: Vec::new(),
         restorations: BTreeMap::new(),
         restoration_applications: Vec::new(),
+        own_packages: BTreeSet::new(),
+        self_claims: BTreeMap::new(),
     }
 }
 
@@ -2942,7 +2952,8 @@ fn discover_unscoped(
     seeds.extend(evidence_seeds(code, semantic, &graph));
     let Some(lookup) = lookup else {
         let found = discover_with(&graph, &seeds, &families, options, profile, None);
-        return (graph, found);
+        let own = own_fence::own_packages_of(ingest, &graph, statements, &found);
+        return (graph, own_fence::set_apart(found, &own));
     };
     if options.banner_names == BannerNames::Known {
         seeds = known_banner_names(seeds, lookup.index);
@@ -3023,6 +3034,10 @@ fn discover_unscoped(
         profile,
         Some(&containment),
     ));
+    // exp183: the bundle's own package, decided once from the first
+    // fixpoint's claims, is set apart from both passes.
+    let own = own_fence::own_packages_of(ingest, &graph, statements, &found);
+    let found = own_fence::set_apart(found, &own);
     let census = |mut found: Discovery| {
         if lookup.census {
             found.call_context = looker.call_context_rows(lookup.index, &lookup.rules);
@@ -3069,7 +3084,7 @@ fn discover_unscoped(
         profile,
         Some(&containment),
     ));
-    let found = census(found);
+    let found = census(own_fence::set_apart(found, &own));
     (graph, found)
 }
 
@@ -3843,6 +3858,14 @@ pub struct DiscoveryReport {
     pub packages: Vec<PackageRow>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub claims: Vec<ClaimRow>,
+    /// The bundle's own packages (exp183): never claimed, their rows are
+    /// [`Self::self_claims`].
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub own_packages: Vec<String>,
+    /// The index's rows on the app's own package's code, set apart from
+    /// the claims (listed with them).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub self_claims: Vec<ClaimRow>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub vetoed: Vec<SpanRow>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -3968,6 +3991,7 @@ impl DiscoveryReport {
             })
             .collect();
         r.restoration_applications = found.restoration_applications.clone();
+        r.own_packages = found.own_packages.iter().cloned().collect();
         if units {
             r.list_units(graph, found);
         }
@@ -3994,18 +4018,16 @@ impl DiscoveryReport {
 
     fn list_units(&mut self, graph: &ReferenceGraph, found: &Discovery) {
         let span = |u: u32| graph.units[u as usize].span;
-        self.claims = found
-            .claims
-            .iter()
-            .map(|(&u, c)| ClaimRow {
-                start: span(u).start,
-                end: span(u).end,
-                package: c.package.clone(),
-                rule: c.rule,
-                round: c.round,
-                evidence: c.evidence.clone(),
-            })
-            .collect();
+        let claim_row = |(&u, c): (&u32, &Claim)| ClaimRow {
+            start: span(u).start,
+            end: span(u).end,
+            package: c.package.clone(),
+            rule: c.rule,
+            round: c.round,
+            evidence: c.evidence.clone(),
+        };
+        self.claims = found.claims.iter().map(claim_row).collect();
+        self.self_claims = found.self_claims.iter().map(claim_row).collect();
         let span_row = |u: u32, package: &str| SpanRow {
             start: span(u).start,
             end: span(u).end,
