@@ -1603,6 +1603,19 @@ pub struct BuildOutcome {
     pub refused: Vec<RefusedRecord>,
 }
 
+/// Chunk `i` of `n` over the plan's sorted package names: dealt round
+/// robin, so a family of adjacent names (`@aws-sdk/*`: hundreds of big
+/// installs) spreads over every chunk instead of loading one — chunks
+/// run concurrently (scripts/build-index.sh), so balance is wall time.
+pub(crate) fn chunk_of(names: &[String], i: usize, n: usize) -> BTreeSet<&String> {
+    names
+        .iter()
+        .enumerate()
+        .filter(|(k, _)| k % n == i)
+        .map(|(_, name)| name)
+        .collect()
+}
+
 /// Plan, build what is missing (none with `cfg.merge_only`), merge into
 /// `cfg.out`. Returns the index id. `dry_run`: print the plan and stop
 /// (returns an empty id).
@@ -1630,8 +1643,7 @@ fn chunk_build(
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
-    let (lo, hi) = (names.len() * i / n, names.len() * (i + 1) / n);
-    let chunk: BTreeSet<&String> = names[lo..hi].iter().collect();
+    let chunk = chunk_of(&names, i, n);
     let tasks: Vec<Task> = plan
         .tasks
         .iter()

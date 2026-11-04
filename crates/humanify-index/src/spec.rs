@@ -102,11 +102,12 @@ pub struct Selection {
 pub struct VersionRules {
     pub default: VersionPolicy,
     pub overrides: Vec<VersionOverride>,
-    /// Add, for every package in the plan, the version each chosen
-    /// version's dependency range on it resolves to AS OF the as-of date
-    /// (what a fresh install that day gets — computable from packuments,
-    /// unlike per-version download counts).
-    pub dependents: bool,
+    /// Add, for every package in the plan, up to this many of the
+    /// versions its dependents' ranges resolve to (each range as of the
+    /// dependent's own publish time: what an install that day got —
+    /// computable from packuments, unlike per-version download counts),
+    /// the most-resolved first. 0 turns the rule off.
+    pub dependents: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -189,7 +190,7 @@ struct RawSelection {
 struct RawVersions {
     policy: String,
     #[serde(default)]
-    dependents: bool,
+    dependents: usize,
     #[serde(default, rename = "override")]
     overrides: Vec<RawOverride>,
 }

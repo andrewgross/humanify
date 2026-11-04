@@ -1100,3 +1100,44 @@ fn a_tasks_install_tree_is_scratch_gone_once_its_shards_are_written() {
          later run reinstalls what a missing shard needs)"
     );
 }
+
+#[test]
+fn chunks_deal_packages_round_robin_so_a_family_spreads_over_every_chunk() {
+    let names: Vec<String> = [
+        "@aws-sdk/a",
+        "@aws-sdk/b",
+        "@aws-sdk/c",
+        "@aws-sdk/d",
+        "ms",
+        "zod",
+    ]
+    .iter()
+    .map(|s| (*s).to_string())
+    .collect();
+    let chunks: Vec<Vec<&str>> = (0..3)
+        .map(|i| {
+            super::build::chunk_of(&names, i, 3)
+                .into_iter()
+                .map(String::as_str)
+                .collect()
+        })
+        .collect();
+    // every package in exactly one chunk
+    let mut all: Vec<&str> = chunks.concat();
+    all.sort_unstable();
+    assert_eq!(
+        all,
+        [
+            "@aws-sdk/a",
+            "@aws-sdk/b",
+            "@aws-sdk/c",
+            "@aws-sdk/d",
+            "ms",
+            "zod"
+        ]
+    );
+    // adjacent names (one family) land in different chunks
+    assert_eq!(chunks[0], ["@aws-sdk/a", "@aws-sdk/d"]);
+    assert_eq!(chunks[1], ["@aws-sdk/b", "ms"]);
+    assert_eq!(chunks[2], ["@aws-sdk/c", "zod"]);
+}

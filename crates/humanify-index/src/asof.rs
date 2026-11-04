@@ -332,6 +332,12 @@ pub enum VersionPolicy {
     /// release was — for packages that publish hundreds of releases a
     /// year (the AWS SDKs).
     Latest(usize),
+    /// Every stable release published in the `months` before the as-of
+    /// date, plus the newest release (so a package that went quiet still
+    /// holds one version) — `recent-<N>mo`, for packages that release
+    /// so often that the version an app bundled is whatever was current
+    /// when it was built (the AWS SDKs).
+    Recent { months: u32 },
     /// Nothing but the pins (`--pinned`: the bundle's readers named them).
     PinsOnly,
 }
@@ -348,6 +354,7 @@ impl VersionPolicy {
             }
             VersionPolicy::Latest(1) => "latest".to_string(),
             VersionPolicy::Latest(n) => format!("latest-{n}"),
+            VersionPolicy::Recent { months } => format!("recent-{months}mo"),
             VersionPolicy::PinsOnly => "pins".to_string(),
         }
     }
@@ -361,6 +368,10 @@ impl VersionPolicy {
                     VersionPolicy::Latest(n.parse().ok()?)
                 }
             });
+        }
+        if let Some(rest) = name.strip_prefix("recent-") {
+            let months: u32 = rest.strip_suffix("mo")?.parse().ok()?;
+            return (months > 0).then_some(VersionPolicy::Recent { months });
         }
         if let Some(rest) = name.strip_prefix("year-last") {
             let (recent, lines) = rest.split_once("+major")?;
@@ -411,13 +422,52 @@ fn year_all_minor(
     out
 }
 
+/// `months` before a normalised time: the same day-of-month and instant,
+/// `months` calendar months earlier (a day the earlier month lacks still
+/// orders correctly as a string bound).
+fn months_before(as_of: &str, months: u32) -> String {
+    let (Some(y), Some(m)) = (
+        as_of.get(..4).and_then(|y| y.parse::<i64>().ok()),
+        as_of.get(5..7).and_then(|m| m.parse::<i64>().ok()),
+    ) else {
+        return String::new();
+    };
+    let total = y * 12 + (m - 1) - i64::from(months);
+    let (y, m) = (total.div_euclid(12), total.rem_euclid(12) + 1);
+    format!("{y:04}-{m:02}{}", &as_of[7..])
+}
+
+/// `recent-<N>mo` over stable versions with their publish times: every
+/// release of the window, highest first, else the newest alone.
+fn recent_months(
+    stable: &[(Semver, &str)],
+    as_of: &str,
+    months: u32,
+    published: &dyn Fn(&str) -> Option<String>,
+) -> Vec<(&'static str, String)> {
+    let since = months_before(as_of, months);
+    let mut sorted: Vec<&(Semver, &str)> = stable.iter().collect();
+    sorted.sort_by(|a, b| b.0.cmp(&a.0));
+    let out: Vec<(&'static str, String)> = sorted
+        .iter()
+        .filter(|(_, v)| {
+            published(v).is_some_and(|t| t.as_str() > since.as_str() && t.as_str() <= as_of)
+        })
+        .map(|(_, v)| ("recent", (*v).to_string()))
+        .collect();
+    if !out.is_empty() {
+        return out;
+    }
+    sorted
+        .first()
+        .map(|(_, v)| vec![("latest", (*v).to_string())])
+        .unwrap_or_default()
+}
+
 /// Twelve months before a normalised time: the same instant a year
 /// earlier.
 fn year_before(as_of: &str) -> String {
-    match as_of.get(..4).and_then(|y| y.parse::<u32>().ok()) {
-        Some(y) => format!("{:04}{}", y - 1, &as_of[4..]),
-        None => String::new(),
-    }
+    months_before(as_of, 12)
 }
 
 /// Every release of the last year plus the newest of every older line
@@ -506,6 +556,7 @@ pub fn select_versions(
                 .map(|(_, v)| ("latest", (*v).to_string()))
                 .collect()
         }
+        VersionPolicy::Recent { months } => recent_months(versions, as_of, months, &published),
         VersionPolicy::PinsOnly => Vec::new(),
     };
     let mut plan = PackagePlan::default();

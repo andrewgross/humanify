@@ -361,3 +361,57 @@ fn latest_n_takes_the_newest_n_stable_versions() {
     // a package with fewer versions than n: all of them
     assert_eq!(got(50).len(), 17);
 }
+
+#[test]
+fn recent_months_takes_every_release_of_the_window_and_always_the_newest() {
+    let got = |as_of: &str, months: u32| {
+        select_versions(
+            &ms(),
+            &parse_as_of(as_of).expect("date"),
+            &[],
+            VersionPolicy::Recent { months },
+        )
+        .selected
+        .into_iter()
+        .map(|s| (s.role, s.version))
+        .collect::<Vec<_>>()
+    };
+    // six months before 2017-12-31: the two November releases
+    assert_eq!(
+        got("2017-12-31", 6),
+        vec![pair("recent", "2.1.1"), pair("recent", "2.1.0")]
+    );
+    // nine months reaches May's 2.0.0, not March's 1.0.0
+    assert_eq!(
+        got("2017-12-31", 9),
+        vec![
+            pair("recent", "2.1.1"),
+            pair("recent", "2.1.0"),
+            pair("recent", "2.0.0")
+        ]
+    );
+    // the window crosses a year boundary: 2017-09-15 .. 2018-03-15
+    assert_eq!(
+        got("2018-03-15", 6),
+        vec![pair("recent", "2.1.1"), pair("recent", "2.1.0")]
+    );
+    // nothing released in the window: the package keeps its newest
+    // version, so a quiet package never drops out of the index
+    assert_eq!(got("2019-12-31", 6), vec![pair("latest", "2.1.2")]);
+}
+
+#[test]
+fn recent_months_is_named_in_the_spec() {
+    let named = |s: &str| VersionPolicy::from_name(s);
+    assert_eq!(
+        named("recent-6mo"),
+        Some(VersionPolicy::Recent { months: 6 })
+    );
+    assert_eq!(
+        VersionPolicy::Recent { months: 6 }.name(),
+        "recent-6mo".to_string()
+    );
+    assert_eq!(named("recent-0mo"), None);
+    assert_eq!(named("recent-6"), None);
+    assert_eq!(named("recent-xmo"), None);
+}

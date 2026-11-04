@@ -33,7 +33,7 @@ of = ["impact"]
 
 [versions]
 policy = "year-all+major"
-dependents = true
+dependents = 2
 
 [[versions.override]]
 id = "aws-sdks"
@@ -127,7 +127,7 @@ fn the_list_selection_is_read(source: &Source) {
 
 fn the_version_rules_are_read(rules: &VersionRules) {
     assert_eq!(rules.default, VersionPolicy::YearAllMajor);
-    assert!(rules.dependents);
+    assert_eq!(rules.dependents, 2);
     assert_eq!(rules.overrides.len(), 1);
     assert_eq!(rules.overrides[0].policy, VersionPolicy::Latest(200));
     assert_eq!(rules.overrides[0].when.names.as_slice(), ["@aws-sdk/*"]);

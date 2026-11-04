@@ -208,6 +208,23 @@ packages (~3 KB: `@anthropic-ai/sandbox-runtime`,
 `@pondwader/socks5-server`). The `pinyin` versions are refused
 intentionally (measured OOMs, exp152).
 
+### The build's install trees are SCRATCH
+
+The first full default-spec build filled the disk — not bytes, INODES:
+`/work`'s filesystem holds 244,191,232 and the build took the last ones
+(107,207 of 117,341 attempted tasks FAILED with "No space left on device
+(os error 28)", the first store-shard writes among them). The cause is
+not the spec's size alone but the build's habit of KEEPING every task's
+install tree: `install()` marks a tree `.installed` and nothing ever
+removed it — exp152's work dir still holds all 66,523 of its trees
+(~1.1 TB here for 58,118 dirs before the fill; a whole default spec is
+165,323 trees, millions of files). Now `execute()` deletes the tree once
+the task's shards are in the store — the shard is the durable artifact,
+a later run reinstalls what a missing shard needs (npm's own cache makes
+that cheap), and a FAILED task keeps its tree (usually small, and what a
+bundle failure is debugged in). Peak work-dir footprint falls from
+terabytes to the concurrent workers' few trees.
+
 ### (d) Installability (npm `--before` ETARGET)
 
 cb64's build ETARGET'd 270 pins (`npm install <pin> --before=<its publish

@@ -76,20 +76,26 @@ of = ["impact"]
 # today's index's own policy, at today's scale (~58k versions over the
 # ~19k-package universe).
 policy = "as-of"
-# The replayable popularity signal (exp184): for every planned version,
-# also index the version each of its dependency ranges resolved to as of
-# the dependent's own publish time — the versions real installs
-# actually got, computed from packuments (unlike per-version download
-# counts, which cannot be replayed later).
-dependents = true
+# The replayable popularity signal (exp184): for every package in the
+# plan, also index the versions its planned dependents' ranges resolved
+# to, each as of the dependent's own publish time — the versions real
+# installs actually got, computed from packuments (unlike per-version
+# download counts, which cannot be replayed later). At most this many per
+# package, the most-resolved first; a dependent version's own
+# dependencies are not walked (uncapped and cascading, the rule planned
+# ~77,600 versions on its own).
+dependents = 2
 
 # Family overrides — rules, not a list of packages:
 
 [[versions.override]]
 id = "aws-sdks"
-# The AWS SDKs release dozens of versions a week; their bundle surface
-# only changes at major boundaries, so index the 200 newest.
-policy = "latest-200"
+# The AWS SDKs release almost daily, all within one major (v3): the
+# version an app bundled is whatever was current when it was built. So
+# every release of the six months before as_of (and always the newest),
+# not a fixed count. BREADTH (which @aws-sdk packages are indexed at all)
+# comes from the universe rules above, not from this override.
+policy = "recent-6mo"
 names = ["@aws-sdk/*"]
 
 # ---- refusals ----

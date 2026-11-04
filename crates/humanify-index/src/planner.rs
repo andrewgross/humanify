@@ -164,6 +164,10 @@ struct Resolution<'a, 'b> {
     /// version → (reason) per package, in the order the rules refused.
     refused: BTreeMap<String, Vec<(String, String)>>,
     pending: BTreeMap<String, Vec<Pending>>,
+    /// The `dependents` rule's tally: package → resolved version → how
+    /// many planned versions' ranges resolved to it, and the first edge
+    /// that did (its attribution). Decided once the walk ends.
+    votes: BTreeMap<String, BTreeMap<String, (usize, String)>>,
     queue: VecDeque<(String, String)>,
     closure_rank: usize,
     skipped: BTreeMap<String, Vec<String>>,
@@ -274,7 +278,7 @@ impl Resolution<'_, '_> {
         let rule = format!(
             "sel={} rule={}{}",
             self.spec.select[pkg.selection].id,
-            policy_name(policy),
+            policy.name(),
             match override_id {
                 Some(id) => format!(" override={id}"),
                 None => String::new(),
@@ -303,25 +307,11 @@ impl Resolution<'_, '_> {
         self.order.push(name.to_string());
         self.universe.insert(name.to_string(), pkg);
         // the spec's version-matching refusal rules
-        let version_refusals = self.version_refusals.clone();
-        for (id, when) in &version_refusals {
-            for (version, _) in &versions {
-                let meta = p.deps.get(version);
-                let matched = match when {
-                    RefusalMatch::Versions(vs) => {
-                        vs.iter().any(|v| v == &format!("{name}@{version}"))
-                    }
-                    RefusalMatch::Platform => meta.is_some_and(|m| m.platform),
-                    RefusalMatch::UnpackedSizeOver(over) => meta
-                        .and_then(|m| m.unpacked_size)
-                        .is_some_and(|s| s > *over),
-                    RefusalMatch::Names(_) => false,
-                };
-                if matched {
-                    self.planned.get_mut(name).expect("planned").remove(version);
-                    let reason = self.reason_of(id);
-                    self.record_refused(name, version, &reason);
-                }
+        for (version, _) in &versions {
+            if let Some(id) = self.version_refusal(&p, name, version) {
+                self.planned.get_mut(name).expect("planned").remove(version);
+                let reason = self.reason_of(&id);
+                self.record_refused(name, version, &reason);
             }
         }
         for (v, _) in &versions {
@@ -351,7 +341,9 @@ impl Resolution<'_, '_> {
 
     /// Resolve every range planned versions have put on `name` — the
     /// `dependents` rule: the version each range resolved to as of the
-    /// requester's own publish time.
+    /// requester's own publish time is TALLIED (planned, capped, by
+    /// `finish_dependents` once the walk ends; a dependent version's own
+    /// dependencies are never walked, so the rule cannot cascade).
     fn resolve_pending(&mut self, name: &str) -> Result<(), String> {
         let Some(pendings) = self.pending.remove(name) else {
             return Ok(());
@@ -364,40 +356,82 @@ impl Resolution<'_, '_> {
             let Some(resolved) = resolve_range(&p, &d.range, &d.cutoff) else {
                 continue;
             };
-            if self
-                .planned
-                .get(name)
-                .is_some_and(|m| m.contains_key(&resolved))
-                || self
-                    .refused
-                    .get(name)
-                    .is_some_and(|rs| rs.iter().any(|(v, _)| v == &resolved))
-            {
-                continue;
-            }
-            let sel = self
-                .universe
-                .get(name)
-                .map(|u| self.spec.select[u.selection].id.clone());
-            let attribution = format!(
-                "sel={} dependent-of={}@{} range={}",
-                sel.unwrap_or_else(|| "?".into()),
-                d.from,
-                d.version,
-                d.range
-            );
-            let published = p.time.get(&resolved).and_then(|t| normalize_time(t));
-            self.planned.entry(name.to_string()).or_default().insert(
-                resolved.clone(),
-                Planned {
-                    role: "dependent".into(),
-                    published: published.unwrap_or_default(),
-                    attribution,
-                },
-            );
-            self.queue.push_back((name.to_string(), resolved));
+            let first = format!("{}@{} range={}", d.from, d.version, d.range);
+            self.votes
+                .entry(name.to_string())
+                .or_default()
+                .entry(resolved)
+                .or_insert((0, first))
+                .0 += 1;
         }
         Ok(())
+    }
+
+    /// The `dependents` rule's decision: per package, the `dependents`
+    /// most-resolved versions not already planned or refused (ties: the
+    /// higher version), each planned as a `dependent`.
+    fn finish_dependents(&mut self) -> Result<(), String> {
+        let cap = self.spec.versions.dependents;
+        let votes = std::mem::take(&mut self.votes);
+        for (name, tally) in votes {
+            if cap == 0 || !self.universe.contains_key(&name) {
+                continue;
+            }
+            let mut ranked: Vec<(String, usize, String)> = tally
+                .into_iter()
+                .filter(|(v, _)| {
+                    !self.planned.get(&name).is_some_and(|m| m.contains_key(v))
+                        && !self
+                            .refused
+                            .get(&name)
+                            .is_some_and(|rs| rs.iter().any(|(r, _)| r == v))
+                })
+                .map(|(v, (n, first))| (v, n, first))
+                .collect();
+            ranked.sort_by(|a, b| {
+                b.1.cmp(&a.1)
+                    .then_with(|| humanify_core::libindex::format::compare_versions(&b.0, &a.0))
+            });
+            ranked.truncate(cap);
+            if ranked.is_empty() {
+                continue;
+            }
+            let p = self.packument(&name)?;
+            let sel = self.spec.select[self.universe[&name].selection].id.clone();
+            for (version, n, first) in ranked {
+                if let Some(id) = self.version_refusal(&p, &name, &version) {
+                    let reason = self.reason_of(&id);
+                    self.record_refused(&name, &version, &reason);
+                    continue;
+                }
+                let published = p.time.get(&version).and_then(|t| normalize_time(t));
+                self.planned.entry(name.clone()).or_default().insert(
+                    version,
+                    Planned {
+                        role: "dependent".into(),
+                        published: published.unwrap_or_default(),
+                        attribution: format!("sel={sel} dependents={n} first={first}"),
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// The first version-matching refusal rule `name@version` meets.
+    fn version_refusal(&self, p: &Packument, name: &str, version: &str) -> Option<String> {
+        let meta = p.deps.get(version);
+        self.version_refusals.iter().find_map(|(id, when)| {
+            let matched = match when {
+                RefusalMatch::Versions(vs) => vs.iter().any(|v| v == &format!("{name}@{version}")),
+                RefusalMatch::Platform => meta.is_some_and(|m| m.platform),
+                RefusalMatch::UnpackedSizeOver(over) => meta
+                    .and_then(|m| m.unpacked_size)
+                    .is_some_and(|s| s > *over),
+                RefusalMatch::Names(_) => false,
+            };
+            matched.then(|| id.clone())
+        })
     }
 
     /// Walk one planned version's dependencies: every range is recorded
@@ -444,7 +478,7 @@ impl Resolution<'_, '_> {
                 cutoff: published.clone(),
             };
             if self.universe.contains_key(&dep) {
-                if self.spec.versions.dependents {
+                if self.spec.versions.dependents > 0 {
                     self.pending.entry(dep.clone()).or_default().push(edge);
                     self.resolve_pending(&dep)?;
                 }
@@ -454,7 +488,7 @@ impl Resolution<'_, '_> {
                 // not a closure member: the dependency is out of scope —
                 // but the range is recorded, so a LATER closure entry of
                 // the package resolves it (enter's resolve_pending)
-                if self.spec.versions.dependents {
+                if self.spec.versions.dependents > 0 {
                     self.pending.entry(dep).or_default().push(edge);
                 }
                 continue;
@@ -474,7 +508,7 @@ impl Resolution<'_, '_> {
             // the edge's range rides in too: enter's resolve_pending
             // applies it, so the version the edge resolved to joins the
             // member's policy picks
-            if self.spec.versions.dependents {
+            if self.spec.versions.dependents > 0 {
                 self.pending.entry(dep.clone()).or_default().push(edge);
             }
             self.enter(&dep, pkg, Some(&format!("{name}@{version}")))?;
@@ -593,19 +627,6 @@ fn resolve_range(p: &Packument, range_text: &str, cutoff: &str) -> Option<String
     best.map(|(v, _)| v)
 }
 
-/// The planner's policy name in a plan record (the spelling
-/// `VersionPolicy::from_name` accepts).
-pub fn policy_name(p: VersionPolicy) -> String {
-    match p {
-        VersionPolicy::AsOf => "as-of".into(),
-        VersionPolicy::YearAllMinor => "year-all+minor".into(),
-        VersionPolicy::YearAllMajor => "year-all+major".into(),
-        VersionPolicy::YearLast { recent, lines } => format!("year-last{recent}+major{lines}"),
-        VersionPolicy::Latest(n) => format!("latest-{n}"),
-        VersionPolicy::PinsOnly => "pins-only".into(),
-    }
-}
-
 /// Which packages a resolution plans, and by which rules.
 pub fn resolve(spec: &IndexSpec, src: &mut Sources) -> Result<ResolvedSpec, String> {
     let needs_deps = needs_deps(spec);
@@ -623,6 +644,7 @@ pub fn resolve(spec: &IndexSpec, src: &mut Sources) -> Result<ResolvedSpec, Stri
         planned: BTreeMap::new(),
         refused: BTreeMap::new(),
         pending: BTreeMap::new(),
+        votes: BTreeMap::new(),
         queue: VecDeque::new(),
         closure_rank: 0,
         skipped: BTreeMap::new(),
@@ -686,6 +708,7 @@ pub fn resolve(spec: &IndexSpec, src: &mut Sources) -> Result<ResolvedSpec, Stri
         return Err(format!("{outage} first {first}"));
     }
     res.drain()?;
+    res.finish_dependents()?;
     Ok(res.finish())
 }
 
@@ -699,7 +722,7 @@ fn is_closure_root(spec: &IndexSpec, si: usize) -> bool {
 
 /// Whether the spec's rules need per-version metadata at all.
 fn needs_deps(spec: &IndexSpec) -> bool {
-    spec.versions.dependents
+    spec.versions.dependents > 0
         || spec
             .select
             .iter()

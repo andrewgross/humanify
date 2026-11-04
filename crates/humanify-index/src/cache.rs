@@ -105,7 +105,7 @@ pub struct SpecPlannedVersion {
     pub version: String,
     pub role: String,
     pub published: String,
-    /// `sel=<id> … rule=<policy>` / `override=<id> …` / `dependent-of=…`.
+    /// `sel=<id> … rule=<policy>` / `override=<id> …` / `dependents=<n> first=…`.
     pub attribution: String,
 }
 
@@ -133,7 +133,7 @@ pub struct SpecSidecar {
     pub spec_sha256: String,
     pub as_of: String,
     pub default_policy: String,
-    pub dependents: bool,
+    pub dependents: usize,
     /// bundler → the version the spec pins.
     pub tools: BTreeMap<String, String>,
     pub selections: Vec<SpecSelection>,

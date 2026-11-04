@@ -36,7 +36,7 @@ of = ["impact"]
 
 [versions]
 policy = "as-of"
-dependents = true
+dependents = 2
 "#;
 
 /// The canned `npm-high-impact` list the tests' fetcher returns.
@@ -359,7 +359,7 @@ fn the_dependents_rule_adds_the_version_the_ranges_resolve_to() {
             .find(|s| s.version == "3.4.0")
             .is_some_and(|s| s.role == "dependent"
                 && s.attribution.as_deref()
-                    == Some("sel=dep-trees dependent-of=ms@2.1.3 range=^3")),
+                    == Some("sel=dep-trees dependents=1 first=ms@2.1.3 range=^3")),
         "{:?}",
         plan_of(&res, "ansi-styles").versions
     );
@@ -429,7 +429,7 @@ fn a_closure_members_entering_edge_resolves_its_range() {
             .iter()
             .find(|s| s.version == "3.4.0")
             .is_some_and(|s| s.attribution.as_deref()
-                == Some("sel=dep-trees dependent-of=ms@2.1.3 range=^3")),
+                == Some("sel=dep-trees dependents=1 first=ms@2.1.3 range=^3")),
         "{:?}",
         plan_of(&res, "ansi-styles").versions
     );
@@ -740,4 +740,77 @@ fn an_absent_packument_from_the_loader_is_skipped_and_recorded() {
             .collect::<Vec<_>>(),
         ["chalk", "ms", "left-pad"]
     );
+}
+
+/// A registry where two dependent versions of ansi-styles compete: 3.4.0
+/// resolved by two planned versions (ms@2.1.3 and chalk@2.4.2, both
+/// `^3`), 2.0.0 by one (left-pad@1.3.0, `~2.0.0`). 3.4.0 itself depends
+/// on a package the registry does not hold: walking a DEPENDENT version's
+/// own dependencies would fail the resolution.
+fn competing_dependents() -> TestRegistry {
+    let mut r = registry();
+    r.packs.insert(
+        "ansi-styles".into(),
+        packument(
+            "ansi-styles",
+            r#""created":"2013-01-01T00:00:00.000Z","2.0.0":"2015-01-01T00:00:00.000Z","3.4.0":"2019-01-01T00:00:00.000Z","5.2.0":"2021-01-01T00:00:00.000Z","6.1.0":"2022-06-01T00:00:00.000Z","7.0.0":"2023-04-01T00:00:00.000Z""#,
+            r#""2.0.0","3.4.0","5.2.0","6.1.0","7.0.0""#,
+            &[("3.4.0", &[("not-in-the-registry", "^1")])],
+        ),
+    );
+    r.packs.get_mut("chalk").expect("chalk").deps.insert(
+        "2.4.2".to_string(),
+        VersionMeta {
+            dependencies: [("ansi-styles".to_string(), "^3".to_string())]
+                .into_iter()
+                .collect(),
+            ..VersionMeta::default()
+        },
+    );
+    r.packs.get_mut("left-pad").expect("left-pad").deps.insert(
+        "1.3.0".to_string(),
+        VersionMeta {
+            dependencies: [("ansi-styles".to_string(), "~2.0.0".to_string())]
+                .into_iter()
+                .collect(),
+            ..VersionMeta::default()
+        },
+    );
+    r
+}
+
+#[test]
+fn the_dependents_cap_keeps_the_most_resolved_versions_per_package() {
+    let dependents = |res: &ResolvedSpec| -> Vec<String> {
+        plan_of(res, "ansi-styles")
+            .versions
+            .iter()
+            .filter(|s| s.role == "dependent")
+            .map(|s| s.version.clone())
+            .collect()
+    };
+    // a cap of 1: only the version two dependents resolve to
+    let mut r = competing_dependents();
+    let res = resolved(&SPEC.replace("dependents = 2", "dependents = 1"), &mut r);
+    assert_eq!(dependents(&res), vec!["3.4.0".to_string()]);
+    let pick = plan_of(&res, "ansi-styles")
+        .versions
+        .iter()
+        .find(|s| s.version == "3.4.0")
+        .expect("planned");
+    assert_eq!(
+        pick.attribution.as_deref(),
+        Some("sel=dep-trees dependents=2 first=chalk@2.4.2 range=^3"),
+    );
+    // a cap of 2: both, most-resolved first in the record's own order
+    let mut r = competing_dependents();
+    let res = resolved(SPEC, &mut r);
+    assert_eq!(
+        dependents(&res),
+        vec!["3.4.0".to_string(), "2.0.0".to_string()]
+    );
+    // 0 turns the rule off
+    let mut r = competing_dependents();
+    let res = resolved(&SPEC.replace("dependents = 2", "dependents = 0"), &mut r);
+    assert!(dependents(&res).is_empty());
 }
