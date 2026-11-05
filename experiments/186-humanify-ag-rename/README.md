@@ -13,14 +13,14 @@ backwards compatibility.
 
 ## Totals first
 
-| what                         | count                                                                                       |
-| ---------------------------- | ------------------------------------------------------------------------------------------- |
-| crates renamed (git mv)      | 5: `humanify-{cli,core,index,llm,model}` → `humanify-ag-{cli,core,index,llm,model}`         |
-| product binaries             | 2 → 1: `humanify` + `humanify-index` → `humanify-ag` (the builder is `humanify-ag index …`) |
-| launch sites updated         | LAUNCH_SITES                                                                                |
-| files touched                | FILES_TOUCHED                                                                               |
-| goldens regenerated          | 4, each by its generator (below); none hand-edited                                          |
-| deobfuscation output changed | none (neutrality, below)                                                                    |
+| what                         | count                                                                                                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| crates renamed (git mv)      | 5: `humanify-{cli,core,index,llm,model}` → `humanify-ag-{cli,core,index,llm,model}`                                               |
+| product binaries             | 2 → 1: `humanify` + `humanify-index` → `humanify-ag` (the builder is `humanify-ag index …`)                                       |
+| launch sites updated         | 11 harness launch sites (scripts/, experiments/lib/, 034, 096) + 10 cargo integration-test launches + 2 harness test expectations |
+| files touched                | 563 (476 renamed — 275 pure moves, 201 moved and edited — 85 edited in place, 2 new)                                              |
+| goldens regenerated          | 4, each by its generator (below); none hand-edited                                                                                |
+| deobfuscation output changed | none (neutrality, below)                                                                                                          |
 
 ## What changed
 
@@ -103,15 +103,70 @@ messages in the emitted `run.cjs` (that file IS in the scored trees).
 
 ## Gate
 
-GATE_TABLE
+Commit 2268a2124 (the code; later commits are this README only), `npm run check` run bare:
+
+| stage              | worktree | clean checkout |
+| ------------------ | -------- | -------------- |
+| typecheck          | PASS     | pending        |
+| lint               | PASS     | pending        |
+| rust:fmt           | PASS     | pending        |
+| rust:clippy        | PASS     | pending        |
+| knip               | PASS     | pending        |
+| knip:prod          | PASS     | pending        |
+| census:clones      | PASS     | pending        |
+| census:concurrency | PASS     | pending        |
+| unit               | PASS     | pending        |
+| rust:unit          | PASS     | pending        |
+| rust:build         | PASS     | pending        |
+| rust:format-golden | PASS     | pending        |
+| e2e                | PASS     | pending        |
+
+The first two worktree runs were red and fixed: prettier on the new test,
+then `unit` — the exp096 scorer imports
+`experiments/095-library-fingerprints/selection/scripts/libix.py`, which
+reads `crates/humanify-index/data` and the families file by path. That file
+is a living dependency, so its paths were updated (the rest of exp095 was
+not).
 
 ## Neutrality (WARM, `--cache /work/neutrality-cache`, pair 2.1.85:2.1.86, baseline main b01b4651c)
 
-NEUTRALITY_TABLE
+Both legs replay the standing warm cache. The candidate leg ran
+`target/release/humanify-ag`; the baseline leg was built from main by
+`build_humanify` as `target/release/humanify` — the per-commit binary name,
+exercised for real.
+
+| mode                             | candidate cache writes | baseline cache writes (must be 0) | exit codes (cand / base) | differing files | differing lines | verdict |
+| -------------------------------- | ---------------------- | --------------------------------- | ------------------------ | --------------- | --------------- | ------- |
+| names (default; index cb64c1f5…) | 0                      | 0                                 | 0 / 0                    | 0               | 0               | NEUTRAL |
+| off (`library.matching=off`)     | 0                      | 0                                 | 0 / 0                    | 0               | 0               | NEUTRAL |
+
+Beyond the verdict (which excludes diagnostics-only artifacts), a plain
+`diff -rq` of the two output trees — everything, `.humanify/` and the stats
+included — is empty in both modes. The two legs' stdout differ only in
+timings and their own output paths.
+
+Workdirs: `/work/exp186-neutral-names`, `/work/exp186-neutral-off`.
 
 ## What I could not prove
 
-NOT_PROVEN
+- Neutrality covers one pair (2.1.85->2.1.86), both naming modes; the change
+  touches no decision code, only crate paths, names and argv dispatch, so no
+  other pair can reach a difference — but that is an argument, not a run.
+- `humanify-ag index build` was not run end to end (a real build is hours;
+  the lock is promised to an index build). What is proven: the subcommand
+  parses every flag the old binary took (`the_index_builder_is_a_subcommand`),
+  the build code is the old `main.rs` moved verbatim except `std::process::exit`
+  → a returned exit code, the index crate's 162 tests and the run-time index
+  tests (which drive `humanify_ag_index::build`) pass, and `--help` /
+  the `--out` refusal (exit 1) behave as before by hand.
+- `scripts/build-index.sh` was syntax-checked (`bash -n`), not run.
+- `experiments/096-library-matching-score/run.py`'s build path was checked
+  by calling `pipeline_crate_of` the way it does on both layouts, not by a
+  full exp096 run.
+- Historical experiment scripts outside the brief's directories (exp095
+  protos with `path = "../../../../crates/humanify-index"`, exp097/101/105/131
+  build scripts calling a `humanify-index` binary, …) no longer build or run
+  against this tree. Nothing in the gate or the eval reaches them.
 
 ## Follow-up questions for Andrew (user-visible names left as they are)
 
@@ -137,5 +192,49 @@ The brief said not to change these in this lane; each is still spelled
 ## Proposed CLAUDE.md diff (not applied — CLAUDE.md is Andrew's)
 
 ```diff
-CLAUDE_DIFF
+--- a/CLAUDE.md	2026-11-05 15:14:00.896413861 +0000
++++ b/CLAUDE.md	2026-11-05 15:14:00.903413863 +0000
+@@ -24,7 +24,9 @@
+ outside it.
+
+ **The pipeline is the Rust binary** (`crates/`, built as
+-`target/release/humanify`). The TypeScript pipeline (`src/`) was deleted at the
++`target/release/humanify-ag` — the one product command since exp186, with
++the offline index builder as its `index` subcommand: `humanify-ag index
++build --spec …`). The TypeScript pipeline (`src/`) was deleted at the
+ cutover, 2026-09-26 — `docs/rust-port/19-cutover.md` is the ledger of what was
+ deleted, moved or retired and why; tag `m4` is the last tree that has it. The
+ TS that remains is the measurement harness (`scripts/`, `experiments/lib/`,
+@@ -74,7 +76,7 @@
+ npm run census:clones      # cross-file twin functions vs allowlist (--loose = review sweep)
+ npm run census:concurrency # concurrency sites in crates/ vs scripts/concurrency-allowlist.json
+ cargo test --workspace     # rust:unit
+-cargo build --release --locked -p humanify-cli   # rust:build
++cargo build --release --locked -p humanify-ag-cli   # rust:build
+ scripts/format-golden.sh   # rust:format-golden (needs rust:build)
+ npm run test:e2e           # e2e (needs rust:build)
+```
+
+@@ -198,7 +200,7 @@
+archive prior (`ts-control-fec64e5` r1; check eval logs for "rebase FAILED").
+
+**What the eval scores: the Rust binary, always.** `npm run eval -- score
+-<label>` BUILDS `target/release/humanify` (`cargo build --release --locked`) +<label>`BUILDS`target/release/humanify-ag` (`cargo build --release --locked`)
+ and runs it at all three launch sites: the rebase, the scored leg and the
+ self-hop. `--bin <path>`names a different binary (in some cargo workspace's
+`target/`). There is no TS mode — the cutover removed it, and a run config
+@@ -450,7 +452,7 @@
+
+- **[`docs/responsibility.md`](./docs/responsibility.md) says who owns which question** — name legality, applying a rename, counting changed lines, walking a tree, reading a ledger, reading a kill switch. Check it before writing a helper, and add a row when you create an owner. The dangerous duplication is not two functions that look alike; it is two that answer the same question DIFFERENTLY with nothing declaring the difference (a guard that read fields one producer never sets was dead for 11,094 accepts and reported as perfect precision).
+- **[`docs/pipeline-stages.md`](./docs/pipeline-stages.md) lists the twelve stages that actually run** (Rust modules since the cutover), in order, and which two have a real strategy registry (unpack, library detection). Read it before assuming a plug point exists: the working mental model was four stages, and the eight unwritten ones are where the noise has come from — `vendor/` went unscored for thirteen experiments at 2.4x the measured `src/` noise. Splitting has ONE path (`stableSplitFromCode`; prior → inherit layout, no prior → fresh grouping): the standalone `split` command, its adapter registry, and the legacy clustering splitter that backed them were deleted 2026-08-11/12 after an execution census measured them at zero runs.
+- **Configuration: every key is a flag.** Add a setting by adding a key to the
+- registry (`crates/humanify-cli/src/config/keys.rs`), never a hand-written
+
+* registry (`crates/humanify-ag-cli/src/config/keys.rs`), never a hand-written
+  flag; the flag, the config-file key, the help text and
+  `humanify.example.toml` are all generated from it, and a flag and a config
+  value that disagree fail.
+
+```
+
 ```
