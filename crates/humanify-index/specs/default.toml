@@ -81,6 +81,10 @@ of = ["impact"]
 #   every-<K>        every K-th release back from the newest: depth spread
 #                    evenly, no release more than K-1 from an indexed one
 #   recent-<N>mo     every release of the N months before as_of
+#   min-dwell-<N>d   skip a release a higher one of its major replaced
+#                    within N days (a fast follow-up fix: barely installed);
+#                    each major's newest stays. Wrong for packages that
+#                    release on a schedule (AWS): use every-<K> there
 #   year-all+minor / year-all+major / year-last<N>+major<M>
 #                    a year of releases plus older lines (exp095 lab)
 # e.g. policy = ["as-of", "every-5"] with max = 40.

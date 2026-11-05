@@ -287,6 +287,46 @@ pub fn grace_cutoff(published: &str) -> Option<String> {
     ))
 }
 
+/// Seconds since 1970-01-01T00:00:00Z of a UTC time [`normalize_time`]
+/// accepts (the milliseconds dropped).
+fn epoch_secs(t: &str) -> Option<i64> {
+    let t = normalize_time(t)?;
+    let num = |a: usize, b: usize| t[a..b].parse::<i64>().ok();
+    let days = days_from_civil(num(0, 4)?, num(5, 7)?, num(8, 10)?);
+    Some(days * 86_400 + num(11, 13)? * 3600 + num(14, 16)? * 60 + num(17, 19)?)
+}
+
+/// [`VersionPolicy::MinDwell`]: highest first.
+fn min_dwell(
+    stable: &[(Semver, &str)],
+    days: u32,
+    published: &dyn Fn(&str) -> Option<String>,
+) -> Vec<(&'static str, String)> {
+    let at: Vec<(&Semver, &str, Option<i64>)> = stable
+        .iter()
+        .map(|(s, v)| (s, *v, published(v).and_then(|t| epoch_secs(&t))))
+        .collect();
+    let mut kept: Vec<(&Semver, &str)> = at
+        .iter()
+        .filter(|(s, _, t)| {
+            let Some(t) = *t else {
+                return false;
+            };
+            let replaced = at
+                .iter()
+                .filter(|(w, _, wt)| w.major == s.major && *w > *s && wt.is_some_and(|wt| wt >= t))
+                .filter_map(|(_, _, wt)| *wt)
+                .min();
+            replaced.is_none_or(|r| r - t >= i64::from(days) * 86_400)
+        })
+        .map(|(s, v, _)| (*s, *v))
+        .collect();
+    kept.sort_by(|a, b| b.0.cmp(a.0));
+    kept.into_iter()
+        .map(|(_, v)| ("dwell", v.to_string()))
+        .collect()
+}
+
 /// Days since 1970-01-01 of a proleptic Gregorian date (Hinnant's
 /// `days_from_civil`).
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
@@ -396,6 +436,14 @@ pub enum VersionPolicy {
     /// drift: a release keeps ~70% of its units 5 releases apart, ~10–90%
     /// at 20). With `max`, the newest `max` of them.
     Every(usize),
+    /// Every stable release NOT replaced by a higher release of its own
+    /// major line within `days` of its publish (`min-dwell-<N>d`): a
+    /// release fixed by a fast follow-up was barely installed (exp184:
+    /// such versions draw ~1-5% of the downloads of the others), so the
+    /// rest carry most of the real use. Each major's newest always stays.
+    /// For packages that release on a schedule (the AWS SDKs) nearly
+    /// every release is "replaced quickly" — use `every-<K>` there.
+    MinDwell { days: u32 },
     /// Nothing but the pins (`--pinned`: the bundle's readers named them).
     PinsOnly,
 }
@@ -414,6 +462,7 @@ impl VersionPolicy {
             VersionPolicy::Latest(n) => format!("latest-{n}"),
             VersionPolicy::Recent { months } => format!("recent-{months}mo"),
             VersionPolicy::Every(k) => format!("every-{k}"),
+            VersionPolicy::MinDwell { days } => format!("min-dwell-{days}d"),
             VersionPolicy::PinsOnly => "pins".to_string(),
         }
     }
@@ -427,6 +476,10 @@ impl VersionPolicy {
                     VersionPolicy::Latest(n.parse().ok()?)
                 }
             });
+        }
+        if let Some(rest) = name.strip_prefix("min-dwell-") {
+            let days: u32 = rest.strip_suffix('d')?.parse().ok()?;
+            return (days > 0).then_some(VersionPolicy::MinDwell { days });
         }
         if let Some(rest) = name.strip_prefix("every-") {
             let k: usize = rest.parse().ok()?;
@@ -629,6 +682,7 @@ pub fn select_versions(
                 .map(|(_, v)| ("every", (*v).to_string()))
                 .collect()
         }
+        VersionPolicy::MinDwell { days } => min_dwell(versions, days, &published),
         VersionPolicy::PinsOnly => Vec::new(),
     };
     let mut plan = PackagePlan::default();

@@ -480,3 +480,47 @@ fn every_k_is_named_in_the_spec() {
     assert_eq!(VersionPolicy::from_name("every-0"), None);
     assert_eq!(VersionPolicy::from_name("every-x"), None);
 }
+
+#[test]
+fn min_dwell_skips_releases_a_higher_one_of_their_major_replaced_quickly() {
+    let got = |days: u32| {
+        select_versions(
+            &ms(),
+            &parse_as_of("2019-12-31").expect("date"),
+            &[],
+            VersionPolicy::MinDwell { days },
+        )
+        .selected
+        .into_iter()
+        .map(|s| s.version)
+        .collect::<Vec<_>>()
+    };
+    // 2.1.0 was replaced by 2.1.1 the same afternoon; 0.2.0 by 0.3.0 four
+    // days later. Each major's newest (2.1.2, 1.0.0, 0.7.3) always stays.
+    assert_eq!(
+        got(7),
+        [
+            "2.1.2", "2.1.1", "2.0.0", "1.0.0", "0.7.3", "0.7.2", "0.7.1", "0.7.0", "0.6.2",
+            "0.6.1", "0.6.0", "0.5.1", "0.5.0", "0.4.0", "0.3.0", "0.1.0"
+        ]
+    );
+    // a month: 0.5.1 (19 days) and 0.4.0 (19 days) go too
+    assert_eq!(
+        got(30),
+        [
+            "2.1.2", "2.1.1", "2.0.0", "1.0.0", "0.7.3", "0.7.2", "0.7.1", "0.7.0", "0.6.2",
+            "0.6.1", "0.6.0", "0.5.0", "0.3.0", "0.1.0"
+        ]
+    );
+}
+
+#[test]
+fn min_dwell_is_named_in_the_spec() {
+    assert_eq!(
+        VersionPolicy::from_name("min-dwell-7d"),
+        Some(VersionPolicy::MinDwell { days: 7 })
+    );
+    assert_eq!(VersionPolicy::MinDwell { days: 7 }.name(), "min-dwell-7d");
+    assert_eq!(VersionPolicy::from_name("min-dwell-0d"), None);
+    assert_eq!(VersionPolicy::from_name("min-dwell-7"), None);
+}
