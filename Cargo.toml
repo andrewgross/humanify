@@ -2,16 +2,16 @@
 # Four pipeline crates since the TS-parity retirement (2026-09-28): the dump
 # differ (humanify-parity) compared TS-side artifact dumps and then,
 # post-cutover, nothing — its only caller was the deleted rust:parity stage.
-# Plus humanify-index (2026-10-11): the OFFLINE library index builder, kept
+# Plus humanify-ag-index (2026-10-11): the OFFLINE library index builder, kept
 # out of the pipeline binary (docs/design/library-index.md §1).
 [workspace]
 resolver = "3"
 members = [
-  "crates/humanify-model",
-  "crates/humanify-core",
-  "crates/humanify-llm",
-  "crates/humanify-cli",
-  "crates/humanify-index",
+  "crates/humanify-ag-model",
+  "crates/humanify-ag-core",
+  "crates/humanify-ag-llm",
+  "crates/humanify-ag-cli",
+  "crates/humanify-ag-index",
 ]
 
 [workspace.package]
@@ -27,21 +27,21 @@ serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = { version = "=1.0.142", features = ["unbounded_depth"] }
 clap = { version = "=4.5.47", features = ["derive"] }
 # The --config file (config sweep step 5, 2026-10-13): TOML, parsed ONCE in
-# humanify-cli::config_file into a plain table, then walked against the key
+# humanify-ag-cli::config_file into a plain table, then walked against the key
 # registry (strict keys, typed values, ranges) — no serde derive on it.
 toml = { version = "=1.1.6", default-features = false, features = ["parse", "std", "serde", "display"] }
 sha2 = "=0.10.9"
 # The fossil tokens' short hash (fossil-assign.ts shortHash: sha1, 8 hex) — WP5.2.
 sha1 = "=0.10.6"
-# The LLM client (WP4.1): tokio runtime + reqwest HTTP, behind humanify-llm's
+# The LLM client (WP4.1): tokio runtime + reqwest HTTP, behind humanify-ag-llm's
 # synchronous NameProvider. native-tls uses the system OpenSSL (rustls'
 # default aws-lc provider needs cmake, absent in the devcontainer).
 tokio = "=1.53.1"
 reqwest = { version = "=0.13.5", default-features = false, features = ["native-tls"] }
 futures-util = { version = "=0.3.34", default-features = false, features = ["std"] }
-# The order-preserving parallel maps (crates/humanify-core/src/par.rs).
+# The order-preserving parallel maps (crates/humanify-ag-core/src/par.rs).
 rayon = "=1.12.0"
-# JS `Number::toString` (humanify_model::js::number_to_string, WP5.6):
+# JS `Number::toString` (humanify_ag_model::js::number_to_string, WP5.6):
 # shortest digits with ECMA-262's even tie-break, the version oxc_ecmascript
 # already locked (its default `ecma` feature spells NaN / Infinity).
 dragonbox_ecma = "=0.1.12"
@@ -61,7 +61,7 @@ oxc_syntax = "=0.150.0"
 oxc_traverse = "=0.150.0"
 
 [workspace.lints.rust]
-unsafe_code = "warn" # humanify-core forbids it at the crate root (02 §10)
+unsafe_code = "warn" # humanify-ag-core forbids it at the crate root (02 §10)
 
 [workspace.lints.clippy]
 # The house rules as lints (05 §4). Complexity ceiling matches biome's 15 in
@@ -69,7 +69,7 @@ unsafe_code = "warn" # humanify-core forbids it at the crate root (02 §10)
 cognitive_complexity = "deny"
 # Decision code must never iterate a hash-keyed collection (02 §5, 06 §4).
 iter_over_hash_type = "deny"
-# Reading the process environment outside humanify-cli's env module is the
+# Reading the process environment outside humanify-ag-cli's env module is the
 # TS kill-switch guard test in lint form (WP1.1).
 disallowed_methods = "deny"
 # Concurrency (docs/concurrency.md, "What clippy enforces"): no sync lock,

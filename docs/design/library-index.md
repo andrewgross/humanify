@@ -19,9 +19,11 @@ it (Andrew, 2026-10-11).
 
 ## Totals first
 
-- **Where it lives.** A new crate, `crates/humanify-index`, with its own
-  binary `humanify-index`. The fingerprints themselves are computed by
-  `humanify-core` — the same functions the pipeline will call to look a
+- **Where it lives.** A crate, `crates/humanify-ag-index`, run as the
+  `index` subcommand of the one `humanify-ag` binary (`humanify-ag index
+build --spec …`; until exp186 it was a separate `humanify-index`
+  binary). The fingerprints themselves are computed by
+  `humanify-ag-core` — the same functions the pipeline will call to look a
   module up. The builder never hashes anything on its own.
 - **What a build does.** Read a package list and a date → pick the versions
   that existed on that date → install each one (dependencies as they were
@@ -46,17 +48,17 @@ it (Andrew, 2026-10-11).
 
 ## 1. Separation: a builder outside the run, sharing the pipeline's code
 
-| Piece                                                                                                  | Lives in                                                                             | Why there                                                                                                                                                                                                                |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Module fingerprint (whole-module key of a bundled CommonJS module)                                     | `humanify_core::modules::vendor_content::bundle_content_keys` → `vendor_content_key` | The pipeline already keys vendor modules this way (carry by content). The index must hold the key the pipeline will compute for the same module, so it is the same function, not a copy.                                 |
-| Literal fingerprint (the strings, property names, numbers and regexes a minifier cannot rename)        | `humanify_core::libindex::literals`                                                  | The pipeline will extract the literals of a bundled module and look them up in an index built from npm SOURCE. Both sides call one extractor with a mode (`Source` / `Bundled`).                                         |
-| Index format: manifest, rows, version ranges, the semver order ranges are read in                      | `humanify_core::libindex::format`                                                    | The pipeline reads it; the builder writes it. One set of types.                                                                                                                                                          |
-| Bundler slice (which part of the index a bundle is looked up in)                                       | `humanify_core::libindex::IndexSlice`                                                | A plugin piece (below).                                                                                                                                                                                                  |
-| Registry reading, as-of selection, npm install, bundler runs, sourcemap attribution, shards, the merge | `crates/humanify-index`                                                              | Network, subprocesses (npm, bun, esbuild) and a work tree of installs have no place in the pipeline binary, which must stay offline and deterministic. The builder's release cadence is the index's, not the pipeline's. |
+| Piece                                                                                                  | Lives in                                                                                | Why there                                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Module fingerprint (whole-module key of a bundled CommonJS module)                                     | `humanify_ag_core::modules::vendor_content::bundle_content_keys` → `vendor_content_key` | The pipeline already keys vendor modules this way (carry by content). The index must hold the key the pipeline will compute for the same module, so it is the same function, not a copy.                                 |
+| Literal fingerprint (the strings, property names, numbers and regexes a minifier cannot rename)        | `humanify_ag_core::libindex::literals`                                                  | The pipeline will extract the literals of a bundled module and look them up in an index built from npm SOURCE. Both sides call one extractor with a mode (`Source` / `Bundled`).                                         |
+| Index format: manifest, rows, version ranges, the semver order ranges are read in                      | `humanify_ag_core::libindex::format`                                                    | The pipeline reads it; the builder writes it. One set of types.                                                                                                                                                          |
+| Bundler slice (which part of the index a bundle is looked up in)                                       | `humanify_ag_core::libindex::IndexSlice`                                                | A plugin piece (below).                                                                                                                                                                                                  |
+| Registry reading, as-of selection, npm install, bundler runs, sourcemap attribution, shards, the merge | `crates/humanify-ag-index`                                                              | Network, subprocesses (npm, bun, esbuild) and a work tree of installs have no place in the pipeline binary, which must stay offline and deterministic. The builder's release cadence is the index's, not the pipeline's. |
 
-Rejected: a `humanify index build` verb in the pipeline binary. It would
+Rejected: a `humanify-ag index build` verb in the pipeline binary. It would
 put npm and network code in the binary the eval scores
-(`rust:build -p humanify-cli`), and every builder change would change the
+(`rust:build -p humanify-ag-cli`), and every builder change would change the
 scored binary's hash. A separate crate keeps "how the index is made" out of
 "how a bundle is processed", while the shared fingerprint functions stay in
 one place.
@@ -67,7 +69,7 @@ Since exp184 the build is driven by ONE committed spec file (§2a) instead
 of a package list and flags:
 
 ```
-humanify-index build --spec <file> --registry <dir> \
+humanify-ag index build --spec <file> --registry <dir> \
     --store <dir> --work <dir> --out <dir> \
     [--jobs N] [--offline] [--dry-run] [--chunk I/N] [--merge-only]
 ```
@@ -128,9 +130,9 @@ humanify-index build --spec <file> --registry <dir> \
 
 ## 2a. The spec: how the default index is made (exp184)
 
-The default index is described by `crates/humanify-index/specs/default.toml`
+The default index is described by `crates/humanify-ag-index/specs/default.toml`
 (schema `humanify-index-spec/1`), and nothing else: a new user runs
-`scripts/build-index.sh crates/humanify-index/specs/default.toml <registry>
+`scripts/build-index.sh crates/humanify-ag-index/specs/default.toml <registry>
 <store> <work> <out>` against the public npm registry and gets an index of
 the same shape and coverage. Every package and version in the plan is
 there because a RULE chose it; the resolved plan (every `pkg@version` and
@@ -228,7 +230,7 @@ An index is a directory of two kinds of table: ROW tables (UTF-8 JSON or
 JSON-lines, one row per line, rows sorted, keys in a fixed order, a
 trailing newline) — provenance, read by instruments (the exp096 scorer
 reads `units.<slice>.jsonl` and `versions.json`), never by a run — and
-LOOKUP tables (binary, `humanify_core::libindex::table`), the only tables a
+LOOKUP tables (binary, `humanify_ag_core::libindex::table`), the only tables a
 run reads.
 
 ```
@@ -401,11 +403,11 @@ A structural fingerprint depends on the bundler (Bun vs esbuild agree on
   5 production + terser, one chunk; `rollup:target=node,format=cjs,minify`:
   rollup 4 + node-resolve + commonjs + json + terser); their bundles cut
   into units by their own module grammar on both sides.
-- **The builder's recipe per slice** (`humanify-index`'s `recipe`): how to
+- **The builder's recipe per slice** (`humanify-ag-index`'s `recipe`): how to
   run that bundler (Bun: `bun build --target node --format cjs --minify
 --sourcemap=external`; esbuild: `--bundle --platform=node --format=cjs
 --minify --sourcemap=external`; webpack and rollup: the Node scripts in
-  `crates/humanify-index/recipes/`, run as `node <script> <entry> <out>
+  `crates/humanify-ag-index/recipes/`, run as `node <script> <entry> <out>
   <format> [external…]` from `--webpack` / `--rollup`, because their
   recipes are configuration code). The recipe's version is part of the
   shard key. No recipe keeps a map's `sourcesContent` (exp131: esbuild
@@ -434,8 +436,8 @@ A structural fingerprint depends on the bundler (Bun vs esbuild agree on
 | Shingles / MinHash                                                                                                                          | deferred                                                                 | Raw shingles are the size problem (246 MB at top-2,000); MinHash was not measured.                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 **Stop-lists and package families are data files** shipped with the index
-(`crates/humanify-index/data/stoplists.json`, and `families.json`, which since
-library discovery lives in `crates/humanify-core/src/libindex/` because the
+(`crates/humanify-ag-index/data/stoplists.json`, and `families.json`, which since
+library discovery lives in `crates/humanify-ag-core/src/libindex/` because the
 lookup reads it too; both copied into
 every index and hashed in its manifest): the helper packages (tslib,
 `@babel/runtime*`, `@babel/helpers`, `@swc/helpers`, regenerator-runtime,
@@ -500,11 +502,11 @@ automatically; lazy-ESM module keys; sub-tree units (since built: §7,
 normaliser (exp095 step 3); every lookup rule and the pipeline flag (§8);
 parallel builds beyond `--jobs 4`; compression of the tables.
 
-**Tests** (beside their modules): `crates/humanify-index/src/asof_test.rs`
+**Tests** (beside their modules): `crates/humanify-ag-index/src/asof_test.rs`
 (from a recorded `ms` packument, no network), `shard_test.rs`,
 `merge_test.rs`, `sourcemap_test.rs`, `recipe_test.rs`, `build_test.rs`
 (the plan, offline, no subprocess);
-`crates/humanify-core/src/libindex/literals_test.rs`, `format_test.rs`;
+`crates/humanify-ag-core/src/libindex/literals_test.rs`, `format_test.rs`;
 `modules/vendor_content/vendor_content_test.rs`'s three bundle-key tests.
 
 **Smoke (2026-10-11, 8 small packages, `--as-of 2022-06-30`):** 29
@@ -607,7 +609,7 @@ stores and a hard-linked seeded work dir (68,304 versions; 62,739 seeded):
 cores, merge 17.5 min at 34 GB peak RSS
 (`experiments/113-k2-all/scripts/build-k2-all.sh`).
 
-**How to build one** (the builder is `crates/humanify-index`; every step
+**How to build one** (the builder is `crates/humanify-ag-index`; every step
 runs offline against a registry snapshot except npm installs):
 
 1. **Package set.** A roots list and a `--pinned` list (exp101's
@@ -624,7 +626,7 @@ runs offline against a registry snapshot except npm installs):
    reads the slices' builds from `--work`, so seed the work dir from earlier
    builds (`experiments/109-default-config/scripts/seed-work.sh`: installs
    hard-linked, finished builds copied).
-3. **Build in short-lived processes.** A `humanify-index build` process
+3. **Build in short-lived processes.** A `humanify-ag index build` process
    grows ~40 MB per version it builds; run many small ones
    (`experiments/108-app-corpus/scripts/build_chunks.py`, ~100 pins per
    chunk), then one `build ... --merge-only` (the streaming merge, §4).
@@ -632,7 +634,7 @@ runs offline against a registry snapshot except npm installs):
    at most 30 cores.
 4. **Slim an old work dir** (builds made before exp131 embed
    `sourcesContent`), under the build lock and `taskset`:
-   `humanify-index slim-cache --work <dir> --journal <dir>` rewrites each
+   `humanify-ag index slim-cache --work <dir> --journal <dir>` rewrites each
    build map in place through its inode (hard links stay shared, symlinks
    and `node_modules` untouched, an interrupted run finished from the
    journal on the next).

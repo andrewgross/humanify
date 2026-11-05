@@ -19,7 +19,7 @@ Every other case is byte-identical to the TS capture.
 
 ## Amendment 2026-09-25 — what WP5.6a/b's implementation overturned
 
-WP5.6a/b landed as `humanify-core::format` (branch `rust/wp5.6-format`;
+WP5.6a/b landed as `humanify-ag-core::format` (branch `rust/wp5.6-format`;
 gate logs `/work/rust-port/gates/wp5.6/`). G1 and G2 are byte-identical
 on every input (numbers below). Where the plan below was wrong or
 incomplete:
@@ -71,7 +71,7 @@ fresh.js`. The raw bundles are in the corpus too (vs the TS probe).
    2026-09-26 (fix/format-bugs) it prints them instead as a file HEADER,
    in source order, after any `#!` line — see the amendment below.
 7. **Numbers:** a synthesized number prints through
-   `humanify_model::js::number_to_string`, now `dragonbox_ecma` (pinned
+   `humanify_ag_model::js::number_to_string`, now `dragonbox_ecma` (pinned
    `=0.1.12`, the version oxc already locked) — one owner of
    `Number::toString`. The switch FIXED that owner: it broke exact ties
    upward, unlike V8 (finding #47).
@@ -510,7 +510,7 @@ The factory structural hash is computed at stage 3 on the raw bundle (`bun-modul
 **Control.** `main-2026-09-18` was scored at `1813577`. `src/` has 8 decision-touching commits after the oracle `f7a707d` alone, and more before it (`git log f7a707d..730eb99 -- src/`), for example `fc7ecb2`, which changed prompt text. Rule 10 says the control must be cold together with the candidate. So:
 
 1. Score a cold TS control at HEAD.
-2. Score two cold Rust runs: `npm run eval -- score rust-5b-<sha>-a --bin target/release/humanify`, then `-b`.
+2. Score two cold Rust runs: `npm run eval -- score rust-5b-<sha>-a --bin target/release/humanify-ag`, then `-b`.
 3. Re-measure the bands from the Rust repeats (M4 asks for re-measured bands). Take the wider of these and `noise-bands.json`.
 
 This needs the endpoint to be up (R14).
@@ -592,8 +592,8 @@ Move whatever is kept into a harness-owned directory, with Babel as a harness de
 
 ### Critical Files for Implementation
 
-- /Users/andrewgross/Development/humanify/crates/humanify-core/src/finish/using/printer.rs (with ast.rs and convert.rs next to it)
+- /Users/andrewgross/Development/humanify/crates/humanify-ag-core/src/finish/using/printer.rs (with ast.rs and convert.rs next to it)
 - /Users/andrewgross/Development/humanify/src/plugins/babel/babel.ts (and node_modules/babel-plugin-transform-beautifier/src/index.ts)
-- /Users/andrewgross/Development/humanify/crates/humanify-cli/src/unified.rs
+- /Users/andrewgross/Development/humanify/crates/humanify-ag-cli/src/unified.rs
 - /Users/andrewgross/Development/humanify/experiments/034-eval-harness/run.sh (with experiments/lib/run-pipeline.ts and scripts/eval.ts)
-- /Users/andrewgross/Development/humanify/crates/humanify-core/src/emit/stable_split.rs (the hash version, plus place/tiers.rs and emit/align.rs)
+- /Users/andrewgross/Development/humanify/crates/humanify-ag-core/src/emit/stable_split.rs (the hash version, plus place/tiers.rs and emit/align.rs)

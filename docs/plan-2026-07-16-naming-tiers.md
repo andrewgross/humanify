@@ -53,7 +53,7 @@ CONSTRAINTS (user, 2026-07-16):
       named, one LLM call per level showing the WHOLE sibling set (folder ->
       its file list) to revise for parallelism / dedupe themes / fix
       outliers. One extra call per level; anchor-only so cost is one-time.
-- [x] REGEN + COMPARE (DONE, results doc updated): full `humanify --split` on 2.1.89
+- [x] REGEN + COMPARE (DONE, results doc updated): full `humanify-ag --split` on 2.1.89
       → validation/claude-code-2.1.89-tiers. Files agent-noun 74->38%,
       kebab 6->1537 (100%), minted digit 32->18; folders camelCase
       103->0. Boots (node run.cjs --version -> 2.1.89, exit 0). Residual:

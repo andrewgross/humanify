@@ -2,8 +2,8 @@
 
 STATUS: PHASE 1 (REPORT-ONLY) IN CORE, 2026-10-11 (index lookup 2026-10-12), branch
 `exp095-discovery-core` (exp095; not merged). The graph (§4) is
-`humanify_core::graph::references`, discovery (§5, §7) is
-`humanify_core::libdetect::discovery`, and a run with `--diagnostics` writes
+`humanify_ag_core::graph::references`, discovery (§5, §7) is
+`humanify_ag_core::libdetect::discovery`, and a run with `--diagnostics` writes
 it as `libraryDiscovery`. Nothing is named, moved or renamed by it. The
 in-run seeds are the declared readers, kept banners and, with
 `--library-index`, the index's statement-unit claims; no shipping index
@@ -183,7 +183,7 @@ around any claim inside it. That is what rule MODULE (§5) uses.
   Declarations are the only **version oracle**. They are exempt from the
   isolation veto (§7), because a declaration is its own evidence.
 
-- **Stop-lists and package families** (`crates/humanify-index/data/`):
+- **Stop-lists and package families** (`crates/humanify-ag-index/data/`):
   compiler helpers, Stainless templates, `@smithy/*` with `@aws-sdk/*`,
   `@azure/msal-*`, …. Families decide what counts as the "same package" in
   every rule below.

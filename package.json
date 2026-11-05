@@ -1,7 +1,7 @@
 {
-  "name": "humanifyjs",
+  "name": "humanify-ag",
   "version": "2.2.2",
-  "description": "Deobfuscate a minified JavaScript bundle into a readable, version-stable source tree. The pipeline is the Rust binary (crates/humanify-cli); this package holds its measurement harness.",
+  "description": "Deobfuscate a minified JavaScript bundle into a readable, version-stable source tree. The pipeline is the Rust binary (crates/humanify-ag-cli); this package holds its measurement harness.",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "npm run check",

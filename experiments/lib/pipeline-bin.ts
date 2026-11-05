@@ -6,7 +6,7 @@
  *
  *   npx tsx experiments/lib/pipeline-bin.ts <bin> <label-commit> [--force-mixed]
  *
- * The CLI BUILDS the binary (`cargo build --release --locked -p humanify-cli`
+ * The CLI BUILDS the binary (`cargo build --release --locked -p humanify-ag-cli`
  * in the cargo workspace that owns `<bin>`), then prints one JSON record —
  * path, sha256, the commit it was built from, whether that tree was dirty —
  * which run.sh writes into the label as `pipeline.json`. Exit 2 = refused
@@ -15,7 +15,7 @@
  * WHY THE HARNESS BUILDS IT. A binary is a file, and a file carries no
  * commit. A label records `commit.txt` = the repo's HEAD, and summarize and
  * the leaderboard treat that as "the code that produced these numbers". A
- * `target/release/humanify` left over from another branch would make that a
+ * `target/release/humanify-ag` left over from another branch would make that a
  * lie nobody could detect afterwards. Building it here makes the label's
  * commit the binary's commit by construction (or refuses, loudly).
  */
@@ -127,7 +127,7 @@ export function buildAndDescribe(bin: string): BinRecord | string {
     const cargoBin = path.join(process.env.HOME ?? "", ".cargo/bin");
     const r = spawnSync(
       "cargo",
-      ["build", "--release", "--locked", "-p", "humanify-cli"],
+      ["build", "--release", "--locked", "-p", "humanify-ag-cli"],
       {
         cwd: root,
         // cargo's stdout goes to OUR stderr: stdout carries the JSON record

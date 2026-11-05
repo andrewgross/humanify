@@ -51,18 +51,18 @@ carry is canonical OUTPUT, not ordered WORK.
 Everything runs on the main thread, one stage after another. Work leaves the
 main thread in only four ways:
 
-1. **`crate::par`** (`crates/humanify-core/src/par.rs`):
+1. **`crate::par`** (`crates/humanify-ag-core/src/par.rs`):
    - `map_ordered`, `produce_then_map` and `join` run pure work on rayon's
      global pool;
    - `beside` runs one pure job on a scoped thread next to the main thread.
      The oxc AST cannot leave the main thread.
-2. **The LLM provider** (`crates/humanify-llm/src/provider.rs`): one
+2. **The LLM provider** (`crates/humanify-ag-llm/src/provider.rs`): one
    `current_thread` tokio runtime.
    - `run_wave` is `block_on(join_all(chunk))`.
    - `run_pipelined` is `block_on(FuturesUnordered)`.
    - Each call passes through `AnswerMemo → RateLimited → DebugProvider →
 OpenAiClient`.
-3. **Subprocesses**, all through `humanify_core::subprocess::run`: the
+3. **Subprocesses**, all through `humanify_ag_core::subprocess::run`: the
    webcrack shim, `diff` for the normal-diff hunks, and `git rev-parse`.
 4. **Observers**: the TTY redraw thread and the profiler's sampler.
 
@@ -181,7 +181,7 @@ deadline covers the whole operation, not the first half of it.
 ## Subprocesses
 
 **Rule 4.** A child process goes through ONE owner,
-`humanify_core::subprocess::run(command, stdin, deadline)`. Do not call
+`humanify_ag_core::subprocess::run(command, stdin, deadline)`. Do not call
 `Command::output`, `spawn` or `wait_with_output` yourself: the owner is
 where all three parts of this rule live, and its tests pin them.
 
@@ -213,7 +213,7 @@ reaches):
 | `diff` (`DIFF_DEADLINE`, `naming/reconcile/hunks.rs`)     | 10 min   | 4.5 s for the largest diff the pipeline runs, the pre-split reconcile over the whole Claude Code bundle (793k vs 805k lines, 2.1.215 -> 2.1.216); per-file diffs are far smaller | post-split: counted as `diff_failed` (apart from parse `discarded`) and a WARNING naming the first file; pre-split: a WARNING that the reconcile did not run (audit R3, fixed) |
 | `git rev-parse` (`GIT_DEADLINE`, `unified.rs`)            | 1 min    | milliseconds                                                                                                                                                                     | not a checkout / no git: the decided quiet "unknown"; a timeout: "unknown" and a WARNING                                                                                       |
 
-The offline index builder (`crates/humanify-index`, not the pipeline) runs
+The offline index builder (`crates/humanify-ag-index`, not the pipeline) runs
 `npm install`, `npm view` and the bundlers through the same owner, under
 `INSTALL_DEADLINE` (30 min), `VIEW_DEADLINE` (5 min), `BUILD_DEADLINE`
 (30 min) and `VERSION_DEADLINE` (1 min); a failure fails that package's
@@ -336,7 +336,7 @@ the `--profile` spans) differ too; they are timing gauges by nature.
   `WARNING: N LLM call(s) failed after every retry`.
   - Since 2026-10-12 the WARNING covers EVERY namer (the waves and sweeps,
     the module namer, the vendor namer, the split namer, the tree reviser:
-    `humanify-cli/src/provider_failures.rs`) and is printed once, after the
+    `humanify-ag-cli/src/provider_failures.rs`) and is printed once, after the
     split. `--stats-json` carries the same counts as `providerErrors` (a
     total plus each namer), and the eval refuses to score a card whose
     scored run or rebuilt base lost any (`experiments/lib/invariants.ts`).

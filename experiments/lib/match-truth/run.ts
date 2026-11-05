@@ -2,16 +2,16 @@
  * The ground-truth runner (exp092): download (once) the pinned corpus,
  * produce the two input forms the pipeline expects per package pair —
  * the OLD version's shipped single-file build run through the stage-6
- * formatter (`humanify format`, the closest no-LLM equivalent of a
+ * formatter (`humanify-ag format`, the closest no-LLM equivalent of a
  * humanified prior) as the prior, and the NEW version's shipped build
- * as the input — run `humanify match` over each pair, score each dump,
+ * as the input — run `humanify-ag match` over each pair, score each dump,
  * and write one deterministic scorecard JSON.
  *
  * Usage:
  *   npm run match-truth [-- --corpus <dir>] [--bin <path>] [--out <file>] [--only <name>]
  *
- * Defaults: the release binary (target/release/humanify — build it with
- * `cargo build --release --locked -p humanify-cli`), the corpus cache
+ * Defaults: the release binary (target/release/humanify-ag — build it with
+ * `cargo build --release --locked -p humanify-ag-cli`), the corpus cache
  * under experiments/092-match-ground-truth/.corpus, results to stdout.
  * No LLM is contacted at any point (matching is fully cold).
  */
@@ -36,7 +36,7 @@ interface Flags {
 function parseFlags(argv: string[]): Flags {
   const flags: Flags = {
     corpusDir: resolve("experiments/092-match-ground-truth/.corpus"),
-    bin: resolve("target/release/humanify")
+    bin: resolve("target/release/humanify-ag")
   };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -122,7 +122,7 @@ function main(): void {
   if (!existsSync(flags.bin)) {
     throw new Error(
       `the humanify binary is not at ${flags.bin} — build it with \
-       \`cargo build --release --locked -p humanify-cli\` or pass --bin`
+       \`cargo build --release --locked -p humanify-ag-cli\` or pass --bin`
     );
   }
   mkdirSync(flags.corpusDir, { recursive: true });

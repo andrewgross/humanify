@@ -60,7 +60,7 @@ neutrality` flags, 7 `neutrality.sh`, 8 `gate.sh`, 6 `selfhop.sh`, 2
   stay (input, output, model endpoint, `--library-matching`,
   `--library-index`, `--config`); conflicts and bad values are refused
   loudly before any work (§3.1); `env-reads` is deleted.
-- **Target:** one parse point (`humanify-cli`), producing one typed,
+- **Target:** one parse point (`humanify-ag-cli`), producing one typed,
   immutable `Config` passed down; nothing below the CLI reads argv,
   environment or files for configuration; the whole config recorded in every
   run manifest; a guard test failing any config read outside the owner.
@@ -115,7 +115,7 @@ crate's integration tests, one row per flag). The accidents, old → new:
 | `--skip-libraries` + `--no-skip-libraries` together: last wins               | refused as a conflict; each alone keeps its effect until step 6                    |
 | (both spellings set false — finding #19)                                     | already fixed by two declarations; stays fixed                                     |
 | unknown option: `unknown option '--x'` + the whole help                      | `unexpected argument '--x' found` + usage line                                     |
-| `-V` printed the bare version                                                | prints `humanify <version>`                                                        |
+| `-V` printed the bare version                                                | prints `humanify-ag <version>`                                                     |
 
 The original analysis:
 
@@ -205,7 +205,7 @@ config record.
 | `env-reads`    | commander | `--markdown`, `-o`                                                                                                                                                               | its own test and help golden               | **deleted** in step 3 (Andrew, 2026-10-13); its source-walking check folds into the config guard test (§3.5)     |
 | `detect`       | clap      | `--profile`, `--toolchain`, `--split-method`                                                                                                                                     | `scripts/e2e.ts`                           | keep; `--profile` → `--perf-trace`                                                                               |
 | `unpack`       | clap      | `--prior-version`, `--llm-cache`, `--model` (default `openai/gpt-oss-20b`), `--reasoning-effort` (`low`), `--max-tokens`, `--llm-log`, `--index`, `--carries`, `--webcrack-shim` | `tests/pipeline_stages.rs`                 | keep; `--index` → `--bundle-order`; model/effort read from the same `[llm]` config as the pipeline (one default) |
-| `libdetect`    | clap      | `--files`, `--webcrack-shim`                                                                                                                                                     | none found                                 | delete, or fold into `humanify index` as the detector's verdict                                                  |
+| `libdetect`    | clap      | `--files`, `--webcrack-shim`                                                                                                                                                     | none found                                 | delete, or fold into `humanify-ag index` as the detector's verdict                                               |
 | `format`       | clap      | `-o`, `--no-transforms`, `--plant`                                                                                                                                               | `experiments/lib/match-truth`              | keep                                                                                                             |
 | `format-check` | clap      | `--show` (10), `--plant`                                                                                                                                                         | `scripts/format-golden.sh`                 | keep                                                                                                             |
 | `match`        | clap      | `-o`, `--sequential` (**inert**: "never changed the dump"), `--bundler`, `--minifier`, `--work-dir`, `--keep-work-dir`, `--webcrack-shim`                                        | `experiments/lib/match-truth`, a Rust test | keep; **delete `--sequential`**                                                                                  |
@@ -241,7 +241,7 @@ scripts (boot-gate.sh exempted by an owner decision of 2026-08-12).
 
 ## 3. Target
 
-1. **One parse point.** `humanify-cli` parses argv (clap), the config file
+1. **One parse point.** `humanify-ag-cli` parses argv (clap), the config file
    (`--config <file>`, **TOML**, decided 2026-10-13) and the one API-key
    environment variable. A value comes from the flag, else the file, else
    the compiled-in default. **Every check in §3.1 runs here, before
@@ -254,7 +254,7 @@ scripts (boot-gate.sh exempted by an owner decision of 2026-08-12).
    raw `CommandOptions` fields collapse into it. The toolchain stays a
    separate value because it is DERIVED from the input by detection, but it
    is built once from `Config` + input and passed down beside it.
-3. **Nothing below the CLI reads configuration.** `humanify-core` takes
+3. **Nothing below the CLI reads configuration.** `humanify-ag-core` takes
    `&Config` sections (or plain values) as parameters. It never sees argv,
    the environment or a config file path.
 4. **Recorded whole.** Every run writes the resolved config (secrets
@@ -301,7 +301,7 @@ that cannot do the lookup has lost nothing but the report, and a user
 pointing humanify at an esbuild bundle with a Bun-only index should still
 get their output. But an eval label whose library numbers come from a run
 with no slice is meaningless, so the eval harness refuses it up front:
-`run.sh` runs `humanify index verify <id> --recipe <detected>` per pair
+`run.sh` runs `humanify-ag index verify <id> --recipe <detected>` per pair
 before the first launch and stops the label if any pair has no slice. The
 binary warns; the measurement fails.
 
@@ -368,11 +368,11 @@ marked **G** touch how the harness launches the binary and update
    run manifest. Add the guard test (red first: plant a `std::env` read and
    a raw option read in core, watch it fail).
 
-   What landed: `humanify_cli::config` owns `Config` — sections `io`,
+   What landed: `humanify_ag_cli::config` owns `Config` — sections `io`,
    `llm`, `matching`, `naming`, `library`, `unpack`, `split`, `switches`,
    `diagnostics`, `perf` (each a future TOML table; `library` is where step
    6 lands). `settings.rs` is deleted; `SwitchState` is a field; the lever
-   parser moved out of `humanify-core`; `CommandOptions` holds only "given
+   parser moved out of `humanify-ag-core`; `CommandOptions` holds only "given
    or not" (no clap defaults) and nothing past `Config::build` reads it.
    Every knob is resolved to its EFFECTIVE value (an unset batch size is
    the 25 the processor would use), except `max_tokens`, whose "unset" is
@@ -412,10 +412,10 @@ marked **G** touch how the harness launches the binary and update
    (the output directory stays empty).
 
    What landed: every setting is declared ONCE in the key registry
-   (`humanify_cli::config::keys::KEYS`: section, name, type and range,
+   (`humanify_ag_cli::config::keys::KEYS`: section, name, type and range,
    default, one-line meaning, and the flag for an operational one); the
    TOML is read only by `config::file` (the env guard's owner for `toml`)
-   — plus, since exp184, `humanify-index/src/spec.rs`, whose spec file is
+   — plus, since exp184, `humanify-ag-index/src/spec.rs`, whose spec file is
    the BUILDER's build INPUT (`humanify-index-spec/1`), not the pipeline's
    configuration; the guard carries it as that rule's second owner.
    Flags kept: the input, `-o/--output-dir`, `--prior-version`,
@@ -502,7 +502,7 @@ vs "http://b/v1" (cfg.toml)`), agreeing ones are recorded as
    `neutrality.sh` read them instead of re-parsing argv; launches pass only
    the six operational flags; pipeline.json records the config sha and the
    library block. TODO (deferred, waits for exp097's rework of the verb):
-   with library matching on, `run.sh` runs `humanify index verify --recipe`
+   with library matching on, `run.sh` runs `humanify-ag index verify --recipe`
    per pair and stops the label on a missing slice (test, red first).
 
    What landed: `scripts/eval.ts` is the one parser of the harness's

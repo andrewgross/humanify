@@ -3,7 +3,7 @@
 usage: <venv python> -I score.py <label> [--corpus dev|test]
        (the corpus must be the one the label ran on: pipeline.json's `corpus`, absent = dev. A TEST label's cards
        stay under the test data dir, beside its reports, and its committed summary holds per-set aggregates only)
-reads  <DATA>/results/<label>/reports/<id>.json   (`humanify discover --unit-prints` output)
+reads  <DATA>/results/<label>/reports/<id>.json   (`humanify-ag discover --unit-prints` output)
        <DATA>/results/<label>/pipeline.json        (the runner's config: index dir, rule, binary)
 writes experiments/096-library-matching-score/results/<label>/cards/<id>.json and summary.json (DETERMINISTIC:
        no clock, no host — the determinism check compares these bytes), timing.json (wall time, peak memory:
@@ -741,7 +741,7 @@ def main():
     open(os.path.join(out_dir, "summary.json"), "w").write(dump(summary))
     walls = [t["wallSeconds"] for t in timing.values()]
     open(os.path.join(out_dir, "timing.json"), "w").write(dump({
-        "note": "NOT deterministic: wall clock and peak memory of each `humanify discover` run (index load "
+        "note": "NOT deterministic: wall clock and peak memory of each `humanify-ag discover` run (index load "
                 "included); the cards and summary.json are the deterministic part",
         "totalWallSeconds": round(sum(walls), 1), "maxPeakRssMb": max((t["peakRssMb"] for t in timing.values()),
                                                                        default=0),

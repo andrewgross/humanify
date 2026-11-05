@@ -1,8 +1,8 @@
 """The library-index LOOKUP for the selection and density labs (docs/design/library-index.md §8, not built in the
-pipeline yet), over humanify-index's own data: an index directory, or the shard store directly.
+pipeline yet), over humanify-ag-index's own data: an index directory, or the shard store directly.
 
 The design rule, as the scale lane re-derived it at top-2,000 (scale/README.md §4–§6):
-  WM  the query module's content key (humanify-core `vendor_content_key`, the key the index's module rows hold) is
+  WM  the query module's content key (humanify-ag-core `vendor_content_key`, the key the index's module rows hold) is
       held by owners of exactly ONE family; the query carries a string (a stringless core agrees on strings
       trivially); the query module is >= 60 bytes (the lab's normLen 400); helper packages are not in the index;
       Stainless / es-shims template files are stop-listed.
@@ -13,14 +13,14 @@ The design rule, as the scale lane re-derived it at top-2,000 (scale/README.md �
       >= 10 bits.
   S∧L the design: both claim, and their packages are in one family. The name is L's package if WM's owners hold
       it, else WM's owner.
-Families (crates/humanify-core/src/libindex/families.json): the five named families, same npm scope, the scoped forks.
+Families (crates/humanify-ag-core/src/libindex/families.json): the five named families, same npm scope, the scoped forks.
 """
 import json, math, os, re, collections
 import numpy as np
 import scipy.sparse as sp
 
-DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../crates/humanify-index/data")
-FAM = json.load(open(os.path.join(DATA, "../../humanify-core/src/libindex/families.json")))
+DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../crates/humanify-ag-index/data")
+FAM = json.load(open(os.path.join(DATA, "../../humanify-ag-core/src/libindex/families.json")))
 STOPL = json.load(open(os.path.join(DATA, "stoplists.json")))
 STAIN_FILE = re.compile(STOPL["lookupFilePatterns"]["stainless"]["file"])
 SHIM_FILE = re.compile(STOPL["lookupFilePatterns"]["shim"]["file"])

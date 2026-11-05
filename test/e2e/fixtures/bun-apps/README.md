@@ -17,7 +17,7 @@ split's module-marker method was chosen for every Bun bundle. A normal app
 has none: on main @ f616f33b `bun-plain` exited 1 after naming ("the bundle
 records no module fossils"), and `bun-mixed` piled its four eager modules
 into one `src/index.js`. The split method is now chosen from what the
-bundle contains (`crates/humanify-core/src/place/method.rs`, finding #87);
+bundle contains (`crates/humanify-ag-core/src/place/method.rs`, finding #87);
 these three fixtures hold each case.
 
 ## The app

@@ -1,10 +1,10 @@
 /**
- * DETECTION CENSUS — `humanify detect` over inputs whose bundler is KNOWN,
+ * DETECTION CENSUS — `humanify-ag detect` over inputs whose bundler is KNOWN,
  * printed as a confusion table (true bundler × detected bundler) plus every
  * miss by name. Reads no bundle into the repo: the corpus and the Claude
  * Code inputs stay where they live; only their paths are passed in.
  *
- *   npx tsx experiments/lib/detect-census.ts --bin target/release/humanify \
+ *   npx tsx experiments/lib/detect-census.ts --bin target/release/humanify-ag \
  *     [--corpus <corpus.json> --data <dir>] [--cc-inputs <dir> --cc 2.1.86,...]
  *
  * Inputs, each with its truth:
@@ -105,7 +105,7 @@ function printTable(rows: { truth: string; got: string }[]): void {
 function main(): void {
   const { values } = parseArgs({
     options: {
-      bin: { type: "string", default: "target/release/humanify" },
+      bin: { type: "string", default: "target/release/humanify-ag" },
       corpus: { type: "string" },
       data: { type: "string" },
       "cc-inputs": { type: "string" },

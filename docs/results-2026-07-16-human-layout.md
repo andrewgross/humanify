@@ -7,7 +7,7 @@ doc (`plan-2026-07-16-human-layout.md`) for the item checklist.
 
 Follow-on (plan-2026-07-16-naming-tiers.md). Compared the pre-tier
 end-to-end tree (validation/claude-code-2.1.89) vs all-4-tiers
-(validation/claude-code-2.1.89-tiers), both full `humanify --split` on
+(validation/claude-code-2.1.89-tiers), both full `humanify-ag --split` on
 2.1.89. Reference: humanify/src (hand-written).
 
 | Metric                                      | Pre-tier                                                           | All 4 tiers                                  |
@@ -35,7 +35,7 @@ CONTENTS issue that only full non-contiguous community clustering
 (deferred) fixes. Tiers 1/2/4 make the NAMES good regardless. One "or"
 slipped a mid-name conjunction past the leading-only stopword check.
 
-## END-TO-END (full `humanify --split`, fresh, local gpt-oss-20b)
+## END-TO-END (full `humanify-ag --split`, fresh, local gpt-oss-20b)
 
 The real pipeline on the original 2.1.89 bundle — rename (36,418 fns +
 15,854 modules) + split naming + vendor naming + runnable relink. Output:

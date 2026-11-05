@@ -1,0 +1,912 @@
+//! The `humanify-ag` binary — the one product command (exp186).
+//!
+//! Three surfaces share the binary:
+//! - the PIPELINE program (`humanify-ag <input> [options]`) — the surface the
+//!   harness drives, declared for clap in `humanify_ag_cli::surface` (the
+//!   commander-13 port it used to be parsed by was deleted in config sweep
+//!   step 3, 2026-10-13; usage errors still exit 1 there);
+//! - the stage VERBS below (`detect`, `unpack`, `discover`, `format`,
+//!   `format-check`, `match`) — one pipeline stage run on its own, for
+//!   inspection and for the gate (`format-check` replays the committed
+//!   formatter goldens, test/parity/format-goldens.json — the formatter's
+//!   frozen spec; `match` is the ground-truth harness's instrument). Parsed
+//!   by clap too, as their own command. `argv[1]` naming a verb selects
+//!   the verbs; anything else is the pipeline's (so an input file literally named like a verb must be
+//!   passed as `./<name>`).
+//! - the INDEX builder (`humanify-ag index build --spec …`,
+//!   `humanify-ag index slim-cache …`): the offline library fingerprint
+//!   index builder, `humanify_ag_index::cli` (exp186: it was the separate
+//!   `humanify-index` binary; same flags, same output, one binary).
+//!
+//! The migration verbs that rebuilt one stage's rows from a TS dump for the
+//! parity gates were deleted at the cutover (docs/rust-port/19-cutover.md);
+//! `libdetect` (no caller) went in the config sweep, 2026-10-13. A renamed
+//! or deleted verb flag is refused naming its replacement
+//! (`surface::RETIRED_FLAGS`, checked before clap parses).
+
+/// mimalloc, not glibc malloc: the parallel stages allocate from many
+/// threads at once and glibc's arenas contend (00-control §3, 2026-09-24),
+/// and the index builder's workers would otherwise keep the peak of every
+/// large bundle they fingerprinted (exp111; allocator_test.rs).
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+use clap::Parser;
+
+#[derive(Parser)]
+#[command(
+    name = "humanify-ag",
+    version,
+    about = "Deobfuscate a minified JavaScript bundle into a readable, version-stable source tree"
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(clap::Subcommand)]
+enum Command {
+    /// The offline library fingerprint index builder
+    /// (docs/design/library-index.md): build an index from a spec, or slim
+    /// a work dir's build maps. Not part of a deobfuscation run.
+    Index {
+        #[command(subcommand)]
+        command: humanify_ag_index::cli::IndexCommand,
+    },
+    /// WPB.1's detection gate: the bundler/minifier verdict for one input,
+    /// printed as the TS `JSON.stringify(detectBundle(code))` shape.
+    Detect {
+        /// The bundle to classify (read as UTF-8, invalid bytes replaced —
+        /// the TS `readFileSync(path, "utf-8")`).
+        input: String,
+        /// Write a Chrome trace-event performance trace of the read +
+        /// detection spans; the summary goes to stderr.
+        #[arg(long)]
+        perf_trace: Option<String>,
+        /// Also print, on a second line, the toolchain the run would
+        /// resolve from this verdict with no `--bundler`/`--minifier` flag:
+        /// the stats file's `selection` and `toolchain` blocks (every
+        /// plugin piece, its choice, and why).
+        #[arg(long)]
+        toolchain: bool,
+        /// Also print, on its own line, the split method a fresh `--split`
+        /// run would give this bundle — the module markers or the fresh
+        /// grouping — the markers' coverage of the app code, and why
+        /// (`{"splitMethod":…}`, the stats file's block). Parses the whole
+        /// bundle.
+        #[arg(long)]
+        split_method: bool,
+    },
+    /// WPB.2's unpack stage: detect the bundler, select the unpack adapter
+    /// and write its tree (bun and esbuild: vendor/*.js + runtime.js +
+    /// vendor/_bun-modules.json — one shared vendor-extraction flow;
+    /// webcrack: the subprocess shim; passthrough: index.js). Prints one
+    /// summary line.
+    Unpack {
+        /// The bundle (read as UTF-8, invalid bytes replaced).
+        input: String,
+        /// The output directory.
+        out_dir: String,
+        /// The prior release's humanified.js (`--prior-version`): its tree's
+        /// vendor manifest feeds carry-over names and the manifest order.
+        #[arg(long)]
+        prior_version: Option<String>,
+        /// Replay the vendor LLM namer from this cache dir (read-only;
+        /// misses fail the batch). Without it the LLM pass is skipped.
+        #[arg(long)]
+        llm_cache: Option<String>,
+        /// The vendor namer's model — part of the cache key, so it must
+        /// match the cache being replayed (the eval's local model is
+        /// `openai/gpt-oss-20b`). One default with the pipeline's
+        /// (`humanify_ag_cli::config::DEFAULT_MODEL`).
+        #[arg(long, default_value = humanify_ag_cli::config::DEFAULT_MODEL)]
+        model: String,
+        /// Reasoning effort sent with the vendor namer's requests (part of
+        /// the cache key too; the eval runs `low`). Unset, like the
+        /// pipeline's: the server's default.
+        #[arg(long, value_enum)]
+        reasoning_effort: Option<humanify_ag_cli::config::ReasoningEffort>,
+        #[arg(long)]
+        max_tokens: Option<u64>,
+        /// Write the vendor LLM batches (keys, evidence, proposals) + stats
+        /// as JSON here (the TS probe's `.llm.json` shape).
+        #[arg(long)]
+        llm_log: Option<String>,
+        /// Write the extracted modules in BUNDLE order ({factoryVar,
+        /// fileName, runtimeIdentifier}) as JSON here.
+        #[arg(long)]
+        bundle_order: Option<String>,
+        /// Write the content carry (finding #90) as JSON here: candidates,
+        /// prior leftovers, every carried module with its score, and the
+        /// declared-identity carries (finding #95) with their keys.
+        #[arg(long)]
+        carries: Option<String>,
+        /// The webcrack shim script (scripts/webcrack-shim.ts), run with
+        /// `npx tsx` from its repo root; required for webpack/browserify.
+        #[arg(long)]
+        webcrack_shim: Option<String>,
+    },
+    /// Library discovery on its own (exp096's library-matching score):
+    /// detect → the unpack adapter (no namer, no prior, scratch dir) with
+    /// discovery on → the `libraryDiscovery` report as JSON, every claimed
+    /// unit listed. Report-only; no LLM path executes.
+    Discover {
+        /// The bundle (read as UTF-8, invalid bytes replaced).
+        input: String,
+        /// The library index directory (its slice is chosen by the
+        /// detected bundler). An index that cannot be read fails the verb.
+        #[arg(long)]
+        library_index: Option<String>,
+        /// A config file: its `[library]` keys tune the lookup and the
+        /// discovery (`[library.lookup] agreement = false` is the
+        /// structural rule; it was `--rule structural`). Default: the
+        /// pipeline's compiled-in values.
+        #[arg(long)]
+        config: Option<String>,
+        /// The pipeline's `--bundler` override (bun, esbuild, …); the
+        /// detector's own verdict is recorded under `detected`.
+        #[arg(long)]
+        bundler: Option<String>,
+        /// Also list every unit with its fingerprints (`unitRows`).
+        #[arg(long)]
+        unit_prints: bool,
+        /// Also take the call-context census (`callContext`, exp153).
+        #[arg(long)]
+        call_context: bool,
+        /// Also list every extracted module with the names-mode placement
+        /// answer (`indexPath` / `indexLeave`) under `bundleOrder` (exp157).
+        #[arg(long)]
+        bundle_order: bool,
+        /// Where the adapter unpacks (default: a scratch dir, removed).
+        #[arg(long)]
+        work_dir: Option<String>,
+        /// Write the JSON here (default: stdout).
+        #[arg(long)]
+        out: Option<String>,
+    },
+    /// WP5.6's native formatter (`core::format`): the stage-6 beautify of
+    /// one file — Babel's `transform()` with the four stage-6 plugins and
+    /// `@babel/generator` (retainLines off, comments off), byte for byte.
+    Format {
+        /// The file to format (read as UTF-8, invalid bytes replaced).
+        input: String,
+        /// Write here instead of stdout.
+        #[arg(short = 'o', long)]
+        out: Option<String>,
+        /// Print only (`transformWithPlugins(code, [])`): the G1 leg.
+        #[arg(long, default_value_t = false)]
+        no_transforms: bool,
+        /// Plant a perturbation (gate red runs): `drop:<visitor>` (a
+        /// visitor's node type or plugin name), `requeue-reversed`,
+        /// `rust-number-format`.
+        #[arg(long)]
+        plant: Option<String>,
+    },
+    /// The formatter's golden check: every case of a goldens file (the
+    /// committed test/parity/format-goldens.json — the formatter's frozen
+    /// spec, captured from the TS beautifier — or a fuzz corpus of the same
+    /// `{name, code, none, full}` shape) formatted both ways and compared
+    /// with the recorded bytes / errors. Exit 1 on any difference; `--plant`
+    /// proves the check can fail. The `rust:format-golden` gate stage.
+    FormatCheck {
+        goldens: String,
+        /// Print at most this many differing cases.
+        #[arg(long, default_value_t = 10)]
+        show: usize,
+        /// Plant a perturbation (as `format --plant`) on the stage-6 legs.
+        #[arg(long)]
+        plant: Option<String>,
+    },
+    /// The matching stage run on its own (detect → unpack → format →
+    /// graph → matching, then STOP before naming): every per-function and
+    /// per-statement decision — matched-to-which, the tier that resolved
+    /// it, the close tier's score, or unmatched — as one deterministic
+    /// JSON dump. Fully cold: no LLM path exists in this verb. The
+    /// ground-truth harness's instrument (experiments/092).
+    Match {
+        /// The new version's file — minified or bundled, as the pipeline
+        /// takes it.
+        input: String,
+        /// The prior release's (humanified) text, as `--prior-version`.
+        #[arg(long)]
+        prior_version: String,
+        /// Write the dump here instead of stdout.
+        #[arg(short = 'o', long)]
+        out: Option<String>,
+        /// Force the bundler type (as the pipeline's flag).
+        #[arg(long)]
+        bundler: Option<String>,
+        /// Force the minifier type (as the pipeline's flag).
+        #[arg(long)]
+        minifier: Option<String>,
+        /// Where the unpack adapter writes its tree; default a temp dir
+        /// that is removed afterwards.
+        #[arg(long)]
+        work_dir: Option<String>,
+        /// Keep the work dir even when it was a default temp dir.
+        #[arg(long, default_value_t = false)]
+        keep_work_dir: bool,
+        /// The webcrack shim script (scripts/webcrack-shim.ts), required
+        /// to unpack webpack/browserify bundles.
+        #[arg(long)]
+        webcrack_shim: Option<String>,
+    },
+}
+
+/// The stage verbs clap owns (every `Command` variant's kebab name).
+fn is_stage_verb(arg: &str) -> bool {
+    Cli::command()
+        .get_subcommands()
+        .any(|c| c.get_name() == arg)
+}
+
+/// A retired flag on a stage verb (`surface::RETIRED_FLAGS`, the one
+/// list): the refusal naming what replaced it, or None.
+fn retired_verb_flag(argv: &[String]) -> Option<String> {
+    let (verb, rest) = argv.split_first()?;
+    humanify_ag_cli::surface::retired_flag(Some(verb.as_str()), rest)
+}
+
+fn main() {
+    let argv = humanify_ag_cli::env::user_args();
+    if !argv.first().is_some_and(|a| is_stage_verb(a)) {
+        std::process::exit(humanify_ag_cli::pipeline_main(&argv));
+    }
+    if let Some(refusal) = retired_verb_flag(&argv) {
+        // clap's usage-error exit code, as an unknown argument gets.
+        eprint!("{refusal}");
+        std::process::exit(2);
+    }
+    let cli = Cli::parse();
+    match cli.command {
+        Some(Command::Index { command }) => {
+            std::process::exit(humanify_ag_index::cli::run_index(command));
+        }
+        Some(Command::Detect {
+            input,
+            perf_trace,
+            toolchain,
+            split_method,
+        }) => run_detect(&input, perf_trace.as_deref(), toolchain, split_method),
+        Some(Command::Unpack {
+            input,
+            out_dir,
+            prior_version,
+            llm_cache,
+            model,
+            reasoning_effort,
+            max_tokens,
+            llm_log,
+            bundle_order,
+            carries,
+            webcrack_shim,
+        }) => {
+            let args = UnpackArgs {
+                prior_version,
+                llm_cache,
+                key_params: humanify_ag_model::llm::CacheKeyParams {
+                    model,
+                    // The TS passes a literal 0 (unified.ts buildProvider).
+                    temperature: Some(0.0),
+                    max_tokens,
+                    reasoning_effort: reasoning_effort.map(|e| e.name().to_string()),
+                },
+                llm_log,
+                bundle_order,
+                carries,
+                webcrack_shim,
+            };
+            if let Err(e) = run_unpack(&input, &out_dir, args) {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Command::Discover {
+            input,
+            library_index,
+            config,
+            bundler,
+            unit_prints,
+            call_context,
+            bundle_order,
+            work_dir,
+            out,
+        }) => {
+            let library = match humanify_ag_cli::discover_verb::library_settings(config.as_deref())
+            {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let args = humanify_ag_cli::discover_verb::DiscoverArgs {
+                input: &input,
+                library_index: library_index.as_deref(),
+                library: &library,
+                bundler: bundler.as_deref(),
+                unit_prints,
+                call_context,
+                bundle_order,
+                work_dir: work_dir.as_deref(),
+            };
+            if let Err(e) = humanify_ag_cli::discover_verb::run_discover(&args, out.as_deref()) {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            }
+        }
+        Some(Command::Format {
+            input,
+            out,
+            no_transforms,
+            plant,
+        }) => format_verb(&input, out.as_deref(), no_transforms, plant.as_deref()),
+        Some(Command::FormatCheck {
+            goldens,
+            show,
+            plant,
+        }) => format_check_verb(&goldens, show, plant.as_deref()),
+        Some(Command::Match {
+            input,
+            prior_version,
+            out,
+            bundler,
+            minifier,
+            work_dir,
+            keep_work_dir,
+            webcrack_shim,
+        }) => {
+            let args = humanify_ag_cli::match_verb::MatchVerbArgs {
+                input: &input,
+                prior_version: &prior_version,
+                bundler: bundler.as_deref(),
+                minifier: minifier.as_deref(),
+                webcrack_shim: webcrack_shim.as_deref(),
+                work_dir: work_dir.as_deref(),
+                keep_work_dir,
+            };
+            if let Err(e) = humanify_ag_cli::match_verb::run_match(&args, out.as_deref()) {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            }
+        }
+        None => {
+            // No subcommand: print help.
+            Cli::command().print_help().expect("help should print");
+        }
+    }
+}
+
+/// The webcrack shim for a `--webcrack-shim <script>` flag (the one owner:
+/// `humanify_ag_cli::unminify::webcrack_shim`).
+fn webcrack_shim(script: &str) -> humanify_ag_core::unpack::webcrack::WebcrackShim {
+    humanify_ag_cli::unminify::webcrack_shim(std::path::Path::new(script))
+}
+
+/// `humanify-ag unpack`'s flags beyond the two paths.
+struct UnpackArgs {
+    prior_version: Option<String>,
+    llm_cache: Option<String>,
+    key_params: humanify_ag_model::llm::CacheKeyParams,
+    llm_log: Option<String>,
+    bundle_order: Option<String>,
+    carries: Option<String>,
+    webcrack_shim: Option<String>,
+}
+
+/// `humanify-ag unpack`: detect, select the adapter, write its tree, print a
+/// summary line (+ the LLM cache counts when replaying).
+fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String> {
+    use humanify_ag_core::modules::vendor_names::{ProviderVendorNamer, VendorNamer};
+    use humanify_ag_core::unpack::{AdapterOutcome, AdapterRun, bun, gate, run_adapter};
+    use std::path::Path;
+
+    let code = std::fs::read(input)
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .map_err(|e| format!("cannot read {input}: {e}"))?;
+    let out = Path::new(out_dir);
+    let toolchain = humanify_ag_core::toolchain::resolve_toolchain(
+        &humanify_ag_core::detect::detect_bundle(&code),
+        None,
+        None,
+    );
+    let adapter = toolchain.unpack.piece;
+    let shim = args.webcrack_shim.as_deref().map(webcrack_shim);
+    let client = args.llm_cache.as_ref().map(|dir| {
+        humanify_ag_llm::LlmClient::replay_only(Path::new(dir), args.key_params.clone())
+    });
+    // The unpack subcommand records no dump: an off log retains nothing
+    // per dispatch (finding #65).
+    let mut vendor_log = humanify_ag_core::artifact_dump::DispatchLog::off(args.key_params.clone());
+    let mut provider_namer = client
+        .as_ref()
+        .map(|c| ProviderVendorNamer::new(c, &mut vendor_log));
+    let mut recording = provider_namer.as_mut().map(|n| gate::RecordingNamer {
+        inner: n as &mut dyn VendorNamer,
+        batches: Vec::new(),
+    });
+    let prior = args.prior_version.as_deref().map(Path::new);
+    // The one dispatch site (`unpack::run_adapter`): every adapter gets
+    // the namer, the prior and the shim, and takes what it uses.
+    let outcome = match run_adapter(
+        adapter,
+        toolchain.layout.piece,
+        &code,
+        out,
+        AdapterRun {
+            interop: toolchain.interop.piece,
+            module_wrappers: toolchain.module_wrappers.piece,
+            module_identity: toolchain.module_identity.piece,
+            namer: recording.as_mut().map(|n| n as &mut dyn VendorNamer),
+            prior: prior.and_then(bun::load_prior_vendor),
+            manifest_prior_order_disabled: false,
+            webcrack_shim: shim.as_ref(),
+            library_discovery: None,
+        },
+    )? {
+        AdapterOutcome::VendorRecord(outcome) => outcome,
+        AdapterOutcome::Files { result, .. } => {
+            println!(
+                "unpack: adapter={} files={}",
+                adapter.name(),
+                result.files.len()
+            );
+            return Ok(());
+        }
+    };
+    let mut sources: Vec<(String, usize)> = Vec::new();
+    // How THIS run named each module (a carry counts as carry-over) — the
+    // run-state source, not the manifest's origin label (finding #71).
+    for f in outcome.manifest.iter().flat_map(|m| &m.factories) {
+        let source = f.run_source.as_str();
+        match sources.iter_mut().find(|(k, _)| k == source) {
+            Some((_, n)) => *n += 1,
+            None => sources.push((source.to_string(), 1)),
+        }
+    }
+    sources.sort();
+    let captures: usize = outcome
+        .manifest
+        .iter()
+        .flat_map(|m| &m.factories)
+        .map(|f| f.captures.len())
+        .sum();
+    println!(
+        "unpack: adapter={} files={} sources={} llm-renamed={}{}{}{} kept-in-app={} captures={}",
+        adapter.name(),
+        outcome.result.files.len(),
+        sources
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>()
+            .join(","),
+        outcome.llm_renamed,
+        outcome
+            .rekey
+            .map(|r| format!(
+                " rekeyed-by-content={}/{} groups={}",
+                r.factories_joined, r.prior_entries, r.groups_joined
+            ))
+            .unwrap_or_default(),
+        outcome
+            .declared_carry
+            .as_ref()
+            .map(|c| format!(" declared-carried={}", c.len()))
+            .unwrap_or_default(),
+        outcome
+            .content_carry
+            .as_ref()
+            .map(|r| format!(
+                " content-carried={}/{} leftovers={}",
+                r.carries.len(),
+                r.candidates,
+                r.leftovers
+            ))
+            .unwrap_or_default(),
+        outcome.kept_in_app,
+        captures,
+    );
+    if let (Some(path), Some(report)) = (&args.carries, &outcome.content_carry) {
+        let json = serde_json::json!({
+            "candidates": report.candidates,
+            "leftovers": report.leftovers,
+            "carries": report.carries,
+            "declaredCarries": outcome.declared_carry.as_deref().unwrap_or_default(),
+        });
+        std::fs::write(
+            path,
+            serde_json::to_string_pretty(&json).expect("json") + "\n",
+        )
+        .map_err(|e| format!("write {path}: {e}"))?;
+    }
+    if let Some(path) = &args.bundle_order {
+        let json = serde_json::to_string_pretty(&outcome.bundle_order).expect("json");
+        std::fs::write(
+            path,
+            json + "
+",
+        )
+        .map_err(|e| format!("write {path}: {e}"))?;
+    }
+    let batches = recording.map(|r| r.batches).unwrap_or_default();
+    let stats = provider_namer.map(|n| n.stats).unwrap_or_default();
+    let cache = client.as_ref().and_then(|c| c.cache_stats());
+    if let Some(cache) = &cache {
+        println!(
+            "llm-cache hits: {} misses: {} writes: {}",
+            cache.hits, cache.misses, cache.writes
+        );
+    }
+    if let Some(path) = &args.llm_log {
+        let log = serde_json::json!({
+            "stats": {
+                "named": stats.named,
+                "declined": stats.declined,
+                "echoed": stats.echoed,
+                "batchesFailed": stats.batches_failed,
+            },
+            "cache": cache.map(|c| serde_json::json!({"hits": c.hits, "misses": c.misses})),
+            "batches": batches,
+        });
+        std::fs::write(
+            path,
+            serde_json::to_string_pretty(&log).expect("json") + "\n",
+        )
+        .map_err(|e| format!("write {path}: {e}"))?;
+    }
+    Ok(())
+}
+
+/// `humanify-ag detect`: read like the TS pipeline (lossy UTF-8, BOM kept),
+/// classify, print one JSON line. With `--perf-trace`, the read and the
+/// detection run inside spans shaped like the TS pipeline's
+/// (`file-io:read` {path, bytes} and `detection` {bundler}; the TS
+/// detection span's `adapter` key arrives with the unpack adapter
+/// registry, WPB.2). With `--toolchain`, a second line: the toolchain
+/// resolved from the verdict (no flags), as the stats file records it.
+fn run_detect(input: &str, profile: Option<&str>, toolchain: bool, split_method: bool) {
+    use humanify_ag_core::profiling::{Profiler, format_profile_summary, to_trace_events};
+    use humanify_ag_model::profiling::{JsObject, trace_tid};
+
+    let profiler = Profiler::new(profile.is_some());
+    let read = profiler.start_span("file-io:read", "io", trace_tid::PIPELINE, None);
+    let code = match std::fs::read(input) {
+        Ok(b) => String::from_utf8_lossy(&b).into_owned(),
+        Err(e) => {
+            eprintln!("Error: cannot read {input}: {e}");
+            std::process::exit(1);
+        }
+    };
+    // `bytes: code.length` — UTF-16 code units, as the TS records it.
+    read.end(Some(
+        JsObject::new()
+            .with("path", input)
+            .with("bytes", code.encode_utf16().count()),
+    ));
+    let span = profiler.pipeline_span("detection");
+    let verdict = humanify_ag_core::detect::detect_bundle(&code);
+    let bundler = serde_json::to_value(verdict.bundler.kind).expect("an enum serializes");
+    span.end(Some(JsObject::new().with("bundler", bundler)));
+    println!(
+        "{}",
+        serde_json::to_string(&verdict).expect("a detection verdict serializes")
+    );
+    if toolchain {
+        println!("{}", toolchain_line(&verdict));
+    }
+    if split_method {
+        println!("{}", split_method_line(&code, &verdict));
+    }
+    if let Some(path) = profile {
+        let report = profiler.finalize(Some(input));
+        let trace =
+            serde_json::to_string_pretty(&to_trace_events(&report)).expect("a trace serializes");
+        if let Err(e) = std::fs::write(path, trace) {
+            eprintln!("Error: cannot write {path}: {e}");
+            std::process::exit(1);
+        }
+        eprintln!("{}", format_profile_summary(&report));
+        eprintln!("Profile written to {path}");
+    }
+}
+
+/// `detect --split-method`'s line: `{"splitMethod":…}` — the split
+/// method a fresh `--split` run would give the bundle (no flags, no prior).
+fn split_method_line(
+    code: &str,
+    verdict: &humanify_ag_model::detection::BundlerDetectionResult,
+) -> String {
+    use humanify_ag_core::place::method::split_method_of_input;
+    use humanify_ag_model::js::{JsObject, JsValue, stringify};
+    use humanify_ag_model::jsshape::JsType;
+
+    let resolved = humanify_ag_core::toolchain::resolve_toolchain(verdict, None, None);
+    let record = split_method_of_input(code, &resolved).record();
+    let mut line = JsObject::new();
+    line.insert("splitMethod", record.to_js());
+    stringify(&JsValue::Object(line))
+}
+
+/// `detect --toolchain`'s second line: `{"selection":…,"toolchain":[…]}`,
+/// the two blocks a run's stats file carries, resolved with no flags.
+fn toolchain_line(verdict: &humanify_ag_model::detection::BundlerDetectionResult) -> String {
+    use humanify_ag_cli::pipeline_config::{pipeline_selection_record, toolchain_record};
+    use humanify_ag_model::js::{JsObject, JsValue, stringify};
+    use humanify_ag_model::jsshape::JsType;
+
+    let resolved = humanify_ag_core::toolchain::resolve_toolchain(verdict, None, None);
+    let pieces = toolchain_record(&resolved)
+        .iter()
+        .map(JsType::to_js)
+        .collect();
+    let mut line = JsObject::new();
+    line.insert("selection", pipeline_selection_record(&resolved).to_js());
+    line.insert("toolchain", JsValue::Array(pieces));
+    stringify(&JsValue::Object(line))
+}
+
+/// `humanify-ag format`: the native formatter on one file.
+fn format_verb(input: &str, out: Option<&str>, no_transforms: bool, plant: Option<&str>) {
+    use humanify_ag_core::format::{FormatOptions, Plant, Plugins, format};
+    let bytes = match std::fs::read(input) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("ERROR: cannot read {input}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let code = String::from_utf8_lossy(&bytes);
+    let plant = match plant.map(Plant::parse) {
+        None => None,
+        Some(Ok(p)) => Some(p),
+        Some(Err(e)) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(2);
+        }
+    };
+    let opts = FormatOptions {
+        plugins: if no_transforms {
+            Plugins::NONE
+        } else {
+            Plugins::STAGE6
+        },
+        plant,
+    };
+    let text = match format(&code, &opts) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("ERROR: {input}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let written = match out {
+        Some(path) => std::fs::write(path, text.as_bytes()),
+        None => {
+            use std::io::Write;
+            std::io::stdout().write_all(text.as_bytes())
+        }
+    };
+    if let Err(e) = written {
+        eprintln!("ERROR: write: {e}");
+        std::process::exit(1);
+    }
+}
+
+/// `humanify-ag format-check`: a goldens file against the formatter.
+fn format_check_verb(path: &str, show: usize, plant: Option<&str>) {
+    use humanify_ag_core::format::{FormatOptions, Plant, Plugins, format};
+    let plant = match plant.map(Plant::parse) {
+        None => None,
+        Some(Ok(p)) => Some(p),
+        Some(Err(e)) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(2);
+        }
+    };
+    let rows: Vec<serde_json::Value> = match std::fs::read_to_string(path)
+        .map_err(|e| e.to_string())
+        .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()))
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("ERROR: {path}: {e}");
+            std::process::exit(2);
+        }
+    };
+    let (mut same, mut differ) = (0usize, 0usize);
+    for row in &rows {
+        let name = row["name"].as_str().unwrap_or("?");
+        let code = row["code"].as_str().unwrap_or("");
+        for (leg, plugins) in [("none", Plugins::NONE), ("full", Plugins::STAGE6)] {
+            let want = &row[leg];
+            let plant = if plugins.is_empty() { None } else { plant };
+            let got = format(code, &FormatOptions { plugins, plant });
+            let ok = match (want.get("text").and_then(serde_json::Value::as_str), &got) {
+                (Some(w), Ok(g)) => w == g,
+                (None, Err(_)) => true,
+                _ => false,
+            };
+            if ok {
+                same += 1;
+                continue;
+            }
+            differ += 1;
+            if differ <= show {
+                println!(
+                    "== {name} [{leg}]\n-- code\n{code}\n-- ts\n{}\n-- rust\n{}",
+                    want,
+                    match got {
+                        Ok(t) => t,
+                        Err(e) => format!("ERROR {e}"),
+                    }
+                );
+            }
+        }
+    }
+    println!(
+        "format-check: {} legs, identical {same}, differing {differ}",
+        same + differ
+    );
+    if differ > 0 {
+        std::process::exit(1);
+    }
+}
+
+use clap::CommandFactory;
+
+#[cfg(test)]
+mod retired_verb_flag_test {
+    use super::{Cli, is_stage_verb, retired_verb_flag};
+    use clap::Parser;
+
+    fn argv(a: &[&str]) -> Vec<String> {
+        a.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Config sweep 2026-10-13, no backwards compatibility: a renamed
+    /// verb flag's old spelling is refused, naming the new one; a deleted
+    /// one is refused saying so.
+    #[test]
+    fn a_retired_verb_flag_is_refused_naming_its_replacement() {
+        for (args, want) in [
+            (
+                &["detect", "in.js", "--profile", "p.json"][..],
+                "--perf-trace",
+            ),
+            (&["detect", "in.js", "--profile=p.json"][..], "--perf-trace"),
+            (
+                &["unpack", "in.js", "out", "--index", "i.json"][..],
+                "--bundle-order",
+            ),
+            (
+                &["match", "in.js", "--prior-version", "p.js", "--sequential"][..],
+                "removed",
+            ),
+        ] {
+            let msg = retired_verb_flag(&argv(args))
+                .unwrap_or_else(|| panic!("{args:?} was not refused"));
+            assert!(msg.contains(want), "{args:?}: {msg}");
+        }
+        // The pipeline's own flags are not the verbs' business.
+        assert_eq!(retired_verb_flag(&argv(&["in.js", "--index"])), None);
+        assert_eq!(
+            retired_verb_flag(&argv(&["unpack", "in.js", "out", "--carries", "c"])),
+            None
+        );
+    }
+
+    #[test]
+    fn the_new_verb_spellings_parse() {
+        assert!(
+            Cli::try_parse_from(["humanify-ag", "detect", "in.js", "--perf-trace", "p"]).is_ok()
+        );
+        assert!(
+            Cli::try_parse_from(["humanify-ag", "unpack", "in", "out", "--bundle-order", "i"])
+                .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "humanify-ag",
+                "match",
+                "in",
+                "--prior-version",
+                "p",
+                "--sequential"
+            ])
+            .is_err()
+        );
+    }
+
+    /// exp186: the index builder is the `index` subcommand of the one
+    /// binary (it was the separate `humanify-index`), its flags unchanged.
+    #[test]
+    fn the_index_builder_is_a_subcommand() {
+        assert!(is_stage_verb("index"));
+        let build = [
+            "humanify-ag",
+            "index",
+            "build",
+            "--spec",
+            "s.toml",
+            "--registry",
+            "r",
+            "--store",
+            "st",
+            "--work",
+            "w",
+            "--out",
+            "o",
+            "--jobs",
+            "4",
+            "--merge-jobs",
+            "2",
+            "--offline",
+            "--merge-only",
+            "--chunk",
+            "0/2",
+            "--dry-run",
+        ];
+        assert!(Cli::try_parse_from(build).is_ok());
+        let slim = [
+            "humanify-ag",
+            "index",
+            "slim-cache",
+            "--work",
+            "w",
+            "--journal",
+            "j",
+        ];
+        assert!(Cli::try_parse_from(slim).is_ok());
+        // no flag of the old binary's was dropped, none added
+        assert!(Cli::try_parse_from(["humanify-ag", "index", "build", "--spec", "s"]).is_err());
+        assert!(
+            Cli::try_parse_from(["humanify-ag", "index", "slim-cache", "--work", "w"]).is_err()
+        );
+        // the verb's flags are not refused as retired flags
+        assert_eq!(retired_verb_flag(&argv(&build[1..])), None);
+    }
+
+    /// `libdetect` had no caller (config sweep 2026-10-13): no longer a verb.
+    #[test]
+    fn libdetect_is_not_a_verb() {
+        assert!(!is_stage_verb("libdetect"));
+    }
+}
+
+#[cfg(test)]
+#[path = "allocator_test.rs"]
+mod allocator_test;
+
+#[cfg(test)]
+mod help_golden_test {
+    use super::Cli;
+
+    /// The match verb's rendered help, pinned by a golden generated
+    /// deliberately with `humanify-ag match --help > test/golden/help/match.txt`
+    /// (the pipeline's help golden is pinned by surface_test; the clap
+    /// verbs had no help pin — the instrument's surface is a contract
+    /// with the ground-truth harness, so it is pinned from the first day).
+    #[test]
+    fn match_help_matches_the_golden() {
+        use clap::CommandFactory;
+        let mut cmd = Cli::command()
+            .find_subcommand("match")
+            .expect("the match verb exists")
+            .clone();
+        // Rendered through the parent (as `humanify-ag match --help` prints
+        // it), not standalone: the usage line carries the bin name.
+        cmd = cmd.bin_name("humanify-ag match");
+        let help = cmd.render_help().to_string();
+        let golden = std::fs::read_to_string(format!(
+            "{}/../../test/golden/help/match.txt",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .expect("the committed golden");
+        assert_eq!(
+            help.trim_end(),
+            golden.trim_end(),
+            "help for match (regenerate the golden with \
+             `humanify-ag match --help > test/golden/help/match.txt` after a deliberate change)"
+        );
+    }
+}

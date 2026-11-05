@@ -38,30 +38,30 @@ exist before the pipeline does):
 ```
 humanify/
   crates/
-    humanify-model/    # pure data, no oxc/rayon/tokio: version-record tables,
+    humanify-ag-model/    # pure data, no oxc/rayon/tokio: version-record tables,
                        # dump schemas, the three hash newtypes, span newtypes,
                        # the NameProvider trait + request/response types
-    humanify-core/     # the pipeline library: all twelve stages + post passes,
+    humanify-ag-core/     # the pipeline library: all twelve stages + post passes,
                        # one public entry point; never reads std::env, never async
-    humanify-llm/      # implements NameProvider for the real client; owns
+    humanify-ag-llm/      # implements NameProvider for the real client; owns
                        # tokio/reqwest, disk cache, rate limiting — behind a
                        # SYNCHRONOUS public API (block_on inside)
-    humanify-cli/      # thin binary: clap-derived RunConfig passed by value
+    humanify-ag-cli/      # thin binary: clap-derived RunConfig passed by value
                        # into core, the ONE env/kill-switch-reading module,
                        # wiring the concrete client, exit codes / ERROR: blocks
                        # / progress UI
-    humanify-parity/   # the dump comparer; depends on humanify-model only —
+    humanify-parity/   # the dump comparer; depends on humanify-ag-model only —
                        # buildable before any pipeline Rust exists
 ```
 
-Detection, unpack, and library detection live in `humanify-core` (they are
-pipeline stages 1–4, not CLI concerns); `humanify-cli` stays argv-to-config
+Detection, unpack, and library detection live in `humanify-ag-core` (they are
+pipeline stages 1–4, not CLI concerns); `humanify-ag-cli` stays argv-to-config
 translation plus output formatting, so tests and tools can run the pipeline
 as a library without pulling in `clap`. The env/kill-switch module lives in
 the CLI crate deliberately: core receives switches as config values and has
 zero process-environment coupling.
 
-`humanify-core`'s internal modules mirror `docs/responsibility.md` (module
+`humanify-ag-core`'s internal modules mirror `docs/responsibility.md` (module
 tree: `ingest`, `hash`, `graph`, `modules`, `detect`, `unpack`, `libdetect`,
 `matching::{cascade,close,twins}`, `prior`, `rename::{validated,transfer,votes}`,
 `naming::{prompts,waves,reconcile,passes,driver}`, `place`, `layout`, `emit`,
@@ -85,7 +85,7 @@ table. The three loudest examples:
   true.
 - **`hash`** exposes three distinct key types — `MatchKey` (literal-blurred
   `structuralHash`), `IdentityKey` (literal-verbatim `statementHash`),
-  `VendorSignature` — as separate newtypes (defined in `humanify-model`). A
+  `VendorSignature` — as separate newtypes (defined in `humanify-ag-model`). A
   correctness gate that consumes a `MatchKey` does not compile. exp046's
   near-miss (vendor byte-reuse keyed on the blurred hash, which would have
   shipped stale endpoints) becomes unrepresentable.
@@ -106,7 +106,7 @@ table. The three loudest examples:
 | `@babel/generator` `compact: false` + beautifier plugin | `oxc_codegen` + a small normalization pass (section 4)                                                                                                                                                                                            |
 | split slices rendered text by byte offsets              | same technique — spans into the rendered output                                                                                                                                                                                                   |
 | `PLACEMENT_TIERS`                                       | same tiers, as a closed enum with exhaustive `match` (all five registries dispatch this way — adding a tier is a compile error until every site handles it; `dyn` is reserved for nothing, and the LLM provider is a GENERIC, not a trait object) |
-| kill-switch registry + guard test                       | the env-reading module lives in `humanify-cli`; core receives switches as config, reads `std::env` nowhere (lint-enforced)                                                                                                                        |
+| kill-switch registry + guard test                       | the env-reading module lives in `humanify-ag-cli`; core receives switches as config, reads `std::env` nowhere (lint-enforced)                                                                                                                     |
 | `--diagnostics` trails, stats JSON                      | serde structs, **same JSON shapes** so existing report tooling works                                                                                                                                                                              |
 
 The cascade tiers, guards, placement tiers, vote ladders, reconcile tiers, and
@@ -240,10 +240,10 @@ sacred). The ordering rules that guarantee it:
 ## 7. The LLM layer
 
 - **The sync/async bridge is one trait at one seam.** `NameProvider` is a
-  plain SYNCHRONOUS trait in `humanify-model`
+  plain SYNCHRONOUS trait in `humanify-ag-model`
   (`fn run_wave(&self, reqs: Vec<Request>) -> Vec<Response>`);
-  `humanify-core` is generic over it and never imports tokio or writes
-  `async fn`. `humanify-llm`'s client implements it by owning a
+  `humanify-ag-core` is generic over it and never imports tokio or writes
+  `async fn`. `humanify-ag-llm`'s client implements it by owning a
   `tokio::runtime::Runtime` internally and `block_on`-ing a
   semaphore-bounded fan-out. The test mock is a zero-dependency fake
   implementing the same trait — no runtime, no network stack.
@@ -321,5 +321,5 @@ Made explicit because it changes what the plan does and does not owe
   discipline; fixtures shared with the TS suite where they are pure
   input/output pairs; red/green TDD unchanged.
 - Complexity ceiling: clippy's `cognitive_complexity` replaces biome's.
-- No `unsafe` in `humanify-core` (the perf comes from the model, not from
+- No `unsafe` in `humanify-ag-core` (the perf comes from the model, not from
   tricks).

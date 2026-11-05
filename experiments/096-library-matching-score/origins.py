@@ -79,7 +79,7 @@ RULES10 = {**RULES7, "via": True}
 # scorer 12 (exp129, from exp130's declared builder/truth difference): one more rule on the scorer 10 layer.
 #   patched   a marker path may hold `=`: pnpm spells a PATCHED dependency `.pnpm/<name>@<version>_patch_hash=<h>/`,
 #             and PATHLIKE refused the marker, so the region read as the shipper's own code while the index builder
-#             (humanify_index::build, any marker path) read it as the named package's (`patched` off: exactly
+#             (humanify_ag_index::build, any marker path) read it as the named package's (`patched` off: exactly
 #             scorer 10's layer)
 RULES12 = {**RULES10, "patched": True}
 PATHLIKE12 = re.compile(r"^(?:\.{0,2}/)*[\w@.-]+(?:/[\w@.+=-]+)*\.(?:[cm]?[jt]sx?|json)$")

@@ -51,7 +51,7 @@ Exit gate: neutrality NEUTRAL for the dump flag; oracle artifacts stored.
 
 ## Phase 1 — core model: parse, semantic, graph, hashes
 
-`humanify-core`: oxc parse + semantic over the TS-beautified text; function
+`humanify-ag-core`: oxc parse + semantic over the TS-beautified text; function
 graph; the three hash families with the canonical serialization (02 §4a);
 shingles.
 

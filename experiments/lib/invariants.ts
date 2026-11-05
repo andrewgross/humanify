@@ -124,7 +124,7 @@ function readProviderErrors(statsPath: string): ProviderErrorCounts | null {
   }
 }
 
-/** The binary's one failed-call WARNING (crates/humanify-cli/src/
+/** The binary's one failed-call WARNING (crates/humanify-ag-cli/src/
  *  provider_failures.rs): `WARNING: <n> LLM call(s) failed after every
  *  retry`. No line = no failed call. */
 const FAILED_CALLS_LINE =
@@ -150,7 +150,7 @@ function readLibraryMatching(statsPath: string): LibraryMatchingBlock | null {
   }
 }
 
-/** The binary's skip line (crates/humanify-cli/src/runtime_index.rs
+/** The binary's skip line (crates/humanify-ag-cli/src/runtime_index.rs
  *  `no_index_line` and its from-bundle twins). */
 const SKIP_LINE =
   /^no library index for \S+ bundles in .* skipping library name matching \(.*$/m;

@@ -2,7 +2,7 @@
  * The `e2e` check stage: the RELEASE BINARY run end to end on the committed
  * e2e fixtures, and its output booted.
  *
- *   npx tsx scripts/e2e.ts          # needs target/release/humanify (rust:build)
+ *   npx tsx scripts/e2e.ts          # needs target/release/humanify-ag (rust:build)
  *
  * Since the cutover (docs/rust-port/19-cutover.md) the pipeline is the Rust
  * binary, so this replaces the TS `*.e2etest.ts` suite. Per fixture with a
@@ -63,7 +63,7 @@
  * skipped with a printed note instead of silently committed against
  * itself.
  *
- * DETECTION is recorded for every pair: `humanify detect --toolchain` on
+ * DETECTION is recorded for every pair: `humanify-ag detect --toolchain` on
  * the v1 input (bundler, minifier, unpack adapter, bundle layout) is
  * printed first, and a fixture's `expect` block (bundler, unpack adapter,
  * a non-empty vendor/) is checked LAST, after the run steps — so a fixture
@@ -109,7 +109,7 @@ import { startStubLlm, stubAnswer } from "./lib/stub-llm.js";
 type Settings = Array<[string, Setting]>;
 
 const REPO = path.resolve(import.meta.dirname, "..");
-const BIN = path.join(REPO, "target/release/humanify");
+const BIN = path.join(REPO, "target/release/humanify-ag");
 const FIXTURES = path.join(REPO, "test/e2e/fixtures");
 /**
  * The library-index store every launch reads. Names mode is the binary's
@@ -175,7 +175,7 @@ interface FixtureConfig {
  * with it — checked after every other step passed, so a fixture with a
  * known detection gap is still run, split and booted end to end first.
  *
- *   - `bundler` — `humanify detect`'s bundler verdict on the v1 input;
+ *   - `bundler` — `humanify-ag detect`'s bundler verdict on the v1 input;
  *   - `unpackAdapter` — the toolchain's unpack adapter for it
  *     (`detect --toolchain`, the same resolution the run makes);
  *   - `vendor` — the fresh split tree's `vendor/` holds at least one
@@ -216,7 +216,7 @@ interface ObservedRun {
   splitMethod?: string;
 }
 
-/** `humanify detect --toolchain`'s verdict on one input, as recorded. */
+/** `humanify-ag detect --toolchain`'s verdict on one input, as recorded. */
 interface Detection {
   bundler: string;
   bundlerTier?: string;
@@ -662,7 +662,7 @@ function fixturePairs(): FixturePair[] {
 }
 
 /**
- * `humanify detect --toolchain` on one input: its second line is the
+ * `humanify-ag detect --toolchain` on one input: its second line is the
  * resolved selection + toolchain, the same resolution a run makes.
  */
 function detectionOf(file: string, label: string): Detection {
@@ -1091,7 +1091,7 @@ async function judgedPair(
 async function main(): Promise<void> {
   if (!fs.existsSync(BIN)) {
     fail(
-      `no binary at ${BIN} — the rust:build stage builds it (cargo build --release --locked -p humanify-cli)`
+      `no binary at ${BIN} — the rust:build stage builds it (cargo build --release --locked -p humanify-ag-cli)`
     );
   }
   const pairs = fixturePairs();

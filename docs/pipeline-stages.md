@@ -19,20 +19,20 @@ on the app, the bundler or the model — are in
 Ordered as they execute. "Pluggable" means a strategy can be selected without
 editing the caller.
 
-| #   | stage                    | entry point (`humanify_core::…`, driven by `humanify_cli::unified`)      | pluggable?                                                                                                                                                  |
-| --- | ------------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Detect bundler/minifier  | `detect` → `toolchain::resolve_toolchain` (every plugin piece, once)     | **yes** — `--bundler` / `--minifier` override detection                                                                                                     |
-| 2   | Select unpack adapter    | `unpack::choose_adapter` (called by the toolchain)                       | **yes** — registry of 4 (webcrack, bun, esbuild, passthrough), `supports()`, passthrough last                                                               |
-| 3   | Unpack the bundle        | `unpack::run_adapter` (the ONE dispatch site; webcrack via its shim)     | via stage 2 — bun and esbuild share the one vendor-extraction flow (`unpack::bun::unpack_bun`)                                                              |
-| 4   | Detect libraries         | `libdetect`                                                              | **yes** — registry of 3, `supports()`, default last                                                                                                         |
-| 5   | Name vendor files        | `modules` (vendor manifest + namer, prior carry-over, declared identity) | **partly** — the bundler's identity piece (P17) is chosen by the toolchain; the package readers are a registry (`identity::readers`); the namer is injected |
-| 6   | Format                   | `format` (`core::format`, the native formatter)                          | **no** — deliberately; output shape is a fixed point (frozen spec: test/parity/format-goldens.json)                                                         |
-| 7   | Build the function graph | `graph`                                                                  | **no**                                                                                                                                                      |
-| 8   | Match against the prior  | `matching` + `twins` (the fingerprint cascade)                           | **no** — the cascade is hard-coded order, see below                                                                                                         |
-| 9   | Name identifiers         | `naming` (LLM waves + prior transfer, `rename`)                          | **partly** — the name profile registry (bun/esbuild/terser/swc/none); levers toggle passes                                                                  |
-| 10  | Place statements         | `place::tiers` (`PLACEMENT_TIERS`)                                       | **partly** — a real registry, but not selectable from outside                                                                                               |
-| 11  | Split (one path)         | `emit::stable_split`                                                     | **no** — prior present → inherit layout; no prior → clustered fresh grouping                                                                                |
-| 12  | Emit + finish on disk    | `emit::cjs`, `finish` (scaffold, relink, ledgers)                        | **no**                                                                                                                                                      |
+| #   | stage                    | entry point (`humanify_ag_core::…`, driven by `humanify_ag_cli::unified`) | pluggable?                                                                                                                                                  |
+| --- | ------------------------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Detect bundler/minifier  | `detect` → `toolchain::resolve_toolchain` (every plugin piece, once)      | **yes** — `--bundler` / `--minifier` override detection                                                                                                     |
+| 2   | Select unpack adapter    | `unpack::choose_adapter` (called by the toolchain)                        | **yes** — registry of 4 (webcrack, bun, esbuild, passthrough), `supports()`, passthrough last                                                               |
+| 3   | Unpack the bundle        | `unpack::run_adapter` (the ONE dispatch site; webcrack via its shim)      | via stage 2 — bun and esbuild share the one vendor-extraction flow (`unpack::bun::unpack_bun`)                                                              |
+| 4   | Detect libraries         | `libdetect`                                                               | **yes** — registry of 3, `supports()`, default last                                                                                                         |
+| 5   | Name vendor files        | `modules` (vendor manifest + namer, prior carry-over, declared identity)  | **partly** — the bundler's identity piece (P17) is chosen by the toolchain; the package readers are a registry (`identity::readers`); the namer is injected |
+| 6   | Format                   | `format` (`core::format`, the native formatter)                           | **no** — deliberately; output shape is a fixed point (frozen spec: test/parity/format-goldens.json)                                                         |
+| 7   | Build the function graph | `graph`                                                                   | **no**                                                                                                                                                      |
+| 8   | Match against the prior  | `matching` + `twins` (the fingerprint cascade)                            | **no** — the cascade is hard-coded order, see below                                                                                                         |
+| 9   | Name identifiers         | `naming` (LLM waves + prior transfer, `rename`)                           | **partly** — the name profile registry (bun/esbuild/terser/swc/none); levers toggle passes                                                                  |
+| 10  | Place statements         | `place::tiers` (`PLACEMENT_TIERS`)                                        | **partly** — a real registry, but not selectable from outside                                                                                               |
+| 11  | Split (one path)         | `emit::stable_split`                                                      | **no** — prior present → inherit layout; no prior → clustered fresh grouping                                                                                |
+| 12  | Emit + finish on disk    | `emit::cjs`, `finish` (scaffold, relink, ledgers)                         | **no**                                                                                                                                                      |
 
 Stage 9 has a step that decides stage 11's FILE names (2026-10-06,
 docs/design/module-naming.md): when the bundle's module markers describe
@@ -117,8 +117,8 @@ After those, the run's REPORTS are written, in this order: `--diagnostics`
 trail), `--stats-json`, `--dump-artifacts`, `--rename-ledger`. They observe
 decisions already made — except `--rename-ledger`, which is NOT inert: it
 gates the family permute off (plugin.ts `finalizeWithFamilyPermute`), so a
-ledger run ships a different tree. (`humanify_cli::unified::RunReports`, the
-dump in `humanify_core::artifact_dump`.)
+ledger run ships a different tree. (`humanify_ag_cli::unified::RunReports`, the
+dump in `humanify_ag_core::artifact_dump`.)
 
 ## What was missing from the four-stage model
 
@@ -128,7 +128,7 @@ Stages 4, 5, 7, 8, 12 and all three post-placement passes. In particular:
   own failure modes: naming decides what a thing should be called, matching
   decides whether it is the same thing as last release. Most cross-version
   noise is a matching failure, not a naming one. Stage 8 has its own
-  inspection verb since exp092: `humanify match` runs the stage cold (no
+  inspection verb since exp092: `humanify-ag match` runs the stage cold (no
   LLM path exists in it) and dumps every per-function/per-statement
   decision — the ground-truth harness's instrument.
 - **Vendor (5) was absent entirely** — the rule-8 blind spot.
@@ -138,7 +138,7 @@ Stages 4, 5, 7, 8, 12 and all three post-placement passes. In particular:
 ## Strategy selection: where the seams actually are
 
 **The toolchain (2026-10-04, finding #76).** Every plugin piece a run uses
-is chosen ONCE, at stage 1, by `humanify_core::toolchain::resolve_toolchain`
+is chosen ONCE, at stage 1, by `humanify_ag_core::toolchain::resolve_toolchain`
 — from the detection verdict and the `--bundler` / `--minifier` flags — and
 handed to the stages that need it as a value (`Toolchain`): the unpack
 adapter, the vendor record's stamp, the library detector, the never-rename

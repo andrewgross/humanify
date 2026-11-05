@@ -9,7 +9,7 @@ This spec covers the **practical implementation** of file splitting as a standal
 
 ## Design Principles
 
-1. **Pipeline stage, not monolith.** `humanify split` is a standalone command that reads already-unminified files and writes a new directory tree. It does not require the rename pass to have run in the same process.
+1. **Pipeline stage, not monolith.** `humanify-ag split` is a standalone command that reads already-unminified files and writes a new directory tree. It does not require the rename pass to have run in the same process.
 
 2. **Input is sacred.** Never mutate input files. Output goes to a separate directory. This enables re-running with different parameters, A/B comparison, and debugging.
 
@@ -40,6 +40,7 @@ Options:
 ### Input Contract
 
 The split command accepts:
+
 - A single `.js` file (scope-hoisted bundle output)
 - A directory of `.js` files (webpack/browserify unpacked modules)
 
@@ -59,6 +60,7 @@ It parses the input fresh using Babel, calls `buildFunctionGraph()`, and works f
 The `shared.js` file is not special — it's just another file inside `src/` that happens to contain functions used by multiple clusters. Ideally, as clustering improves, fewer things end up here. If it grows too large, it gets sub-clustered like any other oversized cluster.
 
 `manifest.json` enables:
+
 - Re-running with cached cluster names
 - Diffing cluster assignments between versions
 - Debugging clustering decisions
@@ -96,6 +98,7 @@ The `shared.js` file is not special — it's just another file inside `src/` tha
 Build the clustering algorithm and validate it produces sensible groupings. Output is `--dry-run` only — a report of what clusters were found and what functions go where.
 
 **What we build:**
+
 - `src/split/cluster.ts` — core clustering algorithm
 - `src/split/types.ts` — Cluster, SplitPlan types
 - `src/split/index.ts` — CLI entry point (dry-run only)
@@ -121,11 +124,13 @@ Build the clustering algorithm and validate it produces sensible groupings. Outp
 ```
 
 **Determinism rules:**
+
 - All iteration over functions: sort by `exactHash`
 - Tie-breaking: secondary sort on `sessionId` (positional, but deterministic for same input)
 - Never depend on `Map`/`Set` iteration order for output-affecting decisions
 
 **Validation approach:**
+
 - Use existing small e2e fixtures (mitt, nanoid, zustand) for basic sanity checks
 - Find a larger real-world project (500+ functions) as the primary test fixture — unminify it once, validate the unminification, save the result as a fixture
 - Get two versions of the larger fixture (with code changes between them) to test cross-version stability
@@ -139,6 +144,7 @@ Build the clustering algorithm and validate it produces sensible groupings. Outp
 Give clusters human-readable names without LLM involvement. Expect most clusters to get fingerprint-based names at this stage — that's fine. LLM naming is a separate future pipeline step.
 
 **Naming strategy (no LLM):**
+
 1. If cluster has a single root function with a humanified name → use that name
    - `createAuth` root → `createAuth.js`
 2. If cluster has multiple roots (merged circulars) → join names
@@ -168,6 +174,7 @@ After Phase 1+2, we have a plan: "function X goes to file Y." Phase 3 executes t
 5. Generate output files from the ASTs using Babel's `generate()`
 
 **On shared declarations:** The worry is that minified code often has many top-level declarations that end up referenced everywhere, making `shared.js` a dumping ground. To mitigate:
+
 - Small `const` declarations (< 100 chars) can be duplicated into each consuming file instead of shared
 - Declarations referenced by only 2 clusters could go into whichever cluster references them more
 - We'll evaluate this during experiments and tune the heuristic
@@ -193,6 +200,7 @@ interface SplitLedger {
 ```
 
 The ledger tracks every top-level statement type:
+
 - Function declarations and expressions
 - Variable declarations (`const`, `let`, `var`)
 - Class declarations
@@ -203,6 +211,7 @@ The ledger tracks every top-level statement type:
 **Verification runs at two points:**
 
 1. **After clustering (Phase 1), before code generation:** Assert every ledger entry has been assigned to an output file. If any are unassigned, abort with a report:
+
    ```
    ERROR: Split would drop 3 nodes:
      - app.js:42:VariableDeclaration (const CONFIG = {...})
@@ -219,10 +228,12 @@ The ledger tracks every top-level statement type:
 The ledger is serialized into `manifest.json` so it's reviewable. In dry-run mode, it provides the core output — "here's what I'd do with every piece of code."
 
 **Additional correctness properties:**
+
 - No identifier references are broken — every cross-file reference has a matching import/export
 - All operations use standard Babel AST transforms: `t.cloneNode()`, `t.exportNamedDeclaration()`, `t.importDeclaration()`, `path.remove()` — deterministic and well-understood
 
 **Babel operations needed:**
+
 - `t.cloneNode(fnPath.node, true)` — deep clone function
 - `t.exportNamedDeclaration(declaration)` — wrap in export
 - `t.importDeclaration(specifiers, source)` — add import
@@ -233,6 +244,7 @@ The ledger is serialized into `manifest.json` so it's reviewable. In dry-run mod
 Replace mechanical names with semantically meaningful ones. This is a separate pipeline step that can run after Phase 3.
 
 **Deferred — depends on:**
+
 - Cluster quality being good enough that names are meaningful
 - Understanding the right LLM prompt for file naming vs function naming
 
@@ -241,6 +253,7 @@ Replace mechanical names with semantically meaningful ones. This is a separate p
 Cache cluster assignments and names so v1.0 → v1.1 produces minimal diffs.
 
 **Deferred — depends on:**
+
 - Phase 1-3 working well on single versions
 - Having two versions of a real codebase to test against (planned as part of Phase 1 validation)
 
@@ -249,17 +262,20 @@ Cache cluster assignments and names so v1.0 → v1.1 produces minimal diffs.
 ## What We Need From Upstream
 
 ### Currently working (can use as-is):
+
 - `computeExactHash()` — 16-char structural hash, tested
 - `buildFunctionGraph()` — call edges + callers, tested
 - `FunctionNode.internalCallees` / `.callers` — the edges we need
 - `FunctionNode.fingerprint.exactHash` — the stable identity
 
 ### Known limitations to be aware of:
+
 - **exactHash collisions on small functions:** Very simple functions (getters, identity functions) may share the same hash. For clustering this is mostly fine — they'll get assigned by who calls them, not by their identity.
 - **Call graph completeness:** Dynamic dispatch (`obj[method]()`) and higher-order functions (`arr.map(fn)`) may not be captured as edges. This means some relationships are invisible to clustering. Acceptable for v1; can improve later. Functions with missing edges still get assigned to a cluster (possibly as orphans or shared) — they are never dropped from the output.
 - **Scope-hoisted code quirks:** After unminifying a Rollup bundle, all functions are at the top level with no module wrappers. `buildFunctionGraph()` should handle this fine since it works on call expressions, not module structure.
 
 ### Not needed for Phase 1 (but structure code to not preclude them):
+
 - Checkpoint DB integration (Phase 5)
 - Cross-version fingerprint matching (Phase 5)
 - Library detection (can add as a pre-filter later)
@@ -282,6 +298,7 @@ src/split/
 **Red-Green TDD throughout:** Write the test first, run it, watch it fail, then write the code that makes it pass. Repeat.
 
 ### Unit tests (Phase 1):
+
 - `cluster.test.ts`:
   - Hand-crafted call graphs → verify cluster assignments
   - Circular dependencies → verify merging
@@ -291,16 +308,19 @@ src/split/
   - Determinism: run 100x, verify identical output
 
 ### Integration tests (Phase 1):
+
 - Small fixtures (mitt, nanoid, zustand) for basic sanity
 - Larger fixture (500+ functions) as primary test target — need to identify and prepare this
 - Snapshot the cluster assignments (not the code, just "function X → cluster Y")
 
 ### Experiments (ongoing):
+
 - Gitignored `experiments/` directory
 - Record: input file, clustering output (manifest.json), observations, parameter tweaks
 - Compare two versions of same project to evaluate stability
 
 ### Quality metrics to track:
+
 - **Shared ratio:** `|shared| / |total|` — lower is better (target: <15%)
 - **MQ score:** Bunch's modularization quality — higher is better
 - **Cluster count:** Should be reasonable for codebase size

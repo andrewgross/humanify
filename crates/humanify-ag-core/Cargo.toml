@@ -1,0 +1,32 @@
+[package]
+name = "humanify-ag-core"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+sha2.workspace = true
+sha1.workspace = true
+rayon.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+oxc_allocator.workspace = true
+oxc_estree.workspace = true
+oxc_ast.workspace = true
+oxc_parser.workspace = true
+oxc_semantic.workspace = true
+oxc_span.workspace = true
+oxc_syntax.workspace = true
+oxc_traverse.workspace = true
+humanify-ag-model = { path = "../humanify-ag-model" }
+
+[dev-dependencies]
+# The vendor replay test runs the real wiring (the replay-only client over a
+# disk cache). A dev-dependency only: the core library itself never links
+# tokio/reqwest (02 §2 — core is generic over NameProvider).
+humanify-ag-llm = { path = "../humanify-ag-llm" }
+
+[lints]
+workspace = true

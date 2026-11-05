@@ -33,8 +33,8 @@ on-demand instruments. Runtimes are estimates until measured.
 | 1   | colocated unit                | `#[cfg(test)] mod tests`, cargo-nextest                | every module's logic, next to the code — the `*.test.ts` discipline                                                                                                                                                                                                                                                                                                                                                                              | < 10 s suite            | per-save + gate       |
 | 2   | compile-fail                  | trybuild                                               | the type-level promises of 02 §2: `MatchKey` into a correctness gate must not compile; holding `&mut Scoping` outside `core::emit` must not compile, and the name overlay's only writer is `rename::validated::attempt_validated_rename` (amended 2026-09-19: was "symbol-name writes outside `rename::validated` must not compile" — `Scoping` publicly exposes `rename_symbol`, so that promise is unenforceable; 02 §2's overlay design wins) | ~30 s                   | gate                  |
 | 3   | property                      | proptest                                               | the five invariants in §4 over generated inputs                                                                                                                                                                                                                                                                                                                                                                                                  | 30–60 s at gate depth   | gate + deep on-demand |
-| 4   | integration, in-process       | `tests/` in `humanify-core`, mock LLM provider         | pipeline segments end-to-end on synthetic fixtures — the `src/test/rename.e2etest.ts` analog (6 cases today, all with mocked `suggestAllNames`)                                                                                                                                                                                                                                                                                                  | seconds                 | gate                  |
-| 5   | integration, binary           | `tests/` in `humanify-cli`, assert_cmd                 | the built binary on committed fixtures with a committed warm cache: flags, exit codes, tree layout, ledgers                                                                                                                                                                                                                                                                                                                                      | 30–60 s                 | gate                  |
+| 4   | integration, in-process       | `tests/` in `humanify-ag-core`, mock LLM provider      | pipeline segments end-to-end on synthetic fixtures — the `src/test/rename.e2etest.ts` analog (6 cases today, all with mocked `suggestAllNames`)                                                                                                                                                                                                                                                                                                  | seconds                 | gate                  |
+| 5   | integration, binary           | `tests/` in `humanify-ag-cli`, assert_cmd              | the built binary on committed fixtures with a committed warm cache: flags, exit codes, tree layout, ledgers                                                                                                                                                                                                                                                                                                                                      | 30–60 s                 | gate                  |
 | 6   | prompt snapshots              | insta                                                  | rendered prompts — an external contract with the LLM cache (02 §7), byte-stable                                                                                                                                                                                                                                                                                                                                                                  | < 5 s                   | per-save + gate       |
 | 7   | fingerprint snapshots         | insta (migration era: the committed TS snapshot files) | match metrics per fixture × pair × minifier — the `*.fptest.ts` analog                                                                                                                                                                                                                                                                                                                                                                           | seconds per fixture     | gate                  |
 | 8   | JSON contract shapes          | insta JSON snapshots + a Node-byte corpus              | serde structs vs the frozen pipeline contract (03 phase 0); byte parity with Node `JSON.stringify`                                                                                                                                                                                                                                                                                                                                               | < 5 s                   | gate                  |
@@ -231,7 +231,7 @@ measurement").
    tiers, vote tallies — permuting the iteration order of inputs yields
    byte-identical decisions and trails. This is the dynamic half of 02 §5's
    `HashMap`-iteration hazard; the static half is the clippy restriction lint
-   `iter_over_hash_type` (allow by default, set to deny in `humanify-core`'s
+   `iter_over_hash_type` (allow by default, set to deny in `humanify-ag-core`'s
    decision modules). The lint cannot see order-dependence smuggled through an
    ordered-but-wrong sort key; the property can. The end-to-end versions of
    this check remain self-hop = 0 and warm-rerun byte identity, as today.
@@ -287,7 +287,7 @@ contradiction, injectivity demotion (01 §4), the seven rename legality rules
 (01 §5), and the placement abstain gates (01 §6).
 
 - Targeted run after touching a guard:
-  `cargo mutants --file crates/humanify-core/src/matching/guards.rs`
+  `cargo mutants --file crates/humanify-ag-core/src/matching/guards.rs`
   (path illustrative until the crate exists).
 - Changed-code run: `cargo mutants --in-diff <diff-file>`.
 - Cadence: on-demand after guard changes, plus a periodic (roughly weekly)
@@ -332,7 +332,7 @@ Each registry also keeps the pinned ordered-name-list test, so reordering or
 renaming a tier is a conscious two-file change. The registry-confinement
 guards port the same way, by the same source-as-text technique
 `test/measurement-owners.test.ts` uses throughout: a test walks
-`crates/humanify-core/src` and fails on `std::env` outside the one `env`
+`crates/humanify-ag-core/src` and fails on `std::env` outside the one `env`
 module (the `src/kill-switches.test.ts` analog, promised in 02 §3), with
 clippy's `disallowed-methods` configuration in `clippy.toml` as the redundant
 static layer.
@@ -365,8 +365,8 @@ Coverage informs; mutation and planted defects verify.
 The cycle is unchanged from the house rules; the commands change:
 
 1. **Red.** Write the test as if the code existed. Run exactly it and watch it
-   fail: `cargo nextest run -p humanify-core -E 'test(rename_when_child_scope_shadows_target_rejects)'`
-   (or `cargo test -p humanify-core <substring>`). For a bug: reproduce it as
+   fail: `cargo nextest run -p humanify-ag-core -E 'test(rename_when_child_scope_shadows_target_rejects)'`
+   (or `cargo test -p humanify-ag-core <substring>`). For a bug: reproduce it as
    this failing test first. For a guard: additionally plant the defect (§5)
    and watch the test catch it.
 2. **Green.** Implement the minimum; re-run the same filter.

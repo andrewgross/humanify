@@ -12,7 +12,7 @@ import { describe, it } from "node:test";
  * run.sh starts the pipeline in three places (the rebase, the scored leg via
  * run-pipeline.ts, the self-hop), and since the cutover every one of them
  * runs the Rust binary: `--bin <path>` names it, and without the flag it is
- * the repo's own `target/release/humanify`, built by the harness. The guard
+ * the repo's own `target/release/humanify-ag`, built by the harness. The guard
  * that matters most is the one a reader cannot do by eye: every launch must
  * be byte-identical to the command lines the binary-scored references
  * (rust-5b-c3b272f-a/-b, docs/rust-port/18-5b-eval-result.md) were scored
@@ -394,7 +394,7 @@ describe("run.sh pipeline launches", () => {
     );
     assert.match(
       h.launches,
-      /^cargo :: build --release --locked -p humanify-cli \(in <REPO>\)$/m
+      /^cargo :: build --release --locked -p humanify-ag-cli \(in <REPO>\)$/m
     );
     assert.doesNotMatch(h.launches, /src\/index\.ts|^humanify /m);
     assert.doesNotMatch(

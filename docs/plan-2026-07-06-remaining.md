@@ -392,7 +392,7 @@ matcher stats — nonzero is expected and fine.
 
 ## Deliberately not now (unchanged from the 2026-07-06 plan)
 
-Changeset renderer / `humanify diff` (user decision: skip); dry-run
+Changeset renderer / `humanify-ag diff` (user decision: skip); dry-run
 mode + pipeline stages; operator normalization (from the lost
 cross-version-diff-gaps note — biggest remaining naming-consistency
 win, but belongs with a future diff-quality pass).

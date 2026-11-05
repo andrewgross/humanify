@@ -126,7 +126,7 @@ describe("eval score argument parsing", () => {
       inputsBase: PAIRS.inputsBase,
       priorsBase: PAIRS.priorsBase,
       workdir: "/tmp/eval-work",
-      bin: path.join(REPO, "target/release/humanify"),
+      bin: path.join(REPO, "target/release/humanify-ag"),
       forceMixed: false,
       pipelineSettings: [],
       // exp171: names is the binary's default; a names launch is handed

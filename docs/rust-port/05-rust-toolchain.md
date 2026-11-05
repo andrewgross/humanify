@@ -28,12 +28,12 @@ humanify/
   deny.toml             # section 5
   bacon.toml            # section 7
   crates/
-    humanify-model/     # pure data: record tables, dump schemas, hash newtypes,
+    humanify-ag-model/     # pure data: record tables, dump schemas, hash newtypes,
                         # NameProvider trait — no oxc/rayon/tokio
-    humanify-core/      # pipeline library: all stages incl. detect/unpack/libdetect
-    humanify-llm/       # NameProvider impl: tokio/reqwest/cache behind a sync API
-    humanify-cli/       # thin binary: clap RunConfig, env/kill-switch module, wiring
-    humanify-parity/    # dump comparer; depends on humanify-model only
+    humanify-ag-core/      # pipeline library: all stages incl. detect/unpack/libdetect
+    humanify-ag-llm/       # NameProvider impl: tokio/reqwest/cache behind a sync API
+    humanify-ag-cli/       # thin binary: clap RunConfig, env/kill-switch module, wiring
+    humanify-parity/    # dump comparer; depends on humanify-ag-model only
   src/ package.json ... # the TS project, untouched until phase 6
 ```
 
@@ -58,7 +58,7 @@ Coexistence facts, checked against the current tree:
 ```toml
 [workspace]
 resolver = "3"
-members = ["crates/humanify-model", "crates/humanify-core", "crates/humanify-llm", "crates/humanify-cli", "crates/humanify-parity"]
+members = ["crates/humanify-ag-model", "crates/humanify-ag-core", "crates/humanify-ag-llm", "crates/humanify-ag-cli", "crates/humanify-parity"]
 
 [workspace.package]
 edition = "2024"
@@ -71,7 +71,7 @@ cognitive_complexity = "deny"   # restriction-group lint: silent unless raised (
 Member crates set `[lints] workspace = true`. Cargo's lints inheritance is
 all-or-nothing — a crate cannot inherit the table and override one entry — so
 per-crate deviations are crate-root attributes (`#![forbid(unsafe_code)]` in
-`humanify-core`, per `02-rust-target-architecture.md` section 10; amended 2026-09-19:
+`humanify-ag-core`, per `02-rust-target-architecture.md` section 10; amended 2026-09-19:
 was "section 9", which is now the compatibility posture), which also
 keeps every deviation visible in the source it applies to.
 
@@ -139,15 +139,15 @@ lint levels, three via crate-root or module-root attributes — with warnings
 fatal at the gate only (amended 2026-09-19: was six; `iter_over_hash_type` from
 `06-testing-strategy.md` §4 property 4 is the seventh).
 
-| lint / setting                                                                              | where configured                                                                                                                             | level                   | house rule it enforces                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `clippy::cognitive_complexity` with `cognitive-complexity-threshold = 15`                   | `clippy.toml` + `[workspace.lints.clippy]`                                                                                                   | deny                    | biome's `noExcessiveCognitiveComplexity` ceiling of 15 (biome.json:13-20; CLAUDE.md "complexity <= 15"). Restriction-group lint, off by default — it must be raised explicitly or it enforces nothing. Clippy's own docs disclaim it as a reliable complexity measure (kept in restriction for exactly that reason); pair it with `too_many_lines` as a companion gate rather than trusting it alone — the mechanical goal (a compile-time analog of the biome ceiling) still holds. |
-| `clippy::disallowed_types`: `std::collections::HashMap`, `std::collections::HashSet`        | `clippy.toml`                                                                                                                                | warn (fatal at gate)    | the determinism hazard of `02-rust-target-architecture.md` section 5: HashMap iteration order is randomized per process; decision paths iterate `BTreeMap`/`IndexMap`/ID-ordered arenas. The ban catches hasher-swapped aliases too (the lint resolves the underlying type), which is intended — a fixed-seed map is still insertion-order-fragile.                                                                                                                                  |
-| `clippy::disallowed_methods`: `std::env::{var, var_os, vars, vars_os, set_var, remove_var}` | `clippy.toml`                                                                                                                                | warn (fatal at gate)    | the kill-switch registry rule. Today a test greps all of `src/` for `process.env` and fails on any reader outside a named allow-list with a stated reason (src/kill-switches.test.ts:95-134). The lint is the same guard with the allow-list spelled `#[allow]` + comment at the one env module (`02-rust-target-architecture.md` section 3 maps this directly).                                                                                                                     |
-| `clippy::unwrap_used`                                                                       | `#![deny]` in `humanify-core` root; `allow-unwrap-in-tests = true` in `clippy.toml`                                                          | deny (core only)        | biome's `noNonNullAssertion` error (biome.json:30-37): no "trust me" narrowing on the decision path. `expect("why this cannot fail")` stays legal — the message is the justification the TS allow-lists demand in comment form.                                                                                                                                                                                                                                                      |
-| `clippy::iter_over_hash_type`                                                               | module-root `#![deny]` in `humanify-core`'s decision modules (`matching`, `rename`, `place`, `layout`, `naming`); allow by default elsewhere | deny (decision modules) | the static half of 02 §5's HashMap-iteration hazard: iterating any hash-keyed collection on a decision path is order-random, including hash-keyed types from dependencies that `disallowed_types` cannot name. The dynamic half is `06-testing-strategy.md` §4 property 4 (input-order permutation). (amended 2026-09-19: row added; 06 §4 wins.)                                                                                                                                    |
-| `unsafe_code` (rustc lint)                                                                  | `#![forbid]` in `humanify-core` root                                                                                                         | forbid                  | "No `unsafe` in `humanify-core`" (`02-rust-target-architecture.md` section 10; amended 2026-09-19: was "section 9", now the compatibility posture). `forbid` cannot be re-allowed downstream, which is the point.                                                                                                                                                                                                                                                                    |
-| warnings-as-errors                                                                          | the gate command only: `cargo clippy --workspace --all-targets -- -D warnings`                                                               | gate/CI only            | unused imports/variables/parameters are errors in biome today (biome.json:25-29). In Rust they stay warnings in the editor and under `bacon` — a half-finished function must not block the edit loop — and become fatal at `npm run check` and in CI, where the repo has always enforced them.                                                                                                                                                                                       |
+| lint / setting                                                                              | where configured                                                                                                                                | level                   | house rule it enforces                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `clippy::cognitive_complexity` with `cognitive-complexity-threshold = 15`                   | `clippy.toml` + `[workspace.lints.clippy]`                                                                                                      | deny                    | biome's `noExcessiveCognitiveComplexity` ceiling of 15 (biome.json:13-20; CLAUDE.md "complexity <= 15"). Restriction-group lint, off by default — it must be raised explicitly or it enforces nothing. Clippy's own docs disclaim it as a reliable complexity measure (kept in restriction for exactly that reason); pair it with `too_many_lines` as a companion gate rather than trusting it alone — the mechanical goal (a compile-time analog of the biome ceiling) still holds. |
+| `clippy::disallowed_types`: `std::collections::HashMap`, `std::collections::HashSet`        | `clippy.toml`                                                                                                                                   | warn (fatal at gate)    | the determinism hazard of `02-rust-target-architecture.md` section 5: HashMap iteration order is randomized per process; decision paths iterate `BTreeMap`/`IndexMap`/ID-ordered arenas. The ban catches hasher-swapped aliases too (the lint resolves the underlying type), which is intended — a fixed-seed map is still insertion-order-fragile.                                                                                                                                  |
+| `clippy::disallowed_methods`: `std::env::{var, var_os, vars, vars_os, set_var, remove_var}` | `clippy.toml`                                                                                                                                   | warn (fatal at gate)    | the kill-switch registry rule. Today a test greps all of `src/` for `process.env` and fails on any reader outside a named allow-list with a stated reason (src/kill-switches.test.ts:95-134). The lint is the same guard with the allow-list spelled `#[allow]` + comment at the one env module (`02-rust-target-architecture.md` section 3 maps this directly).                                                                                                                     |
+| `clippy::unwrap_used`                                                                       | `#![deny]` in `humanify-ag-core` root; `allow-unwrap-in-tests = true` in `clippy.toml`                                                          | deny (core only)        | biome's `noNonNullAssertion` error (biome.json:30-37): no "trust me" narrowing on the decision path. `expect("why this cannot fail")` stays legal — the message is the justification the TS allow-lists demand in comment form.                                                                                                                                                                                                                                                      |
+| `clippy::iter_over_hash_type`                                                               | module-root `#![deny]` in `humanify-ag-core`'s decision modules (`matching`, `rename`, `place`, `layout`, `naming`); allow by default elsewhere | deny (decision modules) | the static half of 02 §5's HashMap-iteration hazard: iterating any hash-keyed collection on a decision path is order-random, including hash-keyed types from dependencies that `disallowed_types` cannot name. The dynamic half is `06-testing-strategy.md` §4 property 4 (input-order permutation). (amended 2026-09-19: row added; 06 §4 wins.)                                                                                                                                    |
+| `unsafe_code` (rustc lint)                                                                  | `#![forbid]` in `humanify-ag-core` root                                                                                                         | forbid                  | "No `unsafe` in `humanify-ag-core`" (`02-rust-target-architecture.md` section 10; amended 2026-09-19: was "section 9", now the compatibility posture). `forbid` cannot be re-allowed downstream, which is the point.                                                                                                                                                                                                                                                                 |
+| warnings-as-errors                                                                          | the gate command only: `cargo clippy --workspace --all-targets -- -D warnings`                                                                  | gate/CI only            | unused imports/variables/parameters are errors in biome today (biome.json:25-29). In Rust they stay warnings in the editor and under `bacon` — a half-finished function must not block the edit loop — and become fatal at `npm run check` and in CI, where the repo has always enforced them.                                                                                                                                                                                       |
 
 `clippy.toml`, complete contents:
 
@@ -170,11 +170,11 @@ disallowed-methods = [
 ]
 ```
 
-Where the banned things ARE allowed: `humanify-llm` and `humanify-cli` may
+Where the banned things ARE allowed: `humanify-ag-llm` and `humanify-ag-cli` may
 `#[allow(clippy::disallowed_types)]` at specific sites (in-flight request
 maps, cache indexes) with a comment stating why iteration order cannot reach a
 decision — mirroring the TS test's each-exception-names-its-reason discipline
-(src/kill-switches.test.ts:100-112). The env module in `humanify-cli` carries
+(src/kill-switches.test.ts:100-112). The env module in `humanify-ag-cli` carries
 the single `#[allow(clippy::disallowed_methods)]`. There is no blanket
 crate-level allow for either.
 
@@ -202,8 +202,8 @@ first use):
 | `thiserror`                                                                                         | per-module errors, loud at the CLI boundary (`02-rust-target-architecture.md` section 10; amended 2026-09-19: was "section 9", now the compatibility posture)                                                                                                                                                                                   | core                 |
 | `xxhash-rust` (XXH3)                                                                                | the hash function under the three key newtypes; the choice is free because phase 1 gates on partition equality, not hash bytes (`03-migration-plan.md` phase 1)                                                                                                                                                                                 | core                 |
 | `tokio`, `reqwest`                                                                                  | async LLM client. Deliberately NOT an OpenAI SDK crate: a hand-rolled client is what keeps request bytes — and therefore the shared cache key — under our control (`02-rust-target-architecture.md` section 7)                                                                                                                                  | core (llm)           |
-| `clap`                                                                                              | the `commander` analog for `humanify-cli`                                                                                                                                                                                                                                                                                                       | core (cli)           |
-| `anyhow`                                                                                            | error aggregation at the binary boundary only, never in `humanify-core`                                                                                                                                                                                                                                                                         | core (cli)           |
+| `clap`                                                                                              | the `commander` analog for `humanify-ag-cli`                                                                                                                                                                                                                                                                                                    | core (cli)           |
+| `anyhow`                                                                                            | error aggregation at the binary boundary only, never in `humanify-ag-core`                                                                                                                                                                                                                                                                      | core (cli)           |
 | `insta`                                                                                             | snapshot tests: prompt renders, canonical hash serializations, trail JSON                                                                                                                                                                                                                                                                       | dev                  |
 | `similar`                                                                                           | diff rendering inside parity test failures                                                                                                                                                                                                                                                                                                      | dev                  |
 | `tempfile`                                                                                          | tree-emitting tests                                                                                                                                                                                                                                                                                                                             | dev                  |
@@ -214,7 +214,7 @@ first use):
 | `tracing-subscriber`                                                                                | the subscriber, level filtering and `--trace-json` stream that 08 §4 specifies                                                                                                                                                                                                                                                                  | core (cli)           |
 | `tracing-chrome`                                                                                    | Chrome Trace Event output for `--profile` traces, the analog of `src/profiling/profiler.ts` (`08-operations-runbook.md` §4, `09-experiment-methodology.md` §4)                                                                                                                                                                                  | core (cli)           |
 | `dhat`                                                                                              | exact allocation counts — the zero-noise-floor instrument of `09-experiment-methodology.md` §6 and `08-operations-runbook.md` §5; behind a `dhat-heap` feature, never in a measured binary                                                                                                                                                      | core (feature-gated) |
-| `dotenvy`                                                                                           | `.env` loading at the CLI boundary only (`08-operations-runbook.md` §3); `humanify-core` stays env-free per the `disallowed_methods` lint                                                                                                                                                                                                       | core (cli)           |
+| `dotenvy`                                                                                           | `.env` loading at the CLI boundary only (`08-operations-runbook.md` §3); `humanify-ag-core` stays env-free per the `disallowed_methods` lint                                                                                                                                                                                                    | core (cli)           |
 | `sha2`                                                                                              | the bit-exact sha256 cache key carried over from `keyOf` (`07-differential-validation.md` §5; `11-risk-register.md` R4, R6) — XXH3 is for the three key newtypes, never the cache key                                                                                                                                                           | core (llm)           |
 | `vergen`                                                                                            | build script stamping the git SHA and dirty state into `--version` (`08-operations-runbook.md` §1, "Version stamping")                                                                                                                                                                                                                          | build                |
 
@@ -276,14 +276,14 @@ first workspace commit, at which point these numbers get replaced with
 measured ones** (the repo's own rule about projections,
 `04-performance-model.md` closing section):
 
-| operation                                       | estimate              |
-| ----------------------------------------------- | --------------------- |
-| cold `cargo build` (full dep tree, laptop)      | 2–5 min               |
-| cold `cargo clippy --workspace`                 | similar to cold build |
-| warm `cargo check` after a `humanify-core` edit | 2–10 s                |
-| warm `cargo clippy`                             | 5–20 s                |
-| `cargo nextest run -p humanify-core` (warm)     | seconds               |
-| cold `cargo build --release`                    | 3–8 min               |
+| operation                                          | estimate              |
+| -------------------------------------------------- | --------------------- |
+| cold `cargo build` (full dep tree, laptop)         | 2–5 min               |
+| cold `cargo clippy --workspace`                    | similar to cold build |
+| warm `cargo check` after a `humanify-ag-core` edit | 2–10 s                |
+| warm `cargo clippy`                                | 5–20 s                |
+| `cargo nextest run -p humanify-ag-core` (warm)     | seconds               |
+| cold `cargo build --release`                       | 3–8 min               |
 
 The levers, in the order to reach for them: incremental compilation (on by
 default in dev — do not disable it), `cargo-nextest` as the test runner
@@ -299,17 +299,17 @@ The develop-quickly payoff, concretely. Steady state while porting a module:
 
 1. **Watch:** `bacon` in a side terminal — `bacon clippy` for diagnostics, or
    the nextest job below for tests-on-save. (`cargo watch -x "nextest run -p
-humanify-core"` is the fallback if bacon is unavailable.)
+humanify-ag-core"` is the fallback if bacon is unavailable.)
 
 ```toml
 # bacon.toml
 [jobs.nextest]
-command = ["cargo", "nextest", "run", "-p", "humanify-core"]
+command = ["cargo", "nextest", "run", "-p", "humanify-ag-core"]
 need_stdout = true
 ```
 
-2. **Test the touched crate, seconds:** `cargo nextest run -p humanify-core`
-   — or one module: `cargo nextest run -p humanify-core hash::`. Red/green
+2. **Test the touched crate, seconds:** `cargo nextest run -p humanify-ag-core`
+   — or one module: `cargo nextest run -p humanify-ag-core hash::`. Red/green
    TDD unchanged (CLAUDE.md development workflow; `02-rust-target-architecture.md`
    section 10 keeps tests colocated as `#[cfg(test)]`; amended 2026-09-19: was
    "section 9", which is now the compatibility posture).
@@ -470,7 +470,7 @@ copy.
    content-addressed store on the workstation and CI runs a reduced fixture
    set. Measure at phase 0 before choosing.
 4. **Doctests.** `cargo nextest` does not run them. Default position: no
-   doctests in `humanify-core` (examples live in unit tests); revisit only if
+   doctests in `humanify-ag-core` (examples live in unit tests); revisit only if
    rustdoc examples accumulate anyway, in which case `rust:unit` gains
    `&& cargo test --doc`.
 5. **A `rust:deny` check stage.** cargo-deny stays CI/manual for now because

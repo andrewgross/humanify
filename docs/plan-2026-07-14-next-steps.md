@@ -38,7 +38,7 @@ Claude Code 2.1.120 bundle):
 ### 1. env-reads → a real tool
 
 **What:** promote the scratchpad AST extractor (removed) into a committed
-`humanify env-reads <path>` subcommand or a `scripts/` util, with tests, and
+`humanify-ag env-reads <path>` subcommand or a `scripts/` util, with tests, and
 an optional HTML view.
 **Why:** we used it to inventory 1,557 env reads / 590 vars in the CC output;
 worth keeping as a first-class diagnostic (audit secrets, diff env usage across

@@ -8,7 +8,7 @@
  * design, and the stub answers deterministically.
  *
  * The request's user prompt carries one "Identifiers to rename: a, b" line
- * per naming ask (crates/humanify-core/src/naming/prompts.ts, batch and
+ * per naming ask (crates/humanify-ag-core/src/naming/prompts.ts, batch and
  * module builders alike), so the policy has everything it needs.
  */
 import { createHash } from "node:crypto";
@@ -77,7 +77,7 @@ const MODULE_WORDS = [
 ];
 
 /**
- * A module batch (crates/humanify-core/src/place/assign/namer.rs, the
+ * A module batch (crates/humanify-ag-core/src/place/assign/namer.rs, the
  * module kind: `"m1": "<file-name>"` keys) gets one four-word kebab name
  * per entry, chosen by a hash of the WHOLE prompt and the key — so a
  * repeat asks the same, and the duplicate retry (whose prompt lists the

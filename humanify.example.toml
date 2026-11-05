@@ -1,8 +1,8 @@
-# humanify.example.toml — every setting `humanify --config <file>` reads,
+# humanify.example.toml — every setting `humanify-ag --config <file>` reads,
 # at its compiled-in default. GENERATED from the key registry
-# (crates/humanify-cli/src/config/keys.rs); a test holds this file
+# (crates/humanify-ag-cli/src/config/keys.rs); a test holds this file
 # byte-equal to the registry, so it cannot drift. Regenerate with
-#   cargo test -p humanify-cli write_the_example_config -- --ignored
+#   cargo test -p humanify-ag-cli write_the_example_config -- --ignored
 #
 # Every line below is commented out at its default: uncomment what this
 # file should set. A key left out keeps its default. Unknown keys, wrong

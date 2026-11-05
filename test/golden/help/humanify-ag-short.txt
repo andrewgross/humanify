@@ -1,0 +1,120 @@
+Unminify JavaScript using an OpenAI-compatible API
+
+Usage: humanify-ag [OPTIONS] <input>
+
+Arguments:
+  <input>  The input minified JavaScript file
+
+Options:
+      --config <file>  TOML config file: any setting below as a key (see humanify.example.toml). A flag that disagrees with the file is refused
+  -h, --help           Print help (see more with '--help')
+  -V, --version        Print version
+
+Run [run]:
+      --run-order <throughput|ordered>  "throughput" (the default: work through items as fast as the pool and the semaphore allow;...
+
+Output [io]:
+  -o, --output-dir <dir>  Output directory
+
+LLM [llm]:
+      --endpoint <url>
+          OpenAI-compatible API endpoint
+  -m, --model <model>
+          Model identifier
+      --llm-timeout-ms <n>
+          LLM request timeout, milliseconds
+      --llm-retries <n>
+          Retry attempts for a failed API call
+      --llm-concurrency <n>
+          Max concurrent function-lane LLM requests (the in-flight cap is this plus module_concurrency)
+      --llm-module-concurrency <n>
+          Max concurrent module-lane LLM requests
+      --llm-max-tokens <n>
+          Per-request completion token budget
+      --llm-context-tokens <n>
+          Model context window, tokens; sizes the batched split-naming prompts
+      --llm-reasoning-effort <low|medium|high>
+          Reasoning effort: low, medium or high ('low' is ~8x faster on gpt-oss)
+      --llm-cache-dir <dir>
+          Cache LLM responses on disk, keyed by request content (iteration only, never a gate run)
+
+Cross-version matching [matching]:
+      --prior-version <folder|file>    The prior release's humanify output folder (or the humanified file in it,...
+      --matching-reconcile-prior-diff  With a prior: snap rename-noise diff hunks back to the prior's names
+
+Naming [naming]:
+      --naming-schedule <relaxed|sequential>
+          "relaxed" (both relaxed levers on) or "sequential" (the pre-2026-09-28 default's bytes at the...
+      --naming-relaxed-levers <a,b,...>
+          Lever-sizing knob: the relaxed levers to turn on (relaxed schedule only)
+      --naming-batch-size <n>
+          Identifiers per LLM batch
+      --naming-max-retries <n>
+          Per-identifier LLM call limit, initial + retries
+      --naming-rename-retries <n>
+          Name-conflict re-asks per rejected suggestion, each disclosing every failed one
+      --naming-max-free-retries <n>
+          Cross-lane collision retry limit
+      --naming-lane-threshold <n>
+          Min bindings to enable parallel lanes
+      --naming-code-window-lines <n>
+          Most lines of a function the naming prompt shows (longer functions are windowed around the names...
+      --naming-floor
+          The deterministic naming floor (closes minted-token gaps)
+      --naming-floor-sweep
+          The LLM sweep of minted survivors (needs naming_floor)
+
+Library matching [library]:
+      --library-matching <off|report|names>
+          What library matching does: "names" (the default since exp171: code the library index recognises...
+      --library-index <dir|id>
+          The library fingerprint index: its directory, or its id (resolved under index_store)
+      --library-index-id-store <dir>
+          Where index ids live (<index_store>/<id>/manifest.json)
+      --library-index-store <dir>
+          The run's library-index store, resolved against the WORKING directory (exp174; an absolute path...
+      --library-index-from-bundle
+          Build the library index AT RUN TIME from the npm packages the bundle itself reveals (its library...
+      --library-index-build-max-packages <n>
+          The safety cap on the packages a run-time index build may plan from the bundle's own evidence:...
+      --library-unnamed <leave|model>
+          Library code with no index name: "leave" (library files not model-named, library functions in...
+      --library-report-units
+          List every claimed, vetoed, library-class and queued unit in the report (default: totals and...
+
+Unpack [unpack]:
+      --bundler <name>                          Force the bundler verdict
+      --minifier <terser|esbuild|swc|bun|none>  Force the minifier verdict
+
+Split [split]:
+      --split                Split the output into a multi-file tree (src/ + vendor/ + run scaffold); off writes one...
+      --split-pure           Emit the byte-exact review tree instead of the runnable module graph (needs enabled)
+      --split-ledger <path>  A prior split ledger, for cross-release file-assignment inheritance (needs enabled)
+
+Switches [switches]:
+      --switches-disable <a,b,...>  Ablation: pass switches to turn OFF (unknown names are refused, listing the valid set)
+      --switches-probe <a,b,...>    Instrumentation probes to turn ON
+
+Diagnostics [diagnostics]:
+  -v, --verbose...
+          0, 1 (info) or 2 (debug); the flag counts: -v is 1, -vv is 2
+      --diagnostics-log-file <path>
+          Write debug logs to this file (implies verbosity 2)
+      --diagnostics-file <path>
+          Write detailed rename diagnostics to this JSON file
+      --diagnostics-stats-json <path>
+          Write the eval harness's match/rename breakdown (and this config) as JSON
+      --diagnostics-dump-artifacts <dir>
+          Write the span-keyed decision-record dump to this directory
+      --diagnostics-dump-asks <path>
+          Write the reason-labelled ask log (one JSONL row per LLM ask) to this path
+      --diagnostics-rename-ledger <dir>
+          Write a replayable rename ledger + source snapshot + apply.mjs to this directory
+
+Performance [perf]:
+      --perf-trace <path>
+          Write a Chrome Trace Event performance trace to this JSON file
+      --perf-simulate-llm-latency <path>
+          Price this run's LLM schedule on a virtual clock; write the simulated wall time here
+
+A boolean's --no-<flag> turns it off (--no-split). The library tuning flags (--library-lookup-*, --library-discovery-*) are listed by --help. Every option is also a key of the --config file (humanify.example.toml); a flag that disagrees with the file is refused. The API key is read from HUMANIFY_API_KEY in the environment.

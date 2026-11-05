@@ -256,7 +256,7 @@ function fullManifest(): RunManifest {
     // exercises every reader at once.
     pipeline: {
       kind: "ts",
-      command: ["/r/target/release/humanify"],
+      command: ["/r/target/release/humanify-ag"],
       bin: { sha256: "a", buildSha256: "b", commit: "", dirty: true }
     },
     outcome: {

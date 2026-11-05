@@ -9,7 +9,7 @@ After humanify deobfuscates a JavaScript bundle, the output is flat files — ei
 ## Design Constraints
 
 - **Bundler-agnostic:** Works on any minified JS. Can opportunistically use webcrack metadata (module paths, bundle type) but doesn't require it.
-- **Discrete pipeline step:** Runs after the LLM rename pass. Can be invoked standalone (`humanify split output/`) or as part of the full pipeline (`humanify unminify --split`). The overall project should support composable stages: unpack → rename → split, where each stage has well-defined inputs/outputs.
+- **Discrete pipeline step:** Runs after the LLM rename pass. Can be invoked standalone (`humanify-ag split output/`) or as part of the full pipeline (`humanify-ag unminify --split`). The overall project should support composable stages: unpack → rename → split, where each stage has well-defined inputs/outputs.
 - **LLM-suggested names:** File and directory names are semantically meaningful, cached by cluster fingerprint for cross-version stability.
 - **Mechanical transforms only:** The LLM suggests names and groupings. All actual code manipulation (extracting functions, adding imports/exports) is done via deterministic Babel AST operations — identical to how renaming works today (LLM suggests names, `scope.rename()` applies them).
 - **Recursive splitting:** Clusters that exceed a size threshold are recursively sub-split. Target scale: 40k+ functions (Claude Code's unminified bundle).
@@ -29,12 +29,17 @@ The `exactHash` (from `src/analysis/structural-hash.ts`) is the foundation of cr
 **What changes the hash:** Adding/removing a statement, changing control flow, adding a parameter. These are genuine code changes.
 
 **Example:**
+
 ```javascript
 // v1.0 (terser output)          // v1.1 (terser output, same function)
-function a(b, c) {               function x(y, z) {
-  if (b > 0) return c * 2;        if (y > 0) return z * 2;
-  return c;                        return z;
-}                                }
+function a(b, c) {
+  function x(y, z) {
+    if (b > 0) return c * 2;
+    if (y > 0) return z * 2;
+    return c;
+    return z;
+  }
+}
 // Both produce exactHash: "7a3f2b1c4d5e6f8a" — identifiers are irrelevant
 ```
 
@@ -61,6 +66,7 @@ humanify unminify bundle.js -o output/ --split
 ```
 
 Each stage reads its predecessor's output + metadata sidecar. This enables:
+
 - Iterating on splitting without re-running the expensive rename pass
 - Swapping in different unpackers (webcrack alternatives)
 - Running stages on different machines
@@ -72,7 +78,7 @@ Per spec 16 (Resumable Processing), we already plan a SQLite checkpoint database
 - Atomic writes (WAL mode) — no partial-write corruption
 - Queryable structure (SQL for finding functions by hash, cluster membership, etc.)
 - A single state backend for resumption, caching, and splitting
-- Serializable: `sqlite3 .dump` produces readable SQL, or we can add a `humanify export-meta` command that emits JSON
+- Serializable: `sqlite3 .dump` produces readable SQL, or we can add a `humanify-ag export-meta` command that emits JSON
 
 **New tables for splitting:**
 
@@ -199,6 +205,7 @@ If a cluster exceeds a size threshold, recursively sub-split it. The cluster bec
 **Step 5: Cluster non-function declarations**
 
 Top-level variables, classes, and constants are assigned to clusters using Babel scope analysis:
+
 - Referenced by one cluster → belongs to that cluster
 - Referenced by multiple clusters → shared module (name TBD — `_shared.js` is a placeholder, LLM can suggest a better name like `common.js` or `globals.js`)
 - `const` declarations can be duplicated if small (< 100 chars) to reduce cross-file imports
@@ -207,8 +214,8 @@ Top-level variables, classes, and constants are assigned to clusters using Babel
 
 ```typescript
 function clusterFingerprint(members: FunctionNode[]): string {
-  const hashes = members.map(m => m.fingerprint.exactHash).sort();
-  return sha256(hashes.join(':')).slice(0, 16);
+  const hashes = members.map((m) => m.fingerprint.exactHash).sort();
+  return sha256(hashes.join(":")).slice(0, 16);
 }
 ```
 
@@ -247,6 +254,7 @@ v1.0 call graph:                    v1.1 call graph (added validateToken):
 | C' | parseConfig | {parseConfig, loadDefaults} | `"a7b8c9..."` (identical to v1.0 C) |
 
 **Stability result:**
+
 - Cluster B → B': Same fingerprint → same file, no diff
 - Cluster C → C': Same fingerprint → same file, no diff
 - Cluster A → A': Fingerprint changed, but **root identity** (createAuth's `exactHash`) is stable → same file name. Diff shows only the added `validateToken` function.
@@ -256,6 +264,7 @@ v1.0 call graph:                    v1.1 call graph (added validateToken):
 ### Handling Circular Calls
 
 In real JS codebases, circular dependencies between modules are common and handled via:
+
 - **Barrel files / index.ts re-exports:** `auth/index.ts` re-exports from `auth/provider.ts` and `auth/token.ts`. The barrel calls nothing, but is called by external consumers.
 - **Lazy resolution:** Module A imports module B and vice versa. Node.js resolves this via partial module objects at require-time.
 - **Event systems:** Modules communicate via events rather than direct calls, breaking the call graph cycle.
@@ -285,17 +294,23 @@ The split is implemented as a sequence of atomic, deterministic operations:
 
 ```typescript
 interface SplitOperation {
-  type: 'extract-function' | 'extract-declaration' | 'add-export' | 'add-import' | 'remove-node';
+  type:
+    | "extract-function"
+    | "extract-declaration"
+    | "add-export"
+    | "add-import"
+    | "remove-node";
   sourceFile: string;
   targetFile: string;
-  nodeFingerprint?: string;     // for functions (identified by exactHash)
-  nodeName?: string;            // for declarations (identified by binding name)
-  exportName?: string;          // the name to export as
-  importSource?: string;        // relative path for import statement
+  nodeFingerprint?: string; // for functions (identified by exactHash)
+  nodeName?: string; // for declarations (identified by binding name)
+  exportName?: string; // the name to export as
+  importSource?: string; // relative path for import statement
 }
 ```
 
 **Example operation sequence for splitting function `createAuth` into `auth.js`:**
+
 ```
 1. extract-function  { source: "app.js", target: "auth.js", fingerprint: "c1a2b3..." }
 2. extract-function  { source: "app.js", target: "auth.js", fingerprint: "d4e5f6..." }  // hashPassword
@@ -325,6 +340,7 @@ For large graphs (40k+ functions), the cross-cluster reference check is O(E) whe
 ### Shared Mutable State
 
 Mutable (`let`/`var`) declarations referenced by multiple clusters → shared module:
+
 ```javascript
 // common/state.js (name LLM-suggested)
 export let currentUser = null;
@@ -341,7 +357,7 @@ export let currentUser = null;
    - All exported function names
    - External API calls (`externalCallees`)
    - String literals from structural features
-2. Send to LLM: *"Given these functions, suggest a file path like `src/auth/provider.js`"*
+2. Send to LLM: _"Given these functions, suggest a file path like `src/auth/provider.js`"_
 3. LLM responds with suggested path
 4. Cache in `cluster_name_cache` table by cluster fingerprint
 
@@ -354,6 +370,7 @@ Since clusters are recursively sub-split, naming follows the hierarchy:
 3. If a sub-cluster is itself split → it becomes a sub-directory, recurse
 
 This produces natural hierarchies:
+
 ```
 src/
   auth/
@@ -368,6 +385,7 @@ src/
 ### Cross-Version Name Stability
 
 Lookup strategy when processing a cluster:
+
 1. **Exact match:** cluster fingerprint found in `cluster_name_cache` → use cached name
 2. **Fuzzy match:** >70% member fingerprints overlap with a cached cluster → inherit cached name
 3. **No match:** ask LLM for a new name, cache it
@@ -377,6 +395,7 @@ This ensures the LLM is only consulted for genuinely new clusters.
 ### Experimental Approach
 
 The clustering + naming algorithm is fundamentally experimental. We should:
+
 1. Build a test fixture set of well-organized open source projects
 2. Minify them, run the full pipeline, compare output layout to original
 3. Track metrics: cluster count, avg cluster size, naming accuracy, cross-version stability %
@@ -384,7 +403,8 @@ The clustering + naming algorithm is fundamentally experimental. We should:
 
 ### Fallback Naming (no LLM available)
 
-If running without LLM access (`humanify split --no-llm`):
+If running without LLM access (`humanify-ag split --no-llm`):
+
 - Use root function's humanified name: `createAuthProvider.js`
 - If no clear root: truncated cluster fingerprint: `mod_a3f2b1c4.js`
 - Directory names from common external calls: a cluster heavy on `fetch` → `api/`, heavy on DOM → `ui/`
@@ -394,6 +414,7 @@ If running without LLM access (`humanify split --no-llm`):
 ### Verbosity Levels
 
 **`-v` (verbose):**
+
 ```
 Split: 847 functions → 43 clusters (avg 19.7 functions/cluster)
   Roots identified: 38
@@ -402,6 +423,7 @@ Split: 847 functions → 43 clusters (avg 19.7 functions/cluster)
 ```
 
 **`-vv` (debug):**
+
 ```
 Cluster "auth" (root: createAuth [c1a2b3]):
   Members: createAuth, hashPassword, generateToken, validateToken
@@ -415,7 +437,7 @@ Split operation: add-import api/handler.js ./auth/provider.js createAuth
 
 ### Dry Run
 
-`humanify split output/ --dry-run` produces a report without modifying any files:
+`humanify-ag split output/ --dry-run` produces a report without modifying any files:
 
 ```
 Dry run — no files will be modified
@@ -444,36 +466,36 @@ The `split-plan.json` contains the full operation list so it can be inspected an
 
 ## New Files
 
-| File | Purpose |
-|------|---------|
-| `src/split/index.ts` | Main orchestrator, CLI integration |
-| `src/split/types.ts` | Cluster, SplitPlan, SplitOperation types |
-| `src/split/library-separator.ts` | Layer 1: extract library code to vendor/ |
-| `src/split/cluster.ts` | Layer 2: fingerprint-stable dependency tree clustering |
-| `src/split/import-export.ts` | Layer 3: Babel AST transforms for imports/exports |
-| `src/split/naming.ts` | Layer 4: LLM-suggested file names with caching |
-| `src/split/operations.ts` | Mechanical split operations (extract, move, add-import, etc.) |
+| File                             | Purpose                                                       |
+| -------------------------------- | ------------------------------------------------------------- |
+| `src/split/index.ts`             | Main orchestrator, CLI integration                            |
+| `src/split/types.ts`             | Cluster, SplitPlan, SplitOperation types                      |
+| `src/split/library-separator.ts` | Layer 1: extract library code to vendor/                      |
+| `src/split/cluster.ts`           | Layer 2: fingerprint-stable dependency tree clustering        |
+| `src/split/import-export.ts`     | Layer 3: Babel AST transforms for imports/exports             |
+| `src/split/naming.ts`            | Layer 4: LLM-suggested file names with caching                |
+| `src/split/operations.ts`        | Mechanical split operations (extract, move, add-import, etc.) |
 
 ## Modified Files
 
-| File | Change |
-|------|--------|
-| `src/unminify.ts` | Persist function graph to checkpoint DB; optionally invoke split |
-| `src/plugins/rename.ts` | Export function graph data for checkpoint DB |
-| `src/index.ts` | Add `split` subcommand and `--split` flag |
-| `src/analysis/types.ts` | Extend FunctionNode with optional cluster assignment |
+| File                           | Change                                                                                           |
+| ------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `src/unminify.ts`              | Persist function graph to checkpoint DB; optionally invoke split                                 |
+| `src/plugins/rename.ts`        | Export function graph data for checkpoint DB                                                     |
+| `src/index.ts`                 | Add `split` subcommand and `--split` flag                                                        |
+| `src/analysis/types.ts`        | Extend FunctionNode with optional cluster assignment                                             |
 | Checkpoint DB schema (spec 16) | Add `function_graph`, `function_edges`, `cluster`, `cluster_member`, `cluster_name_cache` tables |
 
 ## Existing Code to Reuse
 
-| Module | Usage |
-|--------|-------|
-| `src/analysis/function-graph.ts` → `buildFunctionGraph()` | Call graph for clustering |
-| `src/analysis/structural-hash.ts` → `computeExactHash()` | Cluster fingerprint computation |
-| `src/analysis/function-fingerprint.ts` | Cross-version cluster matching |
-| `src/library-detection/` (all layers) | Layer 1 library separation |
-| `src/rename/processor.ts` | Pattern for LLM batching (reuse for naming) |
-| Babel `scope.rename()`, `path.remove()`, AST builders | Layer 3 mechanical transforms |
+| Module                                                    | Usage                                       |
+| --------------------------------------------------------- | ------------------------------------------- |
+| `src/analysis/function-graph.ts` → `buildFunctionGraph()` | Call graph for clustering                   |
+| `src/analysis/structural-hash.ts` → `computeExactHash()`  | Cluster fingerprint computation             |
+| `src/analysis/function-fingerprint.ts`                    | Cross-version cluster matching              |
+| `src/library-detection/` (all layers)                     | Layer 1 library separation                  |
+| `src/rename/processor.ts`                                 | Pattern for LLM batching (reuse for naming) |
+| Babel `scope.rename()`, `path.remove()`, AST builders     | Layer 3 mechanical transforms               |
 
 ## Testing
 
@@ -481,29 +503,31 @@ The `split-plan.json` contains the full operation list so it can be inspected an
 
 Build a comprehensive test suite validating hash behavior:
 
-| Test Case | Expected |
-|-----------|----------|
-| Same function, different variable names | Same hash |
-| Same function, terser vs esbuild vs swc output | Same hash |
-| Same function, different string literal content (same length) | Same hash |
-| Same function, numeric literal 100 vs 999 (same magnitude) | Same hash |
-| Function with added parameter | Different hash |
-| Function with added if-branch | Different hash |
-| Function with reordered statements | Different hash |
-| Arrow function vs function expression (same body) | Different hash (different AST node type) |
-| Nested function — inner function unchanged, outer changed | Inner hash unchanged |
+| Test Case                                                     | Expected                                 |
+| ------------------------------------------------------------- | ---------------------------------------- |
+| Same function, different variable names                       | Same hash                                |
+| Same function, terser vs esbuild vs swc output                | Same hash                                |
+| Same function, different string literal content (same length) | Same hash                                |
+| Same function, numeric literal 100 vs 999 (same magnitude)    | Same hash                                |
+| Function with added parameter                                 | Different hash                           |
+| Function with added if-branch                                 | Different hash                           |
+| Function with reordered statements                            | Different hash                           |
+| Arrow function vs function expression (same body)             | Different hash (different AST node type) |
+| Nested function — inner function unchanged, outer changed     | Inner hash unchanged                     |
 
 ### Clustering E2E Fixtures
 
 Follow the existing pattern from `test/e2e/fixtures/` (mitt, nanoid, zustand). Create new fixtures specifically for split testing:
 
 **Candidate projects (small, well-organized, public):**
+
 1. **preact** — clear component/hook/dom module boundaries
 2. **zustand** (already a fixture) — small state management lib with clear file structure
 3. **date-fns** — many small, independent utility functions (good for testing many-cluster scenarios)
 4. **express** middleware stack — tests deeply nested call chains
 
 **Test process for each fixture:**
+
 1. Clone the original repo, record the original file structure
 2. Bundle with Rollup (scope-hoisted → single file)
 3. Minify with terser
@@ -515,6 +539,7 @@ Follow the existing pattern from `test/e2e/fixtures/` (mitt, nanoid, zustand). C
 ### Cluster Size Thresholds
 
 Analyze real projects to determine appropriate split thresholds:
+
 - Sample 20+ well-organized open source projects
 - Record: files per directory, functions per file, lines per file
 - Derive p50/p90 thresholds for "when should we sub-split?"
@@ -528,6 +553,7 @@ Every test case should first run in `--dry-run` mode and verify the plan matches
 1. **Cluster size thresholds:** What's the right max-functions-per-file? Analyze popular open source projects to find the natural distribution of functions-per-file.
 
 2. **Recursive sub-splitting algorithm:** When a cluster is too large, how do we sub-split? Options:
+
    - Re-run the same root-finding algorithm within the cluster
    - Split by scope nesting depth (top-level helpers vs deeply nested)
    - Split by sub-graph density (find natural sub-communities within the cluster)

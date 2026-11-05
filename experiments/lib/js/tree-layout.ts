@@ -3,7 +3,7 @@
  * by. Moved from the TS pipeline (src/split/layout.ts, src/file-utils.ts and
  * the ledger type in src/split/stable-split.ts) at the cutover
  * (docs/rust-port/19-cutover.md). The Rust binary writes the same layout; its
- * ledger schema is `humanify_model`'s split-ledger type, and this interface
+ * ledger schema is `humanify_ag_model`'s split-ledger type, and this interface
  * is the harness's read view of that file.
  */
 import { readdirSync } from "node:fs";
