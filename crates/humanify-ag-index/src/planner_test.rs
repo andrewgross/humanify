@@ -950,3 +950,58 @@ fn an_empty_policy_list_is_refused() {
     let err = IndexSpec::parse(&spec).expect_err("empty list");
     assert!(err.contains("at least one strategy"), "{err}");
 }
+
+/// ansi-styles released daily (fast cadence), chalk yearly.
+fn daily_ansi_styles() -> TestRegistry {
+    let mut r = registry();
+    let times: Vec<String> = (1..=9)
+        .map(|d| format!(r#""2.{d}.0":"2026-10-0{d}T00:00:00.000Z""#))
+        .collect();
+    let versions: Vec<String> = (1..=9).map(|d| format!(r#""2.{d}.0""#)).collect();
+    r.packs.insert(
+        "ansi-styles".into(),
+        packument(
+            "ansi-styles",
+            &format!(
+                r#""created":"2013-01-01T00:00:00.000Z",{}"#,
+                times.join(",")
+            ),
+            &versions.join(","),
+            &[],
+        ),
+    );
+    r
+}
+
+#[test]
+fn a_cadence_override_matches_only_packages_that_release_faster_than_its_bound() {
+    let spec = format!(
+        "{}\n[[versions.override]]\nid = \"fast\"\npolicy = \"latest-3\"\ncadence_below_days = 3\n",
+        SPEC.replace("dependents = 2", "dependents = 0")
+    );
+    let mut r = daily_ansi_styles();
+    let res = resolved(&spec, &mut r);
+    // daily releases: the override's latest-3
+    assert_eq!(
+        planned_versions(&res, "ansi-styles"),
+        ["2.9.0", "2.8.0", "2.7.0"]
+    );
+    let rule = plan_of(&res, "ansi-styles").versions[0].attribution.clone();
+    assert_eq!(
+        rule.as_deref(),
+        Some("sel=dep-trees rule=latest-3 override=fast")
+    );
+    // chalk releases about once a year: the default as-of, no override
+    let rule = plan_of(&res, "chalk").versions[0].attribution.clone();
+    assert_eq!(rule.as_deref(), Some("sel=impact rule=as-of"));
+}
+
+#[test]
+fn a_cadence_bound_must_be_positive() {
+    let spec = format!(
+        "{}\n[[versions.override]]\nid = \"fast\"\npolicy = \"latest-3\"\ncadence_below_days = 0\n",
+        SPEC
+    );
+    let err = IndexSpec::parse(&spec).expect_err("0 days");
+    assert!(err.contains("cadence_below_days must be positive"), "{err}");
+}

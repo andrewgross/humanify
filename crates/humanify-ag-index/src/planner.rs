@@ -24,7 +24,7 @@ use std::process::Command;
 
 use humanify_ag_core::libindex::format::Semver;
 
-use crate::asof::{Packument, Selected, grace_cutoff, normalize_time, select_versions};
+use crate::asof::{Packument, Selected, epoch_secs, grace_cutoff, normalize_time, select_versions};
 use crate::build::PackageSelection;
 use crate::ranges::{Range, dep_spec};
 use crate::registry;
@@ -258,8 +258,8 @@ impl Resolution<'_, '_> {
         if self.skip_if_refused(name) || self.skipped_seen.contains(name) {
             return Ok(());
         }
-        let (policy, max, override_id) = policy_for(self.spec, name, &pkg);
         let p = self.packument(name)?;
+        let (policy, max, override_id) = policy_for(self.spec, name, &pkg, &p);
         // a recorded absence (the snapshot holds an absent packument —
         // the offline replay of a 404/tombstone): a CLOSURE member's
         // absence is data (the graph is full of gone packages — a
@@ -743,6 +743,34 @@ fn needs_deps(spec: &IndexSpec) -> bool {
         })
 }
 
+/// The median gap, in days, between consecutive stable releases of `p`
+/// (its last 20 published on or before `as_of`, in publish order); None
+/// with fewer than two.
+fn median_release_gap_days(p: &Packument, as_of: &str) -> Option<f64> {
+    let mut times: Vec<f64> = p
+        .versions
+        .iter()
+        .filter(|v| Semver::parse(v).is_some_and(|s| !s.is_prerelease()))
+        .filter_map(|v| p.time.get(v).and_then(|t| normalize_time(t)))
+        .filter(|t| t.as_str() <= as_of)
+        .filter_map(|t| epoch_secs(&t))
+        .map(|s| s as f64 / 86_400.0)
+        .collect();
+    times.sort_by(f64::total_cmp);
+    let recent = &times[times.len().saturating_sub(20)..];
+    let mut gaps: Vec<f64> = recent.windows(2).map(|w| w[1] - w[0]).collect();
+    if gaps.is_empty() {
+        return None;
+    }
+    gaps.sort_by(f64::total_cmp);
+    let n = gaps.len();
+    Some(if n % 2 == 1 {
+        gaps[n / 2]
+    } else {
+        (gaps[n / 2 - 1] + gaps[n / 2]) / 2.0
+    })
+}
+
 /// Every version some strategy of `strategy` chose, each once (the first
 /// strategy to choose it names its role).
 fn union_of(p: &Packument, as_of: &str, strategy: &Strategy) -> Vec<Selected> {
@@ -770,7 +798,9 @@ fn policy_for<'a>(
     spec: &'a IndexSpec,
     name: &str,
     pkg: &UniversePkg,
+    p: &Packument,
 ) -> (&'a Strategy, Option<usize>, Option<String>) {
+    let mut cadence: Option<Option<f64>> = None;
     for o in &spec.versions.overrides {
         let when = &o.when;
         let names_ok = when.names.is_empty() || when.names.iter().any(|p| name_matches(p, name));
@@ -779,7 +809,12 @@ fn policy_for<'a>(
             .as_deref()
             .is_none_or(|s| spec.select[pkg.selection].id == s);
         let rank_ok = when.rank_below.is_none_or(|n| pkg.rank < n);
-        if names_ok && sel_ok && rank_ok {
+        let cadence_ok = when.cadence_below_days.is_none_or(|bound| {
+            cadence
+                .get_or_insert_with(|| median_release_gap_days(p, &spec.as_of))
+                .is_some_and(|gap| gap < f64::from(bound))
+        });
+        if names_ok && sel_ok && rank_ok && cadence_ok {
             return (&o.policy, o.max, Some(o.id.clone()));
         }
     }

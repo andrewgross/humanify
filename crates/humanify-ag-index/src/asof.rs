@@ -289,7 +289,7 @@ pub fn grace_cutoff(published: &str) -> Option<String> {
 
 /// Seconds since 1970-01-01T00:00:00Z of a UTC time [`normalize_time`]
 /// accepts (the milliseconds dropped).
-fn epoch_secs(t: &str) -> Option<i64> {
+pub(crate) fn epoch_secs(t: &str) -> Option<i64> {
     let t = normalize_time(t)?;
     let num = |a: usize, b: usize| t[a..b].parse::<i64>().ok();
     let days = days_from_civil(num(0, 4)?, num(5, 7)?, num(8, 10)?);

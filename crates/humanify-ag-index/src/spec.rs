@@ -148,6 +148,11 @@ pub struct PackageMatch {
     pub selection: Option<String>,
     /// ...within its first N (a list source's rank).
     pub rank_below: Option<usize>,
+    /// Releases faster than this: the median gap, in days, between
+    /// consecutive stable releases (its last 20 on or before as_of, in
+    /// publish order) is below it. Registry timestamps only, so it
+    /// replays (exp187: fast releasers want `latest-N`, not a stride).
+    pub cadence_below_days: Option<u32>,
 }
 
 /// A refusal rule: matched versions leave the plan, recorded with the
@@ -235,6 +240,7 @@ struct RawOverride {
     names: Vec<String>,
     selection: Option<String>,
     rank_below: Option<usize>,
+    cadence_below_days: Option<u32>,
     max: Option<usize>,
 }
 
@@ -562,7 +568,10 @@ impl IndexSpec {
             if o.rank_below.is_some() && o.selection.is_none() {
                 return Err(format!("{ctx}: rank_below needs `selection` (whose rank)"));
             }
-            if o.names.is_empty() && o.selection.is_none() {
+            if o.cadence_below_days == Some(0) {
+                return Err(format!("{ctx}: cadence_below_days must be positive"));
+            }
+            if o.names.is_empty() && o.selection.is_none() && o.cadence_below_days.is_none() {
                 return Err(format!(
                     "{ctx}: matches every package; set versions.policy instead"
                 ));
@@ -576,6 +585,7 @@ impl IndexSpec {
                     names: o.names,
                     selection: o.selection,
                     rank_below: o.rank_below,
+                    cadence_below_days: o.cadence_below_days,
                 },
             });
         }
