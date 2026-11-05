@@ -1,5 +1,5 @@
 /**
- * The scorer (exp092): one `humanify match` dump in, one deterministic
+ * The scorer (exp092): one `humanify-ag match` dump in, one deterministic
  * scorecard out — precision-like and recall-like numbers for the
  * matching machinery against the harness's ground-truth rule.
  *
@@ -375,7 +375,7 @@ function scoreShould(
   return { matchedOfShould, missedShould };
 }
 
-/** Score one `humanify match` dump. Throws loudly on a foreign shape. */
+/** Score one `humanify-ag match` dump. Throws loudly on a foreign shape. */
 export function scoreMatchDump(dump: unknown): Scorecard {
   if (typeof dump !== "object" || dump === null) {
     throw new Error("the match dump is not a JSON object");

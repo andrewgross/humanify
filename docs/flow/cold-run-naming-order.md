@@ -126,18 +126,18 @@ All paths relative to the repo root; every citation is the current code.
 
 ### Before naming
 
-| Box    | What it is (file:line)                                                                                                                                                                           |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| IN     | read + detect phase: `crates/humanify-cli/src/unified.rs:582`, `detect_stage` at `unified.rs:907`                                                                                                |
-| UP     | stages 3-5 phase: `unified.rs:591-606` (`unpack_bundle`); stage table `docs/pipeline-stages.md:19-23`                                                                                            |
-| LIB    | library-detection phase: `unified.rs:611-618` (`filter_libraries`)                                                                                                                               |
-| FMT    | stage 6 per file: `unified.rs:630`, the per-file loop at `unified.rs:964`, formatter comment `unified.rs:1000`                                                                                   |
-| PREV   | the naming stage entry `run_naming` (`crates/humanify-core/src/naming/driver.rs:165`), prior dispatch `driver.rs:186-198`                                                                        |
-| COLD   | `fresh_era` (`crates/humanify-core/src/naming/driver/era.rs:381-430`): parse `:387`, graph `:389-397`, freezes `:402-411`, one scope epoch `:423`                                                |
-| NOTE   | `pre_transfer_states` (`era.rs:411`) feeds the settled filter in `wave_loop` (`crates/humanify-core/src/naming/waves/processor.rs:554`)                                                          |
-| GRAPH  | `build_unified_graph` / `build_function_graph` (`crates/humanify-core/src/graph.rs:501`, `:650`); `GraphFunction` fields incl. `internal_callees` `:55`, `scope_parent` `:59` (`graph.rs:44-70`) |
-| NGRAPH | `build_naming_graph` (`crates/humanify-core/src/naming/waves/graph_ext.rs:91`); node order `:99-103`, dependency edges `:137-169`, callee insertion order `:250-290`                             |
-| PRIOR  | stage 8, cold runs skip it: dispatch `driver.rs:186-196` (`match_prior_version` + `prior_era`)                                                                                                   |
+| Box    | What it is (file:line)                                                                                                                                                                              |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IN     | read + detect phase: `crates/humanify-ag-cli/src/unified.rs:582`, `detect_stage` at `unified.rs:907`                                                                                                |
+| UP     | stages 3-5 phase: `unified.rs:591-606` (`unpack_bundle`); stage table `docs/pipeline-stages.md:19-23`                                                                                               |
+| LIB    | library-detection phase: `unified.rs:611-618` (`filter_libraries`)                                                                                                                                  |
+| FMT    | stage 6 per file: `unified.rs:630`, the per-file loop at `unified.rs:964`, formatter comment `unified.rs:1000`                                                                                      |
+| PREV   | the naming stage entry `run_naming` (`crates/humanify-ag-core/src/naming/driver.rs:165`), prior dispatch `driver.rs:186-198`                                                                        |
+| COLD   | `fresh_era` (`crates/humanify-ag-core/src/naming/driver/era.rs:381-430`): parse `:387`, graph `:389-397`, freezes `:402-411`, one scope epoch `:423`                                                |
+| NOTE   | `pre_transfer_states` (`era.rs:411`) feeds the settled filter in `wave_loop` (`crates/humanify-ag-core/src/naming/waves/processor.rs:554`)                                                          |
+| GRAPH  | `build_unified_graph` / `build_function_graph` (`crates/humanify-ag-core/src/graph.rs:501`, `:650`); `GraphFunction` fields incl. `internal_callees` `:55`, `scope_parent` `:59` (`graph.rs:44-70`) |
+| NGRAPH | `build_naming_graph` (`crates/humanify-ag-core/src/naming/waves/graph_ext.rs:91`); node order `:99-103`, dependency edges `:137-169`, callee insertion order `:250-290`                             |
+| PRIOR  | stage 8, cold runs skip it: dispatch `driver.rs:186-196` (`match_prior_version` + `prior_era`)                                                                                                      |
 
 ### Wave loop and membership
 
@@ -186,7 +186,7 @@ All paths relative to the repo root; every citation is the current code.
 - **Default (relaxed):** `FastTier::Relaxed(Levers::all())` — both
   decision-changing levers on. Selected by `CommandOptions::fast_tier`
   (`unified.rs:107-119`, default at `:118`); the levers are
-  `window-lanes` and `defer-shadowed` (`crates/humanify-core/src/fast.rs:20-32`).
+  `window-lanes` and `defer-shadowed` (`crates/humanify-ag-core/src/fast.rs:20-32`).
 - **--sequential:** `FastTier::Exact` (`unified.rs:114`) — both levers off,
   byte-identical to the pre-2026-09-28 default at the same `--batch-size`
   (`fast.rs:5-9`). Round B costs its own round inside the wave. The legacy

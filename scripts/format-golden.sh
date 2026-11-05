@@ -9,10 +9,10 @@
 #   1. every golden case must format to its recorded bytes (or error);
 #   2. the same check with a planted perturbation must FAIL — proof the
 #      comparison is live, not vacuously green.
-# Needs target/release/humanify (the rust:build stage builds it).
+# Needs target/release/humanify-ag (the rust:build stage builds it).
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$REPO/target/release/humanify"
+BIN="$REPO/target/release/humanify-ag"
 GOLDENS="$REPO/test/parity/format-goldens.json"
 [[ -x "$BIN" ]] || { echo "no binary at $BIN — the rust:build stage builds it" >&2; exit 1; }
 

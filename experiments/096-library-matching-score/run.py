@@ -1,4 +1,4 @@
-"""exp096 runner: build the binary at a commit, run `humanify discover` over the fixed corpus with one index and
+"""exp096 runner: build the binary at a commit, run `humanify-ag discover` over the fixed corpus with one index and
 one claim rule, score it.
 
 usage: run.sh <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST]
@@ -88,12 +88,17 @@ def build(commit, log):
         root = os.path.join(lib096.CORPORA["dev"]["data"], "builds", sha[:12])
         if not os.path.exists(root):
             git("worktree", "add", "--detach", root, sha)
+    # the pipeline's crate and binary AT THAT COMMIT (humanify-ag-cli / humanify-ag since exp186, humanify-cli /
+    # humanify before it), read by its one owner, experiments/lib/build-bin.sh's pipeline_crate_of
+    owner = os.path.join(REPO, "experiments/lib/build-bin.sh")
+    pkg, binary = subprocess.check_output(
+        ["bash", "-c", 'source "$1" && pipeline_crate_of "$2"', "_", owner, root], text=True).split()
     with open(log, "w") as fh:
-        rc = subprocess.call(["cargo", "build", "--release", "--locked", "-p", "humanify-cli"], cwd=root,
+        rc = subprocess.call(["cargo", "build", "--release", "--locked", "-p", pkg], cwd=root,
                              stdout=fh, stderr=subprocess.STDOUT, env=env)
     if rc != 0:
         raise SystemExit(f"FATAL: cargo build failed in {root} — see {log}")
-    return os.path.join(root, "target/release/humanify"), sha
+    return os.path.join(root, "target/release", binary), sha
 
 
 def index_facts(d):
@@ -144,7 +149,7 @@ def selected(entries, sets):
 
 
 def run_one(binary, entry, out_dir, opts, index_dir, config):
-    """One `humanify discover` run in a child process; its wall time and peak memory measured from outside."""
+    """One `humanify-ag discover` run in a child process; its wall time and peak memory measured from outside."""
     report = os.path.join(out_dir, entry["id"] + ".json")
     cmd = ["taskset", "-c", opts["--cpus"], binary, "discover", lib096.corpus_path(entry, "bundle"),
            "--library-index", index_dir, "--config", config, "--bundler", entry.get("builtWith", entry["bundler"]), "--unit-prints",

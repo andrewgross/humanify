@@ -1,6 +1,6 @@
 The matching stage run on its own (detect → unpack → format → graph → matching, then STOP before naming): every per-function and per-statement decision — matched-to-which, the tier that resolved it, the close tier's score, or unmatched — as one deterministic JSON dump. Fully cold: no LLM path exists in this verb. The ground-truth harness's instrument (experiments/092)
 
-Usage: humanify match [OPTIONS] --prior-version <PRIOR_VERSION> <INPUT>
+Usage: humanify-ag match [OPTIONS] --prior-version <PRIOR_VERSION> <INPUT>
 
 Arguments:
   <INPUT>  The new version's file — minified or bundled, as the pipeline takes it

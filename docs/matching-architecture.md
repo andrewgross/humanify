@@ -58,8 +58,8 @@ evidence are the same; the store and the decision rules differ.
 
 ## 2. What exists today
 
-Paths below are under `crates/humanify-core/src/` on main; "branch" means
-`/work/exp095-discovery-core/crates/humanify-core/src/`.
+Paths below are under `crates/humanify-ag-core/src/` on main; "branch" means
+`/work/exp095-discovery-core/crates/humanify-ag-core/src/`.
 
 ### 2.1 Six ways to print code for a hash
 
@@ -167,7 +167,7 @@ units.
 
 ### 3.2 One serializer, forms as named versioned settings
 
-DONE in step 2 as `crates/humanify-core/src/hash/forms.rs` (`CanonicalForm`,
+DONE in step 2 as `crates/humanify-ag-core/src/hash/forms.rs` (`CanonicalForm`,
 the `FORMS` registry; the as-built names and the three walks that stay three
 are in its module doc and `docs/responsibility.md`). The plan as written:
 
@@ -248,7 +248,7 @@ compiled in; see [config-consolidation.md](./config-consolidation.md)).
 
 ### 3.6 As built in step 3 (2026-10-13)
 
-**The cutter** is `crates/humanify-core/src/cut.rs` (+ `cut/units.rs`):
+**The cutter** is `crates/humanify-ag-core/src/cut.rs` (+ `cut/units.rs`):
 
 | piece      | owner                                                                                             | consumers                                                                     |
 | ---------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -266,7 +266,7 @@ assignment) also lives here. Two substrates stay two, as a named view: the
 twins' statement hash, the split and the naming plumbing walk the ESTree
 JSON, the graphs walk the AST; both select the container by the same rule.
 
-**The graph** is `crates/humanify-core/src/graph/edges.rs`: one `Edge`
+**The graph** is `crates/humanify-ag-core/src/graph/edges.rs`: one `Edge`
 (from, to, `EdgeKind` ∈ Call / Read / Write / InitMutation / LazyWrapper,
 `scope: Option<EdgeScope>`) and one `CodeGraph` (the cut's pieces + every
 edge, joined by span). The two BUILDERS stay two, as named views, because

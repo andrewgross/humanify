@@ -1,4 +1,4 @@
-# HumanifyJS
+# humanify-ag
 
 > Deobfuscate Javascript code using LLMs ("AI")
 
@@ -14,7 +14,7 @@ v2 highlights compared to v1:
 
 - Python not required anymore!
 - A lot of tests, the codebase is actually maintanable now
-- A native Rust pipeline, shipped as the `humanify` binary
+- A native Rust pipeline, shipped as the `humanify-ag` binary
 
 ### ➡️ Check out the [introduction blog post][blogpost] for in-depth explanation!
 
@@ -76,7 +76,7 @@ more time and be less accurate.
 
 ## Getting started
 
-The pipeline is a single native binary, `humanify`, built from the Rust
+The pipeline is a single native binary, `humanify-ag`, built from the Rust
 workspace in `crates/`. (Up to tag `m4` it was a TypeScript program; it was
 ported, proven output-equivalent on the eval corpus, and replaced — see
 `docs/rust-port/19-cutover.md`.)
@@ -94,12 +94,12 @@ Prerequisites:
 ```shell
 git clone <repo-url>
 cd humanify
-cargo build --release --locked -p humanify-cli
+cargo build --release --locked -p humanify-ag-cli
 npm ci --ignore-scripts        # only for webpack/browserify inputs and the harness
 ```
 
-The binary is `target/release/humanify`. Copy it anywhere on your `PATH`, or
-`cargo install --path crates/humanify-cli --locked`.
+The binary is `target/release/humanify-ag`. Copy it anywhere on your `PATH`, or
+`cargo install --path crates/humanify-ag-cli --locked`.
 
 ### Usage
 
@@ -108,14 +108,14 @@ itself, or a local server (llama.cpp, vLLM, Ollama's OpenAI endpoint, …).
 
 ```shell
 # OpenAI: writes the multi-file tree to out/ (src/ + vendor/ + a runnable scaffold)
-HUMANIFY_API_KEY="$OPENAI_API_KEY" humanify obfuscated.js -o out --model gpt-4o-mini
+HUMANIFY_API_KEY="$OPENAI_API_KEY" humanify-ag obfuscated.js -o out --model gpt-4o-mini
 
 # One humanified file instead of the tree
-HUMANIFY_API_KEY="$OPENAI_API_KEY" humanify obfuscated.js -o out --no-split
+HUMANIFY_API_KEY="$OPENAI_API_KEY" humanify-ag obfuscated.js -o out --no-split
 
 # A local OpenAI-compatible server (any non-empty key), with settings
 # from a config file and one more on the command line
-HUMANIFY_API_KEY=local humanify obfuscated.js -o out --config humanify.toml \
+HUMANIFY_API_KEY=local humanify-ag obfuscated.js -o out --config humanify.toml \
   --endpoint http://localhost:8000/v1 --model openai/gpt-oss-20b --llm-concurrency 64
 ```
 
@@ -136,7 +136,7 @@ The commonest have short flags (`-o, --output-dir`, `--endpoint`,
 `--<section>-<name>` (`llm.concurrency` is `--llm-concurrency 64`,
 `naming.batch_size` is `--naming-batch-size 10`). A boolean is `--x` to turn
 it on and `--no-x` to turn it off; a list is comma-separated
-(`--switches-disable a,b`). `humanify -h` lists the flags by section (the
+(`--switches-disable a,b`). `humanify-ag -h` lists the flags by section (the
 library tuning flags only in `--help`, which also shows each flag's default
 and config key). [`humanify.example.toml`](./humanify.example.toml) lists
 every key with its flag, default and meaning, all commented out — uncomment
@@ -166,7 +166,9 @@ library-index store, `.humanify/library-index/` in the directory you run
 from (one `<id>/` directory per index, named by the sha256 of its
 `manifest.json`; `--library-index-store <dir>` names another store). With
 neither, the run prints one line saying no index for that kind was found and
-how to get one (the offline builder, `humanify-index build`), and goes on
+how to get one (the offline builder, `humanify-ag index build --spec …`; the
+default spec is `crates/humanify-ag-index/specs/default.toml`, and
+`scripts/build-index.sh` runs it chunked), and goes on
 with library name matching skipped. A `--library-index` that has nothing for
 the bundle's kind fails the run. `--library-index-from-bundle` instead builds
 one at run time from the npm packages the bundle itself reveals (library
@@ -203,11 +205,13 @@ folder without `.humanify/humanified.js` is refused, naming what it lacks.
 
 ```
 crates/
-  humanify-cli/      # the binary: CLI surface, pipeline driver, reports
-  humanify-core/     # the pipeline stages: detect, unpack, format, graph,
-                     #   matching, naming, split/emit, finish
-  humanify-llm/      # the OpenAI-compatible client and the response cache
-  humanify-model/    # shared data types (ledgers, dumps, stats)
+  humanify-ag-cli/      # the one binary, humanify-ag: CLI surface, pipeline
+                        #   driver, reports, the stage verbs, `index`
+  humanify-ag-core/     # the pipeline stages: detect, unpack, format, graph,
+                        #   matching, naming, split/emit, finish
+  humanify-ag-index/    # the offline library index builder (`humanify-ag index`)
+  humanify-ag-llm/      # the OpenAI-compatible client and the response cache
+  humanify-ag-model/    # shared data types (ledgers, dumps, stats)
 scripts/             # the gate (check.ts), the eval dispatcher (eval.ts),
                      #   the e2e stage, the webcrack shim
 experiments/         # the measurement harness (lib/, 034-eval-harness/) and

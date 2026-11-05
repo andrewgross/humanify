@@ -21,7 +21,7 @@ and [`responsibility.md`](./responsibility.md) (who owns which question).
 
 **Update 2026-10-04 (finding #76, branch `feat/detected-toolchain`) — the
 TOOLCHAIN.** Part 4's steps 1 and 3 are done. A run's plugin pieces are now
-chosen in ONE place, `humanify_core::toolchain::resolve_toolchain`, at the
+chosen in ONE place, `humanify_ag_core::toolchain::resolve_toolchain`, at the
 start of the run, from the detection verdict and the `--bundler` /
 `--minifier` flags, and handed to every stage as values — no stage below it
 compares a bundler or minifier NAME any more. Each choice is recorded with
@@ -145,7 +145,7 @@ Status column: **selected** = chosen from detection or from the adapter
 safe fallback; **wrong** = hard-coded and misbehaves on other input (example
 given).
 
-#### Stage 1 — detection (`crates/humanify-core/src/detect/`)
+#### Stage 1 — detection (`crates/humanify-ag-core/src/detect/`)
 
 | #   | where                                                   | what it assumes                                                                                                                                                                                                  | belongs to           | status                     | sev    |
 | --- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | -------------------------- | ------ |
@@ -155,7 +155,7 @@ given).
 | I4  | `detect/signals.rs:234-254` (`detect_terser`)           | terser = `void 0` or `!0` anywhere; always the lowest confidence                                                                                                                                                 | terser               | harmless today, see note   | Medium |
 | I5  | `detect/signals.rs:256-281` (`detect_esbuild_minifier`) | esbuild's minifier = a `// some/path.js` comment in the first 200 characters                                                                                                                                     | esbuild              | harmless today, see note   | Medium |
 | I6  | `detect.rs:26`                                          | every signal must sit in the first 16K characters                                                                                                                                                                | all                  | harmless                   | Low    |
-| I7  | `humanify-model/src/detection.rs:14-55`                 | `parcel` is detected but has no adapter; `rollup` has a detector (exp105: the commonjs plugin's shapes) and its own module grammar but no unpack adapter (passthrough; library discovery runs on the raw bundle) | rollup, parcel       | harmless (do-nothing)      | Low    |
+| I7  | `humanify-ag-model/src/detection.rs:14-55`              | `parcel` is detected but has no adapter; `rollup` has a detector (exp105: the commonjs plugin's shapes) and its own module grammar but no unpack adapter (passthrough; library discovery runs on the raw bundle) | rollup, parcel       | harmless (do-nothing)      | Low    |
 
 - **I2 example:** `esbuild --bundle --minify --format=iife` writes
   `var c=(e,t)=>()=>(t||e((t={exports:{}}).exports,t),t.exports)` — no
@@ -182,21 +182,21 @@ given).
     build writes before each module. The verdict "esbuild minifier" here
     actually means "not minified" — the profile should be "none".
 
-#### Stages 2-3 — choosing and running the unpacker (`crates/humanify-core/src/unpack/`, `modules/`)
+#### Stages 2-3 — choosing and running the unpacker (`crates/humanify-ag-core/src/unpack/`, `modules/`)
 
-| #   | where                                                                                              | what it assumes                                                                                                                                                                                                                                                                                            | belongs to   | status                                                                | sev    |
-| --- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------- | ------ |
-| I8  | `unpack.rs:61-148` (`UnpackAdapter`, `ADAPTERS`, `select_adapter`)                                 | the adapter list; each adapter says which detected bundler it takes                                                                                                                                                                                                                                        | all          | selected                                                              | Low    |
-| I9  | `unpack.rs:152` (`run_adapter`), `humanify-cli/src/unminify.rs:88`, `humanify-cli/src/main.rs:429` | the adapter is RUN from three places; two of them special-case `Bun \| Esbuild` with `matches!` to pass the vendor namer and the prior — **FIXED 2026-10-04**: `unpack::run_adapter` is the one dispatch site; every caller hands it `AdapterRun` (namer, prior, shim) and each adapter takes what it uses | Bun, esbuild | fixed                                                                 | Medium |
-| I10 | `modules.rs:181` (`identify_cjs_factory`) via `prior.rs:597` → `graph.rs:1479,1599`                | EVERY input file (any bundler) is searched for Bun's `{exports:{}}` marker, then esbuild's `__commonJS`; whatever is found marks "third-party factory" bodies, and the naming stage skips every function inside them                                                                                       | Bun, esbuild | fixed (#80: the naming-time scan is deleted; the unpack decides once) | Medium |
-| I11 | `unpack/bun.rs:897` (`identify_bun_require`)                                                       | the module `require` is Bun's `createRequire(import.meta.url)` alias, rewritten back to `require(` in vendor files                                                                                                                                                                                         | Bun          | harmless                                                              | Low    |
-| I12 | `unpack/bun.rs:55`, `modules/vendor_names.rs:352`                                                  | the vendor record is named `vendor/_bun-modules.json` / `BunModulesManifest` for both adapters; its doc still says the stamp is "always bun"                                                                                                                                                               | Bun          | harmless (naming only)                                                | Low    |
-| I13 | `unpack/bun.rs:152` (`load_prior_vendor`)                                                          | a prior tree's vendor record is read whatever adapter wrote it                                                                                                                                                                                                                                             | all          | harmless                                                              | Low    |
-| I14 | `finish/driver.rs:83-87` (`load_bun_manifest`)                                                     | the finish re-links vendor files only when the record's stamp is `"bun"` or `"esbuild"` — **FIXED 2026-10-04**: it accepts the stamp of any registered adapter that writes the record (`UnpackAdapter::of_vendor_record_stamp`)                                                                            | Bun, esbuild | fixed                                                                 | Medium |
-| I15 | `modules.rs:58`, `modules.rs:478` (`factory_arg_function`)                                         | the two factory spellings (function passed directly; esbuild's `{"path"(exports, module){…}}`) are both accepted on every input                                                                                                                                                                            | Bun, esbuild | harmless (by shape)                                                   | Low    |
+| #   | where                                                                                                    | what it assumes                                                                                                                                                                                                                                                                                            | belongs to   | status                                                                | sev    |
+| --- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------- | ------ |
+| I8  | `unpack.rs:61-148` (`UnpackAdapter`, `ADAPTERS`, `select_adapter`)                                       | the adapter list; each adapter says which detected bundler it takes                                                                                                                                                                                                                                        | all          | selected                                                              | Low    |
+| I9  | `unpack.rs:152` (`run_adapter`), `humanify-ag-cli/src/unminify.rs:88`, `humanify-ag-cli/src/main.rs:429` | the adapter is RUN from three places; two of them special-case `Bun \| Esbuild` with `matches!` to pass the vendor namer and the prior — **FIXED 2026-10-04**: `unpack::run_adapter` is the one dispatch site; every caller hands it `AdapterRun` (namer, prior, shim) and each adapter takes what it uses | Bun, esbuild | fixed                                                                 | Medium |
+| I10 | `modules.rs:181` (`identify_cjs_factory`) via `prior.rs:597` → `graph.rs:1479,1599`                      | EVERY input file (any bundler) is searched for Bun's `{exports:{}}` marker, then esbuild's `__commonJS`; whatever is found marks "third-party factory" bodies, and the naming stage skips every function inside them                                                                                       | Bun, esbuild | fixed (#80: the naming-time scan is deleted; the unpack decides once) | Medium |
+| I11 | `unpack/bun.rs:897` (`identify_bun_require`)                                                             | the module `require` is Bun's `createRequire(import.meta.url)` alias, rewritten back to `require(` in vendor files                                                                                                                                                                                         | Bun          | harmless                                                              | Low    |
+| I12 | `unpack/bun.rs:55`, `modules/vendor_names.rs:352`                                                        | the vendor record is named `vendor/_bun-modules.json` / `BunModulesManifest` for both adapters; its doc still says the stamp is "always bun"                                                                                                                                                               | Bun          | harmless (naming only)                                                | Low    |
+| I13 | `unpack/bun.rs:152` (`load_prior_vendor`)                                                                | a prior tree's vendor record is read whatever adapter wrote it                                                                                                                                                                                                                                             | all          | harmless                                                              | Low    |
+| I14 | `finish/driver.rs:83-87` (`load_bun_manifest`)                                                           | the finish re-links vendor files only when the record's stamp is `"bun"` or `"esbuild"` — **FIXED 2026-10-04**: it accepts the stamp of any registered adapter that writes the record (`UnpackAdapter::of_vendor_record_stamp`)                                                                            | Bun, esbuild | fixed                                                                 | Medium |
+| I15 | `modules.rs:58`, `modules.rs:478` (`factory_arg_function`)                                               | the two factory spellings (function passed directly; esbuild's `{"path"(exports, module){…}}`) are both accepted on every input                                                                                                                                                                            | Bun, esbuild | harmless (by shape)                                                   | Low    |
 
 - **I9 example:** add a third vendor-extracting adapter to `run_adapter`
-  only, and `humanify unminify` routes it through the generic branch with
+  only, and `humanify-ag unminify` routes it through the generic branch with
   default options — no LLM vendor naming, no prior carry — without an error.
 - **I10 example:** in a terser-minified webpack runtime the module cache is
   `var o=n[e]={exports:{}}`. The marker matches, and the "helper" is guessed
@@ -234,14 +234,14 @@ given).
 
 #### Stages 6-9 — formatting and naming
 
-| #   | where                                                         | what it assumes                                                                                                                                                                                                                                   | belongs to            | status                      | sev    |
-| --- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | --------------------------- | ------ |
-| I19 | `format/beautify.rs`                                          | undoes general minifier idioms (`void 0`, `!0`, comma chains, flipped comparisons)                                                                                                                                                                | all minifiers         | harmless (generic)          | Low    |
-| I20 | `rename/eligibility.rs:59-159` (`create_skip_set`)            | never-rename lists per bundler (webpack, esbuild) and minifier (swc), chosen from detection — but the always-on rules (any `__word…` name, any `_word_word` name) already cover every listed entry except swc's `_extends` / `_inherits`          | webpack, esbuild, swc | selected (mostly redundant) | Low    |
-| I21 | `finish/driver.rs:330`                                        | the post-split rename pass builds its never-rename list as `Eligibility::new(Some("bun"), Some("bun"))` — whatever was detected — **FIXED 2026-10-04**: it reads the run's `NeverRename` from the toolchain, the same value the naming stage uses | Bun                   | fixed                       | Medium |
-| I22 | `rename/floor.rs:123` (`is_bun_token`) and its 9 callers      | "does this name look minifier-made?" is answered with Bun's shape on every input: the minted-name meter, the below-floor rule, vote candidacy, the family permute, the answer checks (echo, borrowed stem)                                        | Bun's minifier        | **wrong** (in flight)       | Medium |
-| I23 | `naming/waves/processor.rs:1195`, `naming/driver/era.rs:487`  | module-level names are sent to the LLM in groups of 15 for esbuild, 10 for everything else (2026-10-04: the toolchain's `BundlerTuning` piece, no string check)                                                                                   | esbuild               | selected                    | Low    |
-| I24 | `humanify-cli/src/util.rs:118` (`default_module_concurrency`) | a per-bundler lane width (esbuild 40, others 20) — but nothing calls it; only the maximum is used — **DELETED 2026-10-04** (the one value read, 40, kept as a constant)                                                                           | esbuild               | fixed                       | Low    |
+| #   | where                                                            | what it assumes                                                                                                                                                                                                                                   | belongs to            | status                      | sev    |
+| --- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | --------------------------- | ------ |
+| I19 | `format/beautify.rs`                                             | undoes general minifier idioms (`void 0`, `!0`, comma chains, flipped comparisons)                                                                                                                                                                | all minifiers         | harmless (generic)          | Low    |
+| I20 | `rename/eligibility.rs:59-159` (`create_skip_set`)               | never-rename lists per bundler (webpack, esbuild) and minifier (swc), chosen from detection — but the always-on rules (any `__word…` name, any `_word_word` name) already cover every listed entry except swc's `_extends` / `_inherits`          | webpack, esbuild, swc | selected (mostly redundant) | Low    |
+| I21 | `finish/driver.rs:330`                                           | the post-split rename pass builds its never-rename list as `Eligibility::new(Some("bun"), Some("bun"))` — whatever was detected — **FIXED 2026-10-04**: it reads the run's `NeverRename` from the toolchain, the same value the naming stage uses | Bun                   | fixed                       | Medium |
+| I22 | `rename/floor.rs:123` (`is_bun_token`) and its 9 callers         | "does this name look minifier-made?" is answered with Bun's shape on every input: the minted-name meter, the below-floor rule, vote candidacy, the family permute, the answer checks (echo, borrowed stem)                                        | Bun's minifier        | **wrong** (in flight)       | Medium |
+| I23 | `naming/waves/processor.rs:1195`, `naming/driver/era.rs:487`     | module-level names are sent to the LLM in groups of 15 for esbuild, 10 for everything else (2026-10-04: the toolchain's `BundlerTuning` piece, no string check)                                                                                   | esbuild               | selected                    | Low    |
+| I24 | `humanify-ag-cli/src/util.rs:118` (`default_module_concurrency`) | a per-bundler lane width (esbuild 40, others 20) — but nothing calls it; only the maximum is used — **DELETED 2026-10-04** (the one value read, 40, kept as a constant)                                                                           | esbuild               | fixed                       | Low    |
 
 - **I21 example:** for an swc build, the naming stage never renames
   `_extends`, but the post-split pass may. Today this cannot fire for Bun or
@@ -260,7 +260,7 @@ given).
 | #   | where                                                                                                                                                                                                                                                | what it assumes                                                                                                                                                      | belongs to            | status                  | sev    |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ----------------------- | ------ |
 | I25 | `modules/wrapper.rs:26,54,68` and its callers: `place/input.rs:100-107`, `emit/stable_split.rs:205,246`, `graph.rs:1101`, `prior.rs:544,595`, `twins.rs:171`, `naming/driver/era.rs:421`, `naming/passes/family_permute.rs:209`, `unpack/bun.rs:542` | the bundle is ONE wrapper function (called, `!`-called, `.call`ed, or bare) holding the whole program, with at least 50 names declared directly in it                | Bun CJS, esbuild iife | **wrong**               | High   |
-| I26 | `humanify-cli/src/unified.rs:669-690`                                                                                                                                                                                                                | the split, the prior carry and the reports read the LAST file the naming stage processed — for Bun and esbuild that is `runtime.js`, which the adapter writes last   | Bun, esbuild          | **wrong** for webpack   | Medium |
+| I26 | `humanify-ag-cli/src/unified.rs:669-690`                                                                                                                                                                                                             | the split, the prior carry and the reports read the LAST file the naming stage processed — for Bun and esbuild that is `runtime.js`, which the adapter writes last   | Bun, esbuild          | **wrong** for webpack   | Medium |
 | I27 | `emit/load_order.rs:832`, `emit/bun_helpers.rs:107` (`identify_bun_lazy_init`)                                                                                                                                                                       | the lazy-init helper is found by Bun's exact text `x && (y = x(x = 0))`; its calls are then known to do nothing at load time, so the statements around them may move | Bun                   | harmless (conservative) | Low    |
 | I28 | `emit/load_order.rs:710` (`registrar_name`)                                                                                                                                                                                                          | the export registrar is found by shape (a two-parameter arrow with `for (k in src) defineProperty(target, k, {get: src[k]})`)                                        | Bun, esbuild          | selected (by shape)     | Low    |
 | I29 | `unpack.rs:111` (`provides_module_fossils`)                                                                                                                                                                                                          | which adapters record the original module layout ("fossils") the split follows                                                                                       | Bun, esbuild          | selected                | Low    |
@@ -288,12 +288,12 @@ given).
 
 #### The measurement harness (separate from the pipeline)
 
-| #   | where                                                   | what it assumes                                                                                                                                                                                                                                                           | sev    |
-| --- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| H1  | `experiments/lib/boot-gate.sh`                          | the boot check runs the tree with `bun` and asks it a live Claude Code question — it can only judge Claude Code trees                                                                                                                                                     | Low    |
-| H2  | `experiments/034-eval-harness/` (the four scored pairs) | every scored pair, noise band and self-hop range is a Claude Code (Bun) release; nothing scores esbuild or webpack output                                                                                                                                                 | Medium |
-| H3  | `experiments/lib/js/wrapper.ts:14`                      | the harness's own copy of the ≥50 wrapper rule; statement-level KPIs cannot read a bundle without a wrapper                                                                                                                                                               | Low    |
-| H4  | `test/e2e/fixtures/`                                    | the only real bundler builds in the gate are two **unminified esbuild iife** builds; there is no committed real Bun build (Bun is covered by synthetic snippets in `crates/humanify-cli/tests/pipeline_stages.rs` and unit tests), no minified build, no ESM-format build | Medium |
+| #   | where                                                   | what it assumes                                                                                                                                                                                                                                                              | sev    |
+| --- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| H1  | `experiments/lib/boot-gate.sh`                          | the boot check runs the tree with `bun` and asks it a live Claude Code question — it can only judge Claude Code trees                                                                                                                                                        | Low    |
+| H2  | `experiments/034-eval-harness/` (the four scored pairs) | every scored pair, noise band and self-hop range is a Claude Code (Bun) release; nothing scores esbuild or webpack output                                                                                                                                                    | Medium |
+| H3  | `experiments/lib/js/wrapper.ts:14`                      | the harness's own copy of the ≥50 wrapper rule; statement-level KPIs cannot read a bundle without a wrapper                                                                                                                                                                  | Low    |
+| H4  | `test/e2e/fixtures/`                                    | the only real bundler builds in the gate are two **unminified esbuild iife** builds; there is no committed real Bun build (Bun is covered by synthetic snippets in `crates/humanify-ag-cli/tests/pipeline_stages.rs` and unit tests), no minified build, no ESM-format build | Medium |
 
 ## Part 2 — the spec: what a plugin must provide
 
@@ -361,12 +361,12 @@ signal names a bundler OR a minifier, with a tier (`definitive`, `likely`,
 `unknown`); every bundler signal also carries a **strength**
 (`SignalStrength`). The minifier verdict is the highest-tier minifier
 signal. `--bundler` / `--minifier` override both
-(`humanify_core::toolchain::resolve_toolchain`, where every piece is chosen
+(`humanify_ag_core::toolchain::resolve_toolchain`, where every piece is chosen
 from the verdicts).
 
 **The bundler verdict is decided by STRENGTH, never by list order**
 (2026-10-04, toolchain review R3/R19; `detect::pick_bundler`, the rules
-written on `humanify_model::detection::SignalStrength`). Strongest first:
+written on `humanify_ag_model::detection::SignalStrength`). Strongest first:
 
 1. **banner** — the bundler wrote its own name into the header
    (`// @bun`);
@@ -398,7 +398,7 @@ banner fires, so the verdicts and the toolchain are byte-identical to before.
 **A plugin must provide:**
 
 - a value in `BundlerType` / `MinifierType` and in `SELECTABLE_*`
-  (`humanify-model/src/detection.rs`) — the names are also the CLI values;
+  (`humanify-ag-model/src/detection.rs`) — the names are also the CLI values;
 - a signal function, each bundler signal with its **strength** from the
   ranking above. Only a `definitive` verdict picks the unpacker; a name
   another bundler also writes is a shared helper name, not the bundler's
@@ -448,8 +448,8 @@ an unpack function that writes the tree and returns the files **with the
 app's own code last** (P13 depends on that ordering today).
 
 **Where Bun is wired in:** the adapter is dispatched in three places —
-`unpack::run_adapter`, `humanify-cli/src/unminify.rs:88` and the `unpack`
-verb in `humanify-cli/src/main.rs:429` — and the last two special-case
+`unpack::run_adapter`, `humanify-ag-cli/src/unminify.rs:88` and the `unpack`
+verb in `humanify-ag-cli/src/main.rs:429` — and the last two special-case
 `Bun | Esbuild` to pass the LLM vendor namer and the prior vendor record
 (I9). Bun and esbuild share ONE implementation (`unpack::bun::unpack_bun`);
 esbuild differs only by the stamp string it passes.
@@ -676,7 +676,7 @@ naming, both by the record's file name.
 **Tests:** a prior → next-release pair in the e2e fixture (the existing
 bundle fixtures run fresh, then with `--prior-version`);
 `a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files`
-(crates/humanify-cli/tests/pipeline_stages.rs); the `bun-text-assets`
+(crates/humanify-ag-cli/tests/pipeline_stages.rs); the `bun-text-assets`
 fixture (`expect.assets`, `expect.stays`) and
 `unpack_test::a_module_whose_string_changed_length_keeps_its_name_file_and_identifier`,
 `unpack_test::an_app_text_module_is_an_app_asset_named_from_its_text`.
@@ -958,7 +958,7 @@ covered part is only an upper bound, so its file boundaries cannot be
 trusted, and on Bun's output the eager code all follows the lazy modules,
 so the boundaries the markers do prove are exactly the module ends the
 fresh grouping now keeps. The choice, coverage and reason go to the run log
-(`Split method: …`) and `--stats-json` (`splitMethod`); `humanify detect
+(`Split method: …`) and `--stats-json` (`splitMethod`); `humanify-ag detect
 --split-method <bundle>` prints them for an input.
 
 **Module names (2026-10-06, docs/design/module-naming.md):** when the
@@ -1181,7 +1181,7 @@ module looked up in? Structural fingerprints depend on the bundler (Bun vs
 esbuild agree on ~60% of module hashes), so the index keeps one module
 table per slice; literals are shared. The slice is
 `libindex::IndexSlice` (`for_bundler`, `bundler`) — the only slice↔bundler
-mapping. The offline builder (`crates/humanify-index`) builds each slice
+mapping. The offline builder (`crates/humanify-ag-index`) builds each slice
 with its recipe and resolves the toolchain with the slice's bundler as the
 flag, so the module walk is the run's own. Not yet a `Toolchain` field:
 it becomes one when the pipeline reads the index
@@ -1217,7 +1217,7 @@ For a new **bundler** (say, rollup or webpack 5) today:
    has them; set `provides_module_fossils`.
 8. If its output has no single wrapper function: the split is not available
    until P9 and P13 exist.
-9. **Register in the toolchain** (`humanify_core::toolchain`): if a piece
+9. **Register in the toolchain** (`humanify_ag_core::toolchain`): if a piece
    has a new implementation (a `BundlerTuning`, an `InteropHelpers`, a
    `ModuleWrapperGrammar`…), add the value and choose it in
    `resolve_toolchain` — from the flags or a DEFINITIVE detection, never

@@ -16,4 +16,4 @@ test/e2e/library-index/
 # The run-time build's esbuild fixture (exp181): a minified esbuild bundle
 # and the store's recorded packuments and shards, replayed byte-for-byte —
 # a reformat makes the bundle unminified and the shards stale.
-crates/humanify-cli/tests/fixtures/runtime-build-esbuild/
+crates/humanify-ag-cli/tests/fixtures/runtime-build-esbuild/

@@ -233,7 +233,7 @@ difference cannot vouch for it.
 Two related JSON traps from WPB.5: `serde_json::Value`'s map is a
 BTreeMap, so going through `Value` alphabetizes keys that the TS
 emits in insertion order (JS also enumerates array-index keys first) —
-order-carrying objects need their own type (`humanify_model::profiling::JsObject`);
+order-carrying objects need their own type (`humanify_ag_model::profiling::JsObject`);
 and lesson 8's 1-ulp float-parse drift bit again on frozen timings, fixed
 the same way (IEEE bits shipped beside the decimals).
 

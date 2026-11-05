@@ -25,7 +25,7 @@ refuses it as stale and the e2e stage fails — that is the signal):
 
 ```bash
 echo "ms@2.1.3" > packages.txt
-humanify-index build --packages packages.txt --as-of 2026-10-25 \
+humanify-ag index build --packages packages.txt --as-of 2026-10-25 \
   --registry registry --store store --work work --out out \
   --recipe bun:target=bun,format=cjs,minify,production \
   --recipe bun:target=node,format=cjs,minify,production \

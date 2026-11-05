@@ -21,6 +21,7 @@ Individual LLM calls with limited context
 ```
 
 **Problems:**
+
 - Sequential processing (no parallelism)
 - No dependency ordering (can't provide callee context)
 - Each identifier processed in isolation
@@ -44,6 +45,7 @@ LLMProvider with retry, rate limiting, metrics
 ```
 
 **Benefits:**
+
 - Parallel processing (configurable concurrency)
 - Leaf-first ordering (callees named before callers)
 - Rich context (callee signatures, callsites)
@@ -54,26 +56,26 @@ LLMProvider with retry, rate limiting, metrics
 
 ### Legacy Plugin System
 
-| File | Reason |
-|------|--------|
-| `src/plugins/local-llm-rename/visit-all-identifiers.ts` | Replaced by RenameProcessor |
-| `src/plugins/local-llm-rename/visit-all-identifiers.test.ts` | Tests for removed code |
-| `src/plugins/local-llm-rename/unminify-variable-name.ts` | Legacy prompt/rename logic |
-| `src/plugins/local-llm-rename/unminify-variable-name.llmtest.ts` | LLM test for removed code |
-| `src/plugins/local-llm-rename/define-filename.ts` | Not needed (was for filename guessing) |
-| `src/plugins/local-llm-rename/define-filename.llmtest.ts` | LLM test for removed code |
-| `src/plugins/local-llm-rename/local-llm-rename.ts` | Legacy plugin wrapper |
-| `src/plugins/local-llm-rename/phi-jinja-template.ts` | Legacy prompt template |
-| `src/plugins/openai/openai-rename.ts` | Legacy OpenAI plugin |
-| `src/plugins/gemini-rename.ts` | Legacy Gemini plugin |
+| File                                                             | Reason                                 |
+| ---------------------------------------------------------------- | -------------------------------------- |
+| `src/plugins/local-llm-rename/visit-all-identifiers.ts`          | Replaced by RenameProcessor            |
+| `src/plugins/local-llm-rename/visit-all-identifiers.test.ts`     | Tests for removed code                 |
+| `src/plugins/local-llm-rename/unminify-variable-name.ts`         | Legacy prompt/rename logic             |
+| `src/plugins/local-llm-rename/unminify-variable-name.llmtest.ts` | LLM test for removed code              |
+| `src/plugins/local-llm-rename/define-filename.ts`                | Not needed (was for filename guessing) |
+| `src/plugins/local-llm-rename/define-filename.llmtest.ts`        | LLM test for removed code              |
+| `src/plugins/local-llm-rename/local-llm-rename.ts`               | Legacy plugin wrapper                  |
+| `src/plugins/local-llm-rename/phi-jinja-template.ts`             | Legacy prompt template                 |
+| `src/plugins/openai/openai-rename.ts`                            | Legacy OpenAI plugin                   |
+| `src/plugins/gemini-rename.ts`                                   | Legacy Gemini plugin                   |
 
 ### Files to Keep (in local-llm-rename)
 
-| File | Reason |
-|------|--------|
-| `gbnf.ts` | Grammar utilities - useful for local models |
-| `gbnf.test.ts` | Tests for grammar utilities |
-| `llama.ts` | Local llama.cpp integration - needed for local provider |
+| File           | Reason                                                  |
+| -------------- | ------------------------------------------------------- |
+| `gbnf.ts`      | Grammar utilities - useful for local models             |
+| `gbnf.test.ts` | Tests for grammar utilities                             |
+| `llama.ts`     | Local llama.cpp integration - needed for local provider |
 
 ## New Unified Plugin
 
@@ -317,7 +319,10 @@ describe("Rename E2E", () => {
     const result = await plugin(code);
 
     // Should have resolved the conflict
-    assert.ok(!result.includes("function a(a)"), "Should not have conflicting names");
+    assert.ok(
+      !result.includes("function a(a)"),
+      "Should not have conflicting names"
+    );
   });
 });
 ```
@@ -338,22 +343,26 @@ src/test/
 ## Migration Steps
 
 ### Phase 1: Add New Plugin
+
 1. Create `src/plugins/rename.ts` with the new unified plugin
 2. Add E2E tests with mocked LLM
 3. Verify tests pass
 
 ### Phase 2: Update CLI Commands
+
 1. Update `openai.ts` to use new plugin
 2. Update `local.ts` to use new plugin
 3. Update `gemini.ts` to use new plugin
 4. Verify CLI works end-to-end
 
 ### Phase 3: Remove Legacy Code
+
 1. Delete legacy plugin files (see table above)
 2. Remove `--contextSize` CLI option (no longer needed)
 3. Update imports and exports
 
 ### Phase 4: Update Tests
+
 1. Move real LLM tests to `integration/` directory
 2. Update test scripts in package.json:
    ```json
@@ -368,9 +377,9 @@ src/test/
 
 - [ ] All unit tests pass
 - [ ] E2E tests with mocked LLM pass
-- [ ] CLI `humanify openai <file>` works
-- [ ] CLI `humanify local <file>` works
-- [ ] CLI `humanify gemini <file>` works
+- [ ] CLI `humanify-ag openai <file>` works
+- [ ] CLI `humanify-ag local <file>` works
+- [ ] CLI `humanify-ag gemini <file>` works
 - [ ] `--concurrency` flag is respected
 - [ ] Progress output shows metrics
 - [ ] No references to removed files remain

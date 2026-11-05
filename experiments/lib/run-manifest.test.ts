@@ -501,7 +501,7 @@ describe("manifest warnings — a run scored by the Rust binary (--bin)", () => 
     return base({
       pipeline: {
         kind: "rust-bin",
-        command: ["/r/target/release/humanify"],
+        command: ["/r/target/release/humanify-ag"],
         bin: {
           sha256: "aa",
           buildSha256: "aa",

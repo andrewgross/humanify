@@ -9,7 +9,7 @@ Electron notes) plus measured run data; the deep-planning set 05–11 added
 diff architecture, plus the compatibility posture in 02 §9) added the same
 day, followed by a Rust-idioms architecture review whose findings are
 applied throughout (names as a render-time overlay — the AST is read-only;
-five-crate workspace with `humanify-model` first; closed-enum registries;
+five-crate workspace with `humanify-ag-model` first; closed-enum registries;
 arena held until the single render). Every "today" number cites its source.
 Doc 13 (handoff) was added 2026-09-18 when the branch was rebased onto `main`
 at `1671d71`: what moved on `main` since the plan was written, environment

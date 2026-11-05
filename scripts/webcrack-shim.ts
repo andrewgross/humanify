@@ -7,7 +7,7 @@
  *
  * Unpacks with `webcrack` and prints one JSON line:
  * `{"files":[{"path","metadata"?}],"bundleType"?}`, which
- * `humanify_core::unpack::webcrack` parses. Self-contained since the cutover
+ * `humanify_ag_core::unpack::webcrack` parses. Self-contained since the cutover
  * absorbed the TS pipeline's src/plugins/webcrack.ts into it
  * (docs/rust-port/19-cutover.md): this is the binary's one Node dependency
  * at run time, and only for webpack/browserify inputs.

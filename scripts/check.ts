@@ -73,7 +73,7 @@ const STAGES: readonly Stage[] = [
   },
   {
     name: "rust:clippy",
-    why: "the house rules as lints: complexity ceiling, hash-iteration ban in decision code, env reads confined to humanify-cli; warnings fatal at the gate only",
+    why: "the house rules as lints: complexity ceiling, hash-iteration ban in decision code, env reads confined to humanify-ag-cli; warnings fatal at the gate only",
     run: "cargo clippy --workspace --all-targets -- -D warnings"
   },
   {
@@ -110,7 +110,7 @@ const STAGES: readonly Stage[] = [
   {
     name: "rust:build",
     why: "the RELEASE binary — the pipeline the eval scores and the stages below run. `--locked`, the build run.sh makes: a lockfile drift fails here, not an hour into an eval",
-    run: "cargo build --release --locked -p humanify-cli"
+    run: "cargo build --release --locked -p humanify-ag-cli"
   },
   {
     name: "rust:format-golden",

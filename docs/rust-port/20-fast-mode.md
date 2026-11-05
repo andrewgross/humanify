@@ -28,7 +28,7 @@ output (every tree boots, pure rename/relayout), DETERMINISM (same input +
 same answers = same bytes), and clean cross-version diffs (novel/realLn
 exact, reducible KPIs inside `noise-bands.json`)?
 
-Two tiers answer it (`crates/humanify-core/src/fast.rs`):
+Two tiers answer it (`crates/humanify-ag-core/src/fast.rs`):
 
 - **`--fast` (= `--fast exact`)** only reorders or parallelizes work whose
   outcome cannot depend on the order. It SHIPS THE DEFAULT PATH'S BYTES; its
@@ -44,7 +44,7 @@ Two tiers answer it (`crates/humanify-core/src/fast.rs`):
   process CPU spent in each (`cpuMs`) and the average cores busy (`cores`):
   `profiling::phase()`, an RAII guard. Summarize with
   `/work/perf-fast/phases.py <profile.json>`.
-- `--simulate-llm-latency <out.json>` (`humanify-cli/src/llm_sim.rs`) prices
+- `--simulate-llm-latency <out.json>` (`humanify-ag-cli/src/llm_sim.rs`) prices
   a WARM run's real answers on a virtual clock: every call gets a latency
   drawn deterministically from the last cold eval's measured distribution
   (10,283 calls, p50 1.15 s, p99 5.3 s), calls take one of `-c` slots as the

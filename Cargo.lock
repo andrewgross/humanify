@@ -469,14 +469,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
-name = "humanify-cli"
+name = "humanify-ag-cli"
 version = "0.0.0"
 dependencies = [
  "clap",
- "humanify-core",
- "humanify-index",
- "humanify-llm",
- "humanify-model",
+ "humanify-ag-core",
+ "humanify-ag-index",
+ "humanify-ag-llm",
+ "humanify-ag-model",
  "mimalloc",
  "oxc_allocator",
  "oxc_ast",
@@ -490,11 +490,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "humanify-core"
+name = "humanify-ag-core"
 version = "0.0.0"
 dependencies = [
- "humanify-llm",
- "humanify-model",
+ "humanify-ag-llm",
+ "humanify-ag-model",
  "oxc_allocator",
  "oxc_ast",
  "oxc_estree",
@@ -511,13 +511,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "humanify-index"
+name = "humanify-ag-index"
 version = "0.0.0"
 dependencies = [
  "clap",
- "humanify-core",
- "humanify-model",
- "mimalloc",
+ "humanify-ag-core",
+ "humanify-ag-model",
  "oxc_allocator",
  "oxc_semantic",
  "oxc_span",
@@ -529,11 +528,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "humanify-llm"
+name = "humanify-ag-llm"
 version = "0.0.0"
 dependencies = [
  "futures-util",
- "humanify-model",
+ "humanify-ag-model",
  "reqwest",
  "serde",
  "serde_json",
@@ -541,7 +540,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "humanify-model"
+name = "humanify-ag-model"
 version = "0.0.0"
 dependencies = [
  "dragonbox_ecma",

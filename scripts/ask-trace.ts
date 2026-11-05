@@ -34,7 +34,7 @@
  *                      `--set` is refused by the binary)
  *
  * Prints the per-reason ask summary (TOTAL first) and exits with the
- * binary's exit code. Needs target/release/humanify (rust:build).
+ * binary's exit code. Needs target/release/humanify-ag (rust:build).
  */
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
@@ -50,7 +50,7 @@ import { collideAnswer, startStubLlm, stubAnswer } from "./lib/stub-llm.js";
 
 const BIN = path.join(
   path.resolve(import.meta.dirname, ".."),
-  "target/release/humanify"
+  "target/release/humanify-ag"
 );
 
 /** One parsed ask row (the ask-trace writer's schema). */
@@ -169,7 +169,7 @@ export function summarize(rows: AskRow[]): string {
 async function main(): Promise<void> {
   if (!fs.existsSync(BIN)) {
     fail(
-      "target/release/humanify is missing — run `cargo build --release --locked -p humanify-cli` (rust:build)."
+      "target/release/humanify-ag is missing — run `cargo build --release --locked -p humanify-ag-cli` (rust:build)."
     );
   }
   const args = parseArgs(process.argv.slice(2));

@@ -198,7 +198,7 @@ const SCORE_FLAGS: Record<string, FlagKind> = {
   "--inputs-base": "value",
   "--priors-base": "value",
   "--workdir": "value",
-  // The binary to score (default: this repo's target/release/humanify).
+  // The binary to score (default: this repo's target/release/humanify-ag).
   // run.sh builds it, records its sha and build commit, and refuses one not
   // built from the label's commit. There is no other pipeline since the
   // cutover (docs/rust-port/19-cutover.md).
@@ -224,7 +224,7 @@ const SCORE_FLAGS: Record<string, FlagKind> = {
  */
 export type NamingMode = "names" | "off";
 
-/** The binary's default `library.matching` (crates/humanify-cli/src/config/keys.rs). */
+/** The binary's default `library.matching` (crates/humanify-ag-cli/src/config/keys.rs). */
 export const BINARY_DEFAULT_MATCHING = "names";
 
 /**
@@ -424,7 +424,7 @@ export function scoreArgs(args: string[]):
       workdir: strFlag(f, "--workdir", "/tmp/eval-work"),
       bin: path.resolve(
         REPO,
-        strFlag(f, "--bin", path.join(REPO, "target/release/humanify"))
+        strFlag(f, "--bin", path.join(REPO, "target/release/humanify-ag"))
       ),
       forceMixed: force,
       pipelineSettings: sets,
@@ -685,9 +685,9 @@ const VERBS: Verb[] = [
   {
     name: "score",
     usage:
-      "score <label> [--pairs a,b] [--seeded-base | --archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify] [--pipeline-set <section.key=value>]... ...",
+      "score <label> [--pairs a,b] [--seeded-base | --archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify-ag] [--pipeline-set <section.key=value>]... ...",
     description:
-      "Cold scored run of the Rust binary over the eval pairs (the harness builds target/release/humanify unless --bin names another); cards + summary under results/<label>. " +
+      "Cold scored run of the Rust binary over the eval pairs (the harness builds target/release/humanify-ag unless --bin names another); cards + summary under results/<label>. " +
       "Defaults are the gate-valid protocol: SCRATCH bases (each v-1 rebuilt by the current pipeline with no prior), no LLM cache, cold + warm self-hop. " +
       "--seeded-base rebuilds each v-1 seeded by the archive (it inherits the archive's names) — the protocol every reference before 2026-10-03 was scored on, comparable only to seeded labels; " +
       "--archive-prior scores against the archive tree with no rebuild.",
@@ -894,7 +894,7 @@ const VERBS: Verb[] = [
     usage:
       "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--corpus dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4|bun-dev|bun-held|kind-esbuild|kind-webpack|kind-rollup|cc] [--force-mixed] [--pipeline-set library.<key>=value]...",
     description:
-      "Library-matching score (exp096): builds the binary at a commit, runs `humanify discover` (library discovery " +
+      "Library-matching score (exp096): builds the binary at a commit, runs `humanify-ag discover` (library discovery " +
       "on its own, no LLM) with one index and one claim rule over the FIXED corpus " +
       "(experiments/096-library-matching-score/corpus.json: Claude Code 2.1.216, 67 held-out apps, wrangler, an " +
       "esbuild app; every input content-addressed), and writes one card per bundle + a summary under that " +

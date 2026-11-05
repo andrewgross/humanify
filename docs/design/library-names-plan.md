@@ -13,7 +13,7 @@ STATUS: PLAN, 2026-10-25. Agreed with Andrew. Nothing here is built yet.
   reuses the cascade's pieces.
 - **The index is built for the run, and cached.** A run detects the bundler and its version, finds or builds the
   index it needs, and does this in parallel with the stages that don't need it. It also works stand-alone
-  (`humanify-index build`, `--library-index <dir|id>`).
+  (`humanify-ag index build`, `--library-index <dir|id>`).
 - **Profiling covers it.** The index build appears in the run's profile as its own stages, so a full run shows how
   long the index took and why.
 - **Scope.** Bun only, tested on Bun-built apps with source maps and on Claude Code. Other bundlers follow the same
@@ -95,7 +95,7 @@ sample of 2.1.216). Rebuild only what Bun needs:
 > **UPDATE exp181 (2026-11-02):** the run-time build builds for every
 > recipe kind (Bun, esbuild, webpack, rollup): the recipe the bundle needs,
 > run by the pinned tool for its bundler, fetched into `<store>/tools/`
-> (`humanify_index::tools`). A kind no recipe exists for yet is skipped with
+> (`humanify_ag_index::tools`). A kind no recipe exists for yet is skipped with
 > a line saying so. See docs/library-matching-config.md §2.
 >
 > **UPDATE exp175 (2026-11-01):** the store is searched for an index of the
@@ -145,7 +145,7 @@ sample of 2.1.216). Rebuild only what Bun needs:
 - **Concurrency.** The build runs while unpack and parse run. Matching waits on it before naming starts. Install
   and bundle child processes follow `docs/concurrency.md`: drained pipes, a deadline over every wait, sites on the
   concurrency allowlist.
-- **Profiling.** The builder takes the run's `Profiler` (`crates/humanify-core/src/profiling.rs`). Each of the
+- **Profiling.** The builder takes the run's `Profiler` (`crates/humanify-ag-core/src/profiling.rs`). Each of the
   following is a span, with child-process wall time included:
 
   - cache check;
@@ -187,7 +187,7 @@ sample of 2.1.216). Rebuild only what Bun needs:
   (15 files / 39 statements, byte-identical); every divergence traced to composition or to the naming era's
   strict statement-set join (a fossil joins a region only on exact statement-set equality — content drift
   flips the join wholesale, so the region loses its index answer and falls back).
-- **The fix** (both in `crates/humanify-core/src/place/library_layout.rs`):
+- **The fix** (both in `crates/humanify-ag-core/src/place/library_layout.rs`):
   1. an `unclaimed` region with a CLEAN index answer (one owner) now moves on the INDEX's evidence instead
      of leaving; contested / partial / multi-owner / no-row regions still leave unchanged;
   2. synthetic file names come from the region's own content (`module-<first 8 of the module head
@@ -273,7 +273,7 @@ wholesale on content drift. Branch `exp158-naming-stability`.
   wholesale (matching's territory). The relaxation shipped nowhere; the strict join stays, with
   exp158's PACKAGE GUARD (a module two packages claim never moves, whichever pass — a safety
   property; on the pair it refused 0 exact and 4–5 fuzzy candidates).
-- **Reachability.** Both fixes are names-mode-only: `humanify-cli/src/config.rs` sets
+- **Reachability.** Both fixes are names-mode-only: `humanify-ag-cli/src/config.rs` sets
   `module_answers`/`placement_groups` only when `matching == names`, `place_names_modules`
   early-returns without them, and `plan_library_modules` returns immediately on empty regions. No
   default flip; `library.names_unlocked` stays measurement-only.

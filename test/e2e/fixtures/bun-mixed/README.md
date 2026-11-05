@@ -5,7 +5,7 @@ there): Bun 1.3.14, `bun build src/main.js --target=bun --format=cjs`,
 unminified. Of six ES modules, `archive` and `codec` are reached only
 through `require()` from a CommonJS loader, so Bun wraps exactly those two
 in lazy inits; `units`, `palette`, `ledger` and `router` stay eager. The two
-markers cover ~45% of the app code (`humanify detect --split-method`).
+markers cover ~45% of the app code (`humanify-ag detect --split-method`).
 
 ## What it proves (finding #87, C2)
 

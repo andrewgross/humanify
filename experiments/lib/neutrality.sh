@@ -63,7 +63,7 @@ set -uo pipefail
 #
 # Each leg runs the Rust binary built from ITS commit: the candidate from this
 # checkout, the baseline from a detached worktree of <baseline-ref> (each
-# `cargo build --release --locked -p humanify-cli`, log beside the leg's
+# `cargo build --release --locked -p humanify-ag-cli`, log beside the leg's
 # stdout). The TS pipeline these legs launched before the cutover is deleted
 # (docs/rust-port/19-cutover.md); a baseline ref from before it has no binary
 # that is the pipeline, and its verdict would compare two different programs.

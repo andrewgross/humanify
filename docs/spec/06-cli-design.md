@@ -2,7 +2,7 @@
 
 ## Overview
 
-Unified CLI that works with any OpenAI-compatible LLM provider. Replaces the current separate `local`, `openai`, `gemini` commands with a single `humanify` command.
+Unified CLI that works with any OpenAI-compatible LLM provider. Replaces the current separate `local`, `openai`, `gemini` commands with a single `humanify-ag` command.
 
 ## Command Structure
 
@@ -21,52 +21,52 @@ humanify <input> [options]
 
 ### Arguments
 
-| Argument | Description |
-|----------|-------------|
+| Argument | Description                           |
+| -------- | ------------------------------------- |
 | `input`  | Path to minified JS file or directory |
 
 ### LLM Options
 
-| Option | Env Variable | Default | Description |
-|--------|--------------|---------|-------------|
-| `--endpoint <url>` | `HUMANIFY_ENDPOINT` | `https://api.openai.com/v1` | OpenAI-compatible API endpoint |
-| `--api-key <key>` | `HUMANIFY_API_KEY` | - | API key for the endpoint |
-| `--model <name>` | `HUMANIFY_MODEL` | `gpt-4o-mini` | Model identifier |
-| `--local` | - | - | Use local llama.cpp model |
-| `--local-model <path>` | `HUMANIFY_LOCAL_MODEL` | `~/.humanify/models/phi-3-mini.gguf` | Path to local model file |
+| Option                 | Env Variable           | Default                              | Description                    |
+| ---------------------- | ---------------------- | ------------------------------------ | ------------------------------ |
+| `--endpoint <url>`     | `HUMANIFY_ENDPOINT`    | `https://api.openai.com/v1`          | OpenAI-compatible API endpoint |
+| `--api-key <key>`      | `HUMANIFY_API_KEY`     | -                                    | API key for the endpoint       |
+| `--model <name>`       | `HUMANIFY_MODEL`       | `gpt-4o-mini`                        | Model identifier               |
+| `--local`              | -                      | -                                    | Use local llama.cpp model      |
+| `--local-model <path>` | `HUMANIFY_LOCAL_MODEL` | `~/.humanify/models/phi-3-mini.gguf` | Path to local model file       |
 
 ### Output Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `-o, --output <path>` | `./humanified/` | Output directory or file |
-| `--source-map-only` | false | Only generate source map, don't rewrite code |
-| `--inline-source-map` | false | Embed source map in output file |
-| `--no-source-map` | false | Don't generate source map |
+| Option                | Default         | Description                                  |
+| --------------------- | --------------- | -------------------------------------------- |
+| `-o, --output <path>` | `./humanified/` | Output directory or file                     |
+| `--source-map-only`   | false           | Only generate source map, don't rewrite code |
+| `--inline-source-map` | false           | Embed source map in output file              |
+| `--no-source-map`     | false           | Don't generate source map                    |
 
 ### Processing Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--concurrency <n>` | 10 | Max parallel LLM calls |
-| `--retries <n>` | 3 | Number of retry attempts for failed API calls |
-| `--cache <path>` | `~/.humanify/cache` | Cache directory |
-| `--no-cache` | false | Disable caching |
-| `--no-resume` | false | Start fresh, ignoring any previous checkpoint |
-| `--no-skip-libraries` | false | Process library code too |
-| `--source-map` | false | Generate source map files alongside output |
-| `--include <glob>` | - | Only process matching files |
-| `--exclude <glob>` | - | Skip matching files |
+| Option                | Default             | Description                                   |
+| --------------------- | ------------------- | --------------------------------------------- |
+| `--concurrency <n>`   | 10                  | Max parallel LLM calls                        |
+| `--retries <n>`       | 3                   | Number of retry attempts for failed API calls |
+| `--cache <path>`      | `~/.humanify/cache` | Cache directory                               |
+| `--no-cache`          | false               | Disable caching                               |
+| `--no-resume`         | false               | Start fresh, ignoring any previous checkpoint |
+| `--no-skip-libraries` | false               | Process library code too                      |
+| `--source-map`        | false               | Generate source map files alongside output    |
+| `--include <glob>`    | -                   | Only process matching files                   |
+| `--exclude <glob>`    | -                   | Skip matching files                           |
 
 ### Other Options
 
-| Option | Description |
-|--------|-------------|
-| `-v` | Increase verbosity (`-v` info, `-vv` debug) |
-| `--dry-run` | Show what would be processed without doing it |
-| `--cost-estimate` | Show estimated API cost before processing |
-| `-h, --help` | Show help |
-| `--version` | Show version |
+| Option            | Description                                   |
+| ----------------- | --------------------------------------------- |
+| `-v`              | Increase verbosity (`-v` info, `-vv` debug)   |
+| `--dry-run`       | Show what would be processed without doing it |
+| `--cost-estimate` | Show estimated API cost before processing     |
+| `-h, --help`      | Show help                                     |
+| `--version`       | Show version                                  |
 
 ## Examples
 
@@ -182,10 +182,10 @@ humanify analyze <input> [options]
 
 ### Options
 
-| Option | Description |
-|--------|-------------|
-| `-o, --output <path>` | Write analysis to JSON file |
-| `--format <fmt>` | Output format: `json`, `text` (default: text) |
+| Option                | Description                                   |
+| --------------------- | --------------------------------------------- |
+| `-o, --output <path>` | Write analysis to JSON file                   |
+| `--format <fmt>`      | Output format: `json`, `text` (default: text) |
 
 ### Example
 
@@ -257,11 +257,11 @@ humanify download <model>
 
 ### Available Models
 
-| Model | Size | Description |
-|-------|------|-------------|
-| `phi-3-mini` | 2.4 GB | Fast, good for simple renames (default) |
-| `llama-3-8b` | 4.7 GB | Better quality, slower |
-| `codellama-7b` | 3.8 GB | Optimized for code |
+| Model          | Size   | Description                             |
+| -------------- | ------ | --------------------------------------- |
+| `phi-3-mini`   | 2.4 GB | Fast, good for simple renames (default) |
+| `llama-3-8b`   | 4.7 GB | Better quality, slower                  |
+| `codellama-7b` | 3.8 GB | Optimized for code                      |
 
 ### Example
 
@@ -303,6 +303,7 @@ exclude:
 ```
 
 Load order:
+
 1. Default values
 2. Config file (if present)
 3. Environment variables
@@ -310,14 +311,14 @@ Load order:
 
 ## Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | General error |
-| 2 | Invalid arguments |
-| 3 | Input file not found |
-| 4 | LLM API error |
-| 5 | Parse error (invalid JavaScript) |
+| Code | Meaning                          |
+| ---- | -------------------------------- |
+| 0    | Success                          |
+| 1    | General error                    |
+| 2    | Invalid arguments                |
+| 3    | Input file not found             |
+| 4    | LLM API error                    |
+| 5    | Parse error (invalid JavaScript) |
 
 ## Progress Output
 
@@ -371,17 +372,17 @@ Done!
 
 ### Progress Metrics Explained
 
-| Field | Description |
-|-------|-------------|
-| `Functions: X/Y done` | Completed functions out of total |
-| `Z processing` | Functions currently being processed (limited by concurrency) |
-| `W ready` | Functions whose dependencies are met, waiting for a slot |
-| `P pending` | Functions still waiting for dependencies to complete |
-| `LLM Calls: N done` | Total successful LLM API calls |
-| `M in-flight` | Currently active LLM requests |
-| `F failed` | Requests that failed after all retries |
-| `avg Xms` | Average LLM response time |
-| `ETA` | Estimated time remaining based on current rate |
+| Field                 | Description                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| `Functions: X/Y done` | Completed functions out of total                             |
+| `Z processing`        | Functions currently being processed (limited by concurrency) |
+| `W ready`             | Functions whose dependencies are met, waiting for a slot     |
+| `P pending`           | Functions still waiting for dependencies to complete         |
+| `LLM Calls: N done`   | Total successful LLM API calls                               |
+| `M in-flight`         | Currently active LLM requests                                |
+| `F failed`            | Requests that failed after all retries                       |
+| `avg Xms`             | Average LLM response time                                    |
+| `ETA`                 | Estimated time remaining based on current rate               |
 
 ### Progress Display Modes
 
@@ -403,28 +404,32 @@ humanify bundle.min.js -o output/ --progress-json
 ### Interpreting Progress for Bottlenecks
 
 **High `in-flight` but slow progress:**
+
 - API is slow or rate-limited
 - Consider reducing `--concurrency`
 
 **Low `in-flight` but high `ready`:**
+
 - Concurrency too low, increase `--concurrency`
 
 **High `pending`, low `ready`:**
+
 - Dependency chain is deep
 - Normal for deeply nested code
 
 **High `failed` count:**
+
 - API errors or quota issues
 - Check API key and rate limits
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `HUMANIFY_ENDPOINT` | Default API endpoint |
-| `HUMANIFY_API_KEY` | API key (also supports `OPENAI_API_KEY`) |
-| `HUMANIFY_MODEL` | Default model |
-| `HUMANIFY_CACHE` | Cache directory |
-| `HUMANIFY_CONCURRENCY` | Default concurrency |
-| `NO_COLOR` | Disable colored output |
-| `DEBUG` | Enable debug logging |
+| Variable               | Description                              |
+| ---------------------- | ---------------------------------------- |
+| `HUMANIFY_ENDPOINT`    | Default API endpoint                     |
+| `HUMANIFY_API_KEY`     | API key (also supports `OPENAI_API_KEY`) |
+| `HUMANIFY_MODEL`       | Default model                            |
+| `HUMANIFY_CACHE`       | Cache directory                          |
+| `HUMANIFY_CONCURRENCY` | Default concurrency                      |
+| `NO_COLOR`             | Disable colored output                   |
+| `DEBUG`                | Enable debug logging                     |

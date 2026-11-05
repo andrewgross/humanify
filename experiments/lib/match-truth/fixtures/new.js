@@ -1,5 +1,5 @@
 // The NEW version of the fixed two-version fixture (exp092) — the file
-// `humanify match` takes as input. Construction notes in old.js.
+// `humanify-ag match` takes as input. Construction notes in old.js.
 function keepExact(alpha, beta) {
   return alpha + beta;
 }

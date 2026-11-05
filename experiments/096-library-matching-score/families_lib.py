@@ -16,8 +16,8 @@ sys.path.insert(0, os.path.join(HERE, "../095-library-fingerprints/selection/scr
 from libix import family as base_family  # noqa: E402
 
 # ONE file for the scorer and the matcher (exp106): the Rust family judgement reads the same links
-# (crates/humanify-core/src/libindex/families.rs), restricted to an index's own packages.
-DERIVED = os.path.join(HERE, "../../crates/humanify-core/src/libindex/families-derived.json")
+# (crates/humanify-ag-core/src/libindex/families.rs), restricted to an index's own packages.
+DERIVED = os.path.join(HERE, "../../crates/humanify-ag-core/src/libindex/families-derived.json")
 
 
 def derived_sha():

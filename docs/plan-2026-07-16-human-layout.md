@@ -75,7 +75,7 @@ regenerated from scratch after this lands (user said so explicitly).
       is-plain-object hallucination guarded. NOTE: measured via two
       scratchpad harnesses (split-fresh.mts on humanified.js for src/;
       vendor-name-run.mts on the original bundle for vendor/) — a single
-      full `humanify --split` end-to-end regen is the remaining manual
+      full `humanify-ag --split` end-to-end regen is the remaining manual
       confirmation before the backward/forward version walk. zod/Bedrock
       in-src is item 9 (deferred), not fixed here.
 

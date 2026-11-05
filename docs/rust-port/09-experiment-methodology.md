@@ -222,7 +222,7 @@ profiler and gives the migration its today-columns for free.
 ## 5. New instrument: a criterion benchmark suite
 
 Component-level regressions need a cheaper instrument than a full hop.
-PROPOSAL: a `criterion` suite under `humanify-core` (`cargo bench`), with
+PROPOSAL: a `criterion` suite under `humanify-ag-core` (`cargo bench`), with
 committed baselines (`--save-baseline` per run, compared with `critcmp`),
 sized by the measured scale of the machine being ported
 (`01-current-architecture.md`, section 9):
@@ -304,7 +304,7 @@ the valid set listed (kill-switches.ts:140-160), reads only through
 `switchOn` with a census test against unregistered literals
 (kill-switches.ts:19-21, 178), and every scored run's switches recorded into
 its manifest from the child argv (run-pipeline.ts:144-156). The Rust CLI
-keeps all of it — registry in `humanify-cli`, clap-validated, same argv
+keeps all of it — registry in `humanify-ag-cli`, clap-validated, same argv
 contract so the manifest recording keeps working.
 
 The fail-loud property is worth naming because it already caught rot:

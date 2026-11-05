@@ -139,7 +139,7 @@ interface CheckpointStore {
 
 ### Auto-Detection
 
-When `humanify` starts, it checks for an existing checkpoint file at the default location (alongside the output directory):
+When `humanify-ag` starts, it checks for an existing checkpoint file at the default location (alongside the output directory):
 
 ```
 <output-dir>/.humanify-checkpoint.db
@@ -184,6 +184,7 @@ function replayRenames(
 ```
 
 This works because:
+
 - Webcrack output is deterministic (same input → same unpacked files)
 - `getOwnBindings()` returns bindings in a deterministic order
 - `scope.rename()` updates all references throughout the AST
@@ -211,7 +212,7 @@ for (const file of filesToProcess) {
   }
 
   // Mark file as in-progress
-  checkpoint?.setFileStatus(file.path, "in_progress", /* functionCount */);
+  checkpoint?.setFileStatus(file.path, "in_progress" /* functionCount */);
 
   // Process file (rename plugin handles function-level checkpointing)
   const result = await processFile(file, { checkpoint });
@@ -292,12 +293,14 @@ humanify bundle.min.js -o output/ --no-resume
 ```
 
 When `--no-resume` is set:
+
 1. Delete any existing checkpoint file for this output directory
 2. Process everything from scratch
 
 ### Auto-Detection (Default)
 
 When no flag is specified:
+
 1. Check for `<output-dir>/.humanify-checkpoint.db`
 2. If found and compatible, resume
 3. If found but incompatible (input hash mismatch), warn and start fresh
@@ -319,6 +322,7 @@ Processing [██████████████████████�
 ### WAL Mode
 
 SQLite is configured with `PRAGMA journal_mode=WAL` for:
+
 - Concurrent reads during writes (progress queries don't block checkpointing)
 - Crash recovery (WAL survives process crashes)
 - Better performance (no full-file locks)
@@ -326,12 +330,14 @@ SQLite is configured with `PRAGMA journal_mode=WAL` for:
 ### Transaction Granularity
 
 Each `saveFunctionResult` call is a single transaction. This means:
+
 - A crash after function N completes but before function N+1 starts loses zero work
 - A crash mid-function loses only that one function (it will be re-processed on resume)
 
 ### Cleanup on Success
 
 When processing completes successfully:
+
 1. Write all output files
 2. Delete the checkpoint file (it's no longer needed)
 3. Log: "Processing complete. Checkpoint cleaned up."
@@ -341,6 +347,7 @@ If `--keep-checkpoint` is desired in the future, the checkpoint file can be pres
 ## Implementation Phases
 
 ### Phase 1: Core Checkpoint Infrastructure
+
 - [ ] `src/checkpoint/store.ts` — SQLite-backed `CheckpointStore` implementation
 - [ ] `src/checkpoint/index.ts` — Public API
 - [ ] Input hash computation (SHA-256 of input file contents)
@@ -348,6 +355,7 @@ If `--keep-checkpoint` is desired in the future, the checkpoint file can be pres
 - [ ] Unit tests for store CRUD operations
 
 ### Phase 2: Function-Level Integration
+
 - [ ] `onFunctionDone` callback in `ProcessorOptions`
 - [ ] Wire callback in `processor.ts` processing loop
 - [ ] `replayRenames()` utility function
@@ -355,12 +363,14 @@ If `--keep-checkpoint` is desired in the future, the checkpoint file can be pres
 - [ ] Integration test: process half, "crash", resume, verify output matches full run
 
 ### Phase 3: File-Level Integration
+
 - [ ] Checkpoint hooks in `unminify.ts` file loop
 - [ ] Skip webcrack on resume (detect existing unpacked files)
 - [ ] Module output caching (`saveModuleOutput` / `getModuleOutput`)
 - [ ] Handle missing unpacked files (re-run webcrack fallback)
 
 ### Phase 4: CLI + Polish
+
 - [ ] `--no-resume` flag in `src/commands/unified.ts`
 - [ ] Auto-detection of existing checkpoint
 - [ ] Resume progress display

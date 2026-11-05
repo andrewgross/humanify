@@ -1,0 +1,884 @@
+//! Post-split prior-diff reconciliation (exp054) in its TEXT form — TS
+//! `src/split/post-split-reconcile.ts` (12 §5: the plan-based form flips
+//! post-cutover behind its own proof).
+//!
+//! Each emitted split file is reconciled against the prior release's file
+//! at the same path: the reconcile tiers ([`crate::naming::reconcile`])
+//! scoped to one file (~20 candidates instead of the bundle's ~60,000).
+//! Renames land in the file's rename overlay; the TEXT is then rewritten at
+//! every identifier position whose name changed (shorthand-aware), never
+//! re-generated, and the rewrite must re-parse to the same structural
+//! signature or the file ships as emitted. Top-level renames patch the
+//! ledger's `emitNames` / `nameToFiles` (never `emitHashes`: the statement
+//! hash masks names).
+//!
+//! Best-effort throughout, as the TS: any failure is a DISCARD of that
+//! file, never a failed run.
+//!
+//! The pass halves (perf-inventory item 3): the per-file READ+COMPUTE —
+//! read both texts, diff, parse, run the reconcile tiers, rewrite — is
+//! pure per-file work (a worker sees only its file's texts, the
+//! eligibility set and the file's ledger statement count; it never reads
+//! the ledger, which one file's renames patch), so it runs on the rayon
+//! pool as plain data out; everything that touches CROSS-FILE state —
+//! the ledger patches (`nameToFiles` is shared: one file's patch
+//! APPENDS to a list the next file's patch and stale count read), the
+//! stale counts, the trail, the claim totals, the changed list and the
+//! renames — is re-joined serially in LEDGER FILE order, the exact
+//! order the TS iterated, so the outputs are byte-identical by
+//! construction. The determinism pin over that boundary is
+//! `results_are_byte_identical_under_scrambled_completion_order`.
+
+use std::collections::{HashMap, HashSet};
+
+use oxc_allocator::Allocator;
+use oxc_ast::ast::{BindingPattern, ForStatementLeft, Program, Statement};
+use oxc_span::GetSpan;
+use oxc_syntax::identifier::{is_identifier_part, is_identifier_start};
+
+use humanify_ag_model::js::{JsObject, JsValue, cmp_utf16};
+
+use crate::babel_view::DiffLines;
+use crate::emit::substitutions::{Substitution, apply_substitutions};
+use crate::naming::reconcile::hunks::compute_normal_diff;
+use crate::naming::reconcile::resolve::{IdentSite, identifier_sites, shorthand_key};
+use crate::naming::reconcile::{ReconcileOptions, collect_word_tokens, reconcile_diff_noise};
+use crate::rename::eligibility::Eligibility;
+use crate::rename::name_profile::NameProfile;
+use crate::rename::validated::RenameState;
+use crate::rename::validated::scopes::{BabelScopes, SiteType};
+use crate::trail::Anchor;
+
+use super::relink::parse_or_err;
+use super::vendor_inherit::file_signature;
+
+/// One rename the pass shipped (`PostSplitRename`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PostSplitRename {
+    pub file: String,
+    pub from_name: String,
+    pub to_name: String,
+    pub kind: &'static str,
+    pub votes: usize,
+    pub top_level: bool,
+    /// (bodyOrdinal, nameOrdinal).
+    pub locator: Option<(usize, usize)>,
+}
+
+/// `PostSplitReconcileStats`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PostSplitStats {
+    pub considered: usize,
+    pub changed: usize,
+    pub corpus_gated: usize,
+    pub discarded: usize,
+    /// Files whose `diff` failed (could not start, exited 2, or ran past
+    /// its deadline) — apart from `discarded`, which is the parse and
+    /// signature discards (audit R3: this used to be counted there,
+    /// silently).
+    pub diff_failed: usize,
+    pub incoherent: usize,
+}
+
+/// `PostSplitReconcileResult`.
+#[derive(Clone, Debug, Default)]
+pub struct PostSplitResult {
+    /// Only the files whose text changed, in ledger order.
+    pub changed: Vec<(String, String)>,
+    pub renames: Vec<PostSplitRename>,
+    pub stats: PostSplitStats,
+    /// What the pass recorded into the run's strategy trail, per file in
+    /// visit order: the file's path, its text (the rows' spans index it)
+    /// and its rows — one entry per binding NODE, never merged with the
+    /// naming era's rows (finding #50: labelled by the file, not
+    /// "generated").
+    pub trail: Vec<crate::naming::report::diagnostics::ExtraText>,
+    /// The validated renames' claim counters (the run-wide
+    /// `renameClaimStats`).
+    pub claims: crate::rename::validated::RenameClaimStats,
+    /// The first failed `diff` (file, error), in ledger order — what
+    /// [`diff_failure_warning`] names.
+    pub first_diff_failure: Option<(String, String)>,
+}
+
+/// The loud line for failed `diff`s (audit R3): those files kept their
+/// fresh names, so the tree differs from a run where `diff` worked.
+/// Print-only — no decision reads it.
+pub fn diff_failure_warning(result: &PostSplitResult) -> Option<String> {
+    let (file, error) = result.first_diff_failure.as_ref()?;
+    Some(format!(
+        "WARNING: post-split reconcile: diff failed on {} file(s), which kept their fresh \
+names (first: {file}: {error}) — this tree differs from a run where diff worked; re-run it",
+        result.stats.diff_failed
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// The ledger (`StableSplitLedger`, as the JSON object the TS mutates)
+// ---------------------------------------------------------------------------
+
+fn strings(v: Option<&JsValue>) -> Vec<String> {
+    match v {
+        Some(JsValue::Array(items)) => items
+            .iter()
+            .filter_map(|i| i.as_str().map(str::to_string))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn ledger_obj(ledger: &mut JsValue) -> &mut JsObject {
+    match ledger {
+        JsValue::Object(o) => o,
+        _ => panic!("a split ledger is a JSON object"),
+    }
+}
+
+/// `patchEmitNames`: re-point this file's slots at the shipped names; a
+/// slot's key is every declared name, sorted and comma-joined.
+fn patch_emit_names(ledger: &mut JsObject, file: &str, by_from: &HashMap<String, String>) {
+    let order = strings(ledger.get("order"));
+    let Some(JsValue::Array(emit_names)) = ledger.get_mut("emitNames") else {
+        return;
+    };
+    for (slot, entry) in emit_names.iter_mut().enumerate() {
+        if order.get(slot).map(String::as_str) != Some(file) {
+            continue;
+        }
+        let JsValue::String(current) = entry else {
+            continue;
+        };
+        let mut changed = false;
+        let mut parts: Vec<String> = current
+            .split(',')
+            .map(|name| match by_from.get(name) {
+                Some(next) => {
+                    changed = true;
+                    next.clone()
+                }
+                None => name.to_string(),
+            })
+            .collect();
+        if changed {
+            parts.sort_by(|a, b| cmp_utf16(a, b));
+            *current = parts.join(",");
+        }
+    }
+}
+
+/// `patchNameHomes`: move each renamed name's home entries, all removals
+/// first, counts preserved.
+fn patch_name_homes(ledger: &mut JsObject, file: &str, applicable: &[&PostSplitRename]) {
+    let Some(JsValue::Object(homes)) = ledger.get_mut("nameToFiles") else {
+        return;
+    };
+    let mut to_add: Vec<(String, usize)> = Vec::new();
+    for rename in applicable {
+        let list = strings(homes.get(&rename.from_name));
+        if homes.get(&rename.from_name).is_none() {
+            continue;
+        }
+        let kept: Vec<String> = list.iter().filter(|f| *f != file).cloned().collect();
+        let removed = list.len() - kept.len();
+        if removed == 0 {
+            continue;
+        }
+        if kept.is_empty() {
+            homes.remove(&rename.from_name);
+        } else {
+            homes.insert(
+                rename.from_name.clone(),
+                JsValue::Array(kept.into_iter().map(JsValue::String).collect()),
+            );
+        }
+        match to_add.iter_mut().find(|(n, _)| *n == rename.to_name) {
+            Some((_, c)) => *c += removed,
+            None => to_add.push((rename.to_name.clone(), removed)),
+        }
+    }
+    for (to_name, count) in to_add {
+        let mut list = strings(homes.get(&to_name));
+        list.extend(std::iter::repeat_n(file.to_string(), count));
+        homes.insert(
+            to_name,
+            JsValue::Array(list.into_iter().map(JsValue::String).collect()),
+        );
+    }
+}
+
+/// `patchLedger`: only TOP-LEVEL renames describe declared statements.
+fn patch_ledger(ledger: &mut JsObject, file: &str, renames: &[PostSplitRename]) {
+    let applicable: Vec<&PostSplitRename> = renames.iter().filter(|r| r.top_level).collect();
+    if applicable.is_empty() {
+        return;
+    }
+    let by_from: HashMap<String, String> = applicable
+        .iter()
+        .map(|r| (r.from_name.clone(), r.to_name.clone()))
+        .collect();
+    patch_emit_names(ledger, file, &by_from);
+    patch_name_homes(ledger, file, &applicable);
+}
+
+/// `countStaleLedgerEntries` (a stat: must be 0).
+fn count_stale(ledger: &JsObject, file: &str, renames: &[PostSplitRename]) -> usize {
+    let top: Vec<&PostSplitRename> = renames.iter().filter(|r| r.top_level).collect();
+    let targets: HashSet<&str> = top.iter().map(|r| r.to_name.as_str()).collect();
+    let order = strings(ledger.get("order"));
+    let emit_names: Vec<Option<String>> = match ledger.get("emitNames") {
+        Some(JsValue::Array(items)) => items
+            .iter()
+            .map(|i| i.as_str().map(str::to_string))
+            .collect(),
+        _ => Vec::new(),
+    };
+    let homes = match ledger.get("nameToFiles") {
+        Some(JsValue::Object(o)) => Some(o),
+        _ => None,
+    };
+    let mut stale = 0;
+    for r in top
+        .iter()
+        .filter(|r| !targets.contains(r.from_name.as_str()))
+    {
+        if homes
+            .and_then(|h| h.get(&r.from_name))
+            .is_some_and(|v| strings(Some(v)).iter().any(|f| f == file))
+        {
+            stale += 1;
+        }
+        for (slot, entry) in emit_names.iter().enumerate() {
+            if order.get(slot).map(String::as_str) == Some(file)
+                && entry
+                    .as_deref()
+                    .is_some_and(|e| e.split(',').any(|n| n == r.from_name))
+            {
+                stale += 1;
+            }
+        }
+    }
+    stale
+}
+
+// ---------------------------------------------------------------------------
+// One file
+// ---------------------------------------------------------------------------
+
+/// `identifierTokenAt(line, col)`: the ECMAScript IdentifierName standing
+/// at UTF-16 column `col` (ID_Start/`$`/`_`, then ID_Continue/`$`/ZWNJ/ZWJ).
+/// Not ASCII-only — that read mangled `café` into `caféé` (finding #28).
+pub(crate) fn ident_at(line: &str, col: usize) -> Option<String> {
+    let units: Vec<u16> = line.encode_utf16().collect();
+    let rest = String::from_utf16_lossy(units.get(col..)?);
+    let mut chars = rest.chars();
+    let first = chars.next().filter(|&c| is_identifier_start(c))?;
+    let mut token = String::from(first);
+    token.extend(chars.take_while(|&c| is_identifier_part(c)));
+    Some(token)
+}
+
+/// `renameSubstitutionText(path, newName)`.
+pub(crate) fn substitution_text(shorthand_key: Option<&str>, new_name: &str) -> String {
+    match shorthand_key {
+        Some(key) => format!("{key}: {new_name}"),
+        None => new_name.to_string(),
+    }
+}
+
+/// Every occurrence span of a renamed binding → its final name (the
+/// `fastRenameBinding` set: declaration, identifier references, write
+/// targets), keyed by span start.
+fn renamed_occurrences(state: &RenameState, source: &str) -> HashMap<u32, String> {
+    let view = state.view();
+    let mut out = HashMap::new();
+    let mut seen = HashSet::new();
+    for applied in state.applied_renames() {
+        if !seen.insert(applied.binding) {
+            continue;
+        }
+        let b = view.binding(applied.binding);
+        let final_name = state.name_of(applied.binding).to_string();
+        let original = &source[b.id_span.start as usize..b.id_span.end as usize];
+        if original == final_name {
+            continue;
+        }
+        let spans = std::iter::once(b.id_span)
+            .chain(
+                b.refs
+                    .iter()
+                    .filter(|r| r.ty == SiteType::Identifier)
+                    .map(|r| r.span),
+            )
+            .chain(b.violation_targets.iter().flatten().copied());
+        for span in spans {
+            out.insert(span.start, final_name.clone());
+        }
+    }
+    out
+}
+
+/// `collectSubstitutions`: every Identifier node whose current name is not
+/// the token standing at its `loc` in the text.
+fn collect_substitutions(
+    semantic: &oxc_semantic::Semantic<'_>,
+    sites: &[IdentSite<'_>],
+    lines: &DiffLines<'_>,
+    renamed: &HashMap<u32, String>,
+    text_lines: &[&str],
+) -> Vec<Substitution> {
+    let mut subs = Vec::new();
+    for site in sites {
+        let (line, col) = lines.loc(site.start);
+        let Some(text) = text_lines.get(line - 1) else {
+            continue;
+        };
+        let current = match renamed.get(&site.start) {
+            Some(name) if site.resolvable() => name.as_str(),
+            _ => site.name,
+        };
+        let Some(token) = ident_at(text, col) else {
+            continue;
+        };
+        if token == current {
+            continue;
+        }
+        subs.push(Substitution {
+            line,
+            col,
+            from: token,
+            to: substitution_text(shorthand_key(semantic, site).as_deref(), current),
+        });
+    }
+    subs
+}
+
+/// `text` with every identifier position of every binding `state`
+/// renamed rewritten to its final name (shorthand-aware), never
+/// re-generated — the ONE text-rewrite owner of a per-file rename pass:
+/// this reconcile and the per-file library-import names
+/// (`finish::library_names`). The caller proves the result is the same
+/// program (`file_signature`).
+pub(crate) fn rewrite_renamed_text(
+    semantic: &oxc_semantic::Semantic<'_>,
+    state: &RenameState,
+    text: &str,
+    lines: &DiffLines<'_>,
+) -> String {
+    let renamed = renamed_occurrences(state, text);
+    let text_lines: Vec<&str> = text.split('\n').collect();
+    let sites = identifier_sites(semantic, state);
+    let subs = collect_substitutions(semantic, &sites, lines, &renamed, &text_lines);
+    let owned: Vec<String> = text_lines.iter().map(|l| l.to_string()).collect();
+    apply_substitutions(&owned, &subs)
+}
+
+/// Names a binding pattern declares (`getBindingIdentifiers` over
+/// `id`/`params`/`left`/`elements`/`properties`/`value`/`argument`).
+fn pattern_names(p: &BindingPattern<'_>, out: &mut HashSet<String>) {
+    match p {
+        BindingPattern::BindingIdentifier(id) => {
+            out.insert(id.name.to_string());
+        }
+        BindingPattern::AssignmentPattern(ap) => pattern_names(&ap.left, out),
+        BindingPattern::ObjectPattern(op) => {
+            for prop in &op.properties {
+                pattern_names(&prop.value, out);
+            }
+            if let Some(rest) = &op.rest {
+                pattern_names(&rest.argument, out);
+            }
+        }
+        BindingPattern::ArrayPattern(ap) => {
+            for el in ap.elements.iter().flatten() {
+                pattern_names(el, out);
+            }
+            if let Some(rest) = &ap.rest {
+                pattern_names(&rest.argument, out);
+            }
+        }
+    }
+}
+
+/// `topLevelNames(ast)`: `t.getBindingIdentifiers` of each top-level
+/// statement — a function declaration's PARAMS included (Babel's keys
+/// table walks `params`), and a label.
+fn top_level_names(program: &Program<'_>) -> HashSet<String> {
+    let mut out = HashSet::new();
+    for stmt in &program.body {
+        match stmt {
+            Statement::VariableDeclaration(d) => {
+                for decl in &d.declarations {
+                    pattern_names(&decl.id, &mut out);
+                }
+            }
+            Statement::FunctionDeclaration(f) => {
+                if let Some(id) = &f.id {
+                    out.insert(id.name.to_string());
+                }
+                for p in &f.params.items {
+                    pattern_names(&p.pattern, &mut out);
+                }
+                if let Some(rest) = &f.params.rest {
+                    pattern_names(&rest.rest.argument, &mut out);
+                }
+            }
+            Statement::ClassDeclaration(c) => {
+                if let Some(id) = &c.id {
+                    out.insert(id.name.to_string());
+                }
+            }
+            Statement::LabeledStatement(l) => {
+                out.insert(l.label.name.to_string());
+            }
+            Statement::ForInStatement(f) => left_names(&f.left, &mut out),
+            Statement::ForOfStatement(f) => left_names(&f.left, &mut out),
+            _ => {}
+        }
+    }
+    out
+}
+
+fn left_names(left: &ForStatementLeft<'_>, out: &mut HashSet<String>) {
+    match left {
+        ForStatementLeft::VariableDeclaration(d) => {
+            for decl in &d.declarations {
+                pattern_names(&decl.id, out);
+            }
+        }
+        other => target_names(other.to_assignment_target(), out),
+    }
+}
+
+fn target_names(t: &oxc_ast::ast::AssignmentTarget<'_>, out: &mut HashSet<String>) {
+    use oxc_ast::ast::{AssignmentTarget, AssignmentTargetMaybeDefault, AssignmentTargetProperty};
+    let maybe = |m: &AssignmentTargetMaybeDefault<'_>, out: &mut HashSet<String>| match m {
+        AssignmentTargetMaybeDefault::AssignmentTargetWithDefault(d) => {
+            target_names(&d.binding, out)
+        }
+        other => target_names(other.to_assignment_target(), out),
+    };
+    match t {
+        AssignmentTarget::AssignmentTargetIdentifier(id) => {
+            out.insert(id.name.to_string());
+        }
+        AssignmentTarget::ArrayAssignmentTarget(a) => {
+            for el in a.elements.iter().flatten() {
+                maybe(el, out);
+            }
+            if let Some(rest) = &a.rest {
+                target_names(&rest.target, out);
+            }
+        }
+        AssignmentTarget::ObjectAssignmentTarget(o) => {
+            for prop in &o.properties {
+                match prop {
+                    AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(p) => {
+                        out.insert(p.binding.name.to_string());
+                    }
+                    AssignmentTargetProperty::AssignmentTargetPropertyProperty(p) => {
+                        maybe(&p.binding, out)
+                    }
+                }
+            }
+            if let Some(rest) = &o.rest {
+                target_names(&rest.target, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// One binding declaration: (top-level statement index, name, start, line).
+struct Decl {
+    stmt: usize,
+    name: String,
+    start: u32,
+    line: usize,
+}
+
+/// The statement index holding `pos` (spans inclusive at both ends, as
+/// `statementOf`'s binary search).
+pub(crate) fn statement_of(spans: &[(u32, u32)], pos: u32) -> Option<usize> {
+    let (mut lo, mut hi) = (0i64, spans.len() as i64 - 1);
+    while lo <= hi {
+        let mid = ((lo + hi) >> 1) as usize;
+        if pos < spans[mid].0 {
+            hi = mid as i64 - 1;
+        } else if pos > spans[mid].1 {
+            lo = mid as i64 + 1;
+        } else {
+            return Some(mid);
+        }
+    }
+    None
+}
+
+/// `declarationIndex(ast)`: every binding declaration, scopes in
+/// traversal order, each scope's bindings in `Object.keys` order.
+fn declaration_index(
+    view: &BabelScopes,
+    program: &Program<'_>,
+    lines: &DiffLines<'_>,
+) -> Vec<Decl> {
+    let spans: Vec<(u32, u32)> = program
+        .body
+        .iter()
+        .map(|s| (s.span().start, s.span().end))
+        .collect();
+    let mut out = Vec::new();
+    for (si, map) in view.initial_maps.iter().enumerate() {
+        for (name, binding) in map {
+            let b = view.binding(*binding);
+            if b.owner.0 as usize != si {
+                continue;
+            }
+            let start = b.id_span.start;
+            if let Some(stmt) = statement_of(&spans, start) {
+                out.push(Decl {
+                    stmt,
+                    name: name.clone(),
+                    start,
+                    line: lines.line(start),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// One parse of a file for [`locate_renames`]: its declarations.
+struct DeclSide<'s, 'a> {
+    view: &'s BabelScopes,
+    program: &'s Program<'a>,
+    lines: &'s DiffLines<'s>,
+}
+
+/// `locateRenames`: each rename's (bodyOrdinal, nameOrdinal) against the
+/// file's ledger statements (the LAST `ledger_statements` of the body).
+///
+/// The bundle carry looks the binding up among the BUNDLE statement's
+/// declarations named `from_name` — and the bundle still holds the FRESH
+/// names. So the nameOrdinal is counted in the fresh parse: the renamed
+/// declaration is found in the rewritten parse (by its new name and line)
+/// and mapped to the fresh parse by its rank in source order (a rename
+/// never adds, drops or reorders a declaration). Counting in the rewritten
+/// file instead mis-carried a chain (finding #31): after X `a`→`b`,
+/// Y `b`→`c` read as the 2nd `b` of the statement, which in the bundle is
+/// a third binding W.
+fn locate_renames(
+    fresh: &DeclSide<'_, '_>,
+    rewritten: &DeclSide<'_, '_>,
+    renames: &mut [PostSplitRename],
+    decl_lines: &[usize],
+    ledger_statements: usize,
+) {
+    let Some(header) = rewritten.program.body.len().checked_sub(ledger_statements) else {
+        return;
+    };
+    let by_start = |side: &DeclSide<'_, '_>| {
+        let mut decls = declaration_index(side.view, side.program, side.lines);
+        decls.sort_by_key(|d| d.start);
+        decls
+    };
+    let re_decls = by_start(rewritten);
+    let fresh_decls = by_start(fresh);
+    if re_decls.len() != fresh_decls.len() {
+        return; // not the same program: abstain (no locator)
+    }
+    for (i, rename) in renames.iter_mut().enumerate() {
+        let Some(rank) = re_decls
+            .iter()
+            .position(|d| d.name == rename.to_name && d.line == decl_lines[i] && d.stmt >= header)
+        else {
+            continue;
+        };
+        let me = &fresh_decls[rank];
+        if me.name != rename.from_name || me.stmt != re_decls[rank].stmt {
+            continue;
+        }
+        let name_ordinal = fresh_decls[..rank]
+            .iter()
+            .filter(|d| d.stmt == me.stmt && d.name == rename.from_name)
+            .count();
+        rename.locator = Some((me.stmt - header, name_ordinal));
+    }
+}
+
+/// What one file's reconciliation did (`FileOutcome`).
+#[derive(Default)]
+struct FileOutcome {
+    text: Option<String>,
+    renames: Vec<PostSplitRename>,
+    corpus_gated: bool,
+    discarded: bool,
+    /// The `diff` subprocess failed (never a parse discard).
+    diff_failed: Option<String>,
+}
+
+fn discarded() -> FileOutcome {
+    FileOutcome {
+        discarded: true,
+        ..FileOutcome::default()
+    }
+}
+
+/// One file's reconcile as PURE per-file work (the rayon item): the
+/// outcome plus the trail rows and claim counters the pass recorded
+/// while it ran. Plain data only — the oxc nodes it parsed stay on the
+/// worker (they are not `Sync`); [`post_split_reconcile`] re-joins these
+/// in ledger file order.
+#[derive(Default)]
+struct FileWork {
+    outcome: FileOutcome,
+    trail: Option<crate::naming::report::diagnostics::ExtraText>,
+    claims: crate::rename::validated::RenameClaimStats,
+}
+
+impl FileWork {
+    /// A pre-compute failure (`FileOutcome::discarded`, nothing
+    /// recorded) — the Err the TS's caller swallowed into a discard.
+    fn failed() -> FileWork {
+        FileWork {
+            outcome: discarded(),
+            trail: None,
+            claims: crate::rename::validated::RenameClaimStats::default(),
+        }
+    }
+
+    /// The `diff` itself failed: counted and warned on its own (audit R3).
+    fn diff_failed(error: String) -> FileWork {
+        FileWork {
+            outcome: FileOutcome {
+                diff_failed: Some(error),
+                ..FileOutcome::default()
+            },
+            ..FileWork::default()
+        }
+    }
+}
+
+/// `reconcileOneFile`. Infallible: any failure is a discard of this
+/// file, never a failed run — and what the pass already recorded (the
+/// trail rows, the claim counters) stays recorded wherever the file
+/// lands, exactly as when these were pushed into the shared result
+/// before the failure.
+fn reconcile_one_file(
+    file: &str,
+    fresh: &str,
+    prior: &str,
+    eligible: &Eligibility,
+    profile: NameProfile,
+    ledger_statements: usize,
+    differ: &Differ,
+) -> FileWork {
+    let diff_text = match differ(prior, fresh) {
+        Ok(text) => text,
+        Err(error) => return FileWork::diff_failed(error),
+    };
+    if diff_text.is_empty() {
+        return FileWork::default();
+    }
+    let allocator = Allocator::default();
+    let Ok(ingest) = parse_or_err(&allocator, fresh) else {
+        return FileWork::failed();
+    };
+    let Some(baseline) = file_signature(fresh) else {
+        return FileWork::failed();
+    };
+    let lines = DiffLines::new(fresh);
+    let mut state = RenameState::with_trail(
+        ingest.semantic(),
+        Anchor::Generated,
+        crate::trail::StrategyTrail::enabled(),
+        profile,
+    );
+    let prior_names = collect_word_tokens(prior);
+    let opts = ReconcileOptions {
+        apply: true,
+        descriptive_tier: true,
+        max_hunk_lines: 10,
+        mixed_hunk_tier: true,
+        prior_line_count: Some(prior.split('\n').count()),
+        consumer_tier: true,
+        prior_names: Some(prior_names),
+        last_resort_tier: true,
+        skip_import_declarations: true,
+        skeleton_vote_tier: true,
+    };
+    let result = reconcile_diff_noise(ingest.semantic(), &mut state, &diff_text, eligible, &opts);
+    // Recorded as the pass ran — whatever the file's fate below.
+    let rows = state.trail().entries().to_vec();
+    let trail = (!rows.is_empty()).then(|| crate::naming::report::diagnostics::ExtraText {
+        file: file.to_string(),
+        text: fresh.to_string(),
+        rows,
+    });
+    let claims = state.claim_stats();
+    let finish = |outcome| FileWork {
+        outcome,
+        trail,
+        claims,
+    };
+    if result.prior_too_dissimilar {
+        return finish(FileOutcome {
+            corpus_gated: true,
+            ..FileOutcome::default()
+        });
+    }
+    if result.renames.is_empty() {
+        return finish(FileOutcome::default());
+    }
+    let rewritten = rewrite_renamed_text(ingest.semantic(), &state, fresh, &lines);
+    // The saving is only real if the rewritten TEXT is the same program.
+    if file_signature(&rewritten).as_deref() != Some(baseline.as_str()) {
+        return finish(discarded());
+    }
+    let re_alloc = Allocator::default();
+    let Ok(reparsed) = parse_or_err(&re_alloc, &rewritten) else {
+        return finish(discarded());
+    };
+    let declared = top_level_names(reparsed.program);
+    let mut renames: Vec<PostSplitRename> = result
+        .renames
+        .iter()
+        .map(|r| PostSplitRename {
+            file: file.to_string(),
+            from_name: r.from_name.clone(),
+            to_name: r.to_name.clone(),
+            kind: r.kind.as_str(),
+            votes: r.votes,
+            top_level: declared.contains(&r.to_name),
+            locator: None,
+        })
+        .collect();
+    let decl_lines: Vec<usize> = result.renames.iter().map(|r| r.decl_line).collect();
+    let re_lines = DiffLines::new(&rewritten);
+    let re_view = BabelScopes::build(reparsed.semantic());
+    let fresh_view = BabelScopes::build(ingest.semantic());
+    locate_renames(
+        &DeclSide {
+            view: &fresh_view,
+            program: ingest.program,
+            lines: &lines,
+        },
+        &DeclSide {
+            view: &re_view,
+            program: reparsed.program,
+            lines: &re_lines,
+        },
+        &mut renames,
+        &decl_lines,
+        ledger_statements,
+    );
+    finish(FileOutcome {
+        text: Some(rewritten),
+        renames,
+        corpus_gated: false,
+        discarded: false,
+        diff_failed: None,
+    })
+}
+
+/// What the pass is given (`PostSplitReconcileInput`). The read closures
+/// run on the rayon pool's workers (the per-file reads), so they must be
+/// `Sync` — they are shared, immutable-side reads of the two trees.
+pub struct PostSplitInput<'i> {
+    /// The split ledger (patched in place).
+    pub ledger: &'i mut JsValue,
+    pub read_fresh: &'i (dyn Fn(&str) -> Option<String> + Sync),
+    pub read_prior: &'i (dyn Fn(&str) -> Option<String> + Sync),
+    pub eligible: &'i Eligibility,
+    /// The run's minifier name profile (the reconcile gate's half-mint
+    /// check, the carried rule).
+    pub name_profile: NameProfile,
+    /// `--disable post-split-reconcile`.
+    pub disabled: bool,
+}
+
+/// `postSplitReconcile(input)`: the per-file read+compute is a PURE
+/// per-file map (see the module docs) so it runs on the rayon pool in
+/// [`crate::par::map_ordered`]'s input-order pattern — plain data out,
+/// results back in ledger order — and the cross-file half (the ledger
+/// patches, the stale counts, the trail, the claim totals, the changed
+/// list, the renames) is re-joined serially below in that same order,
+/// the exact order the TS iterated.
+pub fn post_split_reconcile(input: PostSplitInput<'_>) -> PostSplitResult {
+    post_split_reconcile_with(input, &compute_normal_diff)
+}
+
+/// How a file pair is diffed: the system `diff` in production
+/// ([`compute_normal_diff`]); a test hands in a failing one.
+type Differ = dyn Fn(&str, &str) -> Result<String, String> + Sync;
+
+fn post_split_reconcile_with(input: PostSplitInput<'_>, differ: &Differ) -> PostSplitResult {
+    let mut result = PostSplitResult::default();
+    if input.disabled {
+        return result;
+    }
+    let PostSplitInput {
+        ledger,
+        read_fresh,
+        read_prior,
+        eligible,
+        name_profile,
+        disabled: _,
+    } = input;
+    let ledger = ledger_obj(ledger);
+    let mut ledger_statements: HashMap<String, usize> = HashMap::new();
+    for f in strings(ledger.get("order")) {
+        *ledger_statements.entry(f).or_insert(0) += 1;
+    }
+    let files = strings(ledger.get("files"));
+    let works: Vec<Option<FileWork>> = crate::par::map_ordered(&files, |file| {
+        // The reads run on the worker: both trees are immutable here and
+        // a file's texts are its per-item input.
+        let (Some(fresh), Some(prior)) = ((read_fresh)(file), (read_prior)(file)) else {
+            return None;
+        };
+        let statements = ledger_statements.get(file).copied().unwrap_or(0);
+        Some(reconcile_one_file(
+            file,
+            &fresh,
+            &prior,
+            eligible,
+            name_profile,
+            statements,
+            differ,
+        ))
+    });
+    for (file, work) in files.iter().zip(works) {
+        let Some(work) = work else {
+            continue;
+        };
+        result.stats.considered += 1;
+        if work.outcome.corpus_gated {
+            result.stats.corpus_gated += 1;
+        }
+        if work.outcome.discarded {
+            result.stats.discarded += 1;
+        }
+        if let Some(error) = work.outcome.diff_failed {
+            result.stats.diff_failed += 1;
+            result
+                .first_diff_failure
+                .get_or_insert_with(|| (file.clone(), error));
+        }
+        if let Some(trail) = work.trail {
+            result.trail.push(trail);
+        }
+        crate::naming::driver::add_claims(&mut result.claims, &work.claims);
+        let Some(text) = work.outcome.text else {
+            continue;
+        };
+        let renames = work.outcome.renames;
+        result.changed.push((file.clone(), text));
+        result.stats.changed += 1;
+        patch_ledger(ledger, file, &renames);
+        result.stats.incoherent += count_stale(ledger, file, &renames);
+        result.renames.extend(renames);
+    }
+    result
+}
+
+#[cfg(test)]
+mod reconcile_test;

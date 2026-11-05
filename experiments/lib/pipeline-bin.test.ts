@@ -34,7 +34,7 @@ describe("pipeline-bin: which binary scored a label", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-bin-"));
     try {
       fs.writeFileSync(path.join(root, "Cargo.toml"), "[workspace]\n");
-      const bin = path.join(root, "target/release/humanify");
+      const bin = path.join(root, "target/release/humanify-ag");
       fs.mkdirSync(path.dirname(bin), { recursive: true });
       fs.writeFileSync(bin, "");
       assert.strictEqual(workspaceRootOf(bin), root);

@@ -24,7 +24,9 @@ All other stages are pass/fail. `check:all` and `test` are aliases of it. Nothin
 outside it.
 
 **The pipeline is the Rust binary** (`crates/`, built as
-`target/release/humanify`). The TypeScript pipeline (`src/`) was deleted at the
+`target/release/humanify-ag` — the one product command since exp186, with
+the offline index builder as its `index` subcommand: `humanify-ag index
+build --spec …`). The TypeScript pipeline (`src/`) was deleted at the
 cutover, 2026-09-26 — `docs/rust-port/19-cutover.md` is the ledger of what was
 deleted, moved or retired and why; tag `m4` is the last tree that has it. The
 TS that remains is the measurement harness (`scripts/`, `experiments/lib/`,
@@ -74,7 +76,7 @@ npm run knip:prod          # production-only dead code audit
 npm run census:clones      # cross-file twin functions vs allowlist (--loose = review sweep)
 npm run census:concurrency # concurrency sites in crates/ vs scripts/concurrency-allowlist.json
 cargo test --workspace     # rust:unit
-cargo build --release --locked -p humanify-cli   # rust:build
+cargo build --release --locked -p humanify-ag-cli   # rust:build
 scripts/format-golden.sh   # rust:format-golden (needs rust:build)
 npm run test:e2e           # e2e (needs rust:build)
 ```
@@ -198,7 +200,7 @@ eval) has OOM-killed a rebase before and silently degraded a label to the
 archive prior (`ts-control-fec64e5` r1; check eval logs for "rebase FAILED").
 
 **What the eval scores: the Rust binary, always.** `npm run eval -- score
-<label>` BUILDS `target/release/humanify` (`cargo build --release --locked`)
+<label>` BUILDS `target/release/humanify-ag` (`cargo build --release --locked`)
 and runs it at all three launch sites: the rebase, the scored leg and the
 self-hop. `--bin <path>` names a different binary (in some cargo workspace's
 `target/`). There is no TS mode — the cutover removed it, and a run config
@@ -450,7 +452,7 @@ Never skip the red step. If the test passes before implementation, the test is n
 - **[`docs/responsibility.md`](./docs/responsibility.md) says who owns which question** — name legality, applying a rename, counting changed lines, walking a tree, reading a ledger, reading a kill switch. Check it before writing a helper, and add a row when you create an owner. The dangerous duplication is not two functions that look alike; it is two that answer the same question DIFFERENTLY with nothing declaring the difference (a guard that read fields one producer never sets was dead for 11,094 accepts and reported as perfect precision).
 - **[`docs/pipeline-stages.md`](./docs/pipeline-stages.md) lists the twelve stages that actually run** (Rust modules since the cutover), in order, and which two have a real strategy registry (unpack, library detection). Read it before assuming a plug point exists: the working mental model was four stages, and the eight unwritten ones are where the noise has come from — `vendor/` went unscored for thirteen experiments at 2.4x the measured `src/` noise. Splitting has ONE path (`stableSplitFromCode`; prior → inherit layout, no prior → fresh grouping): the standalone `split` command, its adapter registry, and the legacy clustering splitter that backed them were deleted 2026-08-11/12 after an execution census measured them at zero runs.
 - **Configuration: every key is a flag.** Add a setting by adding a key to the
-  registry (`crates/humanify-cli/src/config/keys.rs`), never a hand-written
+  registry (`crates/humanify-ag-cli/src/config/keys.rs`), never a hand-written
   flag; the flag, the config-file key, the help text and
   `humanify.example.toml` are all generated from it, and a flag and a config
   value that disagree fail.

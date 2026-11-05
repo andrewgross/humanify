@@ -13,16 +13,16 @@ the current TS pipeline are cited; everything about the binary is design.
 
 ## 1. Building
 
-One workspace, five crates — `humanify-model`, `humanify-core`, `humanify-llm`,
-`humanify-cli`, `humanify-parity` (`02-rust-target-architecture.md` section 2;
+One workspace, five crates — `humanify-ag-model`, `humanify-ag-core`, `humanify-ag-llm`,
+`humanify-ag-cli`, `humanify-parity` (`02-rust-target-architecture.md` section 2;
 amended 2026-09-19: was "three crates"; 02 §2 and 05 §1 win). The
-binary is named `humanify`, built from `humanify-cli`.
+binary is named `humanify`, built from `humanify-ag-cli`.
 
-| profile   | command                           | binary path                 | use                                                                       |
-| --------- | --------------------------------- | --------------------------- | ------------------------------------------------------------------------- |
-| dev       | `cargo build`                     | `target/debug/humanify`     | iteration, unit tests, parity-gate debugging                              |
-| release   | `cargo build --release`           | `target/release/humanify`   | **everything measured or harness-driven**                                 |
-| profiling | `cargo build --profile profiling` | `target/profiling/humanify` | release speed plus debug symbols, for samply / perf / Instruments (05 §6) |
+| profile   | command                           | binary path                  | use                                                                       |
+| --------- | --------------------------------- | ---------------------------- | ------------------------------------------------------------------------- |
+| dev       | `cargo build`                     | `target/debug/humanify`      | iteration, unit tests, parity-gate debugging                              |
+| release   | `cargo build --release`           | `target/release/humanify-ag` | **everything measured or harness-driven**                                 |
+| profiling | `cargo build --profile profiling` | `target/profiling/humanify`  | release speed plus debug symbols, for samply / perf / Instruments (05 §6) |
 
 _amended 2026-09-19: `profiling` row added; the release profile ships without debug symbols — 05 §6 wins._
 
@@ -33,7 +33,7 @@ debug symbols; the separate `profiling` profile (inherits release, `debug =
 true`, `05-rust-toolchain.md` §6) keeps line tables so backtraces and perf
 profiles resolve to source (amended 2026-09-19: was "`[profile.release]
 debug = 1`"; 05 §6 wins).
-`cargo run -p humanify-cli -- <args>` is fine for dev invocations; the
+`cargo run -p humanify-ag-cli -- <args>` is fine for dev invocations; the
 harness always gets a built path. `rust-toolchain.toml` pins the compiler so
 the laptop and devcontainer build identically.
 
@@ -354,7 +354,7 @@ this adds why the COUNT is load-bearing).
 Fresh bundle, local vLLM endpoint (walk defaults, walk-versions.sh:22-30):
 
 ```
-target/release/humanify bundle.js --split \
+target/release/humanify-ag bundle.js --split \
   --endpoint http://<llm-host>:8000/v1 --model openai/gpt-oss-20b \
   --api-key local --reasoning-effort low -c 32 -o out/2.1.89
 ```
@@ -363,7 +363,7 @@ Cross-version hop — the prior is the previous run's
 `.humanify/humanified.js` (src/split/layout.ts:42):
 
 ```
-target/release/humanify bundle.js --split \
+target/release/humanify-ag bundle.js --split \
   --prior-version out/2.1.89/.humanify/humanified.js \
   --endpoint http://<llm-host>:8000/v1 --model openai/gpt-oss-20b \
   --api-key local --reasoning-effort low -c 32 -o out/2.1.90
@@ -406,7 +406,7 @@ Exact edit at cutover — replace the launcher, drop `NODE_OPTIONS`, keep every
 flag (all are in the compatibility table):
 
 ```
-( "$HUMANIFY/target/release/humanify" \
+( "$HUMANIFY/target/release/humanify-ag" \
     "$input" --split \
     --endpoint "$ENDPOINT" --model "$MODEL" --api-key "$APIKEY" \
     --reasoning-effort low -c "$CONCURRENCY" \
@@ -432,7 +432,7 @@ for every script above. Consequences:
 - Install `rustup` in the container; the first `cargo` invocation picks up
   `rust-toolchain.toml`. Build **inside** the container — macOS and Linux
   binaries are not interchangeable.
-- Keep the default in-repo `target/` so `$HUMANIFY/target/release/humanify`
+- Keep the default in-repo `target/` so `$HUMANIFY/target/release/humanify-ag`
   resolves identically on both machines. `target/` is per-machine output:
   exclude it from any sync between the laptop and the `/data4` canonical
   copy; each side builds its own.
@@ -536,7 +536,7 @@ $ git -C ~/Development/unpacked-claude-code diff v2.1.215..v2.1.216 -- src/
 Ask both releases why:
 
 ```
-$ target/release/humanify explain \
+$ target/release/humanify-ag explain \
     --prior ~/walk/2.1.215 --fresh ~/walk/2.1.216 \
     src/permissions/rules.js:142
 ```

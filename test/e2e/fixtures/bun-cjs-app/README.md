@@ -27,7 +27,7 @@ v1.1.0 bumps the version and changes the format module's separator.
 Bun wraps EVERY CommonJS module as `var X = __commonJS(…)`, app or
 library, and the unpack used to write every one under `vendor/`: an app
 written in CommonJS landed wholly in `vendor/`. Now
-(`crates/humanify-core/src/modules/app_factories.rs`):
+(`crates/humanify-ag-core/src/modules/app_factories.rs`):
 
 - the app text only runs `require_cli()`, so that factory is the app's
   ENTRY;

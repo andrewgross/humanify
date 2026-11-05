@@ -133,10 +133,10 @@ src/cli.ts
 
 ```typescript
 // cli.ts addition
-import { humanifyCommand } from './commands/humanify';
+import { humanifyCommand } from "./commands/humanify";
 
 program
-  .addCommand(humanifyCommand)  // New unified command
+  .addCommand(humanifyCommand) // New unified command
   // Existing commands still work
   .addCommand(localCommand)
   .addCommand(openaiCommand)
@@ -160,7 +160,7 @@ src/analysis/library-detector.ts
 # Can be added after initial release
 ```
 
-**Milestone**: `humanify` command works alongside existing commands.
+**Milestone**: `humanify-ag` command works alongside existing commands.
 
 ### Phase 4: Deprecation (Week 4-5)
 
@@ -170,17 +170,19 @@ Deprecate old commands, migrate users.
 
 ```typescript
 // src/commands/openai.ts
-export const openaiCommand = new Command('openai')
-  .description('DEPRECATED: Use "humanify --endpoint https://api.openai.com/v1" instead')
+export const openaiCommand = new Command("openai")
+  .description(
+    'DEPRECATED: Use "humanify --endpoint https://api.openai.com/v1" instead'
+  )
   .action(async (filename, options) => {
     console.warn(
       chalk.yellow('Warning: "humanify openai" is deprecated. ') +
-      'Use "humanify" with --endpoint instead.\n' +
-      'See: humanify --help\n'
+        'Use "humanify" with --endpoint instead.\n' +
+        "See: humanify --help\n"
     );
     // Still works, calls new implementation under the hood
     await runHumanify(filename, {
-      endpoint: 'https://api.openai.com/v1',
+      endpoint: "https://api.openai.com/v1",
       ...options
     });
   });
@@ -227,28 +229,28 @@ rm src/plugins/gemini-rename.ts
 
 ### Files to Keep (Refactor)
 
-| File | Changes |
-|------|---------|
-| `src/index.ts` | Minor CLI entry changes |
-| `src/cli.ts` | Add new commands, deprecate old |
+| File                         | Changes                          |
+| ---------------------------- | -------------------------------- |
+| `src/index.ts`               | Minor CLI entry changes          |
+| `src/cli.ts`                 | Add new commands, deprecate old  |
 | `src/plugins/babel/babel.ts` | Keep as-is, used by new pipeline |
-| `src/plugins/prettier.ts` | Keep as-is |
-| `src/plugins/webcrack.ts` | Keep as-is |
-| `src/local-models.ts` | Keep for `--local` support |
-| `src/progress.ts` | Refactor for new progress model |
+| `src/plugins/prettier.ts`    | Keep as-is                       |
+| `src/plugins/webcrack.ts`    | Keep as-is                       |
+| `src/local-models.ts`        | Keep for `--local` support       |
+| `src/progress.ts`            | Refactor for new progress model  |
 
 ### Files to Replace
 
-| Old File | New File(s) |
-|----------|-------------|
-| `src/unminify.ts` | `src/pipeline/index.ts` |
+| Old File                                                | New File(s)                                                 |
+| ------------------------------------------------------- | ----------------------------------------------------------- |
+| `src/unminify.ts`                                       | `src/pipeline/index.ts`                                     |
 | `src/plugins/local-llm-rename/visit-all-identifiers.ts` | `src/rename/processor.ts`, `src/analysis/function-graph.ts` |
-| `src/plugins/local-llm-rename/llama.ts` | `src/llm/local-llama.ts` |
-| `src/plugins/openai/openai-rename.ts` | `src/llm/openai-compatible.ts` |
-| `src/plugins/gemini-rename.ts` | (Use OpenAI-compatible with Gemini endpoint) |
-| `src/commands/local.ts` | `src/commands/humanify.ts` |
-| `src/commands/openai.ts` | `src/commands/humanify.ts` |
-| `src/commands/gemini.ts` | `src/commands/humanify.ts` |
+| `src/plugins/local-llm-rename/llama.ts`                 | `src/llm/local-llama.ts`                                    |
+| `src/plugins/openai/openai-rename.ts`                   | `src/llm/openai-compatible.ts`                              |
+| `src/plugins/gemini-rename.ts`                          | (Use OpenAI-compatible with Gemini endpoint)                |
+| `src/commands/local.ts`                                 | `src/commands/humanify.ts`                                  |
+| `src/commands/openai.ts`                                | `src/commands/humanify.ts`                                  |
+| `src/commands/gemini.ts`                                | `src/commands/humanify.ts`                                  |
 
 ### New Files
 
@@ -314,8 +316,8 @@ Ensure new implementation produces same/better results:
 
 ```typescript
 // Compare old vs new implementation
-describe('regression', () => {
-  const testCases = loadTestCases('./fixtures/');
+describe("regression", () => {
+  const testCases = loadTestCases("./fixtures/");
 
   for (const tc of testCases) {
     it(`should handle ${tc.name}`, async () => {
@@ -323,7 +325,9 @@ describe('regression', () => {
       const newResult = await newImplementation(tc.input);
 
       // New should be at least as good
-      expect(newResult.renamedCount).toBeGreaterThanOrEqual(oldResult.renamedCount);
+      expect(newResult.renamedCount).toBeGreaterThanOrEqual(
+        oldResult.renamedCount
+      );
 
       // No underscore spam
       expect(newResult.code).not.toMatch(/_{3,}/);
@@ -343,30 +347,35 @@ src/test/e2e/cli.test.ts
 
 If issues arise after v2.0.0 release:
 
-1. **Old commands still work** - Users can use `humanify openai` instead of new `humanify`
+1. **Old commands still work** - Users can use `humanify-ag openai` instead of new `humanify-ag`
 2. **Feature flag** - Add `--legacy` flag to force old implementation
 3. **Quick patch** - Can release v2.0.1 with fixes without full rollback
 
 ## Success Criteria
 
 ### Phase 1
+
 - [ ] All new modules have >80% test coverage
 - [ ] No changes to existing functionality
 
 ### Phase 2
+
 - [ ] New pipeline processes test fixtures correctly
 - [ ] Performance is equal or better than current
 
 ### Phase 3
-- [ ] `humanify` command works for all provider types
+
+- [ ] `humanify-ag` command works for all provider types
 - [ ] Source maps validate correctly
 - [ ] Cache hits work across runs
 
 ### Phase 4
+
 - [ ] Deprecation warnings appear for old commands
 - [ ] Documentation updated
 - [ ] v2.0.0 released
 
 ### Phase 5 (Future)
+
 - [ ] Old code removed
 - [ ] v3.0.0 released

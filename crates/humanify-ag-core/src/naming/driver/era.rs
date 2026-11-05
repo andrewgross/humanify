@@ -1,0 +1,1379 @@
+//! The naming ERA of the driver — everything `createRenamePlugin` does on
+//! the fresh AST before it is released (plugin.ts, parse → generate):
+//! the pre-naming freezes, the prior-version transfer (when a prior is
+//! given), the LLM waves, the library-prefix pass, the naming floor (and
+//! the pre-generate coverage sweep when it is not deferred), the
+//! structural invariant, and `generate`. Two entry points, one body:
+//!
+//! - [`prior_era`] inside `match_prior_version`'s stage (the phase-3
+//!   transfer stage then the waves over the TWO scope epochs the prior
+//!   match's cache clear leaves — lesson 18);
+//! - [`fresh_era`] for a first version: no match, no transfer, and ONE
+//!   scope epoch (`clearBabelCacheAfterPriorMatch` is gated on a prior).
+//!
+//! Everything the era hands on is OWNED ([`NamingEra`]): the ASTs die with
+//! it, as the TS releases the naming-era AST before the post-generate
+//! passes re-parse their own texts.
+
+use std::collections::HashMap;
+
+use humanify_ag_model::llm::{CacheKeyParams, NameProvider, StrMap};
+use oxc_allocator::Allocator;
+use serde_json::Value;
+
+use super::library::{LibraryOutcome, run_library_prefix_pass};
+use crate::artifact_dump::DispatchLog;
+use crate::graph::UnifiedGraph;
+use crate::libdetect::function_carry::{
+    LibraryClassification, LibraryFunctionKey, classify_library_functions, library_function_rows,
+};
+use crate::matching::cascade::ResolutionStats;
+use crate::modules::soundness::collect_eval_with_taint;
+use crate::naming::passes::floor_passes::{derive_expression_inner_names, retry_decorated_names};
+use crate::naming::passes::sweep::{SweepResult, sweep_minted_names};
+use crate::naming::report::ProcessorReport;
+use crate::naming::waves::generate::TextView;
+use crate::naming::waves::graph_ext::{NamingGraph, build_naming_graph};
+use crate::naming::waves::nodes::FnNode;
+use crate::naming::waves::processor::{
+    CloseContext, DispatchRecord, NameRecord, WaveGauges, WaveInputs, WaveOutcome, run_waves,
+};
+use crate::naming::waves::render::{
+    FnPrinter, Occurrences, private_rename_edits, program_edits, render_program_with,
+    span_in_generated_text,
+};
+use crate::prior::MatchStage;
+use crate::rename::eligibility::Eligibility;
+use crate::rename::transfer::carry::{MatcherCarry, PriorCarry, build_prior_match_map};
+use crate::rename::transfer::rows::Rows;
+use crate::rename::transfer::{PreFreeze, PriorCounts, TransferStats, pre_transfer_states};
+use crate::rename::validated::{RenameClaimStats, RenameState};
+use crate::trail::{Anchor, StrategyTrail};
+use crate::twins::gates::PrivateRenameSet;
+
+/// What the era is asked to do (the plugin options it reads).
+pub struct EraOptions<'o> {
+    /// `NamingConfig::never_rename`.
+    pub never_rename: crate::rename::eligibility::NeverRename,
+    /// `NamingConfig::module_group_size`.
+    pub module_group_size: usize,
+    /// `NamingConfig::layout`.
+    pub layout: crate::toolchain::BundleLayout,
+    /// `NamingConfig::module_wrappers`.
+    pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
+    /// `NamingConfig::name_profile`.
+    pub name_profile: crate::rename::name_profile::NameProfile,
+    pub params: &'o CacheKeyParams,
+    /// `namingFloor`.
+    pub naming_floor: bool,
+    /// `namingFloorSweep && !isSweepDeferred`: the sweep runs pre-generate.
+    pub pre_generate_sweep: bool,
+    /// `skipLibraries` (default true) and the file's library
+    /// classification (None = no banner regions).
+    pub skip_libraries: bool,
+    pub library: Option<&'o LibraryClassification>,
+    /// `emitRenameLedger`: derive the ledger's base stage from the
+    /// naming-era renames before `generate`.
+    pub rename_ledger: bool,
+    /// `--dump-artifacts`: take the [`EraCapture`].
+    pub capture: bool,
+    /// The waves' tunables (`--batch-size` …).
+    pub tunables: crate::naming::waves::batch::WaveTunables,
+    /// `--probe shingle-probe`: the close pairs' shingle census lines.
+    pub shingle_probe: bool,
+    /// The naming schedule (the relaxed tier by default; `--sequential`
+    /// the conservative one — see `NamingConfig::fast`).
+    pub fast: crate::fast::FastTier,
+    /// The rendered-prompt window (finding #65; `NamingConfig::prompt_window`).
+    pub prompt_window: usize,
+    /// `NamingConfig::module_naming`.
+    pub module_naming: Option<crate::place::assign::namer::SplitNamerBudget>,
+    /// The names mode's claimed placement groups by raw span (empty when
+    /// the mode is off), converted onto this era's statements through
+    /// `era_bridge`. Read BEFORE the freeze: the layout it plans feeds the
+    /// split's vendor paths and the restored-binding holds.
+    pub claimed_regions: &'o [crate::naming::module_names::ClaimedRegion],
+    /// The raw-to-era bridge (exp166) for this file, names mode only.
+    pub era_bridge: Option<crate::naming::driver::EraBridgeInput<'o>>,
+    /// The claimed units' captured restoration answers (exp160,
+    /// [`crate::libindex::table::RestorationRow`]), keyed by unit print
+    /// hash — empty in every other mode, and empty for an index without
+    /// names tables.
+    pub restorations:
+        &'o std::collections::BTreeMap<String, crate::libindex::table::RestorationRow>,
+    /// Per top-level statement of a text with no raw-to-era bridge, the
+    /// names the index already restored there (exp169: the vendored
+    /// factory bodies, one statement per body) — held by the same rule
+    /// as the bridge's restorations. Empty everywhere else.
+    pub statement_holds: &'o [std::collections::BTreeSet<String>],
+}
+
+/// The module step's input over a side's ESTree JSON: the wrapper body's
+/// top-level statements, else the program body.
+fn module_source_of<'j>(
+    json: &'j Value,
+    wrapper_body: Option<oxc_span::Span>,
+    text: &'j str,
+    grammar: crate::toolchain::ModuleWrapperGrammar,
+) -> Option<crate::naming::module_names::ModuleSource<'j>> {
+    let body = crate::cut::container_statement_values(json, wrapper_body)?;
+    Some(crate::naming::module_names::ModuleSource {
+        body,
+        text,
+        grammar,
+    })
+}
+
+/// The artifact dump's naming-era capture (`--dump-artifacts`) — what the
+/// TS records while the graph and the match stage are live, right after
+/// the prior-version transfer and before the first wave
+/// (`captureGraphDump`, `captureMatchDump`, `recordCloseMatches`,
+/// `recordTwinProposals`, `recordTwinGates`, `captureMechanicalBoundary`,
+/// `pushVotes`). Observation only: nothing here feeds a decision.
+#[derive(Default)]
+pub struct EraCapture {
+    /// functions.json's rows: the graph's pre-naming state, with the
+    /// function rows' `name` / `bindings[].name` read AFTER the transfer
+    /// (the TS reads the live AST's identifiers there).
+    pub functions: Vec<Value>,
+    /// partitions.json's `structuralHash` family (fresh spans).
+    pub structural_family: Vec<(oxc_span::Span, String)>,
+    /// matches / matches-close / twins / twin-gates (None without a prior).
+    pub matches: Option<crate::matching::matches_dump::MatchSections>,
+    /// transfers-mechanical.json: the trail at the mechanical boundary.
+    pub mechanical: Vec<humanify_ag_model::dump::TransferRow>,
+    /// votes.json's rows before the ladder outcome joins (the final trail).
+    pub votes: Vec<crate::rename::votes::dump::VoteDumpRow>,
+}
+
+/// The capture's graph half: the rows with the names the transfer left on
+/// each function's name binding and placeholder slots.
+fn capture_graph(graph: &UnifiedGraph, state: &RenameState) -> EraCapture {
+    use crate::graph::functions_dump::{function_rows, structural_hash_members};
+    let view = state.view();
+    let names: HashMap<(u32, u32), &str> = view
+        .bindings
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            (
+                (b.id_span.start, b.id_span.end),
+                state.name_of(crate::rename::validated::scopes::BindingId(i as u32)),
+            )
+        })
+        .collect();
+    let span_of = |v: &Value| -> Option<(u32, u32)> {
+        Some((v["start"].as_u64()? as u32, v["end"].as_u64()? as u32))
+    };
+    let mut functions = function_rows(graph);
+    for row in &mut functions {
+        if row["kind"] != "function" {
+            continue;
+        }
+        if let Some(name) = span_of(&row["nameBinding"]).and_then(|k| names.get(&k)) {
+            row["name"] = Value::from(*name);
+        }
+        if let Some(slots) = row["bindings"].as_array_mut() {
+            for slot in slots {
+                if let Some(name) = span_of(&slot["span"]).and_then(|k| names.get(&k)) {
+                    slot["name"] = Value::from(*name);
+                }
+            }
+        }
+    }
+    EraCapture {
+        functions,
+        structural_family: structural_hash_members(graph),
+        mechanical: state.trail().transfer_rows(),
+        ..EraCapture::default()
+    }
+}
+
+/// The waves' own records (the dump's prompts / keys / names).
+#[derive(Default)]
+pub struct WaveRecords {
+    pub dispatches: Vec<DispatchRecord>,
+    pub names: Vec<NameRecord>,
+    pub misses: usize,
+    pub errors: usize,
+    pub waves: u64,
+    /// [`WaveOutcome::context_set_names`].
+    pub context_set_names: usize,
+    /// [`WaveOutcome::peak_live_dispatches`] (finding #65's gauge).
+    pub peak_live_dispatches: usize,
+    /// [`WaveOutcome::peak_live_prompt_bytes`].
+    pub peak_live_prompt_bytes: u64,
+    /// [`WaveOutcome::gauges`] (finding #66's owner gauges).
+    pub gauges: WaveGauges,
+}
+
+/// `applyPriorVersionIfPresent`'s stats (stats.json / the coverage).
+#[derive(Clone, Debug, Default)]
+pub struct PriorStats {
+    pub statement_twin: TransferStats,
+    pub exact_match: TransferStats,
+    pub close_match: TransferStats,
+    pub retry: TransferStats,
+    pub counts: PriorCounts,
+    pub close_match_stats: humanify_ag_model::dump::CloseStatsRow,
+    pub resolution_stats: ResolutionStats,
+    /// None when no binding matching ran.
+    pub binding_resolution_stats: Option<ResolutionStats>,
+}
+
+/// The naming floor's counters so far (plugin.ts `NamingFloorResult`).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FloorCounts {
+    pub derived: usize,
+    pub undecorated: usize,
+    pub swept: usize,
+    pub skipped: usize,
+}
+
+/// What the era hands on.
+pub struct NamingEra {
+    /// The generated text (None when stopped after the waves).
+    pub generated: Option<String>,
+    /// The restoration's measurement evidence (exp164; diagnostics only).
+    pub era_dump: Option<crate::naming::restore::EraDump>,
+    pub trail: StrategyTrail,
+    pub claims: RenameClaimStats,
+    pub waves: WaveRecords,
+    pub processor: ProcessorReport,
+    pub library: LibraryOutcome,
+    /// The library freeze as applied (regions.json `libraryFunctions`).
+    pub library_functions: Vec<LibraryFunctionKey>,
+    pub floor: Option<FloorCounts>,
+    /// The pre-generate coverage sweep (fresh-anchored), when it ran.
+    pub pre_sweep: Option<SweepResult>,
+    /// The era state's retry-exhausted still-unrenamed names (the wave
+    /// barrier's give-ups): the deferred sweep keeps these sweep targets
+    /// by joining them by name across the text boundary.
+    pub exhausted_names: Vec<String>,
+    pub prior: Option<PriorStats>,
+    pub function_count: usize,
+    /// sessionId → the function's structural hash (the report's).
+    pub fn_hashes: Vec<(String, String)>,
+    /// What the match carried for the split (`renameResult.priorCarry`):
+    /// the prior's top-level statement texts and the binding-identity map,
+    /// built once every naming-era pass has run (None without a prior).
+    pub prior_carry: Option<PriorCarry>,
+    /// The rename ledger's base stage (`buildRenameLedger(originalCode,
+    /// ledgerBaseAst)`): every naming-era rename over the fresh text.
+    pub ledger: Option<crate::rename::validated::ledger::RenameLedger>,
+    /// The artifact dump's capture (`--dump-artifacts`).
+    pub capture: Option<EraCapture>,
+    /// `--probe shingle-probe`'s debug lines, close-pair order.
+    pub probe_lines: Vec<String>,
+    /// The fresh program's minified names an answer may not borrow
+    /// (`rename::floor::MinifiedStems`) — the deferred sweep reads a
+    /// RENAMED text, so it gets the original names from here.
+    pub stems: crate::rename::floor::MinifiedStems,
+    /// The names the pipeline chose for the bundler's plumbing
+    /// (`naming::plumbing`).
+    pub plumbing: crate::naming::plumbing::PlumbingNames,
+    /// The names the pipeline chose for library imports
+    /// (`naming::plumbing::name_library_imports`, 2026-10-06).
+    pub library_imports: crate::naming::plumbing::PlumbingNames,
+    /// The module step (`naming::module_names`).
+    pub module_names: crate::naming::module_names::ModuleNamingReport,
+    /// What the names mode placed (`naming::module_names`, exp156): the
+    /// moved modules' vendor paths for the split, and their spans (the
+    /// freeze already applied them). Empty when nothing moved.
+    pub library_layout: crate::naming::module_names::LibraryLayout,
+}
+
+/// The match's carry before the names settle: the matcher's texts and
+/// (module row, matched prior name) per binding rename.
+struct PendingCarry {
+    matcher: MatcherCarry,
+    matched: Vec<(usize, String)>,
+}
+
+/// The naming graph's read-only inputs over the fresh text.
+struct Naming<'a, 's> {
+    view: TextView<'s>,
+    ng: NamingGraph,
+    fns: Vec<Option<FnNode>>,
+    graph: &'a UnifiedGraph,
+    semantic: &'a oxc_semantic::Semantic<'s>,
+}
+
+impl<'a, 's> Naming<'a, 's> {
+    fn build(semantic: &'a oxc_semantic::Semantic<'s>, graph: &'a UnifiedGraph) -> Self {
+        let view = TextView::build(semantic);
+        let ng = build_naming_graph(semantic, graph, &view);
+        let fns = FnPrinter::nodes(semantic, graph);
+        Naming {
+            view,
+            ng,
+            fns,
+            graph,
+            semantic,
+        }
+    }
+}
+
+/// The wave-stage state the era runs the waves over (a transfer outcome,
+/// or the bare freezes of a first version).
+struct WaveStart {
+    rename: RenameState,
+    fn_state: Vec<crate::rename::transfer::lifecycle::Lifecycle>,
+    binding_state: Vec<crate::rename::transfer::lifecycle::Lifecycle>,
+    transferred: Vec<std::collections::HashSet<String>>,
+    transferred_pairs: Vec<Option<Vec<(String, String)>>>,
+    close: Vec<Option<CloseContext>>,
+    suggested: Vec<Option<String>>,
+    private: Vec<PrivateRenameSet>,
+    single_epoch: bool,
+    /// The lazy-init helpers the toolchain recognised (fresh-text names):
+    /// the plumbing the pipeline names itself (`naming::plumbing`).
+    lazy_init_helpers: std::collections::HashSet<String>,
+}
+
+/// The era over a prior-version match stage.
+pub fn prior_era<P: NameProvider>(
+    stage: &MatchStage<'_, '_>,
+    opts: &EraOptions<'_>,
+    provider: &P,
+    log: &mut DispatchLog,
+) -> Result<NamingEra, String> {
+    let semantic = stage.fresh.ingest.semantic();
+    let graph = stage.fresh.graph;
+    // The claimed regions must be planned BEFORE the transfer: its moved
+    // statements' spans are a freeze the transfer's state marking reads,
+    // so a library-placed module's rows are never asked in this era
+    // either — the prior's names for them are not carried.
+    let modules = module_source_of(
+        stage.fresh.json,
+        stage.fresh.wrapper.map(|w| w.body_span),
+        semantic.source_text(),
+        opts.module_wrappers,
+    );
+    let library_layout = plan_layout(opts, modules.as_ref(), semantic);
+    let ph = crate::profiling::phase("era:transfer");
+    let mut freeze =
+        crate::rename::transfer::library_freeze(stage, opts.library, opts.skip_libraries)?;
+    freeze.library_spans = library_layout.spans.clone();
+    let (outcome, twins) =
+        crate::rename::transfer::apply_prior_version(stage, &freeze, opts.name_profile)?;
+    drop(ph);
+    let probe_lines = if opts.shingle_probe {
+        shingle_probe_lines(stage)
+    } else {
+        Vec::new()
+    };
+    let capture = opts.capture.then(|| EraCapture {
+        matches: Some(crate::matching::matches_dump::match_sections(stage, &twins)),
+        votes: outcome.votes_dump.clone(),
+        ..capture_graph(graph, &outcome.rename)
+    });
+    let ph = crate::profiling::phase("era:close-contexts");
+    let close = close_contexts(stage, &outcome.fn_close_prior, opts.fast.on())?;
+    drop(ph);
+    let pending = PendingCarry {
+        matcher: outcome.carry.clone(),
+        matched: outcome.matched_module_bindings.clone(),
+    };
+    let prior = PriorStats {
+        statement_twin: outcome.stats_twin.clone(),
+        exact_match: outcome.stats_exact.clone(),
+        close_match: outcome.stats_close.clone(),
+        retry: outcome.stats_retry.clone(),
+        counts: outcome.counts,
+        close_match_stats: stage
+            .close_file
+            .map(|f| f.stats.clone())
+            .unwrap_or_default(),
+        resolution_stats: stage.function_result.resolution_stats.clone(),
+        binding_resolution_stats: stage.binding_result.map(|r| r.resolution_stats.clone()),
+    };
+    let start = WaveStart {
+        rename: outcome.rename,
+        fn_state: outcome.fn_state,
+        binding_state: outcome.binding_state,
+        transferred: outcome.fn_transferred,
+        transferred_pairs: outcome.fn_transferred_pairs,
+        close,
+        suggested: outcome.binding_suggested,
+        private: outcome.private_renames,
+        single_epoch: false,
+        lazy_init_helpers: crate::naming::plumbing::lazy_init_helpers_of(
+            opts.module_wrappers,
+            stage.fresh.json,
+            stage.fresh.wrapper.map(|w| w.body_span),
+        ),
+    };
+    let ph = crate::profiling::phase("era:naming-graph");
+    let naming = Naming::build(semantic, graph);
+    drop(ph);
+    let mut era = run_era(
+        &naming,
+        start,
+        freeze.library,
+        Some((prior, pending)),
+        modules.as_ref(),
+        library_layout,
+        opts,
+        provider,
+        log,
+    );
+    era.capture = capture;
+    era.probe_lines = probe_lines;
+    Ok(era)
+}
+
+/// `--probe shingle-probe` over the stage's close pairs, in the close
+/// tier's assignment order (the TS logs inside that loop, before each
+/// pair's corroboration).
+fn shingle_probe_lines(stage: &crate::prior::MatchStage<'_, '_>) -> Vec<String> {
+    use crate::matching::close::shingle_probe_line;
+    let fn_idx = |graph: &UnifiedGraph| -> HashMap<String, usize> {
+        graph
+            .functions
+            .iter()
+            .enumerate()
+            .map(|(i, f)| (f.session_id.clone(), i))
+            .collect()
+    };
+    let prior_idx = fn_idx(stage.prior.graph);
+    let fresh_idx = fn_idx(stage.fresh.graph);
+    let aligned: HashMap<(i64, i64, i64, i64), u64> = stage
+        .close_file
+        .map(|f| {
+            f.pairs
+                .iter()
+                .map(|p| {
+                    (
+                        (p.prior.start, p.prior.end, p.fresh.start, p.fresh.end),
+                        p.aligned_statements,
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    stage
+        .close_pairs
+        .iter()
+        .filter_map(|c| {
+            let pi = *prior_idx.get(&c.prior_id)?;
+            let fi = *fresh_idx.get(&c.fresh_id)?;
+            let ps = stage.prior.graph.functions[pi].span;
+            let fs = stage.fresh.graph.functions[fi].span;
+            let n = aligned
+                .get(&(
+                    i64::from(ps.start),
+                    i64::from(ps.end),
+                    i64::from(fs.start),
+                    i64::from(fs.end),
+                ))
+                .copied()
+                .unwrap_or(0);
+            Some(shingle_probe_line(
+                &c.fresh_id,
+                &stage.prior.index.compute_shingle_set(pi),
+                &stage.fresh.index.compute_shingle_set(fi),
+                n as usize,
+            ))
+        })
+        .collect()
+}
+
+/// The era of a first version (no prior): parse, graph, the freezes.
+pub fn fresh_era<P: NameProvider>(
+    fresh: &str,
+    opts: &EraOptions<'_>,
+    provider: &P,
+    log: &mut DispatchLog,
+) -> Result<NamingEra, String> {
+    let allocator = Allocator::default();
+    let ingest = crate::prior::parse_side(&allocator, fresh, "input.js")?;
+    let json = crate::ingest::program_estree_json(ingest.program);
+    let parts = crate::prior::build_side_parts(
+        &ingest,
+        &json,
+        "input.js",
+        crate::graph::Eligibility::SkipSet(opts.never_rename),
+        opts.layout,
+    );
+    let semantic = ingest.semantic();
+    let graph = &parts.graph;
+    let found = opts.layout.find_wrapper(ingest.program, semantic);
+    let wrapper = found.as_ref().map(|w| w.span);
+    let lazy_init_helpers = crate::naming::plumbing::lazy_init_helpers_of(
+        opts.module_wrappers,
+        &json,
+        found.as_ref().map(|w| w.body_span),
+    );
+    let modules = module_source_of(
+        &json,
+        found.as_ref().map(|w| w.body_span),
+        fresh,
+        opts.module_wrappers,
+    );
+    // Planned before the freeze for the same reason as the prior era: the
+    // moved statements' spans are part of the freeze the state marking
+    // reads, so the model is never asked for a library-placed module.
+    let library_layout = plan_layout(opts, modules.as_ref(), semantic);
+    let freeze = PreFreeze {
+        library: classify_library_functions(
+            &json,
+            graph,
+            wrapper.is_some(),
+            opts.skip_libraries,
+            opts.library,
+        )?,
+        library_spans: library_layout.spans.clone(),
+    };
+    let (fn_state, binding_state) = pre_transfer_states(graph, semantic, wrapper, &freeze);
+    let n_fns = graph.functions.len();
+    let n_bindings = graph.module_bindings.len();
+    let start = WaveStart {
+        rename: RenameState::new(semantic, Anchor::Fresh, opts.name_profile),
+        fn_state,
+        binding_state,
+        transferred: vec![Default::default(); n_fns],
+        transferred_pairs: vec![None; n_fns],
+        close: vec![None; n_fns],
+        suggested: vec![None; n_bindings],
+        private: Vec::new(),
+        single_epoch: true,
+        lazy_init_helpers,
+    };
+    let capture = opts.capture.then(|| capture_graph(graph, &start.rename));
+    let naming = Naming::build(semantic, graph);
+    let mut era = run_era(
+        &naming,
+        start,
+        freeze.library,
+        None,
+        modules.as_ref(),
+        library_layout,
+        opts,
+        provider,
+        log,
+    );
+    era.capture = capture;
+    Ok(era)
+}
+
+/// The shared body: waves, library prefix, the module step, floor,
+/// generate.
+#[allow(clippy::too_many_arguments)]
+fn run_era<P: NameProvider>(
+    naming: &Naming<'_, '_>,
+    mut start: WaveStart,
+    library: Vec<(usize, String)>,
+    prior: Option<(PriorStats, PendingCarry)>,
+    modules: Option<&crate::naming::module_names::ModuleSource<'_>>,
+    mut library_layout: crate::naming::module_names::LibraryLayout,
+    opts: &EraOptions<'_>,
+    provider: &P,
+    log: &mut DispatchLog,
+) -> NamingEra {
+    let (prior, pending) = match prior {
+        Some((stats, pending)) => (Some(stats), Some(pending)),
+        None => (None, None),
+    };
+    let semantic = naming.semantic;
+    let graph = naming.graph;
+    let eligible = Eligibility::new(opts.never_rename);
+    // The names mode's moved modules: every binding inside their spans is
+    // library code that stays exactly as it is (the index placed the
+    // file; identifier restoration is out of scope). The row skips above
+    // keep the waves off them; recording them as CARRIED — the standing
+    // "settled below the floor without a rename" mark — keeps the naming
+    // floor's sweep off them too, or their still-minified names would be
+    // re-asked there.
+    let body_spans: Vec<(u32, u32)> = modules.map_or(Vec::new(), |m| {
+        m.body
+            .iter()
+            .map(|s| crate::naming::module_names::span_of(s).unwrap_or((0, 0)))
+            .collect()
+    });
+    let mut frozen: Vec<(usize, u32, String)> = Vec::new();
+    let mut holds = RestoredHolds::new(graph);
+    if !library_layout.spans.is_empty() {
+        let inside: Vec<u32> = start
+            .rename
+            .view()
+            .bindings
+            .iter()
+            .enumerate()
+            .filter(|(_, binding)| {
+                library_layout
+                    .spans
+                    .iter()
+                    .any(|&(s, e)| binding.id_span.start >= s && binding.id_span.end <= e)
+            })
+            .map(|(i, _)| i as u32)
+            .collect();
+        for i in inside {
+            let id = crate::rename::validated::scopes::BindingId(i);
+            let binding = start.rename.view().binding(id);
+            let statement = statement_of_span(&body_spans, binding.id_span);
+            let name = start.rename.name_of(id).to_string();
+            if let Some(statement) = statement {
+                frozen.push((statement, binding.symbol.index() as u32, name.clone()));
+            }
+            // exp166: the freeze holds only what the index restored —
+            // held exactly as Site A's restorations are, since no row skip
+            // keeps the waves off a restored slot any more.
+            holds.hold(&mut start, graph, id, &name);
+        }
+    }
+    // exp160, library-names plan step 7: the index's restoration answers
+    // for the claimed statements, applied before anything else names —
+    // through the validated path, the library hold lifted for this one
+    // writer. The restored bindings are recorded carried and held, their
+    // names join the waves' transferred sets (a module-level one skips
+    // its row), so no wave, sweep or reconcile re-asks or re-rolls them;
+    // their statements' spans join the layout's protected spans.
+    let mut era_sites: Vec<crate::naming::restore::RestorationSite> = Vec::new();
+    if !opts.restorations.is_empty()
+        && let Some(source) = modules
+        && !library_layout.regions.is_empty()
+    {
+        let mut outcome = crate::naming::restore::apply_era_restoration(
+            &mut start.rename,
+            semantic,
+            source,
+            &library_layout.regions,
+            opts.restorations,
+        );
+        for (binding, name) in &outcome.applied {
+            holds.hold(&mut start, graph, *binding, name);
+        }
+        library_layout.restored_spans = outcome.spans;
+        era_sites = std::mem::take(&mut outcome.sites);
+    }
+    // The exp164 measurement dump: the era's statement coordinates, the
+    // freeze's bindings, the converted regions and Site A's rows —
+    // diagnostics only (serialized by the CLI's `--diagnostics`).
+    let era_dump = (!opts.restorations.is_empty()
+        || !library_layout.spans.is_empty()
+        || opts.era_bridge.is_some())
+    .then(|| crate::naming::restore::EraDump {
+        body_len: modules.map_or(0, |m| m.body.len()),
+        frozen,
+        regions: library_layout.regions.clone(),
+        sites: era_sites,
+        body_raw_spans: library_layout.era_raw.clone(),
+        moved_spans: library_layout.moved_spans.clone(),
+        moved_files: library_layout.moved_files.clone(),
+        ordinal_regions: library_layout.ordinal_regions.clone(),
+        ordinal_moved_files: library_layout.ordinal_moved_files.clone(),
+        conversion: library_layout.conversion,
+        factory_files: opts
+            .era_bridge
+            .map(|b| b.bridge.factories.clone())
+            .unwrap_or_default(),
+        body_spans,
+    });
+    // The plumbing the pipeline names itself, before any prompt shows it
+    // (and over whatever name the transfer carried).
+    let plumbing = crate::naming::plumbing::name_lazy_init_helper(
+        graph,
+        &start.lazy_init_helpers,
+        &mut start.rename,
+        &mut start.binding_state,
+    );
+    // The library imports the pipeline names from their specifiers
+    // (`require("path")` -> `pathModule`), never asked (2026-10-06).
+    let library_imports = crate::naming::plumbing::name_library_imports(
+        semantic,
+        graph,
+        &mut start.rename,
+        &mut start.binding_state,
+        &start.suggested,
+    );
+    let ph = crate::profiling::phase("era:occurrences+rows");
+    let occ = Occurrences::build(semantic, &start.rename);
+    // The module step's plan, before the first wave: the wrappers it will
+    // name are settled so no wave asks them (`naming::module_names`).
+    let module_plan = match (opts.module_naming, modules) {
+        (Some(_), Some(source)) => crate::naming::module_names::plan_module_naming(
+            source,
+            graph,
+            &start.rename,
+            &occ,
+            &start.lazy_init_helpers,
+            &mut start.binding_state,
+        ),
+        _ => crate::naming::module_names::ModulePlan::default(),
+    };
+    let rows = Rows::build(graph, semantic, start.rename.view());
+    let single_epoch = start.single_epoch;
+    let stems = crate::rename::floor::MinifiedStems::of_program(opts.name_profile, semantic);
+    let inputs = WaveInputs {
+        semantic,
+        graph,
+        ng: &naming.ng,
+        view: &naming.view,
+        occ: &occ,
+        fns: &naming.fns,
+        rows: &rows,
+        eligible: &eligible,
+        transferred: &start.transferred,
+        transferred_pairs: &start.transferred_pairs,
+        close: &start.close,
+        suggested: &start.suggested,
+        module_group_size: opts.module_group_size,
+        params: opts.params.clone(),
+        single_epoch: start.single_epoch,
+        tunables: opts.tunables,
+        fast: opts.fast,
+        window: opts.prompt_window,
+        stems: &stems,
+    };
+    let fn_hashes: Vec<(String, String)> = graph
+        .functions
+        .iter()
+        .map(|f| (f.session_id.clone(), f.structural_hash.clone()))
+        .collect();
+    let has_nodes = !graph.functions.is_empty() || !graph.module_bindings.is_empty();
+    drop(ph);
+    let ph = crate::profiling::phase("era:waves");
+    let WaveOutcome {
+        mut state,
+        dispatches,
+        names,
+        misses,
+        errors,
+        waves,
+        processor,
+        context_set_names,
+        peak_live_dispatches,
+        peak_live_prompt_bytes,
+        gauges,
+        ..
+    } = if has_nodes {
+        run_waves(
+            &inputs,
+            provider,
+            log,
+            start.rename,
+            start.fn_state,
+            start.binding_state,
+        )
+    } else {
+        WaveOutcome::idle(start.rename, start.fn_state, start.binding_state)
+    };
+    let records = WaveRecords {
+        dispatches,
+        names,
+        misses,
+        errors,
+        waves,
+        context_set_names,
+        peak_live_dispatches,
+        peak_live_prompt_bytes,
+        gauges,
+    };
+    drop(ph);
+    let ph = crate::profiling::phase("era:library-prefix");
+    let library_functions = library_function_rows(&library, graph);
+    let eval_tainted = collect_eval_with_taint(semantic).tainted_functions;
+    let library =
+        run_library_prefix_pass(&mut state, &rows, graph, &library, &eligible, &eval_tainted);
+    drop(ph);
+    // The module step: after the waves and the library prefix (every other
+    // name in a module is final), before the floor and the sweep (which
+    // ask whatever it leaves unnamed).
+    let ph = crate::profiling::phase("era:module-names");
+    let module_names = match (opts.module_naming, modules) {
+        (Some(budget), Some(source)) => crate::naming::module_names::run_module_naming(
+            &module_plan,
+            &crate::naming::module_names::ModuleStepInputs {
+                view: &naming.view,
+                occ: &occ,
+                source,
+                stems: &stems,
+                budget,
+                window: opts.prompt_window,
+            },
+            &mut state,
+            provider,
+            log,
+        ),
+        _ => Default::default(),
+    };
+    let mut era = NamingEra {
+        generated: None,
+        trail: StrategyTrail::default(),
+        claims: RenameClaimStats::default(),
+        waves: records,
+        processor,
+        library,
+        library_functions,
+        floor: None,
+        pre_sweep: None,
+        exhausted_names: Vec::new(),
+        prior,
+        function_count: graph.functions.len(),
+        fn_hashes,
+        prior_carry: None,
+        ledger: None,
+        capture: None,
+        probe_lines: Vec::new(),
+        stems: crate::rename::floor::MinifiedStems::empty(opts.name_profile),
+        plumbing,
+        library_imports,
+        module_names,
+        // Filled after `era:generate` (the moved modules' spans are
+        // folded into the generated text's coordinates first).
+        library_layout: Default::default(),
+        era_dump,
+    };
+    drop(ph);
+    let ph = crate::profiling::phase("era:naming-floor");
+    if opts.naming_floor {
+        let taint = collect_eval_with_taint(semantic);
+        let derivation = derive_expression_inner_names(semantic, &mut state, &eligible, &taint);
+        let decoration = retry_decorated_names(semantic, &mut state, &eligible, &taint);
+        let sweep = opts.pre_generate_sweep.then(|| {
+            sweep_minted_names(
+                semantic,
+                &mut state,
+                &eligible,
+                &taint,
+                provider,
+                log,
+                crate::trail::Anchor::Fresh,
+                opts.params,
+                opts.prompt_window,
+                &opts.tunables,
+                // The in-era sweep holds the records itself: per-binding
+                // exact, no cross-text join.
+                None,
+                &stems,
+            )
+        });
+        era.floor = Some(FloorCounts {
+            derived: derivation.derived,
+            undecorated: decoration.undecorated,
+            swept: sweep.as_ref().map_or(0, |s| s.named),
+            skipped: derivation.skipped.len()
+                + decoration.skipped
+                + sweep.as_ref().map_or(0, |s| s.skipped),
+        });
+        era.pre_sweep = sweep;
+    }
+    // Every naming-era pass has run: the matched module bindings'
+    // declarations carry their final (pre-reconcile) names — plugin.ts
+    // builds `priorCarry.matchMap` here, before the AST is released.
+    era.prior_carry = pending.map(|p| PriorCarry {
+        match_map: build_prior_match_map(p.matched.iter().map(|(row, prior)| {
+            let b = &graph.module_bindings[*row];
+            (
+                state.name_of_symbol(b.symbol).unwrap_or(b.name.as_str()),
+                prior.as_str(),
+            )
+        })),
+        matcher: p.matcher,
+    });
+    drop(ph);
+    let ph = crate::profiling::phase("era:generate");
+    let privates = private_rename_edits(semantic.source_text(), &start.private);
+    let generated = render_program_with(semantic, &state, &privates);
+    // The moved modules' spans in the generated text, for the passes that
+    // re-parse it (the prior-diff reconcile arm the same library hold
+    // there). Zero work for every run that placed nothing.
+    if !library_layout.spans.is_empty() || !library_layout.restored_spans.is_empty() {
+        let edits = program_edits(semantic, &state, &privates);
+        let fold = |spans: &[(u32, u32)]| -> Vec<(u32, u32)> {
+            spans
+                .iter()
+                .map(|&(s, e)| span_in_generated_text(&edits, s, e))
+                .collect()
+        };
+        library_layout.generated_spans = fold(&library_layout.spans);
+        library_layout.restored_generated_spans = fold(&library_layout.restored_spans);
+    }
+    era.library_layout = library_layout;
+    drop(ph);
+    // The ledger's base stage: the AST as the naming era left it (every
+    // pass before `generate` — the floor and the pre-generate sweep
+    // included), over the fresh text. Which scope OBJECTS the TS walk
+    // (`traverse(ast)`) sees decides the entry order:
+    // - after the generated text's validation parse cleared Babel's
+    //   cache (a full bundle), every scope is a fresh crawl;
+    // - with a prior, the prior-match clear left the program scope and
+    //   the graph functions' retained `fn.path.scope`s out of the new
+    //   cache: the walk crawls them fresh (registration order, current
+    //   names), while the scopes the waves reached through new paths
+    //   keep their post-clear tables (the waves' model).
+    era.ledger = opts.rename_ledger.then(|| {
+        use crate::rename::validated::ledger::{build_rename_ledger, parse_clears_scope_cache};
+        if parse_clears_scope_cache(&generated) {
+            state.recrawl_order(|_| true);
+        } else if !single_epoch {
+            let program = state.view().program_scope();
+            let retained: std::collections::HashSet<_> = rows.fns.iter().map(|f| f.scope).collect();
+            state.recrawl_order(|s| s == program || retained.contains(&s));
+        }
+        let rendered = program_edits(semantic, &state, &privates);
+        build_rename_ledger(semantic.source_text(), &state, &rendered)
+    });
+    era.generated = Some(generated);
+    era.claims = state.claim_stats();
+    let outcome = state.finish();
+    era.trail = outcome.trail;
+    era.exhausted_names = outcome.exhausted_names;
+    era.stems = stems;
+    era
+}
+/// The wrapper-body statement whose span holds `span` (exp164's dump
+/// only): the spans are statement order and do not overlap, so the last
+/// statement starting at or before the binding's identifier is its
+/// statement. `None` when the spans are unknown (no module source).
+/// How a restored binding is kept off every later namer (exp160's Site A
+/// rule, shared by exp166's restore-or-ask freeze): recorded carried and
+/// library-held, its name joins the transferred set of the innermost
+/// function whose span holds it (the wave ask reads that set by name),
+/// and a module-level binding's row skips entirely. Lookups are indexed:
+/// the restored set runs to thousands of bindings.
+struct RestoredHolds {
+    /// Function indices by span start (an enclosing function before the
+    /// functions it holds), with each one's innermost enclosing function.
+    order: Vec<usize>,
+    parent: Vec<Option<usize>>,
+    module_binding_of: std::collections::HashMap<oxc_semantic::SymbolId, usize>,
+}
+
+impl RestoredHolds {
+    fn new(graph: &UnifiedGraph) -> Self {
+        let mut order: Vec<usize> = (0..graph.functions.len()).collect();
+        order.sort_by_key(|&i| {
+            let span = graph.functions[i].span;
+            (span.start, std::cmp::Reverse(span.end))
+        });
+        let mut parent = vec![None; order.len()];
+        let mut stack: Vec<usize> = Vec::new();
+        for (k, &i) in order.iter().enumerate() {
+            let span = graph.functions[i].span;
+            while let Some(&top) = stack.last() {
+                if graph.functions[order[top]].span.end >= span.end {
+                    break;
+                }
+                stack.pop();
+            }
+            parent[k] = stack.last().copied();
+            stack.push(k);
+        }
+        let module_binding_of = graph
+            .module_bindings
+            .iter()
+            .enumerate()
+            .map(|(j, b)| (b.symbol, j))
+            .collect();
+        RestoredHolds {
+            order,
+            parent,
+            module_binding_of,
+        }
+    }
+
+    /// The innermost function whose span holds `span` (`span.start <= s`
+    /// and `e <= span.end`), as Site A's linear scan chose it.
+    fn innermost(&self, graph: &UnifiedGraph, s: u32, e: u32) -> Option<usize> {
+        let at = self
+            .order
+            .partition_point(|&i| graph.functions[i].span.start <= s);
+        let mut k = at.checked_sub(1)?;
+        loop {
+            if graph.functions[self.order[k]].span.end >= e {
+                return Some(self.order[k]);
+            }
+            k = self.parent[k]?;
+        }
+    }
+
+    fn hold(
+        &mut self,
+        start: &mut WaveStart,
+        graph: &UnifiedGraph,
+        binding: crate::rename::validated::scopes::BindingId,
+        name: &str,
+    ) {
+        start.rename.record_carried(binding);
+        start.rename.mark_library_held(binding);
+        let view = start.rename.view().binding(binding);
+        let (id_span, symbol) = (view.id_span, view.symbol);
+        if let Some(f) = self.innermost(graph, id_span.start, id_span.end) {
+            start.transferred[f].insert(name.to_string());
+        }
+        if let Some(&j) = self.module_binding_of.get(&symbol)
+            && start.binding_state[j].is_pending()
+        {
+            start.binding_state[j]
+                .mark_skipped("library-restored", &graph.module_bindings[j].session_id);
+        }
+    }
+}
+
+/// Names mode's era layout (exp166), once per era, before the freeze:
+/// the claimed groups converted onto this era's statements through the
+/// exact raw-to-era bridge ([`crate::naming::module_names::convert_regions`]),
+/// the placement plan over them, and the freeze narrowed to what the index
+/// actually restored ("restore or ask, never freeze"): a binding in the
+/// era is held only when Site B restored its name inside the raw
+/// statement it came from — every other identifier, moved module or not,
+/// goes through the normal naming flow (the prior's carry, then the
+/// model). Without a bridge the regions are taken as given (era
+/// ordinals — the unit tests' seam) and nothing is frozen.
+fn plan_layout(
+    opts: &EraOptions<'_>,
+    modules: Option<&crate::naming::module_names::ModuleSource<'_>>,
+    semantic: &oxc_semantic::Semantic<'_>,
+) -> crate::naming::module_names::LibraryLayout {
+    let Some(source) = modules else {
+        return Default::default();
+    };
+    let Some(bridge) = opts.era_bridge else {
+        // No bridge: the regions are taken as given (era ordinals) and,
+        // with no restoration record, nothing is frozen.
+        let mut layout =
+            crate::naming::module_names::plan_library_modules(source, opts.claimed_regions);
+        layout.spans.clear();
+        layout.regions = opts.claimed_regions.to_vec();
+        if !opts.statement_holds.is_empty() {
+            // exp169: the vendored bodies' restored names, one statement
+            // per body — held exactly as the bridge's restorations are.
+            let body_spans: Vec<(u32, u32)> = source
+                .body
+                .iter()
+                .map(|s| crate::naming::module_names::span_of(s).unwrap_or((0, 0)))
+                .collect();
+            layout.spans = held_binding_spans(
+                semantic,
+                &body_spans,
+                |i| {
+                    opts.statement_holds
+                        .get(i)
+                        .map(|names| names.iter().map(String::as_str).collect())
+                },
+                opts.name_profile,
+            );
+        }
+        return layout;
+    };
+    let body_spans: Vec<(u32, u32)> = source
+        .body
+        .iter()
+        .map(|s| crate::naming::module_names::span_of(s).unwrap_or((0, 0)))
+        .collect();
+    let era_raw = bridge.bridge.era_raw_spans(&body_spans, bridge.origins);
+    let (regions, conversion) =
+        crate::naming::module_names::convert_regions(opts.claimed_regions, &era_raw);
+    let mut layout = crate::naming::module_names::plan_library_modules(source, &regions);
+    // The baseline the precision check compares against (diagnostics
+    // only): the retired ordinal conversion's plan over the same groups.
+    let ordinal_regions = bridge.bridge.ordinal_regions(opts.claimed_regions);
+    layout.ordinal_moved_files =
+        crate::naming::module_names::plan_library_modules(source, &ordinal_regions).moved_files;
+    layout.ordinal_regions = ordinal_regions;
+    layout.spans = restored_binding_spans(
+        semantic,
+        &body_spans,
+        &era_raw,
+        bridge.bridge,
+        opts.name_profile,
+    );
+    layout.regions = regions;
+    layout.conversion = Some(conversion);
+    layout.era_raw = era_raw;
+    layout
+}
+
+/// The declaration spans of the bindings Site B restored (exp166): a
+/// binding whose name the index restored inside the raw statement its
+/// era statement came from. A restored name that is itself a minifier
+/// token (the mint census's own gate, `rename::floor::is_minifier_token`
+/// — `i`, `k`, `_a` from the package's own source) is NOT held: it says
+/// nothing the minified name did not, and a short name can coincide with
+/// an unrelated minifier name in the same statement. It takes the normal
+/// flow. Sorted, era coordinates.
+fn restored_binding_spans(
+    semantic: &oxc_semantic::Semantic<'_>,
+    body_spans: &[(u32, u32)],
+    era_raw: &[Option<(u32, u32)>],
+    bridge: &crate::naming::module_names::EraBridge,
+    profile: crate::rename::name_profile::NameProfile,
+) -> Vec<(u32, u32)> {
+    if bridge.restored.is_empty() {
+        return Vec::new();
+    }
+    held_binding_spans(
+        semantic,
+        body_spans,
+        |i| {
+            let raw = era_raw.get(i).copied().flatten()?;
+            Some(bridge.restored_in(raw).collect())
+        },
+        profile,
+    )
+}
+
+/// The ONE hold rule over a statement list (exp166, shared by exp169's
+/// vendored bodies): a binding declared inside statement `i` is held
+/// when its name is one `names_of(i)` restored there and is not itself a
+/// minifier token. Sorted, the text's coordinates.
+fn held_binding_spans<'n>(
+    semantic: &oxc_semantic::Semantic<'_>,
+    body_spans: &[(u32, u32)],
+    names_of_statement: impl Fn(usize) -> Option<std::collections::HashSet<&'n str>>,
+    profile: crate::rename::name_profile::NameProfile,
+) -> Vec<(u32, u32)> {
+    let scoping = semantic.scoping();
+    let mut names_of: std::collections::HashMap<usize, Option<std::collections::HashSet<&str>>> =
+        std::collections::HashMap::new();
+    let mut out = Vec::new();
+    for symbol in scoping.symbol_ids() {
+        let span = scoping.symbol_span(symbol);
+        let Some(i) = statement_of_span(body_spans, span) else {
+            continue;
+        };
+        let (start, end) = body_spans[i];
+        if span.start < start || span.end > end {
+            continue;
+        }
+        let Some(names) = names_of
+            .entry(i)
+            .or_insert_with(|| names_of_statement(i))
+            .as_ref()
+        else {
+            continue;
+        };
+        let name = scoping.symbol_name(symbol);
+        if names.contains(name) && !crate::rename::floor::is_minifier_token(profile, name) {
+            out.push((span.start, span.end));
+        }
+    }
+    out.sort_unstable();
+    out
+}
+
+fn statement_of_span(body_spans: &[(u32, u32)], span: oxc_span::Span) -> Option<usize> {
+    if body_spans.is_empty() {
+        return None;
+    }
+    let mut lo = 0usize;
+    let mut hi = body_spans.len();
+    while lo + 1 < hi {
+        let mid = (lo + hi) / 2;
+        if body_spans[mid].0 <= span.start {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    Some(lo)
+}
+
+/// The pending close-matched functions' prior-version context: the prior
+/// function's code (`generate(priorFn.path.node)` on the PRIOR text), its
+/// placeholder names (unique, first 40), and the pair's folded hints/snaps.
+fn close_contexts(
+    stage: &crate::prior::MatchStage<'_, '_>,
+    close_prior: &[Option<String>],
+    fast: bool,
+) -> Result<Vec<Option<CloseContext>>, String> {
+    let prior_semantic = stage.prior.ingest.semantic();
+    let prior_view = TextView::build(prior_semantic);
+    let ident_index = identifier_index(prior_semantic);
+    let fn_json = function_json_index(stage.prior.json);
+    let prior_fn_by_span: HashMap<(u32, u32), usize> = stage
+        .prior
+        .graph
+        .functions
+        .iter()
+        .enumerate()
+        .map(|(i, f)| ((f.span.start, f.span.end), i))
+        .collect();
+    let mut pairs: HashMap<(i64, i64), &humanify_ag_model::dump::ClosePairRow> = HashMap::new();
+    if let Some(file) = stage.close_file {
+        for p in &file.pairs {
+            pairs.insert((p.fresh.start, p.fresh.end), p);
+        }
+    }
+    let fresh_graph = stage.fresh.graph;
+    let prior_spans = stage.prior.spans;
+    let prior_graph = stage.prior.graph;
+    // One function's context: a pure read of plain data (the text view,
+    // the identifier index, the JSON, the graphs), so the fast schedule maps it on
+    // the pool — results in input order, the first error first.
+    let one = |(f, prior_id): (usize, &Option<String>)| {
+        let Some(prior_id) = prior_id else {
+            return Ok(None);
+        };
+        let span = *prior_spans
+            .get(prior_id)
+            .ok_or_else(|| format!("close prior {prior_id} has no span"))?;
+        let prior_code = prior_view.pretty(span, &[], true);
+        let prior_names = match prior_fn_by_span.get(&(span.start, span.end)) {
+            Some(&pi) => collect_prior_names(
+                &ident_index,
+                fn_json.get(&(span.start, span.end)).copied(),
+                &prior_graph.functions[pi].placeholder_bindings,
+            ),
+            None => Vec::new(),
+        };
+        let fs = fresh_graph.functions[f].span;
+        let row = pairs.get(&(i64::from(fs.start), i64::from(fs.end)));
+        let hints = row
+            .map(|r| {
+                r.hints
+                    .iter()
+                    .map(|h| (h.new_name.clone(), h.prior_name.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|h| !h.is_empty())
+            .map(StrMap);
+        let snaps = row
+            .map(|r| {
+                r.snaps
+                    .iter()
+                    .map(|h| (h.new_name.clone(), h.prior_name.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|h| !h.is_empty());
+        Ok(Some(CloseContext {
+            prior_code,
+            prior_names,
+            hints,
+            snaps,
+        }))
+    };
+    if fast {
+        let items: Vec<(usize, &Option<String>)> = close_prior.iter().enumerate().collect();
+        crate::par::map_ordered(&items, |&item| one(item))
+            .into_iter()
+            .collect()
+    } else {
+        close_prior.iter().enumerate().map(one).collect()
+    }
+}
+
+/// Every identifier occurrence of a text, (start, symbol's declaration
+/// span, name), sorted by start — the prior names' walk-order index.
+type IdentIndex<'n> = Vec<(u32, (u32, u32), oxc_semantic::SymbolId, &'n str)>;
+
+fn identifier_index<'n>(semantic: &'n oxc_semantic::Semantic<'_>) -> IdentIndex<'n> {
+    use oxc_ast::AstKind;
+    use oxc_span::GetSpan;
+    let nodes = semantic.nodes();
+    let scoping = semantic.scoping();
+    let mut out: IdentIndex<'n> = Vec::new();
+    for node in nodes.iter() {
+        let (symbol, name, start) = match node.kind() {
+            AstKind::IdentifierReference(r) => (
+                r.reference_id
+                    .get()
+                    .and_then(|id| scoping.get_reference(id).symbol_id()),
+                r.name.as_str(),
+                r.span.start,
+            ),
+            AstKind::BindingIdentifier(b) => (b.symbol_id.get(), b.name.as_str(), b.span.start),
+            _ => continue,
+        };
+        let Some(symbol) = symbol else { continue };
+        let decl = nodes.get_node(scoping.symbol_declaration(symbol)).span();
+        out.push((start, (decl.start, decl.end), symbol, name));
+    }
+    out.sort_by_key(|o| o.0);
+    out
+}
+
+/// Function-like nodes of a program's ESTree JSON by span (the first in
+/// pre-order — the row node, as the graph's own JSON index finds it).
+fn function_json_index(root: &Value) -> HashMap<(u32, u32), &Value> {
+    const TYPES: [&str; 5] = [
+        "FunctionDeclaration",
+        "FunctionExpression",
+        "ArrowFunctionExpression",
+        "MethodDefinition",
+        "Property",
+    ];
+    fn walk<'v>(v: &'v Value, out: &mut HashMap<(u32, u32), &'v Value>) {
+        match v {
+            Value::Object(fields) => {
+                let ty = fields.get("type").and_then(Value::as_str).unwrap_or("");
+                if TYPES.contains(&ty)
+                    && let (Some(s), Some(e)) = (
+                        fields.get("start").and_then(Value::as_u64),
+                        fields.get("end").and_then(Value::as_u64),
+                    )
+                {
+                    out.entry((s as u32, e as u32)).or_insert(v);
+                }
+                for (_, c) in fields {
+                    walk(c, out);
+                }
+            }
+            Value::Array(items) => items.iter().for_each(|c| walk(c, out)),
+            _ => {}
+        }
+    }
+    let mut out = HashMap::new();
+    walk(root, &mut out);
+    out
+}
+
+/// `collectPriorNames(priorFn)`: the placeholder mapping's names in slot
+/// order — the TS assigns slots by first occurrence in its `Object.keys`
+/// walk of the babel node (babel's PARSED field order: a SwitchCase's
+/// `consequent` before its `test`), which the Rust canonical serializer's
+/// slot order does not follow (its bytes differ by design, 02 §4a). The
+/// walk here follows [`ordered_child_keys`] over the function's ESTree
+/// subtree; unique names, at most 40.
+fn collect_prior_names(
+    index: &IdentIndex<'_>,
+    fn_json: Option<&Value>,
+    slots: &[(String, oxc_span::Span, String)],
+) -> Vec<String> {
+    use crate::matching::statement_align::ordered_child_keys;
+    let slot_decls: std::collections::HashSet<(u32, u32)> =
+        slots.iter().map(|(_, s, _)| (s.start, s.end)).collect();
+    let by_start: HashMap<u32, usize> = index.iter().enumerate().map(|(i, o)| (o.0, i)).collect();
+    let mut seen_symbols = std::collections::HashSet::new();
+    let mut names: Vec<String> = Vec::new();
+    let mut stack: Vec<&Value> = fn_json.into_iter().collect();
+    // An explicit pre-order walk (children pushed in reverse).
+    while let Some(v) = stack.pop() {
+        match v {
+            Value::Object(map) => {
+                let ty = map.get("type").and_then(Value::as_str).unwrap_or("");
+                if ty == "Identifier"
+                    && let Some(start) = map.get("start").and_then(Value::as_u64)
+                    && let Some(&i) = by_start.get(&(start as u32))
+                {
+                    let (_, decl, symbol, name) = &index[i];
+                    if slot_decls.contains(decl)
+                        && seen_symbols.insert(*symbol)
+                        && !names.iter().any(|n| n == name)
+                    {
+                        names.push(name.to_string());
+                        if names.len() >= 40 {
+                            break;
+                        }
+                    }
+                }
+                let keys = ordered_child_keys(ty, map);
+                for k in keys.into_iter().rev() {
+                    if matches!(k, "type" | "start" | "end" | "range" | "loc") {
+                        continue;
+                    }
+                    stack.push(&map[k]);
+                }
+            }
+            Value::Array(items) => {
+                for c in items.iter().rev() {
+                    stack.push(c);
+                }
+            }
+            _ => {}
+        }
+    }
+    names
+}
