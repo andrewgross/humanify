@@ -442,3 +442,41 @@ fn the_grace_cutoff_is_one_hour_later_and_carries_across_days_months_and_years()
     );
     assert_eq!(grace_cutoff("yesterday"), None);
 }
+
+#[test]
+fn every_k_takes_every_kth_release_back_from_the_newest() {
+    let got = |k: usize| {
+        select_versions(
+            &ms(),
+            &parse_as_of("2019-12-31").expect("date"),
+            &[],
+            VersionPolicy::Every(k),
+        )
+        .selected
+        .into_iter()
+        .map(|s| (s.role, s.version))
+        .collect::<Vec<_>>()
+    };
+    // 18 releases admitted (2.1.2 … 0.1.0): positions 0, 5, 10, 15
+    assert_eq!(
+        got(5),
+        vec![
+            pair("every", "2.1.2"),
+            pair("every", "0.7.3"),
+            pair("every", "0.6.1"),
+            pair("every", "0.3.0")
+        ]
+    );
+    assert_eq!(got(1).len(), 18);
+}
+
+#[test]
+fn every_k_is_named_in_the_spec() {
+    assert_eq!(
+        VersionPolicy::from_name("every-5"),
+        Some(VersionPolicy::Every(5))
+    );
+    assert_eq!(VersionPolicy::Every(5).name(), "every-5");
+    assert_eq!(VersionPolicy::from_name("every-0"), None);
+    assert_eq!(VersionPolicy::from_name("every-x"), None);
+}

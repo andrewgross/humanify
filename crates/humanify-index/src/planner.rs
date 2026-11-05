@@ -24,13 +24,13 @@ use std::process::Command;
 
 use humanify_core::libindex::format::Semver;
 
-use crate::asof::{Packument, VersionPolicy, grace_cutoff, normalize_time, select_versions};
+use crate::asof::{Packument, Selected, grace_cutoff, normalize_time, select_versions};
 use crate::build::PackageSelection;
 use crate::ranges::{Range, dep_spec};
 use crate::registry;
 use crate::shard::hex_sha256;
 use crate::spec::{
-    HighImpactList, IndexSpec, RefusalMatch, Source, name_matches, parse_high_impact_list,
+    HighImpactList, IndexSpec, RefusalMatch, Source, Strategy, name_matches, parse_high_impact_list,
 };
 
 /// The reserved skip keys for entries no refusal rule named: a list
@@ -258,7 +258,7 @@ impl Resolution<'_, '_> {
         if self.skip_if_refused(name) || self.skipped_seen.contains(name) {
             return Ok(());
         }
-        let (policy, override_id) = policy_for(self.spec, name, &pkg);
+        let (policy, max, override_id) = policy_for(self.spec, name, &pkg);
         let p = self.packument(name)?;
         // a recorded absence (the snapshot holds an absent packument —
         // the offline replay of a 404/tombstone): a CLOSURE member's
@@ -274,18 +274,22 @@ impl Resolution<'_, '_> {
             self.note_absent(&[name.to_string()]);
             return Ok(());
         }
-        let chosen = select_versions(&p, &self.spec.as_of, &[], policy);
+        let mut selected = union_of(&p, &self.spec.as_of, policy);
+        if let Some(max) = max {
+            cap_newest(&mut selected, max);
+        }
         let rule = format!(
-            "sel={} rule={}{}",
+            "sel={} rule={}{}{}",
             self.spec.select[pkg.selection].id,
             policy.name(),
+            max.map(|m| format!(" max={m}")).unwrap_or_default(),
             match override_id {
                 Some(id) => format!(" override={id}"),
                 None => String::new(),
             }
         );
         let mut versions = Vec::new();
-        for s in chosen.selected {
+        for s in selected {
             self.planned
                 .entry(name.to_string())
                 .or_default()
@@ -739,9 +743,34 @@ fn needs_deps(spec: &IndexSpec) -> bool {
         })
 }
 
+/// Every version some strategy of `strategy` chose, each once (the first
+/// strategy to choose it names its role).
+fn union_of(p: &Packument, as_of: &str, strategy: &Strategy) -> Vec<Selected> {
+    let mut out: Vec<Selected> = Vec::new();
+    for &policy in &strategy.0 {
+        for s in select_versions(p, as_of, &[], policy).selected {
+            if !out.iter().any(|o| o.version == s.version) {
+                out.push(s);
+            }
+        }
+    }
+    out
+}
+
+/// Keep the `max` highest versions of a policy's choice (a version that
+/// does not parse as semver sorts last).
+fn cap_newest(selected: &mut Vec<Selected>, max: usize) {
+    selected.sort_by(|a, b| Semver::parse(&b.version).cmp(&Semver::parse(&a.version)));
+    selected.truncate(max);
+}
+
 /// The planner's policy per package: the first override whose match
-/// holds, else the default.
-fn policy_for(spec: &IndexSpec, name: &str, pkg: &UniversePkg) -> (VersionPolicy, Option<String>) {
+/// holds, else the default; with its depth cap.
+fn policy_for<'a>(
+    spec: &'a IndexSpec,
+    name: &str,
+    pkg: &UniversePkg,
+) -> (&'a Strategy, Option<usize>, Option<String>) {
     for o in &spec.versions.overrides {
         let when = &o.when;
         let names_ok = when.names.is_empty() || when.names.iter().any(|p| name_matches(p, name));
@@ -751,10 +780,10 @@ fn policy_for(spec: &IndexSpec, name: &str, pkg: &UniversePkg) -> (VersionPolicy
             .is_none_or(|s| spec.select[pkg.selection].id == s);
         let rank_ok = when.rank_below.is_none_or(|n| pkg.rank < n);
         if names_ok && sel_ok && rank_ok {
-            return (o.policy, Some(o.id.clone()));
+            return (&o.policy, o.max, Some(o.id.clone()));
         }
     }
-    (spec.versions.default, None)
+    (&spec.versions.default, spec.versions.max, None)
 }
 
 /// The real list fetcher: the `npm-high-impact` package at the pinned

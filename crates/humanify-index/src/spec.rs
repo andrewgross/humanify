@@ -98,9 +98,26 @@ pub struct Selection {
 /// Which versions each package is indexed at: the first override whose
 /// match holds, else the default policy; then the `dependents` rule adds
 /// what ranges resolve to.
+/// A spec's version strategy: one policy, or several whose choices are
+/// UNIONED (`policy = ["as-of", "recent-18mo"]`: the older major lines
+/// as-of keeps, plus every release of the window).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Strategy(pub Vec<VersionPolicy>);
+
+impl Strategy {
+    /// As the spec spells it, comma-joined (the plan's attribution).
+    pub fn name(&self) -> String {
+        self.0
+            .iter()
+            .map(VersionPolicy::name)
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct VersionRules {
-    pub default: VersionPolicy,
+    pub default: Strategy,
     pub overrides: Vec<VersionOverride>,
     /// Add, for every package in the plan, up to this many of the
     /// versions its dependents' ranges resolve to (each range as of the
@@ -108,13 +125,18 @@ pub struct VersionRules {
     /// computable from packuments, unlike per-version download counts),
     /// the most-resolved first. 0 turns the rule off.
     pub dependents: usize,
+    /// An explicit depth over the default policy: at most this many of
+    /// the versions it chose, the newest first (None: uncapped).
+    pub max: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VersionOverride {
     pub id: String,
     pub when: PackageMatch,
-    pub policy: VersionPolicy,
+    pub policy: Strategy,
+    /// The override's own depth cap (see [`VersionRules::max`]).
+    pub max: Option<usize>,
 }
 
 /// Which packages a rule applies to. Every field given must hold.
@@ -188,22 +210,32 @@ struct RawSelection {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawVersions {
-    policy: String,
+    policy: RawStrategy,
     #[serde(default)]
     dependents: usize,
+    max: Option<usize>,
     #[serde(default, rename = "override")]
     overrides: Vec<RawOverride>,
+}
+
+/// `policy = "as-of"` or `policy = ["as-of", "recent-18mo"]`.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RawStrategy {
+    One(String),
+    Many(Vec<String>),
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawOverride {
     id: String,
-    policy: String,
+    policy: RawStrategy,
     #[serde(default)]
     names: Vec<String>,
     selection: Option<String>,
     rank_below: Option<usize>,
+    max: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -217,13 +249,29 @@ struct RawRefusal {
     versions: Option<Vec<String>>,
 }
 
-fn policy(text: &str, ctx: &str) -> Result<VersionPolicy, String> {
-    VersionPolicy::from_name(text).ok_or_else(|| {
-        format!(
-            "{ctx}: unknown version policy {text:?} (as-of, year-all+minor, \
-             year-all+major, year-last<N>+major[<M>])"
-        )
-    })
+fn policy(raw: &RawStrategy, ctx: &str) -> Result<Strategy, String> {
+    let names: Vec<&str> = match raw {
+        RawStrategy::One(n) => vec![n.as_str()],
+        RawStrategy::Many(ns) => ns.iter().map(String::as_str).collect(),
+    };
+    if names.is_empty() {
+        return Err(format!("{ctx}: a policy list needs at least one strategy"));
+    }
+    let mut out: Vec<VersionPolicy> = Vec::new();
+    for text in names {
+        let p = VersionPolicy::from_name(text).ok_or_else(|| {
+            format!(
+                "{ctx}: unknown version policy {text:?} (as-of, latest[-<N>], \
+                 recent-<N>mo, year-all+minor, year-all+major, \
+                 year-last<N>+major[<M>])"
+            )
+        })?;
+        if out.contains(&p) {
+            return Err(format!("{ctx}: policy {text:?} is listed twice"));
+        }
+        out.push(p);
+    }
+    Ok(Strategy(out))
 }
 
 fn check_id(id: &str, seen: &mut Vec<String>, what: &str) -> Result<(), String> {
@@ -241,6 +289,16 @@ fn check_id(id: &str, seen: &mut Vec<String>, what: &str) -> Result<(), String> 
     }
     seen.push(id.to_string());
     Ok(())
+}
+
+/// A depth cap of 0 would plan nothing: refused.
+fn check_max(max: Option<usize>, ctx: &str) -> Result<(), String> {
+    match max {
+        Some(0) => Err(format!(
+            "{ctx}: max must be at least 1 (omit it for no cap)"
+        )),
+        _ => Ok(()),
+    }
 }
 
 fn check_names(names: &[String], ctx: &str) -> Result<(), String> {
@@ -490,6 +548,7 @@ impl IndexSpec {
             return Err("spec: no selection has a package source".into());
         }
         let default = policy(&raw.versions.policy, "spec: versions.policy")?;
+        check_max(raw.versions.max, "spec: versions")?;
         let mut overrides = Vec::new();
         for o in raw.versions.overrides {
             let ctx = format!("spec: versions.override {:?}", o.id);
@@ -508,8 +567,10 @@ impl IndexSpec {
                     "{ctx}: matches every package; set versions.policy instead"
                 ));
             }
+            check_max(o.max, &ctx)?;
             overrides.push(VersionOverride {
                 policy: policy(&o.policy, &ctx)?,
+                max: o.max,
                 id: o.id,
                 when: PackageMatch {
                     names: o.names,
@@ -534,6 +595,7 @@ impl IndexSpec {
                 default,
                 overrides,
                 dependents: raw.versions.dependents,
+                max: raw.versions.max,
             },
             refuse,
         })

@@ -861,3 +861,92 @@ fn a_pin_published_within_the_grace_after_its_dependent_still_resolves() {
     let mut r = late_sibling("2016-06-01T02:00:00.000Z");
     assert!(dependents(&resolved(SPEC, &mut r)).is_empty());
 }
+
+fn planned_versions(res: &ResolvedSpec, name: &str) -> Vec<String> {
+    plan_of(res, name)
+        .versions
+        .iter()
+        .filter(|s| s.role != "dependent")
+        .map(|s| s.version.clone())
+        .collect()
+}
+
+#[test]
+fn max_caps_any_policy_at_the_newest_n_releases_it_chose() {
+    // a strategy (every release of ten years) capped by an explicit depth
+    let spec = SPEC.replace(
+        "policy = \"as-of\"\ndependents = 2",
+        "policy = \"recent-120mo\"\nmax = 2\ndependents = 0",
+    );
+    let mut r = registry();
+    let res = resolved(&spec, &mut r);
+    assert_eq!(planned_versions(&res, "chalk"), ["5.3.0", "5.0.0"]);
+    let rule = plan_of(&res, "chalk").versions[0].attribution.clone();
+    assert_eq!(rule.as_deref(), Some("sel=impact rule=recent-120mo max=2"));
+    // uncapped, the same strategy keeps all four
+    let spec = SPEC.replace(
+        "policy = \"as-of\"\ndependents = 2",
+        "policy = \"recent-120mo\"\ndependents = 0",
+    );
+    let mut r = registry();
+    assert_eq!(
+        planned_versions(&resolved(&spec, &mut r), "chalk"),
+        ["5.3.0", "5.0.0", "4.1.0", "2.4.2"]
+    );
+}
+
+#[test]
+fn an_override_carries_its_own_max() {
+    let spec = format!(
+        "{}\n[[versions.override]]\nid = \"deep\"\npolicy = \"recent-120mo\"\nmax = 3\nnames = [\"chalk\"]\n",
+        SPEC.replace("dependents = 2", "dependents = 0")
+    );
+    let mut r = registry();
+    let res = resolved(&spec, &mut r);
+    assert_eq!(planned_versions(&res, "chalk"), ["5.3.0", "5.0.0", "4.1.0"]);
+    let rule = plan_of(&res, "chalk").versions[0].attribution.clone();
+    assert_eq!(
+        rule.as_deref(),
+        Some("sel=impact rule=recent-120mo max=3 override=deep")
+    );
+}
+
+#[test]
+fn a_max_of_zero_is_refused() {
+    let spec = SPEC.replace("policy = \"as-of\"", "policy = \"as-of\"\nmax = 0");
+    let err = IndexSpec::parse(&spec).expect_err("max = 0");
+    assert!(err.contains("max must be at least 1"), "{err}");
+}
+
+#[test]
+fn a_policy_list_plans_the_union_of_its_strategies() {
+    // as-of keeps the older major line (1.0.0), the window adds the depth
+    // of the current one (2.1.0): neither strategy alone plans all three
+    let mut r = registry();
+    r.packs.insert(
+        "ansi-styles".into(),
+        packument(
+            "ansi-styles",
+            r#""created":"2013-01-01T00:00:00.000Z","1.0.0":"2015-01-01T00:00:00.000Z","2.0.0":"2019-01-01T00:00:00.000Z","2.1.0":"2026-06-01T00:00:00.000Z","2.2.0":"2026-09-01T00:00:00.000Z""#,
+            r#""1.0.0","2.0.0","2.1.0","2.2.0""#,
+            &[],
+        ),
+    );
+    let spec = SPEC.replace(
+        "policy = \"as-of\"\ndependents = 2",
+        "policy = [\"as-of\", \"recent-6mo\"]\ndependents = 0",
+    );
+    let res = resolved(&spec, &mut r);
+    let mut got = planned_versions(&res, "ansi-styles");
+    got.sort();
+    assert_eq!(got, ["1.0.0", "2.1.0", "2.2.0"]);
+    let rule = plan_of(&res, "ansi-styles").versions[0].attribution.clone();
+    assert_eq!(rule.as_deref(), Some("sel=dep-trees rule=as-of,recent-6mo"));
+}
+
+#[test]
+fn an_empty_policy_list_is_refused() {
+    let spec = SPEC.replace("policy = \"as-of\"", "policy = []");
+    let err = IndexSpec::parse(&spec).expect_err("empty list");
+    assert!(err.contains("at least one strategy"), "{err}");
+}

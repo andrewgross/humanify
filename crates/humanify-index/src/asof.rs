@@ -390,6 +390,12 @@ pub enum VersionPolicy {
     /// so often that the version an app bundled is whatever was current
     /// when it was built (the AWS SDKs).
     Recent { months: u32 },
+    /// Every `k`-th stable release counting back from the newest
+    /// (`every-<K>`): depth spread evenly over the whole history, so no
+    /// release is more than `k - 1` releases from an indexed one (exp184
+    /// drift: a release keeps ~70% of its units 5 releases apart, ~10–90%
+    /// at 20). With `max`, the newest `max` of them.
+    Every(usize),
     /// Nothing but the pins (`--pinned`: the bundle's readers named them).
     PinsOnly,
 }
@@ -407,6 +413,7 @@ impl VersionPolicy {
             VersionPolicy::Latest(1) => "latest".to_string(),
             VersionPolicy::Latest(n) => format!("latest-{n}"),
             VersionPolicy::Recent { months } => format!("recent-{months}mo"),
+            VersionPolicy::Every(k) => format!("every-{k}"),
             VersionPolicy::PinsOnly => "pins".to_string(),
         }
     }
@@ -420,6 +427,10 @@ impl VersionPolicy {
                     VersionPolicy::Latest(n.parse().ok()?)
                 }
             });
+        }
+        if let Some(rest) = name.strip_prefix("every-") {
+            let k: usize = rest.parse().ok()?;
+            return (k > 0).then_some(VersionPolicy::Every(k));
         }
         if let Some(rest) = name.strip_prefix("recent-") {
             let months: u32 = rest.strip_suffix("mo")?.parse().ok()?;
@@ -609,6 +620,15 @@ pub fn select_versions(
                 .collect()
         }
         VersionPolicy::Recent { months } => recent_months(versions, as_of, months, &published),
+        VersionPolicy::Every(k) => {
+            let mut sorted: Vec<&(Semver, &str)> = versions.iter().collect();
+            sorted.sort_by(|a, b| b.0.cmp(&a.0));
+            sorted
+                .into_iter()
+                .step_by(k)
+                .map(|(_, v)| ("every", (*v).to_string()))
+                .collect()
+        }
         VersionPolicy::PinsOnly => Vec::new(),
     };
     let mut plan = PackagePlan::default();

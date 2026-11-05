@@ -4,7 +4,7 @@
 use super::asof::VersionPolicy;
 use super::build::SpongeRegions;
 use super::spec::{
-    HighImpactList, IndexSpec, Source, VersionRules, name_matches, parse_high_impact_list,
+    HighImpactList, IndexSpec, Source, Strategy, VersionRules, name_matches, parse_high_impact_list,
 };
 
 const VALID: &str = r#"
@@ -126,10 +126,13 @@ fn the_list_selection_is_read(source: &Source) {
 }
 
 fn the_version_rules_are_read(rules: &VersionRules) {
-    assert_eq!(rules.default, VersionPolicy::YearAllMajor);
+    assert_eq!(rules.default, Strategy(vec![VersionPolicy::YearAllMajor]));
     assert_eq!(rules.dependents, 2);
     assert_eq!(rules.overrides.len(), 1);
-    assert_eq!(rules.overrides[0].policy, VersionPolicy::Latest(200));
+    assert_eq!(
+        rules.overrides[0].policy,
+        Strategy(vec![VersionPolicy::Latest(200)])
+    );
     assert_eq!(rules.overrides[0].when.names.as_slice(), ["@aws-sdk/*"]);
 }
 
