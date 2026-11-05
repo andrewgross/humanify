@@ -283,10 +283,10 @@
     },
     {
       "file": "crates/humanify-index/src/build.rs",
-      "scope": "install",
+      "scope": "npm_install",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "`npm install --before=<publish date>` of one package (retried once with --legacy-peer-deps), through humanify_core::subprocess::run under INSTALL_DEADLINE (30 min; tens of seconds in the exp095 builds); a failure or timeout fails the task, which writes no shard and is reported as FAILED"
+      "reason": "`npm install --before=<cutoff>` of one package (retried once with --legacy-peer-deps; install calls it at the exact cutoff, then once at the grace cutoff when only the date blocked it), through humanify_core::subprocess::run under INSTALL_DEADLINE (30 min; tens of seconds in the exp095 builds); a failure or timeout fails the task, which writes no shard and is reported as FAILED"
     },
     {
       "file": "crates/humanify-index/src/recipe.rs",

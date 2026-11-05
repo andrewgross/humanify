@@ -22,7 +22,7 @@ use humanify_core::libindex::format::{
 use humanify_core::libindex::literals::{LiteralMode, code_literals, json_literals};
 use humanify_core::libindex::recipe::Recipe;
 
-use crate::asof::{Selected, VersionPolicy, normalize_time, select_versions};
+use crate::asof::{Selected, VersionPolicy, grace_cutoff, normalize_time, select_versions};
 use crate::merge::{GIANT_SHARD_BYTES, MergeMeta, ShardFlow, finish_workers, stream_parallel};
 use crate::recipe::{
     MAX_SOURCE_BYTES, RECIPE_VERSION, RecipeBuild, bundler_package, entry_specifiers,
@@ -727,7 +727,10 @@ fn write_entries(dir: &Path, name: &str) -> Result<(), String> {
 }
 
 /// Install `task` (once) in its work directory: dependencies as of its
-/// own publish time (`--before`), no install scripts.
+/// own publish time (`--before`), no install scripts. When npm finds no
+/// version that old for a dependency, once more as of [`grace_cutoff`]
+/// (a sibling of the same release published moments later); the planner
+/// resolves ranges by the same two cutoffs.
 fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<PathBuf, String> {
     let dir = work.join(format!("{}@{}", task.name.replace('/', "__"), task.version));
     if dir.join(".installed").exists() {
@@ -737,30 +740,47 @@ fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<PathBuf, String
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let manifest = serde_json::json!({"private": true, "name": "ix-app", "dependencies": {&task.name: &task.version}});
     std::fs::write(dir.join("package.json"), format!("{manifest}\n")).map_err(|e| e.to_string())?;
-    let before = format!("--before={}", task.published);
-    let base = [
-        "install",
-        "--ignore-scripts",
-        "--no-audit",
-        "--no-fund",
-        "--loglevel=error",
-    ];
-    let npm = |legacy: bool, trace: Trace<'_>| -> Result<(), String> {
+    let label = format!("npm install {}@{}", task.name, task.version);
+    let exact = npm_install(&dir, &task.published, trace);
+    if let Err(e) = exact {
+        let grace = grace_cutoff(&task.published).filter(|_| date_blocked(&e));
+        let Some(grace) = grace else {
+            return Err(format!("{label}: {e}"));
+        };
+        npm_install(&dir, &grace, trace).map_err(|e2| format!("{label}: {e} / grace: {e2}"))?;
+    }
+    strip_source_map_comments(&dir.join("node_modules"));
+    std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+/// `npm install` in `dir` as of `before`, retried with
+/// `--legacy-peer-deps` when the strict peer resolution fails.
+fn npm_install(dir: &Path, before: &str, trace: Trace<'_>) -> Result<(), String> {
+    let npm = |legacy: bool| -> Result<(), String> {
         let mut cmd = Command::new("npm");
-        cmd.current_dir(&dir).args(base).arg(&before);
+        cmd.current_dir(dir)
+            .args([
+                "install",
+                "--ignore-scripts",
+                "--no-audit",
+                "--no-fund",
+                "--loglevel=error",
+            ])
+            .arg(format!("--before={before}"));
         if legacy {
             cmd.arg("--legacy-peer-deps");
         }
         let _s = trace.stage("library.index.install");
         run_cmd(&mut cmd)
     };
-    if let Err(e) = npm(false, trace) {
-        npm(true, trace)
-            .map_err(|e2| format!("npm install {}@{}: {e} / {e2}", task.name, task.version))?;
-    }
-    strip_source_map_comments(&dir.join("node_modules"));
-    std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
-    Ok(dir)
+    npm(false).or_else(|e| npm(true).map_err(|e2| format!("{e} / {e2}")))
+}
+
+/// Whether an install failed only on its date: npm found no version of
+/// some dependency published before the cutoff.
+pub(crate) fn date_blocked(err: &str) -> bool {
+    err.contains("ETARGET") && err.contains("with a date before")
 }
 
 /// `path` with symlinks resolved (a bundler writes map sources relative to

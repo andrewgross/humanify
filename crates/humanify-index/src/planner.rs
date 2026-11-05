@@ -24,7 +24,7 @@ use std::process::Command;
 
 use humanify_core::libindex::format::Semver;
 
-use crate::asof::{Packument, VersionPolicy, normalize_time, select_versions};
+use crate::asof::{Packument, VersionPolicy, grace_cutoff, normalize_time, select_versions};
 use crate::build::PackageSelection;
 use crate::ranges::{Range, dep_spec};
 use crate::registry;
@@ -353,7 +353,10 @@ impl Resolution<'_, '_> {
         }
         let p = self.packument(name)?;
         for d in pendings {
-            let Some(resolved) = resolve_range(&p, &d.range, &d.cutoff) else {
+            // the installer's rule: the exact cutoff, else the grace one
+            let resolved = resolve_range(&p, &d.range, &d.cutoff)
+                .or_else(|| grace_cutoff(&d.cutoff).and_then(|g| resolve_range(&p, &d.range, &g)));
+            let Some(resolved) = resolved else {
                 continue;
             };
             let first = format!("{}@{} range={}", d.from, d.version, d.range);
@@ -600,7 +603,8 @@ impl Resolution<'_, '_> {
 }
 
 /// The highest stable, installable version published by `cutoff` that
-/// `range` resolves to (what `npm install --before=cutoff` gets). None:
+/// `range` resolves to (what `npm install --before=cutoff` gets; the
+/// caller retries at [`grace_cutoff`] as the installer does). None:
 /// an unresolvable spec (a git/file/workspace URL, a tag) or nothing
 /// satisfies it.
 fn resolve_range(p: &Packument, range_text: &str, cutoff: &str) -> Option<String> {

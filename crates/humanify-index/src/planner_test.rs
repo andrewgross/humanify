@@ -814,3 +814,50 @@ fn the_dependents_cap_keeps_the_most_resolved_versions_per_package() {
     let res = resolved(&SPEC.replace("dependents = 2", "dependents = 0"), &mut r);
     assert!(dependents(&res).is_empty());
 }
+
+/// left-pad 1.3.0 (2016-06-01T00:00:00.000Z) pins ansi-styles 2.1.0,
+/// published at `sibling` — a monorepo-style release a moment later.
+fn late_sibling(sibling: &str) -> TestRegistry {
+    let mut r = registry();
+    r.packs.insert(
+        "ansi-styles".into(),
+        packument(
+            "ansi-styles",
+            &format!(
+                r#""created":"2013-01-01T00:00:00.000Z","2.0.0":"2015-01-01T00:00:00.000Z","2.1.0":"{sibling}","2.2.0":"2023-04-01T00:00:00.000Z""#
+            ),
+            r#""2.0.0","2.1.0","2.2.0""#,
+            &[],
+        ),
+    );
+    r.packs.get_mut("left-pad").expect("left-pad").deps.insert(
+        "1.3.0".to_string(),
+        VersionMeta {
+            dependencies: [("ansi-styles".to_string(), "2.1.0".to_string())]
+                .into_iter()
+                .collect(),
+            ..VersionMeta::default()
+        },
+    );
+    r
+}
+
+#[test]
+fn a_pin_published_within_the_grace_after_its_dependent_still_resolves() {
+    let dependents = |res: &ResolvedSpec| -> Vec<String> {
+        plan_of(res, "ansi-styles")
+            .versions
+            .iter()
+            .filter(|s| s.role == "dependent")
+            .map(|s| s.version.clone())
+            .collect()
+    };
+    // 0.9 s later: what `npm install --before=<own publish time>` misses
+    // and the installer's grace retry gets
+    let mut r = late_sibling("2016-06-01T00:00:00.900Z");
+    let res = resolved(SPEC, &mut r);
+    assert_eq!(dependents(&res), vec!["2.1.0".to_string()]);
+    // two hours later: outside the grace, nothing resolves
+    let mut r = late_sibling("2016-06-01T02:00:00.000Z");
+    assert!(dependents(&resolved(SPEC, &mut r)).is_empty());
+}

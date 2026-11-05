@@ -1,7 +1,7 @@
 //! The plan: what an as-of build would index, and which shards it would
 //! reuse — no network (a recorded registry), no subprocess (no slices).
 
-use super::build::{BuildConfig, SpongeRegions, parse_package_spec, plan};
+use super::build::{BuildConfig, SpongeRegions, date_blocked, parse_package_spec, plan};
 use super::shard::{Shard, write_shard};
 use crate::bun_node;
 
@@ -1140,4 +1140,20 @@ fn chunks_deal_packages_round_robin_so_a_family_spreads_over_every_chunk() {
     assert_eq!(chunks[0], ["@aws-sdk/a", "@aws-sdk/d"]);
     assert_eq!(chunks[1], ["@aws-sdk/b", "ms"]);
     assert_eq!(chunks[2], ["@aws-sdk/c", "zod"]);
+}
+
+#[test]
+fn only_a_date_blocked_install_is_retried_at_the_grace_cutoff() {
+    // the 2026-11-04 build's own error text
+    let late = "npm error code ETARGET\nnpm error notarget No matching version found for \
+                @aws-sdk/client-s3@3.1038.0 with a date before 4/27/2026, 8:10:59 PM.";
+    assert!(date_blocked(late));
+    // a version that never existed is not a date problem
+    assert!(!date_blocked(
+        "npm error code ETARGET\nnpm error notarget No matching version found for x@9.9.9."
+    ));
+    assert!(!date_blocked(
+        "npm error code ENOVERSIONS\nnpm error No versions available for y"
+    ));
+    assert!(!date_blocked("npm error code ERESOLVE"));
 }

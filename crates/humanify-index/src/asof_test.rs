@@ -2,7 +2,9 @@
 //! `testdata/ms.packument.json` is `npm view ms time versions --json` as of
 //! 2026-10-11.
 
-use super::asof::{Packument, VersionPolicy, normalize_time, parse_as_of, select_versions};
+use super::asof::{
+    Packument, VersionPolicy, grace_cutoff, normalize_time, parse_as_of, select_versions,
+};
 
 fn ms() -> Packument {
     Packument::from_json(include_str!("../testdata/ms.packument.json")).expect("fixture")
@@ -414,4 +416,29 @@ fn recent_months_is_named_in_the_spec() {
     assert_eq!(named("recent-0mo"), None);
     assert_eq!(named("recent-6"), None);
     assert_eq!(named("recent-xmo"), None);
+}
+
+#[test]
+fn the_grace_cutoff_is_one_hour_later_and_carries_across_days_months_and_years() {
+    // a monorepo release publishes its packages seconds apart, so a
+    // package's exact pin on a sibling can be LATER than its own publish
+    // time (s3-presigned-post 3.1038.0 at 20:10:59.707, client-s3
+    // 3.1038.0 at 20:11:00.632)
+    assert_eq!(
+        grace_cutoff("2026-04-27T20:10:59.707Z").as_deref(),
+        Some("2026-04-27T21:10:59.707Z")
+    );
+    assert_eq!(
+        grace_cutoff("2024-02-28T23:30:00.000Z").as_deref(),
+        Some("2024-02-29T00:30:00.000Z")
+    );
+    assert_eq!(
+        grace_cutoff("2023-02-28T23:30:00.000Z").as_deref(),
+        Some("2023-03-01T00:30:00.000Z")
+    );
+    assert_eq!(
+        grace_cutoff("2025-12-31T23:59:59.999Z").as_deref(),
+        Some("2026-01-01T00:59:59.999Z")
+    );
+    assert_eq!(grace_cutoff("yesterday"), None);
 }

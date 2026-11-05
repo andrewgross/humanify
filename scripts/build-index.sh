@@ -64,7 +64,7 @@ mkdir -p "$REGISTRY" "$WORK"
   for i in $(seq 0 $((CHUNKS - 1))); do
     $BIN build --spec "$SPEC" --registry "$REGISTRY" --store "$STORE" \
       --work "$WORK" --jobs "$JOBS" --chunk "$i/$CHUNKS" --offline \
-      > >(sed "s|^|[chunk $i/$CHUNKS] |") 2>&1 &
+      > >(sed -u "s|^|[chunk $i/$CHUNKS] |") 2>&1 &
     pids+=("$!")
   done
   failed=0
