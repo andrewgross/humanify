@@ -71,6 +71,20 @@ of = ["impact"]
 # ---- version selection ----
 
 [versions]
+# How deep each package is indexed is a STRATEGY, chosen per spec and per
+# override. `policy` is one strategy or a list of them (a list plans the
+# UNION of what each chose); `max = N` is an explicit depth cap over the
+# result, the newest N kept. The strategies:
+#   as-of            latest, its highest earlier patch, and the newest of
+#                    the two previous major lines
+#   latest-<N>       the newest N releases (explicit depth)
+#   every-<K>        every K-th release back from the newest: depth spread
+#                    evenly, no release more than K-1 from an indexed one
+#   recent-<N>mo     every release of the N months before as_of
+#   year-all+minor / year-all+major / year-last<N>+major<M>
+#                    a year of releases plus older lines (exp095 lab)
+# e.g. policy = ["as-of", "every-5"] with max = 40.
+#
 # The default: latest, the highest earlier patch of the latest's
 # major.minor, and the highest of each of the two previous major lines —
 # today's index's own policy, at today's scale (~58k versions over the
