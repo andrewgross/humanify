@@ -103,23 +103,23 @@ messages in the emitted `run.cjs` (that file IS in the scored trees).
 
 ## Gate
 
-Commit 2268a2124 (the code; later commits are this README only), `npm run check` run bare:
+`npm run check` run bare. Worktree: commit 2268a2124 (the code). Clean checkout (`git worktree add --detach /work/exp186-clean 035165215`, fresh `npm ci`, cold `target/`): commit 035165215, which differs from 2268a2124 only by this README. The commit after that fills in this table and is README-only too.
 
 | stage              | worktree | clean checkout |
 | ------------------ | -------- | -------------- |
-| typecheck          | PASS     | pending        |
-| lint               | PASS     | pending        |
-| rust:fmt           | PASS     | pending        |
-| rust:clippy        | PASS     | pending        |
-| knip               | PASS     | pending        |
-| knip:prod          | PASS     | pending        |
-| census:clones      | PASS     | pending        |
-| census:concurrency | PASS     | pending        |
-| unit               | PASS     | pending        |
-| rust:unit          | PASS     | pending        |
-| rust:build         | PASS     | pending        |
-| rust:format-golden | PASS     | pending        |
-| e2e                | PASS     | pending        |
+| typecheck          | PASS     | PASS           |
+| lint               | PASS     | PASS           |
+| rust:fmt           | PASS     | PASS           |
+| rust:clippy        | PASS     | PASS           |
+| knip               | PASS     | PASS           |
+| knip:prod          | PASS     | PASS           |
+| census:clones      | PASS     | PASS           |
+| census:concurrency | PASS     | PASS           |
+| unit               | PASS     | PASS           |
+| rust:unit          | PASS     | PASS           |
+| rust:build         | PASS     | PASS           |
+| rust:format-golden | PASS     | PASS           |
+| e2e                | PASS     | PASS           |
 
 The first two worktree runs were red and fixed: prettier on the new test,
 then `unit` — the exp096 scorer imports
