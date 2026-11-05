@@ -22,7 +22,7 @@ use humanify_core::libindex::format::{
 use humanify_core::libindex::literals::{LiteralMode, code_literals, json_literals};
 use humanify_core::libindex::recipe::Recipe;
 
-use crate::asof::{VersionPolicy, normalize_time, select_versions};
+use crate::asof::{Selected, VersionPolicy, grace_cutoff, normalize_time, select_versions};
 use crate::merge::{GIANT_SHARD_BYTES, MergeMeta, ShardFlow, finish_workers, stream_parallel};
 use crate::recipe::{
     MAX_SOURCE_BYTES, RECIPE_VERSION, RecipeBuild, bundler_package, entry_specifiers,
@@ -84,6 +84,9 @@ use humanify_core::libindex::units::UNIT_ROW_MIN_NODES;
 pub struct BuildConfig {
     /// `name` or `name@version` (a pin), one per entry.
     pub packages: Vec<String>,
+    /// A RESOLVED spec (exp184, `--spec`): the plan is the resolution's
+    /// selections, and the file path below is unused.
+    pub spec: Option<crate::planner::ResolvedSpec>,
     /// Normalised (`asof::parse_as_of`).
     pub as_of: String,
     pub registry: PathBuf,
@@ -126,6 +129,13 @@ pub struct BuildConfig {
     /// build OOMs workers solo gets one refusal entry, never a
     /// special-case retry path.
     pub refuse: Vec<String>,
+    /// Build only chunk I of N (exp184, a spec build split across
+    /// invocations): the plan is resolved in FULL, the BUILDS limited to
+    /// the chunk's packages (the planned packages sorted, split into N
+    /// contiguous groups), and nothing merged or written. The chunks
+    /// finish with one `--merge-only` run (or `--chunk 0/1`, which skips
+    /// no package) over the whole plan.
+    pub chunk: Option<(usize, usize)>,
 }
 
 /// What the run-time build records into the run's profiler, and the two
@@ -213,6 +223,29 @@ pub struct Task {
     pub published: String,
     pub missing: Vec<ShardInputs>,
     pub reused: Vec<ShardInputs>,
+}
+
+/// One version a plan indexes, with the rule that chose it (exp184: the
+/// attribution goes into the build's sidecar).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlannedVersion {
+    pub version: String,
+    pub role: String,
+    pub published: String,
+    pub attribution: Option<String>,
+}
+
+/// One package's plan: the versions to index and the ones refused, the
+/// resolution's output (a spec's, or a `--packages` file's selections
+/// resolved at plan time).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PackageSelection {
+    pub name: String,
+    pub versions: Vec<PlannedVersion>,
+    /// (version, reason), rule order.
+    pub refused: Vec<(String, String)>,
+    /// Why the package is in the plan at all.
+    pub attribution: Option<String>,
 }
 
 #[derive(Debug)]
@@ -390,40 +423,93 @@ fn refusal_specs(specs: &[String]) -> Result<Vec<(String, String, String)>, Stri
         .collect()
 }
 
+/// One package's resolved plan as `plan` builds it: the chosen versions,
+/// the spec's own (version, reason) refusals.
+type Planned = Vec<(String, Vec<Selected>, Vec<(String, String)>)>;
+
 pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, String> {
     let mut snapshot = RegistrySnapshot::default();
     let slices = slice_records(cfg, &mut snapshot, trace)?;
     let mut tasks = Vec::new();
     let mut refused = Vec::new();
     let refusals = refusal_specs(&cfg.refuse)?;
-    // `--pinned` specs join a listed package's pins, or are indexed at
-    // their pins alone
-    let mut groups: Vec<(String, Vec<String>, VersionPolicy)> = group_specs(&cfg.packages)
-        .into_iter()
-        .map(|(name, pins)| (name, pins, cfg.policy))
-        .collect();
-    for (name, pins) in group_specs(&cfg.pinned) {
-        match groups.iter_mut().find(|g| g.0 == name) {
-            Some(g) => g.1.extend(pins),
-            None => groups.push((name, pins, VersionPolicy::PinsOnly)),
+    // The plan's packages: a resolved spec's selections (exp184), or the
+    // `--packages` file's specs resolved at plan time (`--pinned` specs
+    // join a listed package's pins, or are indexed at their pins alone).
+    let selections: Planned = match &cfg.spec {
+        Some(resolved) => {
+            for (name, sha) in &resolved.packuments {
+                snapshot.packuments.insert(name.clone(), sha.clone());
+            }
+            note_fetch(&mut snapshot, resolved.earliest_fetch.as_deref());
+            note_fetch(&mut snapshot, resolved.latest_fetch.as_deref());
+            resolved
+                .selections
+                .iter()
+                .map(|s| {
+                    (
+                        s.name.clone(),
+                        s.versions
+                            .iter()
+                            .map(|v| Selected {
+                                version: v.version.clone(),
+                                role: v.role.clone(),
+                                published: v.published.clone(),
+                            })
+                            .collect(),
+                        s.refused.clone(),
+                    )
+                })
+                .collect()
         }
-    }
-    for (name, pins, policy) in groups {
-        let (packument, sha) = {
-            let _s = trace.stage("library.index.registry");
-            registry::load(&cfg.registry, &name, cfg.offline)?
-        };
-        snapshot.packuments.insert(name.clone(), sha);
-        note_fetch(&mut snapshot, packument.fetched_at.as_deref());
-        let chosen = select_versions(&packument, &cfg.as_of, &pins, policy);
-        refused.extend(chosen.refused.into_iter().map(|r| RefusedRecord {
-            name: name.clone(),
-            version: r.version,
-            reason: r.reason,
-        }));
-        // an explicit --refuse removes the version from the plan; a version
-        // the plan already refused keeps its first reason (no duplicate rows)
-        let mut selected = chosen.selected;
+        None => {
+            let mut groups: Vec<(String, Vec<String>, VersionPolicy)> = group_specs(&cfg.packages)
+                .into_iter()
+                .map(|(name, pins)| (name, pins, cfg.policy))
+                .collect();
+            for (name, pins) in group_specs(&cfg.pinned) {
+                match groups.iter_mut().find(|g| g.0 == name) {
+                    Some(g) => g.1.extend(pins),
+                    None => groups.push((name, pins, VersionPolicy::PinsOnly)),
+                }
+            }
+            groups
+                .into_iter()
+                .map(|(name, pins, policy)| {
+                    let (packument, sha) = {
+                        let _s = trace.stage("library.index.registry");
+                        registry::load(&cfg.registry, &name, cfg.offline)?
+                    };
+                    snapshot.packuments.insert(name.clone(), sha);
+                    note_fetch(&mut snapshot, packument.fetched_at.as_deref());
+                    let chosen = select_versions(&packument, &cfg.as_of, &pins, policy);
+                    let refused: Vec<(String, String)> = chosen
+                        .refused
+                        .into_iter()
+                        .map(|r| (r.version, r.reason))
+                        .collect();
+                    Ok((name, chosen.selected, refused))
+                })
+                .collect::<Result<Vec<_>, String>>()?
+        }
+    };
+    for (name, selected, sel_refused) in selections {
+        // the resolution's own refusals, then an explicit --refuse
+        // (runtime builds): a version already refused keeps its first
+        // reason (no duplicate rows)
+        for (version, reason) in sel_refused {
+            if !refused
+                .iter()
+                .any(|r: &RefusedRecord| r.name == name && r.version == version)
+            {
+                refused.push(RefusedRecord {
+                    name: name.clone(),
+                    version: version.clone(),
+                    reason: reason.clone(),
+                });
+            }
+        }
+        let mut selected = selected;
         for (rn, rv, reason) in &refusals {
             if rn != &name {
                 continue;
@@ -641,7 +727,10 @@ fn write_entries(dir: &Path, name: &str) -> Result<(), String> {
 }
 
 /// Install `task` (once) in its work directory: dependencies as of its
-/// own publish time (`--before`), no install scripts.
+/// own publish time (`--before`), no install scripts. When npm finds no
+/// version that old for a dependency, once more as of [`grace_cutoff`]
+/// (a sibling of the same release published moments later); the planner
+/// resolves ranges by the same two cutoffs.
 fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<PathBuf, String> {
     let dir = work.join(format!("{}@{}", task.name.replace('/', "__"), task.version));
     if dir.join(".installed").exists() {
@@ -651,30 +740,47 @@ fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<PathBuf, String
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let manifest = serde_json::json!({"private": true, "name": "ix-app", "dependencies": {&task.name: &task.version}});
     std::fs::write(dir.join("package.json"), format!("{manifest}\n")).map_err(|e| e.to_string())?;
-    let before = format!("--before={}", task.published);
-    let base = [
-        "install",
-        "--ignore-scripts",
-        "--no-audit",
-        "--no-fund",
-        "--loglevel=error",
-    ];
-    let npm = |legacy: bool, trace: Trace<'_>| -> Result<(), String> {
+    let label = format!("npm install {}@{}", task.name, task.version);
+    let exact = npm_install(&dir, &task.published, trace);
+    if let Err(e) = exact {
+        let grace = grace_cutoff(&task.published).filter(|_| date_blocked(&e));
+        let Some(grace) = grace else {
+            return Err(format!("{label}: {e}"));
+        };
+        npm_install(&dir, &grace, trace).map_err(|e2| format!("{label}: {e} / grace: {e2}"))?;
+    }
+    strip_source_map_comments(&dir.join("node_modules"));
+    std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+/// `npm install` in `dir` as of `before`, retried with
+/// `--legacy-peer-deps` when the strict peer resolution fails.
+fn npm_install(dir: &Path, before: &str, trace: Trace<'_>) -> Result<(), String> {
+    let npm = |legacy: bool| -> Result<(), String> {
         let mut cmd = Command::new("npm");
-        cmd.current_dir(&dir).args(base).arg(&before);
+        cmd.current_dir(dir)
+            .args([
+                "install",
+                "--ignore-scripts",
+                "--no-audit",
+                "--no-fund",
+                "--loglevel=error",
+            ])
+            .arg(format!("--before={before}"));
         if legacy {
             cmd.arg("--legacy-peer-deps");
         }
         let _s = trace.stage("library.index.install");
         run_cmd(&mut cmd)
     };
-    if let Err(e) = npm(false, trace) {
-        npm(true, trace)
-            .map_err(|e2| format!("npm install {}@{}: {e} / {e2}", task.name, task.version))?;
-    }
-    strip_source_map_comments(&dir.join("node_modules"));
-    std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
-    Ok(dir)
+    npm(false).or_else(|e| npm(true).map_err(|e2| format!("{e} / {e2}")))
+}
+
+/// Whether an install failed only on its date: npm found no version of
+/// some dependency published before the cutoff.
+pub(crate) fn date_blocked(err: &str) -> bool {
+    err.contains("ETARGET") && err.contains("with a date before")
 }
 
 /// `path` with symlinks resolved (a bundler writes map sources relative to
@@ -1416,7 +1522,7 @@ fn module_shard(
 
 /// Build every missing shard of `task`: the module shards first, since the
 /// literal shard reads their builds (any build not yet made is made).
-fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), String> {
+pub(crate) fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), String> {
     let dir = install(&cfg.work, task, trace)?;
     // the entries are the recipe's: rewritten on every build
     write_entries(&dir, &task.name)?;
@@ -1450,6 +1556,13 @@ fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), Strin
         };
         write_shard(&cfg.store, &shard)?;
     }
+    // The install tree is SCRATCH: the store's shards are the durable
+    // artifact, and a whole default spec's trees are millions of files —
+    // the 2026-11-03 build exhausted the filesystem's INODES (244M, 0
+    // free) long before its bytes. A later run reinstalls what a missing
+    // shard needs (npm's own cache makes that cheap); a FAILED task keeps
+    // its tree (usually small, and what a bundle failure is debugged in).
+    let _ = std::fs::remove_dir_all(&dir);
     Ok(())
 }
 
@@ -1510,6 +1623,19 @@ pub struct BuildOutcome {
     pub refused: Vec<RefusedRecord>,
 }
 
+/// Chunk `i` of `n` over the plan's sorted package names: dealt round
+/// robin, so a family of adjacent names (`@aws-sdk/*`: hundreds of big
+/// installs) spreads over every chunk instead of loading one — chunks
+/// run concurrently (scripts/build-index.sh), so balance is wall time.
+pub(crate) fn chunk_of(names: &[String], i: usize, n: usize) -> BTreeSet<&String> {
+    names
+        .iter()
+        .enumerate()
+        .filter(|(k, _)| k % n == i)
+        .map(|(_, name)| name)
+        .collect()
+}
+
 /// Plan, build what is missing (none with `cfg.merge_only`), merge into
 /// `cfg.out`. Returns the index id. `dry_run`: print the plan and stop
 /// (returns an empty id).
@@ -1519,8 +1645,60 @@ pub struct BuildOutcome {
 /// (exp162) the workers partition the key space into contiguous ranges,
 /// each streaming EVERY shard in label order and keeping its range's
 /// rows; the segments concatenate in range order into the same bytes.
-pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
-    build(cfg, dry_run, Trace::default()).map(|o| o.index_id)
+/// A `--chunk I/N` build: build ONLY the chunk's packages' shards, write
+/// nothing. The plan is full (the same everywhere); the package list is
+/// the plan's sorted and split into N contiguous groups. No merge: the
+/// chunks finish with one `--merge-only` run over the whole plan.
+fn chunk_build(
+    cfg: &BuildConfig,
+    plan: &mut Plan,
+    i: usize,
+    n: usize,
+    trace: Trace<'_>,
+) -> Result<BuildOutcome, String> {
+    let names: Vec<String> = plan
+        .tasks
+        .iter()
+        .map(|t| t.name.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let chunk = chunk_of(&names, i, n);
+    let tasks: Vec<Task> = plan
+        .tasks
+        .iter()
+        .filter(|t| chunk.contains(&t.name))
+        .cloned()
+        .collect();
+    println!(
+        "chunk {i}/{n}: {} of {} packages, {} tasks",
+        chunk.len(),
+        names.len(),
+        tasks.len()
+    );
+    let errors = execute_all(cfg, &tasks, trace);
+    for (label, e) in &errors {
+        eprintln!("FAILED {label}: {e}");
+    }
+    if trace.stopped() {
+        return Err("the run stopped the build: its wait deadline \
+             (library.index.wait) expired"
+            .to_string());
+    }
+    let built = tasks.iter().filter(|t| !t.missing.is_empty()).count();
+    Ok(BuildOutcome {
+        index_id: String::new(),
+        tasks: tasks.len(),
+        reused: tasks.len() - built,
+        built,
+        slices: plan.slices.clone(),
+        errors,
+        refused: plan.refused.clone(),
+    })
+}
+
+pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<BuildOutcome, String> {
+    build(cfg, dry_run, Trace::default())
 }
 
 /// [`run`] with the run-time caller's [`Trace`] (exp154,
@@ -1538,6 +1716,9 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
     }
     if dry_run {
         return Ok(BuildOutcome::default());
+    }
+    if let Some((i, n)) = cfg.chunk {
+        return chunk_build(cfg, &mut plan, i, n, trace);
     }
     let mut errors = Vec::new();
     if !cfg.merge_only {

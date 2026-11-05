@@ -97,6 +97,50 @@ pub struct SidecarSlice {
     pub bundler_version: String,
 }
 
+/// One version an index spec's resolved plan indexes, with the rule that
+/// chose it (exp184).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecPlannedVersion {
+    pub version: String,
+    pub role: String,
+    pub published: String,
+    /// `sel=<id> … rule=<policy>` / `override=<id> …` / `dependents=<n> first=…`.
+    pub attribution: String,
+}
+
+/// One package of an index spec's resolved plan.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecSelection {
+    pub name: String,
+    /// Why the package is in the plan (`sel=<id> …`).
+    pub attribution: String,
+    pub versions: Vec<SpecPlannedVersion>,
+    /// (version, reason), rule order.
+    pub refused: Vec<(String, String)>,
+}
+
+/// The spec block of a spec-built index's `build.json` (exp184): the spec
+/// file's sha256 and schema, and the RESOLVED PLAN — every package@version
+/// and the rule that chose it, the versions refused with their reasons,
+/// the packages a names-refusal skipped, and the tool pins. Same spec +
+/// same registry snapshot ⇒ same plan.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecSidecar {
+    pub schema: String,
+    pub spec_sha256: String,
+    pub as_of: String,
+    pub default_policy: String,
+    pub dependents: usize,
+    /// bundler → the version the spec pins.
+    pub tools: BTreeMap<String, String>,
+    pub selections: Vec<SpecSelection>,
+    /// refusal rule id → the package names it skipped.
+    pub skipped: BTreeMap<String, Vec<String>>,
+}
+
 /// `build.json` (schema `library-index-build/1`): how an index was built
 /// — tool versions, as-of, the seed list, counts and per-stage wall
 /// times. A SIDECAR because the index id is the manifest's hash: times in
@@ -113,6 +157,10 @@ pub struct BuildSidecar {
     pub as_of: String,
     pub format: String,
     pub slices: Vec<SidecarSlice>,
+    /// The spec the build came from, and its resolved plan (exp184; a
+    /// `--spec` build only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec: Option<SpecSidecar>,
     pub seeds: Vec<PlannedSeed>,
     /// The seeds the plan dropped, and why (exp171).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -490,6 +538,7 @@ pub fn plan_runtime(
         pinned.push(format!("{}@{}", seed.name, version));
     }
     let cfg = BuildConfig {
+        spec: None,
         packages: Vec::new(),
         as_of,
         registry: registry_dir,
@@ -506,6 +555,7 @@ pub fn plan_runtime(
         sponge_regions: Default::default(),
         names: true,
         refuse: Vec::new(),
+        chunk: None,
         quiet: true,
     };
     Ok((cfg, planned, dropped))
@@ -646,6 +696,7 @@ pub fn build_planned(
             .unwrap_or_default()
     ));
     let cfg = BuildConfig {
+        spec: None,
         out: Some(temp.clone()),
         ..cfg
     };
@@ -745,6 +796,7 @@ pub fn build_planned(
         reused: outcome.reused,
         stage_ms,
         completed: now_iso(),
+        spec: None,
     };
     write_build_sidecar(&dir, &sidecar)?;
     Ok(RuntimeBuild {
@@ -765,7 +817,7 @@ fn first_line(e: &str) -> String {
 }
 
 /// `YYYY-MM-DDTHH:MM:SS.mmmZ` now (the sidecar's `completed`).
-fn now_iso() -> String {
+pub fn now_iso() -> String {
     let ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()

@@ -291,6 +291,7 @@ fn the_sidecar_round_trips() {
         reused: 0,
         stage_ms: BTreeMap::from([("install".to_string(), 12_345)]),
         completed: "2026-10-26T00:00:00Z".into(),
+        spec: None,
     };
     write_build_sidecar(&dir, &side).expect("write");
     assert_eq!(

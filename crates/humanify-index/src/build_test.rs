@@ -1,7 +1,7 @@
 //! The plan: what an as-of build would index, and which shards it would
 //! reuse — no network (a recorded registry), no subprocess (no slices).
 
-use super::build::{BuildConfig, SpongeRegions, parse_package_spec, plan};
+use super::build::{BuildConfig, SpongeRegions, date_blocked, parse_package_spec, plan};
 use super::shard::{Shard, write_shard};
 use crate::bun_node;
 
@@ -23,7 +23,9 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
     .expect("fixture");
     BuildConfig {
         names: false,
+        spec: None,
         refuse: Vec::new(),
+        chunk: None,
         packages: vec!["ms".into()],
         as_of: as_of.into(),
         registry,
@@ -169,7 +171,7 @@ fn merge_only_builds_nothing_and_merges_what_the_store_holds() {
     let id = super::build::run(&cfg, false).expect("merges");
     let manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(out.join("manifest.json")).unwrap()).unwrap();
-    assert_eq!(id.len(), 64);
+    assert_eq!(id.index_id.len(), 64);
     assert_eq!(manifest["packages"].as_array().unwrap().len(), 1);
     let no_shard: Vec<&str> = manifest["refused"]
         .as_array()
@@ -948,7 +950,9 @@ fn exp162_config(
 ) -> BuildConfig {
     BuildConfig {
         names: false,
+        spec: None,
         refuse: Vec::new(),
+        chunk: None,
         packages: vec!["ms".into()],
         as_of: "2020-12-01T23:59:59.999Z".into(),
         registry: root.join("registry"),
@@ -1070,4 +1074,86 @@ fn exp162_anchor() {
     for (i, d) in dirs.iter().enumerate().skip(1) {
         assert_eq!(&dirs[0], d, "dir {i} differs from the serial merge");
     }
+}
+
+#[test]
+fn a_tasks_install_tree_is_scratch_gone_once_its_shards_are_written() {
+    let cfg = config("work-cleanup", "2020-12-01T23:59:59.999Z");
+    let planned = plan(&cfg, Default::default()).expect("plan");
+    let mut task = planned.tasks[0].clone();
+    task.missing.clear();
+    // a PRE-INSTALLED tree (its .installed stamp): install() must not
+    // reach npm for this task
+    let dir = cfg.work.join(format!("{}@{}", task.name, task.version));
+    std::fs::create_dir_all(dir.join("node_modules/ms")).expect("mkdir");
+    std::fs::write(dir.join(".installed"), "").expect("stamp");
+    std::fs::write(
+        dir.join("node_modules/ms/package.json"),
+        r#"{"name":"ms","version":"2.1.2"}"#,
+    )
+    .expect("pkg");
+    crate::build::execute(&cfg, &task, Default::default()).expect("execute");
+    assert!(
+        !dir.exists(),
+        "the install tree is scratch: gone once the task's shards are \
+         written (165k trees are terabytes the build does not need; a \
+         later run reinstalls what a missing shard needs)"
+    );
+}
+
+#[test]
+fn chunks_deal_packages_round_robin_so_a_family_spreads_over_every_chunk() {
+    let names: Vec<String> = [
+        "@aws-sdk/a",
+        "@aws-sdk/b",
+        "@aws-sdk/c",
+        "@aws-sdk/d",
+        "ms",
+        "zod",
+    ]
+    .iter()
+    .map(|s| (*s).to_string())
+    .collect();
+    let chunks: Vec<Vec<&str>> = (0..3)
+        .map(|i| {
+            super::build::chunk_of(&names, i, 3)
+                .into_iter()
+                .map(String::as_str)
+                .collect()
+        })
+        .collect();
+    // every package in exactly one chunk
+    let mut all: Vec<&str> = chunks.concat();
+    all.sort_unstable();
+    assert_eq!(
+        all,
+        [
+            "@aws-sdk/a",
+            "@aws-sdk/b",
+            "@aws-sdk/c",
+            "@aws-sdk/d",
+            "ms",
+            "zod"
+        ]
+    );
+    // adjacent names (one family) land in different chunks
+    assert_eq!(chunks[0], ["@aws-sdk/a", "@aws-sdk/d"]);
+    assert_eq!(chunks[1], ["@aws-sdk/b", "ms"]);
+    assert_eq!(chunks[2], ["@aws-sdk/c", "zod"]);
+}
+
+#[test]
+fn only_a_date_blocked_install_is_retried_at_the_grace_cutoff() {
+    // the 2026-11-04 build's own error text
+    let late = "npm error code ETARGET\nnpm error notarget No matching version found for \
+                @aws-sdk/client-s3@3.1038.0 with a date before 4/27/2026, 8:10:59 PM.";
+    assert!(date_blocked(late));
+    // a version that never existed is not a date problem
+    assert!(!date_blocked(
+        "npm error code ETARGET\nnpm error notarget No matching version found for x@9.9.9."
+    ));
+    assert!(!date_blocked(
+        "npm error code ENOVERSIONS\nnpm error No versions available for y"
+    ));
+    assert!(!date_blocked("npm error code ERESOLVE"));
 }

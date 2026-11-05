@@ -414,7 +414,10 @@ marked **G** touch how the harness launches the binary and update
    What landed: every setting is declared ONCE in the key registry
    (`humanify_cli::config::keys::KEYS`: section, name, type and range,
    default, one-line meaning, and the flag for an operational one); the
-   TOML is read only by `config::file` (the env guard's owner for `toml`).
+   TOML is read only by `config::file` (the env guard's owner for `toml`)
+   — plus, since exp184, `humanify-index/src/spec.rs`, whose spec file is
+   the BUILDER's build INPUT (`humanify-index-spec/1`), not the pipeline's
+   configuration; the guard carries it as that rule's second owner.
    Flags kept: the input, `-o/--output-dir`, `--prior-version`,
    `--endpoint`, `-m/--model`, `--config`, `-v` (plus help/version, and the
    library spellings until step 6). **33 flags moved** (34 spellings with

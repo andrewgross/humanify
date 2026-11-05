@@ -449,6 +449,11 @@ Never skip the red step. If the test passes before implementation, the test is n
 - Actively unify duplicated code. When two systems do similar things, extract shared functionality rather than duplicating with minor variations. Before writing new helpers, check if an existing one can be reused or generalized.
 - **[`docs/responsibility.md`](./docs/responsibility.md) says who owns which question** — name legality, applying a rename, counting changed lines, walking a tree, reading a ledger, reading a kill switch. Check it before writing a helper, and add a row when you create an owner. The dangerous duplication is not two functions that look alike; it is two that answer the same question DIFFERENTLY with nothing declaring the difference (a guard that read fields one producer never sets was dead for 11,094 accepts and reported as perfect precision).
 - **[`docs/pipeline-stages.md`](./docs/pipeline-stages.md) lists the twelve stages that actually run** (Rust modules since the cutover), in order, and which two have a real strategy registry (unpack, library detection). Read it before assuming a plug point exists: the working mental model was four stages, and the eight unwritten ones are where the noise has come from — `vendor/` went unscored for thirteen experiments at 2.4x the measured `src/` noise. Splitting has ONE path (`stableSplitFromCode`; prior → inherit layout, no prior → fresh grouping): the standalone `split` command, its adapter registry, and the legacy clustering splitter that backed them were deleted 2026-08-11/12 after an execution census measured them at zero runs.
+- **Configuration: every key is a flag.** Add a setting by adding a key to the
+  registry (`crates/humanify-cli/src/config/keys.rs`), never a hand-written
+  flag; the flag, the config-file key, the help text and
+  `humanify.example.toml` are all generated from it, and a flag and a config
+  value that disagree fail.
 - **Concurrency: [`docs/concurrency.md`](./docs/concurrency.md) is the approach** —
   ten sanctioned patterns (CPU work through `crate::par` only, the ONE tokio
   runtime the LLM provider owns, a deadline over every whole wait, drained

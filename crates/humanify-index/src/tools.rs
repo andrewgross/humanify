@@ -113,8 +113,14 @@ pub const TOOLS_BEFORE: &str = "2026-10-16T00:00:00Z";
 /// The npm specs the fetch of `bundler`'s tool installs: the bundler at
 /// its pin first, then its recipe's plugins.
 pub fn fetch_specs(bundler: RecipeBundler) -> Vec<String> {
+    fetch_specs_at(bundler, pin(bundler).version)
+}
+
+/// [`fetch_specs`] at an explicit bundler version (exp184: a spec pins its
+/// own).
+pub fn fetch_specs_at(bundler: RecipeBundler, version: &str) -> Vec<String> {
     let p = pin(bundler);
-    std::iter::once(format!("{}@{}", bundler_package_name(bundler), p.version))
+    std::iter::once(format!("{}@{}", bundler_package_name(bundler), version))
         .chain(p.plugins.iter().map(|s| s.to_string()))
         .collect()
 }
@@ -230,6 +236,19 @@ pub fn find_tool(root: &Path, bundler: RecipeBundler) -> Result<Tool, String> {
     }
 }
 
+/// The store's tool for `bundler` at exactly `version`: the install if it
+/// is there, else a fetch of it. The spec-mode builder's tool lookup — a
+/// spec pins the version, so "the newest install" ([`find_tool`]) is the
+/// wrong question.
+pub fn tool_at(root: &Path, bundler: RecipeBundler, version: &str) -> Result<Tool, String> {
+    let dir = tool_dir(root, bundler, version);
+    if installed(&dir, bundler) {
+        tool_in(&dir, bundler, version)
+    } else {
+        fetch_tool_at(root, bundler, version)
+    }
+}
+
 /// The build that runs `recipe` with the store's tool for its bundler.
 pub fn recipe_build(root: &Path, recipe: Recipe) -> Result<(RecipeBuild, Tool), String> {
     let tool = find_tool(root, recipe.bundler)?;
@@ -254,14 +273,22 @@ const FETCH_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15 * 
 /// install). The tool must answer `--version` with its pin, else the fetch
 /// fails loudly and leaves nothing behind.
 pub fn fetch_tool(root: &Path, bundler: RecipeBundler) -> Result<Tool, String> {
+    fetch_tool_at(root, bundler, pin(bundler).version)
+}
+
+/// [`fetch_tool`] at an EXPLICIT version (exp184: an index spec pins its
+/// own tools; the runtime path calls this with [`pin`]'s version). The
+/// npm packages installed are still [`fetch_specs`]' (the recipe script's
+/// own plugin pins).
+pub fn fetch_tool_at(root: &Path, bundler: RecipeBundler, version: &str) -> Result<Tool, String> {
     let p = pin(bundler);
-    let dir = tool_dir(root, bundler, p.version);
+    let dir = tool_dir(root, bundler, version);
     let fail = |what: String| -> String {
         let _ = std::fs::remove_dir_all(&dir);
         format!(
             "fetching {} {} into {}: {what}",
             p.label,
-            p.version,
+            version,
             dir.display()
         )
     };
@@ -270,7 +297,7 @@ pub fn fetch_tool(root: &Path, bundler: RecipeBundler) -> Result<Tool, String> {
     let out = humanify_core::subprocess::run(
         Command::new("npm")
             .arg("install")
-            .args(fetch_specs(bundler))
+            .args(fetch_specs_at(bundler, version))
             .arg(format!("--before={TOOLS_BEFORE}"))
             .args(["--prefix"])
             .arg(&dir)
@@ -293,9 +320,9 @@ pub fn fetch_tool(root: &Path, bundler: RecipeBundler) -> Result<Tool, String> {
     if let Some((scope, binary, placeholder)) = native_placeholder(bundler) {
         place_platform_binary(&dir, scope, binary, placeholder).map_err(fail)?;
     }
-    let tool = tool_in(&dir, bundler, p.version).map_err(fail)?;
+    let tool = tool_in(&dir, bundler, version).map_err(fail)?;
     let said = bundler_version_of(bundler, &tool.bin, FETCH_DEADLINE).map_err(fail)?;
-    if said != p.version {
+    if said != version {
         return Err(fail(format!(
             "{} --version answered {said:?}",
             tool.bin.display()

@@ -2,6 +2,16 @@
 //! (docs/design/library-index.md). Not part of a humanify run: it reads
 //! the npm registry, installs and bundles packages, and writes an index
 //! directory a run can later be pointed at.
+//!
+//! Since exp184 the build is driven by ONE committed spec file
+//! (`experiments/184-index-spec/README.md`, Andrew 2026-11-02: "it
+//! shouldn't be 'here is a list of 25 random packages to also add and if
+//! you don't have this hardcoded list then it won't work'"): `--spec
+//! <file>` says which packages (rules over replayable public signals),
+//! which versions of each (rules, with per-package overrides), the
+//! recipes, the pinned tools and the refusals. The resolved plan — every
+//! package@version and the rule that chose it — is written into the
+//! index's `build.json` sidecar.
 
 /// mimalloc, not glibc malloc (exp111): glibc's per-thread arenas keep
 /// the peak of every large bundle a worker fingerprinted, so a long build
@@ -9,18 +19,20 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use clap::Parser;
-use humanify_core::libindex::recipe::{Recipe, RecipeBundler};
-use humanify_index::asof::{VersionPolicy, parse_as_of};
-use humanify_index::build::{BuildConfig, SpongeRegions, run};
-use humanify_index::recipe::RecipeBuild;
+use humanify_index::build::{BuildConfig, run};
+use humanify_index::cache::{BUILD_SIDECAR_SCHEMA, BuildSidecar, SpecSidecar};
+use humanify_index::planner::{self, ResolvedSpec};
+use humanify_index::spec::{IndexSpec, SPEC_SCHEMA};
+use humanify_index::tools;
 
 #[derive(Parser)]
 #[command(
     name = "humanify-index",
-    about = "Build a library fingerprint index as of a date"
+    about = "Build a library fingerprint index from a spec"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -28,63 +40,35 @@ struct Cli {
 }
 
 #[derive(clap::Subcommand)]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "parsed once per process; boxing clap's arguments buys nothing"
-)]
 enum Command {
-    /// Plan, build the missing shards, merge them into an index.
+    /// Build the index an index spec describes: resolve the spec's
+    /// package and version rules against the npm registry, install and
+    /// bundle what is missing, merge into an index, record the resolved
+    /// plan in its `build.json` sidecar.
     Build {
-        /// A file of package specs, one per line: `name` or `name@version`
-        /// (a pinned version, refused if published after --as-of).
+        /// The index spec (schema `humanify-index-spec/1`): the as-of
+        /// date, the package selections (npm-high-impact lists at pinned
+        /// versions + the dependency closure of their chosen versions),
+        /// the version rules and overrides, the recipes, the pinned
+        /// tools, the refusals.
         #[arg(long)]
-        packages: PathBuf,
-        /// A file of `name@version` specs indexed at exactly those versions
-        /// (no policy picks): the versions a bundle's own readers declare.
-        #[arg(long)]
-        pinned: Option<PathBuf>,
-        /// Index only versions published on or before this time
-        /// (`YYYY-MM-DD` = the end of that UTC day, or a UTC timestamp).
-        #[arg(long)]
-        as_of: String,
-        /// The registry snapshot directory (packuments; fetched once).
+        spec: PathBuf,
+        /// The registry snapshot directory (packuments, enriched with
+        /// per-version dependency metadata; fetched once).
         #[arg(long)]
         registry: PathBuf,
-        /// The shard store (reused across builds and dates).
+        /// The shard store (reused across builds and dates); also where
+        /// the spec's pinned tools are installed (`<store>/tools/`).
         #[arg(long)]
         store: PathBuf,
-        /// Where packages are installed and bundled.
+        /// Where packages are installed and bundled, and where the spec's
+        /// list files are cached (`<work>/lists/`).
         #[arg(long)]
         work: PathBuf,
-        /// The index directory to write (not needed with --dry-run).
+        /// The index directory to write (not needed with --dry-run or
+        /// --chunk).
         #[arg(long)]
         out: Option<PathBuf>,
-        /// A build recipe = one index slice (repeatable, at least one; no
-        /// default):
-        /// `<bun|esbuild>:target=<bun|node>,format=<cjs|esm>[,minify][,production]`
-        /// (`production`: process.env.NODE_ENV defined as "production", as
-        /// app bundles are built; Bun and esbuild only), e.g.
-        /// `bun:target=bun,format=cjs,minify`. The first recipe of a
-        /// bundler is its default slice (for bundles that do not record
-        /// their target).
-        #[arg(long = "recipe", required = true)]
-        recipes: Vec<String>,
-        /// The Bun binary (Bun recipes).
-        #[arg(long, default_value = "bun")]
-        bun: PathBuf,
-        /// The esbuild binary (esbuild recipes).
-        #[arg(long, default_value = "esbuild")]
-        esbuild: PathBuf,
-        /// The webpack recipe script (webpack recipes): a copy of
-        /// `crates/humanify-index/recipes/webpack-build.cjs` beside an
-        /// install of webpack, run with `node`.
-        #[arg(long)]
-        webpack: Option<PathBuf>,
-        /// The rollup recipe script (rollup recipes): a copy of
-        /// `crates/humanify-index/recipes/rollup-build.mjs` beside an
-        /// install of rollup and its plugins, run with `node`.
-        #[arg(long)]
-        rollup: Option<PathBuf>,
         /// Parallel package builds (at most 4).
         #[arg(long, default_value_t = 2)]
         jobs: usize,
@@ -95,39 +79,22 @@ enum Command {
         /// bytes the serial merge writes, which is the default (1).
         #[arg(long, default_value_t = 1)]
         merge_jobs: usize,
-        /// Which versions to index: `as-of` (latest, previous patch, the
-        /// two previous majors) or `year-all+minor` (every release of the
-        /// last 12 months + the latest patch of every older minor).
-        #[arg(long, default_value = "as-of")]
-        policy: String,
         /// Never fetch: every packument must already be in --registry.
         #[arg(long)]
         offline: bool,
         /// Build no shard: merge the shards the store already holds (a
-        /// version with none is refused `no-shard`). A re-merge after a
-        /// build, without retrying the builds that failed.
+        /// version with none is refused `no-shard`).
         #[arg(long)]
         merge_only: bool,
-        /// Refuse `name@version:reason` (repeatable): the version leaves
-        /// the plan and the refusal is recorded like the plan's own
-        /// (exp161: a package whose build OOMs workers solo gets one
-        /// refusal entry, never a special-case retry path).
+        /// Build only chunk I of N: the plan is resolved in FULL (the
+        /// same everywhere), the builds and the merge are limited to the
+        /// chunk's packages — a heavy build split across invocations,
+        /// finished by a final `--chunk 0/1` or a `--merge-only`. Nothing
+        /// is written to --out.
         #[arg(long)]
-        refuse: Vec<String>,
-        /// What the units inside a pre-bundled file's FOREIGN regions (a
-        /// module marker naming another package) become: `drop` (no rows)
-        /// or `origin` (rows of the package the marker names, at its pnpm
-        /// path's version).
-        #[arg(long, default_value = "drop")]
-        sponge_regions: String,
-        /// Derive and store each unit's ORIGINAL identifier names (exp159,
-        /// from the build's own sourcemap and the package sources): marks
-        /// the index `names/1`. Default off — without it the shard bytes
-        /// are byte-identical to before.
-        #[arg(long)]
-        names: bool,
-        /// Print the plan (versions, refusals, shards to build or reuse)
-        /// and stop.
+        chunk: Option<String>,
+        /// Print the resolved plan (every package@version and the rule
+        /// that chose it, the refusals and the skips) and stop.
         #[arg(long)]
         dry_run: bool,
     },
@@ -175,6 +142,222 @@ fn slim_cache(work: &[PathBuf], journal: &std::path::Path) -> Result<(), String>
     }
 }
 
+/// The spec's list files, fetched and hash-verified into
+/// `<work>/lists/` (cached: a rerun replays them).
+fn list_fetcher(
+    work: &std::path::Path,
+) -> impl Fn(humanify_index::spec::HighImpactList, &str, &str) -> Result<String, String> {
+    let dir = work.join("lists");
+    move |list, version, sha256| planner::fetch_high_impact_list(list, version, sha256, &dir)
+}
+
+/// The resolved plan, as `--dry-run` prints it: every package@version and
+/// the rule that chose it.
+fn print_plan(spec: &IndexSpec, resolved: &ResolvedSpec) {
+    println!("spec as-of {}", spec.as_of);
+    for (id, names) in &resolved.skipped {
+        for n in names {
+            println!("skipped {n}: refusal {id}");
+        }
+    }
+    for s in &resolved.selections {
+        match s.attribution.as_deref() {
+            Some(a) => println!("selected {} ({a})", s.name),
+            None => println!("selected {}", s.name),
+        }
+        for v in &s.versions {
+            match v.attribution.as_deref() {
+                Some(a) => println!("  index {}@{} ({}, {a})", s.name, v.version, v.role),
+                None => println!("  index {}@{} ({})", s.name, v.version, v.role),
+            }
+        }
+        for (version, reason) in &s.refused {
+            println!("  refused {}@{}: {reason}", s.name, version);
+        }
+    }
+}
+
+/// The `build` subcommand's paths and counts. Every path the bundlers or
+/// npm touch must be absolute.
+struct BuildArgs {
+    registry: PathBuf,
+    store: PathBuf,
+    work: PathBuf,
+    out: Option<PathBuf>,
+    jobs: usize,
+    merge_jobs: usize,
+    offline: bool,
+    merge_only: bool,
+    chunk: Option<String>,
+    dry_run: bool,
+}
+
+/// A chunk spec `I/N`: 0 <= I < N.
+fn parse_chunk(text: &str) -> Result<(usize, usize), String> {
+    let Some((i, n)) = text.split_once('/') else {
+        return Err(format!("--chunk {text}: expected I/N"));
+    };
+    let (i, n) = (i.trim(), n.trim());
+    let (i, n) = (i.parse::<usize>(), n.parse::<usize>());
+    let (Ok(i), Ok(n)) = (i, n) else {
+        return Err(format!("--chunk {text}: expected I/N (numbers)"));
+    };
+    if n == 0 || i >= n {
+        return Err(format!("--chunk {text}: need 0 <= I < N"));
+    }
+    Ok((i, n))
+}
+
+/// The index spec resolved against the registry: the spec's parse (whose
+/// sha256 goes into the sidecar), the planner's resolution, and the
+/// spec's pinned tools fetched into the store.
+fn resolve_spec(
+    spec_path: &std::path::Path,
+    registry: &std::path::Path,
+    store: &std::path::Path,
+    work: &std::path::Path,
+    offline: bool,
+) -> Result<(IndexSpec, ResolvedSpec, String), String> {
+    let text =
+        std::fs::read_to_string(spec_path).map_err(|e| format!("{}: {e}", spec_path.display()))?;
+    let sha = humanify_index::shard::hex_sha256(text.as_bytes());
+    let spec = IndexSpec::parse(&text)?;
+    let mut loader = planner::SnapshotLoader::new(registry.to_path_buf(), offline, 16);
+    let mut src = planner::Sources {
+        loader: &mut loader,
+        list: &list_fetcher(work),
+    };
+    let resolved = planner::resolve(&spec, &mut src)?;
+    for (bundler, version) in &spec.tools {
+        tools::tool_at(store, *bundler, version).map_err(|e| format!("spec tools: {e}"))?;
+    }
+    Ok((spec, resolved, sha))
+}
+
+/// The sidecar spec block: the resolved plan, rule attribution included.
+fn spec_sidecar(spec: &IndexSpec, resolved: &ResolvedSpec, spec_sha: &str) -> SpecSidecar {
+    SpecSidecar {
+        spec_sha256: spec_sha.to_string(),
+        schema: SPEC_SCHEMA.into(),
+        as_of: spec.as_of.clone(),
+        default_policy: spec.versions.default.name(),
+        dependents: spec.versions.dependents,
+        tools: spec
+            .tools
+            .iter()
+            .map(|(b, v)| (b.name().to_string(), v.clone()))
+            .collect(),
+        selections: resolved
+            .selections
+            .iter()
+            .map(|s| humanify_index::cache::SpecSelection {
+                name: s.name.clone(),
+                attribution: s.attribution.clone().unwrap_or_default(),
+                versions: s
+                    .versions
+                    .iter()
+                    .map(|v| humanify_index::cache::SpecPlannedVersion {
+                        version: v.version.clone(),
+                        role: v.role.clone(),
+                        published: v.published.clone(),
+                        attribution: v.attribution.clone().unwrap_or_default(),
+                    })
+                    .collect(),
+                refused: s.refused.clone(),
+            })
+            .collect(),
+        skipped: resolved.skipped.clone(),
+    }
+}
+
+fn build(spec_path: &std::path::Path, args: &BuildArgs) -> Result<String, String> {
+    let (spec, resolved, spec_sha) = resolve_spec(
+        spec_path,
+        &args.registry,
+        &args.store,
+        &args.work,
+        args.offline,
+    )?;
+    if args.dry_run {
+        print_plan(&spec, &resolved);
+        return Ok(String::new());
+    }
+    let chunk = args.chunk.as_deref().map(parse_chunk).transpose()?;
+    // every recipe's bundler tool, at the spec's pin
+    let mut builds: Vec<humanify_index::recipe::RecipeBuild> = Vec::new();
+    for recipe in &spec.recipes {
+        let version = spec.tools.get(&recipe.bundler).expect("checked at parse");
+        let tool = tools::tool_at(&args.store, recipe.bundler, version)?;
+        builds.push(humanify_index::recipe::RecipeBuild {
+            recipe: *recipe,
+            bin: tool.bin.clone(),
+        });
+    }
+    let side_spec = spec_sidecar(&spec, &resolved, &spec_sha);
+    let cfg = BuildConfig {
+        packages: Vec::new(),
+        spec: Some(resolved),
+        as_of: spec.as_of.clone(),
+        registry: args.registry.clone(),
+        store: args.store.clone(),
+        work: args.work.clone(),
+        out: args.out.clone(),
+        recipes: builds,
+        jobs: args.jobs,
+        merge_jobs: args.merge_jobs,
+        offline: args.offline,
+        merge_only: args.merge_only,
+        refuse: Vec::new(),
+        quiet: false,
+        names: spec.names,
+        sponge_regions: spec.sponge_regions,
+        pinned: Vec::new(),
+        policy: humanify_index::asof::VersionPolicy::AsOf,
+        chunk,
+    };
+    let outcome = run(&cfg, false)?;
+    if let (Some(out), false) = (&args.out, chunk.is_some()) {
+        let side = BuildSidecar {
+            schema: BUILD_SIDECAR_SCHEMA.into(),
+            index_id: outcome.index_id.clone(),
+            built_from: "index spec".into(),
+            as_of: spec.as_of.clone(),
+            format: humanify_core::libindex::format::INDEX_FORMAT.into(),
+            slices: outcome
+                .slices
+                .iter()
+                .map(|s| humanify_index::cache::SidecarSlice {
+                    slice: s.slice.clone(),
+                    recipe: s.recipe.clone(),
+                    bundler: s.bundler.clone(),
+                    bundler_version: s.version.clone(),
+                })
+                .collect(),
+            seeds: Vec::new(),
+            dropped: Vec::new(),
+            failed: outcome
+                .errors
+                .iter()
+                .map(|(label, why)| humanify_index::cache::DroppedSeed {
+                    name: label.clone(),
+                    reason: why.clone(),
+                    evidence: String::new(),
+                })
+                .collect(),
+            versions_in_index: outcome.tasks - outcome.errors.len(),
+            packages: side_spec.selections.len(),
+            refused: outcome.refused.len(),
+            built: outcome.built,
+            reused: outcome.reused,
+            stage_ms: BTreeMap::new(),
+            completed: humanify_index::cache::now_iso(),
+            spec: Some(side_spec),
+        };
+        humanify_index::cache::write_build_sidecar(out, &side)?;
+    }
+    Ok(outcome.index_id)
+}
+
 fn main() {
     let command = Cli::parse().command;
     if let Command::SlimCache { work, journal } = &command {
@@ -185,93 +368,42 @@ fn main() {
         return;
     }
     let Command::Build {
-        packages,
-        pinned,
-        as_of,
+        spec,
         registry,
         store,
         work,
         out,
-        recipes,
-        bun,
-        esbuild,
-        webpack,
-        rollup,
         jobs,
         merge_jobs,
-        policy,
         offline,
         merge_only,
-        refuse,
-        sponge_regions,
-        names,
+        chunk,
         dry_run,
     } = command
     else {
         unreachable!("slim-cache returned above")
     };
     let result = (|| -> Result<String, String> {
-        let as_of = parse_as_of(&as_of)?;
-        let specs = std::fs::read_to_string(&packages)
-            .map_err(|e| format!("{}: {e}", packages.display()))?;
-        let mut builds: Vec<RecipeBuild> = Vec::new();
-        for text in &recipes {
-            let recipe = Recipe::parse(text)?;
-            if builds.iter().any(|b| b.recipe == recipe) {
-                return Err(format!("--recipe {text} given twice"));
-            }
-            // the scripts run inside each install: absolute, like every path
-            let script = |given: &Option<PathBuf>, flag: &str| {
-                let p = given
-                    .clone()
-                    .ok_or(format!("--recipe {text} needs --{flag} <recipe script>"))?;
-                std::path::absolute(&p).map_err(|e| format!("{}: {e}", p.display()))
-            };
-            let bin = match recipe.bundler {
-                RecipeBundler::Bun => bun.clone(),
-                RecipeBundler::Esbuild => esbuild.clone(),
-                RecipeBundler::Webpack => script(&webpack, "webpack")?,
-                RecipeBundler::Rollup => script(&rollup, "rollup")?,
-            };
-            builds.push(RecipeBuild { recipe, bin });
+        if out.is_none() && !dry_run && chunk.is_none() {
+            return Err("--out is required unless --dry-run or --chunk".into());
         }
-        if out.is_none() && !dry_run {
-            return Err("--out is required unless --dry-run".into());
-        }
-        // the bundlers run inside each install: every path must be absolute
-        let abs = |p: PathBuf| std::path::absolute(&p).map_err(|e| format!("{}: {e}", p.display()));
-        let cfg = BuildConfig {
-            packages: specs.lines().map(str::to_string).collect(),
-            as_of,
+        // the bundlers and npm run inside each install: every path absolute
+        let abs = |p: PathBuf| -> Result<PathBuf, String> {
+            std::path::absolute(&p).map_err(|e| format!("{}: {e}", p.display()))
+        };
+        let args = BuildArgs {
             registry: abs(registry)?,
             store: abs(store)?,
             work: abs(work)?,
             out: out.map(abs).transpose()?,
-            recipes: builds,
             jobs,
             merge_jobs,
             offline,
             merge_only,
-            refuse,
-            quiet: false,
-            names,
-            sponge_regions: match sponge_regions.as_str() {
-                "drop" => SpongeRegions::Drop,
-                "origin" => SpongeRegions::Origin,
-                other => return Err(format!("unknown --sponge-regions {other} (drop, origin)")),
-            },
-            pinned: match &pinned {
-                Some(p) => std::fs::read_to_string(p)
-                    .map_err(|e| format!("{}: {e}", p.display()))?
-                    .lines()
-                    .map(str::to_string)
-                    .collect(),
-                None => Vec::new(),
-            },
-            policy: VersionPolicy::from_name(&policy)
-                .ok_or(format!("unknown --policy {policy} (as-of, year-all+minor)"))?,
+            chunk,
+            dry_run,
         };
-        run(&cfg, dry_run)
+        build(&spec, &args)
     })();
     match result {
         Ok(id) if !id.is_empty() => println!("index id {id}"),
