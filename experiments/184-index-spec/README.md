@@ -1,6 +1,13 @@
 # exp184 — the index spec: the default index made by rules
 
-STATUS: MEASUREMENT PENDING.
+STATUS (2026-11-05): MEASURED — the spec-built index is NOT adopted. It
+holds precision (99.8–100%, app 0) but loses recall to cb64 on VERSION
+DEPTH (bun-dev −6.3 pts, cc −14.1, held-out −1.8/+0.3). cb64 stays the
+eval's index. What merges: the spec builder, the install grace fallback,
+the version-strategy vocabulary (policy lists, `max`, `every-<K>`,
+`min-dwell-<N>d`, `recent-<N>mo`), and the depth measurements below.
+Next: a cadence selector + `["as-of","every-5"]`, priced and scored on
+the held-out set before any adoption (§(g)).
 
 Andrew's directive (2026-11-02): "it's fine if we have rules like 'for these
 20 packages, get the top 200 versions instead of top 20' to cover things
@@ -236,3 +243,65 @@ selects 136 of those 270 pins (different resolver, same npm artifact
 will recur at build time); a failed install records `FAILED <pin>` and
 the build continues — the same behavior exp152's build had. The
 plan's own selection never names a version the snapshot does not list.
+
+### (e) The full default build, and the install grace fallback
+
+Trimmed plan (dependents capped at 2 per package, no cascade): 82,002
+versions over ~20.7k packages, 8 concurrent chunks (`--chunk i/8`,
+round-robin so a family spreads). First pass: 6,573 versions FAILED, ~5,450
+of ~5,550 date-blocked ones a SIBLING of the same monorepo release
+published seconds to minutes after the pinning package
+(`@aws-sdk/s3-presigned-post@3.1038.0` 20:10:59.707 pins
+`client-s3@3.1038.0` 20:11:00.632; `@aws-sdk/core` alone blocked 888).
+Fix: a date-blocked install retries ONCE at publish + 1 h
+(`asof::grace_cutoff`, `GRACE_SECS`), and the planner resolves ranges by
+the same two cutoffs. A FALLBACK, not a wider cutoff: an install that
+succeeds at the exact cutoff installs as before, so the store's existing
+shards are what the rule produces. Second pass: 529 failures, all
+genuinely uninstallable (unpublished `left-pad`/`lodash` pins, spam
+packages, 1 AWS `ENOVERSIONS`), refused in `build.json`. Index
+`e40b64133388…`, 81,473 versions, 62.5 GB (15.6 GB run-time `.bin`, 46.8 GB
+provenance `.jsonl`).
+
+### (f) Score — exp096 scorer 14, all at main `701d7631a`, rule structural
+
+| set (slice)     | cb64 recall | exp177 8462c502 | spec e40b6413 | spec − cb64 |
+| --------------- | ----------- | --------------- | ------------- | ----------- |
+| bun-dev (bun)   | 83.9%       | 84.2%           | 77.6%         | −6.3        |
+| bun-dev (node)  | 83.2%       | 83.5%           | 77.8%         | −5.3        |
+| bun-held (bun)  | 85.7%       | 86.0%           | 83.9%         | −1.8        |
+| bun-held (node) | 81.9%       | 82.2%           | 82.1%         | +0.3        |
+| cc 2.1.216      | 81.9%       | 81.9%           | 67.8%         | −14.1       |
+
+Precision 99.8–100% everywhere, app claimed 0 everywhere. The loss is
+VERSIONS, not packages: of cc's 230 KB labelled library bytes only ~3 KB
+belong to packages the spec lacks; the rest are packages both hold at
+different depth (`@growthbook/growthbook` 48 versions in cb64 vs 3,
+`@modelcontextprotocol/sdk` 49 vs 11, `zod` 94 vs 48). cb64's pins came
+from the dev apps' own installs, so its dev/cc recall is partly fitted;
+held-out is the fair comparison.
+
+### (g) Version depth — drift, hide-a-version, cost frontier (store only)
+
+- Drift (bun-bun-cjs-min shards): a release keeps 83–100% of the previous
+  release's units, ~70% five releases apart, 10–90% twenty apart; the
+  AWS SDKs barely drift (91% at 20). Matching breaks with DISTANCE.
+- The merged index already stores each function once per (package, file)
+  with version ranges (9.68M rows, 5.30M unique hashes, 1.11 ranges/row),
+  so depth costs BUILD TIME (~10.8k versions/h at 32 concurrent), far
+  less index size.
+- Hide-a-version (161 packages dense in the store; coverage pooled per
+  package, downloads-weighted, claim guards ignored): as-of 86.0% at 6%
+  of releases; as-of+every-5 max 40 95.4% at 24%; fast releasers (median
+  < 3 days to the next release) want `latest-10` (98–100%), not a stride.
+- Full-universe dry runs (versions measured): as-of+recent-18mo 204,664;
+  as-of+every-5 281,618; as-of+every-3 350,382 (vs 82,002 today) —
+  ~19–32 build hours from scratch. A rank-limited variant (depth for
+  rank < 5000 only) extrapolates to ~108k versions / ~10 h at 93.0%.
+- Per-version downloads (npm `versions/<pkg>/last-week`) are concentrated
+  and fast-follow fixes draw little, but they are not replayable;
+  `min-dwell-<N>d` (registry timestamps) keeps ~77% of releases — near
+  the ceiling, not a saver.
+
+Scripts and raw data: the session scratchpad (`loo/`, `drift/`, `dl/`);
+not committed (measurement over local store data).
