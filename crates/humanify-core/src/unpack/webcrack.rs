@@ -47,8 +47,9 @@ struct ShimOutput {
     files: Vec<ShimFile>,
 }
 
-/// `WebcrackAdapter.unpack`: run the shim, return its files in the order it
-/// listed them. A non-zero exit, unparseable output or a shim past its
+/// `WebcrackAdapter.unpack`: run the shim on the ABSOLUTE output directory
+/// ([`shim_out_dir`]), return its files in the order it listed them — every
+/// one inside that directory, or the unpack fails naming the one outside. A non-zero exit, unparseable output or a shim past its
 /// deadline (killed) is an error — the TS adapter throws the same way when
 /// webcrack does. The pipes and the deadline are [`crate::subprocess`]'s.
 pub fn unpack_webcrack(
@@ -56,8 +57,9 @@ pub fn unpack_webcrack(
     out_dir: &Path,
     shim: &WebcrackShim,
 ) -> Result<UnpackResult, String> {
+    let out_dir = shim_out_dir(out_dir)?;
     let mut command = Command::new(&shim.program);
-    command.args(&shim.args).arg(out_dir);
+    command.args(&shim.args).arg(&out_dir);
     if let Some(cwd) = &shim.cwd {
         command.current_dir(cwd);
     }
@@ -71,7 +73,27 @@ pub fn unpack_webcrack(
             String::from_utf8_lossy(&output.stderr).trim()
         ));
     }
-    parse_shim_output(&String::from_utf8_lossy(&output.stdout))
+    let result = parse_shim_output(&String::from_utf8_lossy(&output.stdout))?;
+    if let Some(stray) = result.files.iter().find(|f| !f.path.starts_with(&out_dir)) {
+        return Err(format!(
+            "webcrack shim reported {}, outside its output directory {}",
+            stray.path.display(),
+            out_dir.display()
+        ));
+    }
+    Ok(result)
+}
+
+/// The output directory as the shim must receive it: created, then
+/// ABSOLUTE and canonical. The shim runs in its own working directory (the
+/// repo root, [`WebcrackShim::cwd`]), so a relative `out_dir` — `-o out` —
+/// resolved THERE: webcrack wrote into `<repo>/out/` and reported
+/// `out/deobfuscated.js`, which the run then read against its own working
+/// directory and did not find (exp182). Canonical, so the paths the shim
+/// reports (`path.join(outputDir, file)`, which normalizes) start with it.
+fn shim_out_dir(out_dir: &Path) -> Result<PathBuf, String> {
+    std::fs::create_dir_all(out_dir).map_err(|e| format!("mkdir {}: {e}", out_dir.display()))?;
+    std::fs::canonicalize(out_dir).map_err(|e| format!("resolve {}: {e}", out_dir.display()))
 }
 
 /// The shim's stdout → the unpack result (its LAST non-empty line: a

@@ -49,6 +49,7 @@ pub mod identity;
 pub mod inline_modules;
 pub mod known_globals;
 pub mod lex;
+pub mod own_package;
 pub mod soundness;
 pub mod text_assets;
 pub mod vendor_content;
