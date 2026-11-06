@@ -98,6 +98,14 @@ remin3-esbuild +49 B app, a truth artifact); exp144's `shown` fixed the first an
 included. Whether that reopens the flip is Andrew's call; a flip would also need the pipeline-side checks exp176
 ran (names-mode placement, warm neutrality, the eval), which were not run here.
 
+## Gate
+
+`npm run check`, bare, under `/work/heavy.lock`, at `f6543f3e1`: **13 / 13 in the worktree and 13 / 13 in a clean
+checkout** (`git worktree add --detach /work/exp189-dropped-seeds-clean f6543f3e1`). typecheck, lint, rust:fmt,
+rust:clippy, knip, knip:prod, census:clones, census:concurrency, unit, rust:unit, rust:build, rust:format-golden
+and e2e all PASS. No neutrality or eval was run: the change is a report field the pipeline never writes (the
+`discover` verb's `--unit-prints` only), and the 90 bun-dev discover reports are byte-equal to main's without it.
+
 ## What this could not prove
 
 - **The fix.** None was built: see STATUS. The veto relaxations already measured (exp143 `all-rules`, exp144
