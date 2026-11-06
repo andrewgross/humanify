@@ -18,7 +18,7 @@ README. Scope is `docs/dev-harness.md` (branch `exp185-dev-harness-design`)
   file's sha256 equals its source's (66 manifests, all equal).
 - **Oracle (a), 034 KPI scorer:** reproduced. All 24 cards and all 12 report pages are byte-equal to the recorded ones, and all 24 partitions add up. The 3 names-mode summaries are byte-equal. The 3 off-mode (`ref-scratch`) summaries differ ONLY by `namingModes: ["off"]`, a provenance key exp171 added to `summarize.ts` after those summaries were written. Every `rescore.ts` line reads `OLD-FIELDS DIFFER`, which is an artifact: that check strips `churn.surfaces` from the new card and compares it with the old card, and these old cards already carry surfaces. The cards themselves are byte-equal.
 - **Oracle (b), the exp096 library scorer:** reproduced, **9 / 9 labels**: every `summary.json` and every card (90 + 30 + 1 per index, 363 cards) byte-equal.
-- **Gate:** `npm run check` 13/13 in the worktree and 13/13 from a clean checkout of the branch head (§4). `unit` held its wall time (111 s against 109 s before): the e2e golden runs alongside run-launch.test.ts, which takes 110 s.
+- **Gate:** `npm run check` 13/13 in the worktree and 13/13 from a clean checkout of `c1cf98597` (§4). `unit` held its wall time (111 s against 109 s before): the e2e golden runs alongside run-launch.test.ts, which takes 110 s. On the clean checkout `unit` took 228 s and `rust:build` 0.1 s, because the e2e golden test does the release build first (the same total work, moved earlier).
 
 ## 1. Launch goldens (proof c)
 
@@ -149,19 +149,19 @@ run read the same bytes. Once /tmp is cleared, a port must map that prefix to
 
 | Stage                    | Worktree | Clean checkout |
 | ------------------------ | -------- | -------------- |
-| typecheck                | PASS     | CLEAN_TC       |
-| lint                     | PASS     | CLEAN_LINT     |
-| rust:fmt                 | PASS     | CLEAN_FMT      |
-| rust:clippy              | PASS     | CLEAN_CLIPPY   |
-| knip                     | PASS     | CLEAN_KNIP     |
-| knip:prod                | PASS     | CLEAN_KNIPP    |
-| census:clones (advisory) | PASS     | CLEAN_CLONES   |
-| census:concurrency       | PASS     | CLEAN_CONC     |
-| unit (365 tests, 11 new) | PASS     | CLEAN_UNIT     |
-| rust:unit                | PASS     | CLEAN_RUNIT    |
-| rust:build               | PASS     | CLEAN_BUILD    |
-| rust:format-golden       | PASS     | CLEAN_FG       |
-| e2e                      | PASS     | CLEAN_E2E      |
+| typecheck                | PASS     | PASS           |
+| lint                     | PASS     | PASS           |
+| rust:fmt                 | PASS     | PASS           |
+| rust:clippy              | PASS     | PASS           |
+| knip                     | PASS     | PASS           |
+| knip:prod                | PASS     | PASS           |
+| census:clones (advisory) | PASS     | PASS           |
+| census:concurrency       | PASS     | PASS           |
+| unit (365 tests, 11 new) | PASS     | PASS           |
+| rust:unit                | PASS     | PASS           |
+| rust:build               | PASS     | PASS           |
+| rust:format-golden       | PASS     | PASS           |
+| e2e                      | PASS     | PASS2E         |
 
 ## 5. What this lane could not do
 
