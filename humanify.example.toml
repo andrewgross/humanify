@@ -205,7 +205,7 @@
 # max_rounds = 50
 # What may support a seed against the isolation veto: "without-module" or "all-rules" (the lab prototype's).
 # flag: --library-discovery-veto-support
-# veto_support = "without-module"
+# veto_support = "all-rules"
 # Refuse an index seed or a propagated claim when another package family's index prints cover more of the unit than the claimed family's (exp102).
 # flag: --library-discovery-evidence-conflict
 # evidence_conflict = true

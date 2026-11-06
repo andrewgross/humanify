@@ -418,6 +418,25 @@ fn the_default_library_tunables_are_the_measured_recommendation() {
     assert_eq!(o.helper_families, 0, "helper_families stays off (exp106)");
 }
 
+/// exp192: the isolation veto counts every rule's claims (MODULE fills
+/// included) as a seed's support by default — exp189 measured it on the cb64
+/// index: recall up on bun-dev and bun-held, precision held or up, app 0, cc
+/// unchanged. "without-module" stays a choice.
+#[test]
+fn the_default_veto_support_is_all_rules() {
+    use humanify_ag_core::libdetect::discovery::VetoSupport;
+    let o = build(&["in.js"], "").unwrap().library.discovery_options();
+    assert_eq!(o.veto_support, VetoSupport::AllRules);
+    let old = build(
+        &["in.js"],
+        "[library.discovery]\nveto_support = \"without-module\"\n",
+    )
+    .unwrap()
+    .library
+    .discovery_options();
+    assert_eq!(old.veto_support, VetoSupport::WithoutModule);
+}
+
 /// exp117: exp114's context-presence pair with its fence, and exp112's
 /// declared cap, measured together on every corpus on k2-all
 /// (experiments/117-default-flip). shadow_ties joined them 2026-10-15 on
