@@ -30,10 +30,10 @@ Branch `exp190-build-shape`. Data under `/work/exp190-data` (not committed).
 
 ## Gate
 
-| check                                                            | result                                           |
-| ---------------------------------------------------------------- | ------------------------------------------------ |
-| `npm run check` (13 stages, bare, worktree, at 131e8eed3's tree) | ALL 13 STAGES PASSED (e2e: 19 pairs)             |
-| `npm run check` from a clean checkout                            | see the report of the commit that adds this line |
+| check                                                                          | result                               |
+| ------------------------------------------------------------------------------ | ------------------------------------ |
+| `npm run check` (13 stages, bare, worktree, at 131e8eed3's tree)               | ALL 13 STAGES PASSED (e2e: 19 pairs) |
+| `npm run check` from a clean checkout (`git worktree add --detach`, db649d125) | ALL 13 STAGES PASSED (e2e: 19 pairs) |
 
 Only Python scripts and this README are added (no pipeline, builder or
 harness TS change), so no eval or neutrality run applies.
