@@ -1,0 +1,36 @@
+cargo :: build --release --locked -p humanify-ag-cli (in <REPO>)
+<REPO>/target/release/humanify-ag (in <REPO>) :: --help
+<REPO>/target/release/humanify-ag (in <REPO>) HUMANIFY_API_KEY=local :: <TMP>/inputs/claude-code-2.1.86/binary-decompiled/src/entrypoints/index.js --config <TMP>/work/neutrality-candidate.toml --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b -o <TMP>/work/neutrality-candidate --prior-version <TMP>/priors/2.1.85-rebased/.humanify/humanified.js 
+humanify-config| [llm]
+humanify-config| reasoning_effort = "low"
+humanify-config| concurrency = 472
+humanify-config| cache_dir = "<TMP>/work/cache"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [library]
+humanify-config| index = "/work/library-index/cb64c1f5fd507bee7f80efd46e0d01cec405a8b3028a9c05d56e94d7c071ec28"
+cargo :: build --release --locked -p humanify-ag-cli (in <TMP>/work/neutrality-baseline-src)
+<TMP>/work/neutrality-baseline-src/target/release/humanify-ag (in <REPO>) :: --help
+<TMP>/work/neutrality-baseline-src/target/release/humanify-ag (in <REPO>) HUMANIFY_API_KEY=local :: <TMP>/inputs/claude-code-2.1.86/binary-decompiled/src/entrypoints/index.js --config <TMP>/work/neutrality-baseline.toml --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b -o <TMP>/work/neutrality-baseline --prior-version <TMP>/priors/2.1.85-rebased/.humanify/humanified.js 
+humanify-config| [llm]
+humanify-config| reasoning_effort = "low"
+humanify-config| concurrency = 472
+humanify-config| cache_dir = "<TMP>/work/cache"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [library]
+humanify-config| index = "/work/library-index/cb64c1f5fd507bee7f80efd46e0d01cec405a8b3028a9c05d56e94d7c071ec28"
+run-config| {
+run-config|   "kind": "neutrality",
+run-config|   "baseline": "baseline",
+run-config|   "pair": "2.1.85:2.1.86",
+run-config|   "workdir": "<TMP>/work",
+run-config|   "cache": "<TMP>/work/cache",
+run-config|   "priors": "<TMP>/priors",
+run-config|   "inputsBase": "<TMP>/inputs",
+run-config|   "endpoint": "http://127.0.0.1:9/v1",
+run-config|   "pipelineSettings": [],
+run-config|   "namingMode": "names",
+run-config|   "libraryIndex": "/work/library-index/cb64c1f5fd507bee7f80efd46e0d01cec405a8b3028a9c05d56e94d7c071ec28"
+run-config| }
+exit 0

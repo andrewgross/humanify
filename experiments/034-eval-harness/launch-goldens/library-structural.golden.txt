@@ -1,0 +1,15 @@
+python :: -I <REPO>/experiments/096-library-matching-score/corpus.py verify --corpus bun-dev
+cargo :: build --release --locked -p humanify-ag-cli (in <REPO>)
+taskset :: -c 0-15 <REPO>/target/release/humanify-ag discover <TMP>/data/corpus/app-big/bundle.js --library-index <TMP>/index --config <TMP>/data/results/lbl/discover.toml --bundler webpack --unit-prints --out <TMP>/data/results/lbl/reports/app-big.json
+<REPO>/target/release/humanify-ag (in <TMP>) HUMANIFY_API_KEY= :: discover <TMP>/data/corpus/app-big/bundle.js --library-index <TMP>/index --config <TMP>/data/results/lbl/discover.toml --bundler webpack --unit-prints --out <TMP>/data/results/lbl/reports/app-big.json 
+humanify-config| [library.lookup]
+humanify-config| agreement = false
+humanify-config| [library]
+humanify-config| matching = "report"
+taskset :: -c 0-15 <REPO>/target/release/humanify-ag discover <TMP>/data/corpus/app-small/bundle.js --library-index <TMP>/index --config <TMP>/data/results/lbl/discover.toml --bundler bun --unit-prints --out <TMP>/data/results/lbl/reports/app-small.json
+<REPO>/target/release/humanify-ag (in <TMP>) HUMANIFY_API_KEY= :: discover <TMP>/data/corpus/app-small/bundle.js --library-index <TMP>/index --config <TMP>/data/results/lbl/discover.toml --bundler bun --unit-prints --out <TMP>/data/results/lbl/reports/app-small.json 
+humanify-config| [library.lookup]
+humanify-config| agreement = false
+humanify-config| [library]
+humanify-config| matching = "report"
+python :: -I <REPO>/experiments/096-library-matching-score/score.py lbl --corpus bun-dev

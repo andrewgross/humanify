@@ -1,0 +1,1210 @@
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/bun-bundle/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-bundle/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-bundle/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-bundle/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-bundle/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-bundle/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-bundle/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-bundle/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-bundle-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/bun-cjs-app/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-cjs-app/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-cjs-app/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-cjs-app/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-cjs-app/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-cjs-app/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-cjs-app/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-cjs-app/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-cjs-app-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/bun-esm-minified/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-esm-minified/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-esm-minified/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/fresh/runtime.js -o <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-esm-minified/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/fresh/runtime.js -o <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-esm-minified/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-esm-minified/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-esm-minified/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/seq-fresh-a/runtime.js -o <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-esm-minified/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/seq-fresh-a/runtime.js -o <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-esm-minified-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/bun-lazy/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-lazy/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-lazy/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-lazy/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-lazy/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-lazy/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-lazy/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-lazy/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-lazy-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/bun-mixed/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-mixed/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-mixed/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-mixed/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-mixed/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-mixed/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-mixed/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-mixed/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-mixed-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/bun-plain/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-plain/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-plain/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-plain/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-plain/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-plain/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-plain/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-plain/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-plain-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/bun-text-assets/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-text-assets/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-text-assets/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-text-assets/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-text-assets/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-text-assets/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-text-assets/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-text-assets/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-text-assets-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/disambiguation/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/disambiguation/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/disambiguation/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/fresh/index.js -o <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/disambiguation/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/fresh/index.js -o <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/disambiguation/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/disambiguation/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/disambiguation/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/seq-fresh-a/index.js -o <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/disambiguation/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/seq-fresh-a/index.js -o <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/disambiguation-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/esbuild-bundle/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/esbuild-bundle-small/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle-small/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle-small/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle-small/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle-small/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle-small/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle-small/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-bundle-small/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-bundle-small-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/esbuild-cjs/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-cjs/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-cjs/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/fresh/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-cjs/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/fresh/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-cjs/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-cjs/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-cjs/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/seq-fresh-a/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-cjs/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/seq-fresh-a/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-cjs-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/esbuild-esm/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-esm/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-esm/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/fresh/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-esm/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/fresh/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-esm/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-esm/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-esm/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/seq-fresh-a/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-esm/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/seq-fresh-a/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-esm-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/esbuild-kept-factory/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-kept-factory/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-kept-factory/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-kept-factory/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-kept-factory/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-kept-factory/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-kept-factory/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-kept-factory/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-kept-factory-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/esbuild-minified/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/esbuild-minified-0.28/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-0.28/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-0.28/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-0.28/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-0.28/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-0.28/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-0.28/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-0.28/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-0.28-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/esbuild-minified-esm/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-esm/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-esm/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/fresh/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-esm/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/fresh/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-esm/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-esm/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-esm/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/seq-fresh-a/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minified-esm/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/seq-fresh-a/runtime.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minified-esm-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/esbuild-minify-identifiers/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minify-identifiers/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minify-identifiers/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minify-identifiers/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minify-identifiers/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minify-identifiers/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minify-identifiers/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esbuild-minify-identifiers/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esbuild-minify-identifiers-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/esm-exports/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esm-exports/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esm-exports/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/fresh/index.js -o <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esm-exports/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/fresh/index.js -o <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esm-exports/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esm-exports/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esm-exports/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/seq-fresh-a/index.js -o <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/esm-exports/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/seq-fresh-a/index.js -o <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/esm-exports-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/r1b-synthetic/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/r1b-synthetic/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/r1b-synthetic/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/fresh/index.js -o <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/r1b-synthetic/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/fresh/index.js -o <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/r1b-synthetic/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/r1b-synthetic/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/r1b-synthetic/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/seq-fresh-a/index.js -o <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/r1b-synthetic/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/seq-fresh-a/index.js -o <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/r1b-synthetic-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = false
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
