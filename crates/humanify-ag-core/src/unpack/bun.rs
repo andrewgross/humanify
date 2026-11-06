@@ -1253,6 +1253,7 @@ fn discovery_over(
             classified,
             request.options.factory_bodies,
         );
+        report.seed_trail = crate::libdetect::discovery::seed_trail_rows(&graph, &found);
     }
     if request.placement_groups {
         report.placement_groups = crate::libdetect::discovery::placement_groups(&graph, &found);

@@ -492,6 +492,53 @@ pub struct Discovery {
     /// The own packages' claims, set apart from [`Self::claims`]: the
     /// app's code, which the index knows as a package (`own_fence`).
     pub self_claims: BTreeMap<u32, Claim>,
+    /// The seed trail (exp189, an instrument: decides nothing): per index
+    /// seed the lookup proposed, the stage that dropped or moved it, or
+    /// `claimed` ([`SeedDrop::stage`]). Empty without an index.
+    pub seed_trail: Vec<SeedDrop>,
+}
+
+/// One row of the seed trail ([`Discovery::seed_trail`]): an index seed
+/// on `unit` for `package`, and what became of it. The lookup's stages
+/// (`unsupported` — the position window refused the pick, an instrument
+/// row only when [`IndexLookup::trail`] asks; `evidenceConflict`,
+/// `helperFamilies`, `helperPrints`), the presence rules'
+/// (`contextPresence`, `copyPresence`, `copyPresenceMoved`, `shadowTies`,
+/// `shadowTiesMoved`, `factoryTieFence`, `factoryWholeSeed`), and after
+/// the fixpoint: `vetoed`, `external`, `settledOut` (another seed on the
+/// unit won), `ownPackage`, `claimedOther`, `claimed`, `unclaimed`. A
+/// `*Moved` row is the seed as it was before a rule gave it to another
+/// package; the moved seed carries on under that package.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeedDrop {
+    pub unit: u32,
+    pub package: String,
+    pub stage: &'static str,
+}
+
+/// The trail rows of one presence step: the seeds of `before` that `after`
+/// emptied (`dropped`) or gave another package (`moved`).
+fn note_step(
+    before: &[Option<Seed>],
+    after: &[Option<Seed>],
+    (dropped, moved): (&'static str, &'static str),
+    drops: &mut Vec<SeedDrop>,
+) {
+    for (b, a) in before.iter().zip(after) {
+        let Some(b) = b else {
+            continue;
+        };
+        let stage = match a {
+            None => dropped,
+            Some(a) if a.package != b.package => moved,
+            Some(_) => continue,
+        };
+        drops.push(SeedDrop {
+            unit: b.unit,
+            package: b.package.clone(),
+            stage,
+        });
+    }
 }
 
 impl Discovery {
@@ -1866,6 +1913,7 @@ fn presence(
     containment: &Containment<'_>,
     families: &PackageFamilies,
     options: DiscoveryOptions,
+    drops: &mut Vec<SeedDrop>,
 ) -> Vec<Seed> {
     if options.context_presence <= 0.0
         && !options.shadow_ties
@@ -1901,6 +1949,11 @@ fn presence(
         .collect();
     let mut keep: Vec<Option<Seed>> = seeds.into_iter().map(Some).collect();
     let mut dropped_units: Vec<u32> = Vec::new();
+    let mut was = keep.clone();
+    let mut note = |keep: &[Option<Seed>], names| {
+        note_step(&was, keep, names, drops);
+        was = keep.to_vec();
+    };
     if options.context_presence > 0.0 {
         let mut present: BTreeSet<usize> = declared.clone();
         let mut judged: BTreeSet<usize> = BTreeSet::new();
@@ -1926,6 +1979,7 @@ fn presence(
                 dropped_units.extend(slot.take().map(|s| s.unit));
             }
         }
+        note(&keep, ("contextPresence", "contextPresence"));
     }
     if options.copy_presence > 0.0 {
         copy_presence(
@@ -1938,14 +1992,17 @@ fn presence(
             &mut key_of,
             &mut dropped_units,
         );
+        note(&keep, ("copyPresence", "copyPresenceMoved"));
     }
     let before: Vec<u32> = keep.iter().flatten().map(|s| s.unit).collect();
     if options.shadow_ties {
         shadow_ties(&mut keep, &keys, &declared, graph, containment, &mut key_of);
+        note(&keep, ("shadowTies", "shadowTiesMoved"));
     }
     let mut fenced: Vec<u32> = Vec::new();
     if options.factory_tie_fence {
         factory_ties(&mut keep, graph, containment, &mut fenced);
+        note(&keep, ("factoryTieFence", "factoryTieFence"));
     }
     if options.factory_whole_seed {
         factory_whole(
@@ -1956,6 +2013,7 @@ fn presence(
             options.factory_whole_cover,
             &mut fenced,
         );
+        note(&keep, ("factoryWholeSeed", "factoryWholeSeed"));
     }
     let mut out: Vec<Seed> = keep.into_iter().flatten().collect();
     out.extend(fenced.into_iter().map(|unit| Seed {
@@ -2663,6 +2721,7 @@ pub fn discover_with(
         restoration_applications: Vec::new(),
         own_packages: BTreeSet::new(),
         self_claims: BTreeMap::new(),
+        seed_trail: Vec::new(),
     }
 }
 
@@ -2744,6 +2803,7 @@ impl<'x> DiscoveryRequest<'x> {
             }),
             census: self.call_context,
             restoration: self.restoration,
+            trail: self.unit_prints,
         })
     }
 }
@@ -2762,6 +2822,10 @@ pub struct IndexLookup<'x> {
     /// Also capture the claimed units' restoration answers
     /// ([`Discovery::restorations`], exp160) — a names-mode run only.
     pub restoration: bool,
+    /// Also record the lookup's position-window refusals in the seed trail
+    /// ([`Discovery::seed_trail`], exp189; an instrument, the `discover`
+    /// verb's `--unit-prints`): a second pass of the structural picks.
+    pub trail: bool,
 }
 
 /// Library discovery over a RAW bundle (comments still in it): the
@@ -3004,19 +3068,53 @@ fn discover_unscoped(
     // the best package under its specificity and package-count filters; a
     // unit the index as a whole gives to another family more is no seed.
     // The helper floor likewise: emitted helper code is no package's seed.
-    let unconflicted = |s: &Seed| {
-        !(options.evidence_conflict && containment.outweighed(s.unit, &s.package))
-            && !(options.helper_families > 0
-                && containment.helper_dominated(s.unit, options.helper_families))
+    // exp189: every seed these guards drop goes to the trail, by guard.
+    let mut lookup_trail: Vec<SeedDrop> = Vec::new();
+    let guarded = |raw: Vec<Seed>, trail: &mut Vec<SeedDrop>| -> Vec<Seed> {
+        let mut out = Vec::new();
+        for s in raw {
+            let stage = if options.evidence_conflict && containment.outweighed(s.unit, &s.package) {
+                "evidenceConflict"
+            } else if options.helper_families > 0
+                && containment.helper_dominated(s.unit, options.helper_families)
+            {
+                "helperFamilies"
+            } else {
+                let (unit, package) = (s.unit, s.package.clone());
+                match containment.helper_seed(s, options.helper_prints) {
+                    Some(s) => {
+                        out.push(s);
+                        continue;
+                    }
+                    None => {
+                        trail.push(SeedDrop {
+                            unit,
+                            package,
+                            stage: "helperPrints",
+                        });
+                        continue;
+                    }
+                }
+            };
+            trail.push(SeedDrop {
+                unit: s.unit,
+                package: s.package,
+                stage,
+            });
+        }
+        out
     };
-    seeds.extend(
-        looker
-            .claims(lookup.index, &everything, lookup.rules, Evidence::Index)
-            .into_iter()
-            .filter(unconflicted)
-            .filter_map(|s| containment.helper_seed(s, options.helper_prints)),
-    );
-    let present = |seeds: &[Seed]| {
+    if lookup.trail {
+        lookup_trail.extend(unsupported_picks(
+            &looker,
+            lookup.index,
+            &everything,
+            &lookup.rules,
+        ));
+    }
+    let raw = looker.claims(lookup.index, &everything, lookup.rules, Evidence::Index);
+    seeds.extend(guarded(raw, &mut lookup_trail));
+    let present = |seeds: &[Seed], drops: &mut Vec<SeedDrop>| {
         presence(
             seeds.to_vec(),
             &graph,
@@ -3024,11 +3122,14 @@ fn discover_unscoped(
             &containment,
             &families,
             options,
+            drops,
         )
     };
+    let mut presence_trail: Vec<SeedDrop> = Vec::new();
+    let presented = present(&seeds, &mut presence_trail);
     let found = unfence(discover_with(
         &graph,
-        &present(&seeds),
+        &presented,
         &families,
         options,
         profile,
@@ -3050,8 +3151,18 @@ fn discover_unscoped(
         }
         found
     };
+    let trailed = |mut found: Discovery,
+                   lookup_trail: &[SeedDrop],
+                   presented: &[Seed],
+                   presence_trail: Vec<SeedDrop>| {
+        let mut trail = lookup_trail.to_vec();
+        trail.extend(presence_trail);
+        trail.extend(fixpoint_trail(&graph, &found, presented));
+        found.seed_trail = trail;
+        found
+    };
     let Some(targeted) = lookup.targeted else {
-        let found = census(found);
+        let found = census(trailed(found, &lookup_trail, &presented, presence_trail));
         return (graph, found);
     };
     let mut more = Vec::new();
@@ -3062,30 +3173,94 @@ fn discover_unscoped(
             .copied()
             .filter(|u| !found.claims.contains_key(u))
             .collect();
-        more.extend(
-            looker
-                .claims(lookup.index, &region, targeted, Evidence::QueueIndex)
-                .into_iter()
-                .filter(|s| q.uses.iter().any(|used| families.same(used, &s.package)))
-                .filter(unconflicted)
-                .filter_map(|s| containment.helper_seed(s, options.helper_prints)),
-        );
+        let raw: Vec<Seed> = looker
+            .claims(lookup.index, &region, targeted, Evidence::QueueIndex)
+            .into_iter()
+            .filter(|s| q.uses.iter().any(|used| families.same(used, &s.package)))
+            .collect();
+        more.extend(guarded(raw, &mut lookup_trail));
     }
     if more.is_empty() {
-        let found = census(found);
+        let found = census(trailed(found, &lookup_trail, &presented, presence_trail));
         return (graph, found);
     }
     seeds.extend(more);
+    let mut presence_trail: Vec<SeedDrop> = Vec::new();
+    let presented = present(&seeds, &mut presence_trail);
     let found = unfence(discover_with(
         &graph,
-        &present(&seeds),
+        &presented,
         &families,
         options,
         profile,
         Some(&containment),
     ));
-    let found = census(own_fence::set_apart(found, &own));
+    let found = own_fence::set_apart(found, &own);
+    let found = census(trailed(found, &lookup_trail, &presented, presence_trail));
     (graph, found)
+}
+
+/// The seed trail's rows for the lookup's position window (exp189, an
+/// instrument): the structural picks among `units` the window refused
+/// (`unsupported`) — what [`crate::libindex::lookup::claim_units`] skips
+/// before any seed exists.
+fn unsupported_picks(
+    looker: &Looker<'_>,
+    index: &crate::libindex::lookup::LibraryIndex,
+    units: &[u32],
+    rules: &crate::libindex::lookup::LookupRules,
+) -> Vec<SeedDrop> {
+    let queries = looker.queries(units);
+    crate::libindex::lookup::picks(index, &queries, rules, looker.same)
+        .into_iter()
+        .zip(&queries)
+        .filter_map(|(pick, q)| {
+            let pick = pick.filter(|p| !p.supported)?;
+            Some(SeedDrop {
+                unit: q.unit,
+                package: index.package_name(pick.package).to_string(),
+                stage: "unsupported",
+            })
+        })
+        .collect()
+}
+
+/// The seed trail's rows after the fixpoint (exp189): what became of each
+/// index seed that reached it (`presented`, the presence rules' output).
+fn fixpoint_trail(graph: &ReferenceGraph, found: &Discovery, presented: &[Seed]) -> Vec<SeedDrop> {
+    let vetoed: BTreeSet<u32> = found.vetoed.iter().map(|s| s.unit).collect();
+    let settled: BTreeMap<u32, Seed> = settle_seeds(graph, presented)
+        .into_iter()
+        .map(|s| (s.unit, s))
+        .collect();
+    presented
+        .iter()
+        .filter(|s| s.evidence.is_index() && s.package != FENCE)
+        .map(|s| {
+            let stage = if let Some(c) = found.claims.get(&s.unit) {
+                if c.package == s.package {
+                    "claimed"
+                } else {
+                    "claimedOther"
+                }
+            } else if found.self_claims.contains_key(&s.unit) {
+                "ownPackage"
+            } else if graph.is_base_external(s.unit) {
+                "external"
+            } else if settled.get(&s.unit).is_some_and(|w| w != s) {
+                "settledOut"
+            } else if vetoed.contains(&s.unit) {
+                "vetoed"
+            } else {
+                "unclaimed"
+            };
+            SeedDrop {
+                unit: s.unit,
+                package: s.package.clone(),
+                stage,
+            }
+        })
+        .collect()
 }
 
 /// The seeds with every banner name resolved to a package `index` knows
@@ -3777,6 +3952,34 @@ pub struct SpanRow {
     pub package: String,
 }
 
+/// One seed-trail row in the report ([`SeedDrop`], exp189).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SeedTrailRow {
+    pub start: u32,
+    pub end: u32,
+    pub package: String,
+    pub stage: &'static str,
+}
+
+/// The seed trail as report rows (exp189; the `discover` verb's
+/// `--unit-prints` lists it).
+pub fn seed_trail_rows(graph: &ReferenceGraph, found: &Discovery) -> Vec<SeedTrailRow> {
+    found
+        .seed_trail
+        .iter()
+        .map(|d| {
+            let span = graph.units[d.unit as usize].span;
+            SeedTrailRow {
+                start: span.start,
+                end: span.end,
+                package: d.package.clone(),
+                stage: d.stage,
+            }
+        })
+        .collect()
+}
+
 /// One queued region in the report.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -3876,6 +4079,10 @@ pub struct DiscoveryReport {
     /// ([`DiscoveryRequest::unit_prints`]; the `discover` verb).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unit_rows: Vec<UnitRow>,
+    /// The seed trail (exp189, [`Discovery::seed_trail`]), only with the
+    /// unit rows ([`DiscoveryRequest::unit_prints`]; the `discover` verb).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub seed_trail: Vec<SeedTrailRow>,
     /// The call-context census, only when asked for
     /// ([`DiscoveryRequest::call_context`]; the `discover` verb).
     #[serde(skip_serializing_if = "Vec::is_empty")]

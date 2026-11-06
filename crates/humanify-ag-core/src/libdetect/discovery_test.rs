@@ -378,6 +378,7 @@ fn index_seeds_and_targeted_queue_lookups_claim_through_the_index() {
             }),
             census: false,
             restoration: false,
+            trail: false,
         }),
         DiscoveryOptions::default(),
     );
@@ -680,6 +681,7 @@ fn run_indexed_factories(
             targeted: None,
             census: false,
             restoration: false,
+            trail: false,
         }),
         options,
     );
@@ -1844,6 +1846,7 @@ fn call_context_can_support_an_ambiguous_seed_against_the_isolation_veto() {
                 targeted: None,
                 census: false,
                 restoration: false,
+                trail: false,
             }),
             DiscoveryOptions::default(),
         );
@@ -2046,4 +2049,67 @@ fn a_library_reading_its_own_manifest_inside_the_bundle_stays_claimed() {
         vec!["lodash".to_string(), "swc".to_string()]
     );
     assert!(found.self_claims.is_empty() && found.own_packages.is_empty());
+}
+
+/// exp189: the stage the seed trail records for the index seed on the unit
+/// whose text starts with `head` (None: no trail row for it).
+fn trail_stage(
+    code: &str,
+    graph: &ReferenceGraph,
+    found: &Discovery,
+    head: &str,
+) -> Option<String> {
+    found
+        .seed_trail
+        .iter()
+        .find(|d| code[graph.units[d.unit as usize].span.start as usize..].starts_with(head))
+        .map(|d| format!("{}:{}", d.package, d.stage))
+}
+
+#[test]
+fn the_seed_trail_names_the_stage_that_dropped_each_index_seed() {
+    // the factory whole-seed rule: P holds only the functions of F's statements
+    let whole = DiscoveryOptions {
+        factory_bodies: true,
+        factory_whole_seed: true,
+        ..DiscoveryOptions::default()
+    };
+    let functions = [
+        Held::inner("var lib", "function (t)", "P", 100),
+        Held::inner("var dep", "function (e)", "P", 100),
+    ];
+    let (graph, found, _) = run_indexed_factories(LONG_MODULES, true, &functions, vec![], whole);
+    assert_eq!(
+        trail_stage(LONG_MODULES, &graph, &found, "var lib"),
+        Some("P:factoryWholeSeed".into())
+    );
+    // copy presence: every seed of S is a copy of Q's smaller module
+    let copied = [
+        Held::inner("var lib", "function (x)", "S", 4000),
+        Held::inner("var lib", "function (y)", "S", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+    ];
+    let copy = DiscoveryOptions {
+        copy_presence: 0.1,
+        copy_presence_factor: 4,
+        ..DiscoveryOptions::default()
+    };
+    let (graph, found, _) = run_indexed_with(COPIED, &copied, vec![], copy);
+    assert_eq!(
+        trail_stage(COPIED, &graph, &found, "var lib"),
+        Some("S:copyPresence".into())
+    );
+    // the isolation veto: an ambiguous seed with no independent neighbour
+    let code = "var lib = function (t) { return t.split(\",\").map(tiny).filter(Boolean).join(\"|\").concat(t.length); };\nvar tiny = (x) => x + 1;\nvar app = () => lib(\"a\");\n";
+    let (graph, found, _) = run_indexed(code, &[("var lib", &["P", "Q"])]);
+    assert_eq!(
+        trail_stage(code, &graph, &found, "var lib"),
+        Some("P:vetoed".into())
+    );
+    // a seed that holds: claimed, no drop
+    let (graph, found, _) = run_indexed(code, &[("var lib", &["P"])]);
+    assert_eq!(
+        trail_stage(code, &graph, &found, "var lib"),
+        Some("P:claimed".into())
+    );
 }

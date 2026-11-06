@@ -383,6 +383,7 @@ fn discover_with(
             }),
             census,
             restoration: false,
+            trail: false,
         }),
         DiscoveryOptions::recommended(),
     );

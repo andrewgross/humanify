@@ -107,6 +107,7 @@ fn library_claims(
             }),
             census: false,
             restoration: false,
+            trail: false,
         }),
         DiscoveryOptions::default(),
         profile,

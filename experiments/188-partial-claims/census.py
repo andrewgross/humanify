@@ -108,7 +108,9 @@ def fn_bytes_of(spans, s, e):
     return sum(min(b, e) - max(a, s) for a, b in spans if min(b, e) > max(a, s))
 
 
-def census_map(report, truth, ix, origins, audit, entry, t):
+def unclaimed_units(report, truth, ix, origins, audit, t=None):
+    """Per scored unit with prints the run left unclaimed: (unit, route, cover, verdict, function bytes, is library).
+    With a Tally `t`, the claimed index seeds feed its validation block."""
     units = score.run_units(report)
     every = score.scored_units(units)
     labels = score.label_units(truth, units, origins, audit)
@@ -122,7 +124,7 @@ def census_map(report, truth, ix, origins, audit, entry, t):
         c = claims.get(u["i"])
         frac = r[1] / max(u["w"][1], 1) if r else 0.0
         if c is not None:
-            if c["rule"] == "seed" and (c.get("evidence") or {}).get("kind") in ("index", "queueIndex"):
+            if t is not None and c["rule"] == "seed" and (c.get("evidence") or {}).get("kind") in ("index", "queueIndex"):
                 t.val["seedBytes"] += u["b"]
                 if r and frac >= 0.5 and score.same_family(r[0], c["package"]):
                     t.val["seedBytesEmulatedSame"] += u["b"]
@@ -134,7 +136,12 @@ def census_map(report, truth, ix, origins, audit, entry, t):
         else:
             v = verdict_of(score.judge_origin(r[0], row, app_pkg)[0])
             fb = fn_bytes_of(r[2], u["s"], u["e"])
-        t.add(bucket(frac), v, u["b"], fb, row["label"] not in score.NOT_LIBRARY)
+        yield u, r, frac, v, fb, row["label"] not in score.NOT_LIBRARY
+
+
+def census_map(report, truth, ix, origins, audit, entry, t):
+    for u, _, frac, v, fb, is_lib in unclaimed_units(report, truth, ix, origins, audit, t):
+        t.add(bucket(frac), v, u["b"], fb, is_lib)
 
 
 def census_sample(report, truth, ix, t):
