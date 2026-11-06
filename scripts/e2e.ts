@@ -103,6 +103,12 @@ import {
   type Setting,
   writePipelineConfig
 } from "../experiments/lib/pipeline-config.js";
+import {
+  firstDifference,
+  goldenFile,
+  goldenOf,
+  shellQuote
+} from "./lib/launch-golden.js";
 import { startStubLlm, stubAnswer } from "./lib/stub-llm.js";
 
 /** `--config` settings for one launch, as dotted keys. */
@@ -421,6 +427,57 @@ export function staysFailures(
  */
 class E2EFailure extends Error {}
 
+/**
+ * THE LAUNCH GOLDEN (exp191): every launch this stage makes — argv, the
+ * API key it hands over, the `--config` file's lines — in order, held to
+ * experiments/034-eval-harness/launch-goldens/e2e.golden.txt. It is the
+ * launch protocol a Rust runner must reproduce. Each entry is written in
+ * the shape of test/launch-recorder.ts's shell recorders (argv through
+ * `printf %q`, config lines prefixed, one trailing space trimmed), so this
+ * golden reads like every other one. Held HERE, not in `unit`, because it
+ * needs the release binary and only this stage runs after rust:build
+ * (Andrew, 2026-11-06). `UPDATE_LAUNCH_GOLDENS=1 npx tsx scripts/e2e.ts`
+ * re-records it from this live run.
+ */
+const LAUNCH_GOLDEN = "e2e";
+const LAUNCHES: string[] = [];
+
+function logLaunch(argv: string[], env: NodeJS.ProcessEnv): void {
+  const quoted = argv.map((a) => `${shellQuote(a)} `).join("");
+  const lines = [
+    `${BIN} HUMANIFY_API_KEY=${env.HUMANIFY_API_KEY ?? ""} :: ${quoted}`
+  ];
+  const at = argv.indexOf("--config");
+  const config = at >= 0 ? argv[at + 1] : undefined;
+  if (config && fs.existsSync(config)) {
+    const text = fs.readFileSync(config, "utf8").replace(/\n$/, "");
+    for (const line of text.split("\n")) {
+      lines.push(`humanify-config| ${line}`.replace(/ $/, ""));
+    }
+  }
+  LAUNCHES.push(`${lines.join("\n")}\n`);
+}
+
+/** The launches with this run's paths and port replaced, as the golden
+ *  stores them. */
+function normalizedLaunches(scratch: string, port: number): string {
+  return LAUNCHES.join("")
+    .replaceAll(scratch, "<TMP>/humanify-e2e-<RUN>")
+    .replaceAll(REPO, "<REPO>")
+    .replaceAll(`http://127.0.0.1:${port}/v1`, "http://127.0.0.1:<PORT>/v1");
+}
+
+function holdLaunchGolden(scratch: string, port: number): void {
+  const recorded = normalizedLaunches(scratch, port);
+  const golden = goldenOf(LAUNCH_GOLDEN, recorded);
+  if (recorded !== golden) {
+    fail(
+      `the e2e launches changed — ${goldenFile(LAUNCH_GOLDEN)} is the launch protocol the Rust runner must reproduce; ` +
+        `re-record a deliberate change with UPDATE_LAUNCH_GOLDENS=1 and say why each line changed\n${firstDifference(recorded, golden)}`
+    );
+  }
+}
+
 function fail(msg: string): never {
   throw new E2EFailure(msg);
 }
@@ -454,16 +511,15 @@ async function runBinary(
     ["library.index_store_dir", LIBRARY_STORE],
     ...settings
   ]);
-  const child = spawn(
-    BIN,
-    [...args, "--endpoint", endpoint, "--config", config],
-    {
-      stdio: ["ignore", "ignore", "pipe"],
-      // The binary's API key comes from HUMANIFY_API_KEY only (config
-      // sweep step 4); the stub accepts any.
-      env: { ...process.env, HUMANIFY_API_KEY: "e2e" }
-    }
-  );
+  const argv = [...args, "--endpoint", endpoint, "--config", config];
+  // The binary's API key comes from HUMANIFY_API_KEY only (config sweep
+  // step 4); the stub accepts any.
+  const env = { ...process.env, HUMANIFY_API_KEY: "e2e" };
+  logLaunch(argv, env);
+  const child = spawn(BIN, argv, {
+    stdio: ["ignore", "ignore", "pipe"],
+    env
+  });
   let stderr = "";
   child.stderr.on("data", (c) => {
     stderr += c;
@@ -666,9 +722,13 @@ function fixturePairs(): FixturePair[] {
  * resolved selection + toolchain, the same resolution a run makes.
  */
 function detectionOf(file: string, label: string): Detection {
-  const r = spawnSync(BIN, ["detect", "--toolchain", file], {
-    encoding: "utf8"
-  });
+  const argv = ["detect", "--toolchain", file];
+  // Detection asks no model: it gets no API key, so the launch (and its
+  // golden line) does not depend on the caller's environment.
+  const env = { ...process.env };
+  delete env.HUMANIFY_API_KEY;
+  logLaunch(argv, env);
+  const r = spawnSync(BIN, argv, { encoding: "utf8", env });
   if (r.status !== 0) fail(`${label}: detect --toolchain failed\n${r.stderr}`);
   const lines = r.stdout.trim().split("\n");
   const resolved = JSON.parse(lines[lines.length - 1]) as {
@@ -1115,8 +1175,10 @@ async function main(): Promise<void> {
     server.close();
     fs.rmSync(scratch, { recursive: true, force: true });
   }
+  holdLaunchGolden(scratch, port);
   console.log(
-    `e2e: ${pairs.length - gaps} fixture pair(s) passed, ${gaps} known gap(s) failed exactly as declared`
+    `e2e: ${pairs.length - gaps} fixture pair(s) passed, ${gaps} known gap(s) failed exactly as declared; ` +
+      `${LAUNCHES.length} launches equal to ${path.relative(REPO, goldenFile(LAUNCH_GOLDEN))}`
   );
 }
 
