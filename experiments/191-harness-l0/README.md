@@ -19,7 +19,7 @@ recorded goldens, one owner row, and this README. The one harness change is
   file's sha256 equals its source's (66 manifests, all equal).
 - **Oracle (a), 034 KPI scorer:** reproduced. All 24 cards and all 12 report pages are byte-equal to the recorded ones, and all 24 partitions add up. The 3 names-mode summaries are byte-equal. The 3 off-mode (`ref-scratch`) summaries differ ONLY by `namingModes: ["off"]`, a provenance key exp171 added to `summarize.ts` after those summaries were written. Every `rescore.ts` line reads `OLD-FIELDS DIFFER`, which is an artifact: that check strips `churn.surfaces` from the new card and compares it with the old card, and these old cards already carry surfaces. The cards themselves are byte-equal.
 - **Oracle (b), the exp096 library scorer:** reproduced, **9 / 9 labels**: every `summary.json` and every card (90 + 30 + 1 per index, 363 cards) byte-equal.
-- **Gate:** `npm run check` 13/13 in the worktree and 13/13 from a clean checkout of `c1cf98597` (§4). `unit` held its wall time (111 s against 109 s before): the e2e golden runs alongside run-launch.test.ts, which takes 110 s. On the clean checkout `unit` took 228 s and `rust:build` 0.1 s, because the e2e golden test does the release build first (the same total work, moved earlier).
+- **Gate:** `npm run check` 13/13 in the worktree and 13/13 from a clean checkout of `bfa9cb44c` (§4). With the e2e golden held by the e2e stage (§1b), `unit` on the clean checkout is back to 111.6 s (it was 228 s when the unit test built the binary), `rust:build` does the build again (135.9 s), and `e2e` takes 77.2 s with the golden check.
 
 ## 1. Launch goldens (proof c)
 
@@ -173,21 +173,28 @@ run read the same bytes. Once /tmp is cleared, a port must map that prefix to
 
 ## 4. Gate
 
-| Stage                    | Worktree | Clean checkout |
-| ------------------------ | -------- | -------------- |
-| typecheck                | PASS     | PASS           |
-| lint                     | PASS     | PASS           |
-| rust:fmt                 | PASS     | PASS           |
-| rust:clippy              | PASS     | PASS           |
-| knip                     | PASS     | PASS           |
-| knip:prod                | PASS     | PASS           |
-| census:clones (advisory) | PASS     | PASS           |
-| census:concurrency       | PASS     | PASS           |
-| unit (365 tests, 11 new) | PASS     | PASS           |
-| rust:unit                | PASS     | PASS           |
-| rust:build               | PASS     | PASS           |
-| rust:format-golden       | PASS     | PASS           |
-| e2e                      | PASS     | PASS2E         |
+At `bfa9cb44c` (the e2e golden held by the e2e stage). Worktree times are
+warm (binary already built); the clean checkout is `git worktree add
+--detach /work/exp191-clean2 bfa9cb44c` with `npm ci --ignore-scripts`.
+
+| Stage                    | Worktree       | Clean checkout |
+| ------------------------ | -------------- | -------------- |
+| typecheck                | PASS           | PASS           |
+| lint                     | PASS           | PASS           |
+| rust:fmt                 | PASS           | PASS           |
+| rust:clippy              | PASS           | PASS           |
+| knip                     | PASS           | PASS           |
+| knip:prod                | PASS           | PASS           |
+| census:clones (advisory) | PASS           | PASS           |
+| census:concurrency       | PASS           | PASS           |
+| unit                     | PASS (111.1 s) | PASS (111.6 s) |
+| rust:unit                | PASS           | PASS           |
+| rust:build               | PASS (0.1 s)   | PASS (135.9 s) |
+| rust:format-golden       | PASS           | PASS           |
+| e2e (+ launch golden)    | PASS (77.2 s)  | PASS (77.2 s)  |
+
+Before §1b, at `c1cf98597`, the clean checkout read `unit` 228 s and
+`rust:build` 0.1 s (the unit test built the binary).
 
 ## 5. What this lane could not do
 
