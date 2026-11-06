@@ -1,13 +1,14 @@
 # exp191 — harness migration lane L0: launch goldens, frozen proof data, oracles run once
 
-STATUS: DONE (2026-11-06), branch `exp191-harness-l0`, NOT merged. No harness
-code changed: this lane adds tests, recorded goldens, one owner row, and this
-README. Scope is `docs/dev-harness.md` (branch `exp185-dev-harness-design`)
+STATUS: DONE (2026-11-06), branch `exp191-harness-l0`. This lane adds tests,
+recorded goldens, one owner row, and this README. The one harness change is
+§1b: the e2e stage (`scripts/e2e.ts`) now holds its own launch golden
+(Andrew's decision, 2026-11-06), so `unit` no longer builds the binary. Scope is `docs/dev-harness.md` (branch `exp185-dev-harness-design`)
 §4 proofs a-c and the §5 L0 row, nothing more.
 
 ## Totals
 
-- **Launch goldens: 11 recorded, 11 held** by one new test file, covering
+- **Launch goldens: 11 recorded, 11 held**: 10 by one new test file, the e2e one by the e2e stage itself (§1b), covering
   every living launcher the doc names except the walk (it has no living
   launcher). Each one is a recorder log from a live run. None was typed.
   Planting a one-word change in `boot-gate.sh` and in `run.py` turned the
@@ -62,16 +63,10 @@ How faithful each one is, and what was patched:
   setting keeps the log order fixed (with 4 jobs the order is completion
   order). The `eval library` -> `run.sh` -> venv layer is not in the golden.
   `eval-library-args.test.ts` already holds the argv `eval.ts` hands run.sh.
-- **e2e:** e2e checks what each leg wrote (renames, boot, determinism, the
-  legacy goldens), so its recorder is a PASS-THROUGH to the real release
-  binary. The test builds that binary first with the rust:build command,
-  because `unit` runs before `rust:build` in a clean checkout. COST: this
-  adds one more e2e run (~80 s) to the `unit` stage, plus the release build
-  on a clean checkout. I chose that over a test that skips when the binary
-  is missing, because a check that passes without running is the thing this
-  project keeps getting bitten by. If the cost is not wanted, the cheaper
-  option is to hold this one golden inside the `e2e` stage, but that is a
-  `check.ts` change and so out of this lane's scope.
+- **e2e:** first recorded from a sandbox with a PASS-THROUGH recorder to
+  the real release binary, inside `unit`, which then had to build the
+  binary itself (`unit` 111 s -> 228 s on a clean checkout). Superseded by
+  §1b: the e2e stage now logs and holds its own launches.
 - **boot gate:** `boot-gate.sh` is sourced in place, under `env -i` with a
   seeded session environment. `bun` (in `$HOME/.bun/bin`, which the gate
   puts first on PATH), `timeout` and `env` are recorders. The last two then
@@ -97,6 +92,37 @@ Findings while recording (observed only, nothing changed):
 3. `launch_parity_test.rs`'s transcribed neutrality entry is stale, as
    dev-harness.md §1 already says. The golden above is the live shape it
    should read in L4.
+
+## 1b. The e2e golden is held by the e2e stage (2026-11-06)
+
+Andrew's decision: hold the e2e golden inside the `e2e` stage, the one stage
+that runs after `rust:build`, instead of building the binary in `unit`.
+
+- `scripts/e2e.ts` logs every launch it makes (the 19 `detect` calls and
+  the 133 runs: argv through a `printf %q` twin, the API key it hands over,
+  the `--config` file's lines), normalises the scratch dir, the repo path
+  and the stub's port, and after the last pair compares the log with
+  `launch-goldens/e2e.golden.txt`. A difference fails the stage with the
+  first differing line. `UPDATE_LAUNCH_GOLDENS=1 npx tsx scripts/e2e.ts`
+  re-records it from that live run.
+- The format is the shell recorder's, so the golden recorded from the
+  sandbox is held UNCHANGED: the first native run matched all 152 launches,
+  and a re-record with `UPDATE_LAUNCH_GOLDENS=1` wrote identical bytes
+  (`cmp` equal against the copy taken before the change).
+- `shellQuote` (the `printf %q` twin, `scripts/lib/launch-golden.ts`, with
+  `goldenOf` moved there from `test/launch-recorder.ts`) is held to the
+  real bash on 21 sample strings by `test/launch-golden.test.ts`, and
+  refuses a control character rather than guessing.
+- One launch change, no byte change: `detect --toolchain` now runs with
+  `HUMANIFY_API_KEY` removed from its environment (it asks no model), so the
+  golden line does not depend on the caller's shell. Before, it inherited
+  the caller's key; the sandbox recording had it empty.
+- **Drift proof:** planted `llm.retries` 0 -> 1 in e2e's launch config
+  (one word). The e2e stage FAILED (exit 1): `line 4: golden: humanify-config|
+retries = 0 / now: humanify-config| retries = 1`. Reverted; golden `cmp`
+  equal.
+- The e2e case and its `cargo build` are gone from
+  `test/launch-goldens.test.ts`.
 
 ## 2. Frozen proof data
 
@@ -173,4 +199,4 @@ run read the same bytes. Once /tmp is cleared, a port must map that prefix to
 
 ## Proposed `harness-ts-final`
 
-`harness-ts-final` = **`f8bbb20ae263b87b446d1dbd934a4fb12f9dbd08`**, the commit both oracles ran on (main when this lane started). This branch adds only tests, goldens, one docs row and this README, and changes no harness code, so the merge of this branch would be an equivalent tag point that also carries the goldens. Either works. Andrew picks.
+`harness-ts-final` = **`f8bbb20ae263b87b446d1dbd934a4fb12f9dbd08`**, the commit both oracles ran on (main when this lane started). This branch adds tests, goldens, one docs row and this README, and its only harness change is the e2e stage holding its own launch golden (§1b, no launch byte changed), so the merge of this branch would be an equivalent tag point that also carries the goldens. Either works. Andrew picks.

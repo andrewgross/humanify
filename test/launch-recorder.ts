@@ -24,10 +24,6 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 export const REPO = path.resolve(import.meta.dirname, "..");
-export const GOLDENS = path.join(
-  REPO,
-  "experiments/034-eval-harness/launch-goldens"
-);
 
 /**
  * The binary recorder. It logs every call (cwd, the API key it inherited,
@@ -226,20 +222,6 @@ export function recordedCalls(
     .replaceAll(path.join(rec.root, "repo"), "<REPO>")
     .replaceAll(rec.root, "<TMP>")
     .replaceAll(REPO, "<REAL_REPO>");
-}
-
-/**
- * Hold a recording to its golden. `UPDATE_LAUNCH_GOLDENS=1` re-records
- * (only ever from a live run like this one — never by hand).
- */
-export function goldenOf(name: string, recorded: string): string {
-  const file = path.join(GOLDENS, `${name}.golden.txt`);
-  if (process.env.UPDATE_LAUNCH_GOLDENS === "1") {
-    fs.mkdirSync(GOLDENS, { recursive: true });
-    fs.writeFileSync(file, recorded);
-  }
-  if (!fs.existsSync(file)) return `<no golden at ${file}>`;
-  return fs.readFileSync(file, "utf8");
 }
 
 export function cleanup(rec: Recording): void {

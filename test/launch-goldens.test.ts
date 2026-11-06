@@ -5,9 +5,9 @@ import * as path from "node:path";
 import { describe, it } from "node:test";
 
 import { CORPUS } from "../experiments/lib/match-truth/corpus.js";
+import { goldenOf } from "../scripts/lib/launch-golden.js";
 import {
   cleanup,
-  goldenOf,
   importClosure,
   newRecording,
   placeBinary,
@@ -23,9 +23,12 @@ import {
  * docs/dev-harness.md §4 proof c). run.sh's launches are held by
  * experiments/034-eval-harness/run-launch.test.ts; these are the rest:
  * neutrality (both legs, the pre-rename baseline, the legacy no-`--config`
- * leg), the library runner, e2e (every leg), ask-trace, match-truth and the
- * boot gate's CLI argv + environment scrub. The Rust runners (L3/L4) must
- * reproduce each golden byte for byte.
+ * leg), the library runner, ask-trace, match-truth and the boot gate's CLI
+ * argv + environment scrub. The Rust runners (L3/L4) must reproduce each
+ * golden byte for byte. e2e's golden (every leg) is held by the e2e stage
+ * itself (scripts/e2e.ts), the one stage that runs after rust:build: it
+ * needs the release binary, and building it here doubled `unit` on a clean
+ * checkout (111 s -> 228 s).
  *
  * Each golden is a recorder's log from a LIVE run of the launcher
  * (launch-recorder.ts says how), never typed. To re-record after a
@@ -577,72 +580,4 @@ describe("library runner launches (096 run.py: build, discover per bundle under 
       }
     });
   }
-});
-
-// ─── e2e ─────────────────────────────────────────────────────────────────
-
-const REAL_BIN = path.join(REPO, "target/release/humanify-ag");
-
-/** e2e's recorder: logs the launch and its --config file, then runs the
- *  real release binary with the same argv. */
-const PASS_THROUGH = String.raw`#!/usr/bin/env bash
-echo "$0 HUMANIFY_API_KEY=${"$"}{HUMANIFY_API_KEY:-} :: $(printf '%q ' "$@")" >> "$RECORDER_ROOT/calls.log"
-prev=""
-for a in "$@"; do
-  [[ "$prev" == "--config" && -f "$a" ]] && sed 's/^/humanify-config| /; s/ $//' "$a" >> "$RECORDER_ROOT/calls.log"
-  prev="$a"
-done
-exec "${REAL_BIN}" "$@"
-`;
-
-describe("e2e launches (scripts/e2e.ts: every leg of every fixture pair)", () => {
-  it("the release binary runs every leg through a pass-through recorder", () => {
-    // e2e checks what each leg WROTE (renames, boot, determinism, the legacy
-    // goldens), so its recorder is a pass-through to the real binary —
-    // built here exactly as the rust:build stage builds it (a no-op when
-    // fresh), because this stage runs before rust:build in a clean checkout.
-    const build = spawnSync(
-      "cargo",
-      ["build", "--release", "--locked", "-p", "humanify-ag-cli"],
-      {
-        cwd: REPO,
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          PATH: `${path.join(process.env.HOME ?? "", ".cargo/bin")}:${process.env.PATH ?? ""}`
-        }
-      }
-    );
-    assert.strictEqual(build.status, 0, build.stderr.slice(-2000));
-    const rec = newRecording("launch-e2e");
-    try {
-      const repo = sandboxRepo(rec, [
-        { files: importClosure(["scripts/e2e.ts"]) }
-      ]);
-      for (const d of [
-        "test/e2e/fixtures",
-        "test/e2e/library-index",
-        "test/golden/legacy-default"
-      ]) {
-        fs.mkdirSync(path.dirname(path.join(repo, d)), { recursive: true });
-        fs.symlinkSync(path.join(REPO, d), path.join(repo, d));
-      }
-      writeExec(path.join(repo, "target/release/humanify-ag"), PASS_THROUGH);
-      const r = spawnSync(realNpx(), ["tsx", "scripts/e2e.ts"], {
-        cwd: repo,
-        encoding: "utf8",
-        env: { ...envWith(rec), HOME: process.env.HOME, TMPDIR: rec.root },
-        maxBuffer: 1 << 28
-      });
-      assert.strictEqual(r.status, 0, `${r.stdout}${r.stderr}`.slice(-4000));
-      const calls = recordedCalls(rec, [
-        [PORT, "http://127.0.0.1:<PORT>/v1"],
-        [/humanify-e2e-[A-Za-z0-9]{6}/g, "humanify-e2e-<RUN>"]
-      ]);
-      assert.match(calls, /:: detect --toolchain /);
-      check("e2e", calls);
-    } finally {
-      cleanup(rec);
-    }
-  });
 });
