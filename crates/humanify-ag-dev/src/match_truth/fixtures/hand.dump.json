@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "tool": "humanify match",
+  "meta": {},
+  "files": [
+    {
+      "path": "index.js",
+      "freshText": "",
+      "functions": {
+        "prior": [
+          {
+            "id": "input.js:1:1",
+            "start": 100,
+            "end": 110,
+            "name": "alpha",
+            "slice": "function alpha(x, y) {\n  return x + y;\n}"
+          },
+          {
+            "id": "input.js:1:2",
+            "start": 200,
+            "end": 210,
+            "name": "renamed",
+            "slice": "function renamed(p, q) {\n  return p * q;\n}"
+          },
+          {
+            "id": "input.js:1:3",
+            "start": 300,
+            "end": 310,
+            "name": "near",
+            "slice": "function x(n) {\n  var t = 0;\n  for (var i = 0; i < 9; i++) {\n    t += i;\n  }\n  t = t * 2;\n  t = t + n;\n  t -= 4;\n  return t;\n}"
+          },
+          {
+            "id": "input.js:1:4",
+            "start": 400,
+            "end": 410,
+            "name": "far",
+            "slice": "function y(n) {\n  var s = 0;\n  while (n > 0) {\n    s += n % 10;\n    n = Math.floor(n / 10);\n  }\n  s = s * s;\n  s += 1000;\n  if (s > 5) {\n    s = 0;\n  }\n  return s;\n}"
+          },
+          {
+            "id": "input.js:1:5",
+            "start": 500,
+            "end": 510,
+            "name": "dupe",
+            "slice": "function dupe() {\n  return 1;\n}"
+          },
+          {
+            "id": "input.js:1:6",
+            "start": 600,
+            "end": 610,
+            "name": "dupe",
+            "slice": "function dupe() {\n  return 1;\n}"
+          }
+        ],
+        "fresh": [
+          {
+            "id": "input.js:1:1",
+            "start": 100,
+            "end": 110,
+            "name": "alpha",
+            "slice": "function alpha(x, y) {\n  return x + y;\n}"
+          },
+          {
+            "id": "input.js:1:2",
+            "start": 200,
+            "end": 210,
+            "name": "renamed2",
+            "slice": "function renamed2(a, b) {\n  return a * b;\n}"
+          },
+          {
+            "id": "input.js:1:3",
+            "start": 300,
+            "end": 310,
+            "name": "near2",
+            "slice": "function x(n) {\n  var t = 0;\n  for (var i = 0; i < 9; i++) {\n    t += i;\n  }\n  t = t * 3;\n  t = t + n;\n  t -= 4;\n  return t;\n}"
+          },
+          {
+            "id": "input.js:1:4",
+            "start": 400,
+            "end": 410,
+            "name": "other",
+            "slice": "function other(z) {\n  return z - z;\n}"
+          },
+          {
+            "id": "input.js:1:5",
+            "start": 500,
+            "end": 510,
+            "name": "dupe",
+            "slice": "function dupe() {\n  return 1;\n}"
+          },
+          {
+            "id": "input.js:1:6",
+            "start": 600,
+            "end": 610,
+            "name": "dupe",
+            "slice": "function dupe() {\n  return 1;\n}"
+          }
+        ],
+        "pairs": [
+          {
+            "prior": 0,
+            "fresh": 0,
+            "priorId": "input.js:1:1",
+            "freshId": "input.js:1:1",
+            "tier": "identity"
+          },
+          {
+            "prior": 1,
+            "fresh": 1,
+            "priorId": "input.js:1:2",
+            "freshId": "input.js:1:2",
+            "tier": "identity"
+          },
+          {
+            "prior": 2,
+            "fresh": 2,
+            "priorId": "input.js:1:3",
+            "freshId": "input.js:1:3",
+            "tier": "ordinal"
+          },
+          {
+            "prior": 3,
+            "fresh": 4,
+            "priorId": "input.js:1:4",
+            "freshId": "input.js:1:5",
+            "tier": "interchangeable"
+          },
+          {
+            "prior": 4,
+            "fresh": 5,
+            "priorId": "input.js:1:5",
+            "freshId": "input.js:1:6",
+            "tier": "interchangeable"
+          }
+        ],
+        "unmatched": [],
+        "ambiguous": [],
+        "rejections": [],
+        "stats": {}
+      },
+      "close": null,
+      "twins": {
+        "prior": [
+          {
+            "start": 1,
+            "end": 2,
+            "hash": "h1",
+            "slice": "var a = 1;"
+          },
+          {
+            "start": 2,
+            "end": 3,
+            "hash": "h2",
+            "slice": "var b = 2;"
+          }
+        ],
+        "fresh": [
+          {
+            "start": 11,
+            "end": 12,
+            "hash": "h11",
+            "slice": "var a = 1;"
+          },
+          {
+            "start": 12,
+            "end": 13,
+            "hash": "h12",
+            "slice": "var b = 9;"
+          }
+        ],
+        "gates": {
+          "rows": [
+            {
+              "tier": "unique",
+              "prior": {
+                "start": 1,
+                "end": 2
+              },
+              "fresh": {
+                "start": 11,
+                "end": 12
+              },
+              "outcome": "bridged"
+            },
+            {
+              "tier": "unique",
+              "prior": {
+                "start": 2,
+                "end": 3
+              },
+              "fresh": {
+                "start": 12,
+                "end": 13
+              },
+              "outcome": "vetoed:callee"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

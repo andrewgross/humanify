@@ -59,6 +59,25 @@ pub(crate) fn arrow_serializes_as_function(map: &serde_json::Map<String, Value>)
     body_type == Some("BlockStatement") && !arrow_owns_outer_binding_use(map)
 }
 
+/// The FUNCTION side of the same rule, for a caller that holds a
+/// FunctionExpression and asks whether its arrow spelling means the same
+/// thing (the dev harness's match-truth canonicalizer, which erases the
+/// `function` head): no binding `id`, no generator, and no
+/// `this`/`arguments`/`new.target` in the function's own lexical scope —
+/// the very walk the arrow side runs ([`arrow_owns_outer_binding_use`]).
+/// False for any other node type.
+pub fn function_expression_flip_is_semantics_preserving(
+    map: &serde_json::Map<String, Value>,
+) -> bool {
+    let is_function = map.get("type").and_then(Value::as_str) == Some("FunctionExpression");
+    let has_id = map.get("id").is_some_and(|v| !v.is_null());
+    let generator = map
+        .get("generator")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    is_function && !has_id && !generator && !arrow_owns_outer_binding_use(map)
+}
+
 /// The function-head fields the unified spelling must carry so the
 /// function-SIDE conditions of the rule hold in the statement hash's
 /// scalar-free stream: `async` (condition 3 — it must MATCH, it is carried
