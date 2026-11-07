@@ -400,6 +400,9 @@ pub fn rekey_prior_by_content(
                 .map(|(_, e)| CarriedName {
                     name: e.name.clone(),
                     origin: e.origin,
+                    // A stale-era entry is re-keyed by content; its file
+                    // and identifier are re-derived (exp194 is current-era).
+                    identity: None,
                 })
                 .collect(),
         );

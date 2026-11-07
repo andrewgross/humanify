@@ -467,6 +467,24 @@ pub fn leftover_priors<'p>(
         .collect()
 }
 
+/// What an exact structural-hash carry takes beside the name (exp194): the
+/// prior entry's file, when it is a reusable vendor path, and its
+/// identifier. None when neither survives.
+pub fn prior_identity(
+    file_name: Option<&str>,
+    runtime_identifier: Option<&str>,
+    vendor_dir: &str,
+) -> Option<CarriedIdentity> {
+    let file_name = file_name
+        .filter(|f| reusable_vendor_path(f, vendor_dir))
+        .map(String::from);
+    let runtime_identifier = runtime_identifier.map(String::from);
+    (file_name.is_some() || runtime_identifier.is_some()).then_some(CarriedIdentity {
+        file_name,
+        runtime_identifier,
+    })
+}
+
 /// A prior path a carry may reuse: `vendor/<safe segments>.js`.
 pub fn reusable_vendor_path(file_name: &str, vendor_dir: &str) -> bool {
     let Some(rest) = file_name

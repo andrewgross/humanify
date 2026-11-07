@@ -366,6 +366,13 @@ impl NameSource {
 pub struct CarriedName {
     pub name: String,
     pub origin: NameSource,
+    /// The prior entry's file and identifier (exp194): an exact carry
+    /// takes them with the name. They are usually the hash's own spelling,
+    /// but not after an earlier content pair kept an older release's —
+    /// re-deriving them from the hash then renamed a byte-identical file
+    /// (21,104 changed lines on one walk hop). None when the prior entry
+    /// recorded neither.
+    pub identity: Option<vendor_pairing::CarriedIdentity>,
 }
 
 impl CarriedName {
@@ -374,7 +381,14 @@ impl CarriedName {
         CarriedName {
             name: name.into(),
             origin: NameSource::of_prior_label(label),
+            identity: None,
         }
+    }
+
+    /// The same, with the prior entry's file and identifier.
+    pub fn with_identity(mut self, identity: Option<vendor_pairing::CarriedIdentity>) -> Self {
+        self.identity = identity;
+        self
     }
 }
 
@@ -424,7 +438,8 @@ pub struct FactoryRecord {
     /// template literal with no `${}`): the text. The shape half of the app
     /// text asset rule ([`text_assets`]); None for anything else.
     pub exported_text: Option<String>,
-    /// What a content pair carried from the prior release (finding #90) —
+    /// What a carry took from the prior release — a content or declared
+    /// pair (finding #90/#95) or the exact structural-hash carry (exp194):
     /// the prior file and identifier the unpack reuses. None otherwise.
     pub carried: Option<vendor_pairing::CarriedIdentity>,
     /// What the module declares about itself (finding #95,
@@ -639,11 +654,13 @@ fn index_by_hash(factories: &[FactoryRecord]) -> HashIndex {
     }
 }
 
-/// The prior release's name for this factory, or None. The group must be
+/// The prior release's entry for this factory, or None. The group must be
 /// INTACT — the same number of factories share the hash now as did in the
 /// prior — or positions no longer line up and carrying would silently
 /// misname every member. A changed group earns a fresh name, never a guess.
-fn prior_name_for(
+/// The caller keeps vendor and asset apart: an app text asset's name is
+/// never a vendor name.
+fn prior_entry_for(
     idx: usize,
     hash: &str,
     prior_names: Option<&HashMap<String, Vec<CarriedName>>>,
@@ -653,11 +670,7 @@ fn prior_name_for(
     if group.len() != *index.group_size.get(hash)? {
         return None;
     }
-    // An app text asset's name is never a vendor name.
-    group
-        .get(index.occurrence[idx])
-        .filter(|c| c.origin != NameSource::Asset)
-        .cloned()
+    group.get(index.occurrence[idx]).cloned()
 }
 
 /// Apply the Phase 3 naming cascade to each classified factory.
@@ -684,14 +697,31 @@ pub fn name_cjs_factories(
     for (idx, factory) in classification.factories.iter_mut().enumerate() {
         // An app text asset is named from its own text before the cascade
         // (`text_assets`) — no declared or carried package name applies.
+        let prior = prior_entry_for(idx, &factory.structural_hash, prior_names, &index);
         if factory.name_source == Some(NameSource::Asset) {
+            // An unchanged asset keeps the prior asset's identifier (its
+            // file is its text's): exp194, the content pair's
+            // identifier-only carry made durable.
+            if let Some(carried) = prior.filter(|c| c.origin == NameSource::Asset) {
+                factory.carried =
+                    carried
+                        .identity
+                        .and_then(|i| i.runtime_identifier)
+                        .map(|runtime_identifier| vendor_pairing::CarriedIdentity {
+                            file_name: None,
+                            runtime_identifier: Some(runtime_identifier),
+                        });
+            }
             counts.asset += 1;
             continue;
         }
-        if let Some(carried) = prior_name_for(idx, &factory.structural_hash, prior_names, &index) {
+        if let Some(carried) = prior.filter(|c| c.origin != NameSource::Asset) {
             factory.name = Some(carried.name);
             factory.name_source = Some(NameSource::CarryOver);
             factory.name_origin = Some(carried.origin);
+            // The module's identity is the prior's whole: its file and
+            // identifier carry with the name (exp194).
+            factory.carried = carried.identity;
             counts.carry_over += 1;
             continue;
         }
