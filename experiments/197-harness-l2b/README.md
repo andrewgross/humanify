@@ -124,7 +124,7 @@ cards and summaries byte for byte (9 / 9; it did, 2026-11-07 16:43-17:08).
 | cc-exp153-ix4-ctx-tb        | yes                        | identical, identical              |
 | cc-exp153-ix4-ctx-tbr       | yes                        | identical, identical              |
 
-All 24 Rust rows were re-run on the final binary (sha256 `b13bbf09…`, built from `9e96c88d2`); the bun-held cards compared are the on-disk ones beside the reports (a private corpus commits its summary only).
+All 24 Rust rows were re-run on the final binary (sha256 `6648ee62…`, built from `05f7305bc`; `cargo dev library proof` for the 15 committed labels); the bun-held cards compared are the on-disk ones beside the reports (a private corpus commits its summary only).
 
 Committed scorer-14 labels: 516. Their reports are on disk for 21; the
 other 495 (dev, test, test2, bundlers, apps, pop, remin\*) lost their raw
@@ -207,7 +207,12 @@ is refused (the Python fetched it).
 
 ## 8. Gate
 
-GATE
+| Check                                                                                                                                                                             | Result                                                                                                                                                |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cargo test -p humanify-ag-dev` (incl. the library tests: Python-recorded vectors for `re` classes, os.path, decoder, families, gzip, vendor-precision card, leaderboard goldens) | pass                                                                                                                                                  |
+| Red seen first                                                                                                                                                                    | gzip test (prettier reflowed its raw JSON), corpus surrogate test, env_guard rule 5 (card field names `library`/`bundler`/`index` read like settings) |
+| `npm run check` in the worktree (`05f7305bc`)                                                                                                                                     | 13/13 PASS (rust:unit 294 s, rust:build 136 s, e2e 77 s)                                                                                              |
+| `npm run check` on a clean checkout of the merge commit                                                                                                                           | see the merge report                                                                                                                                  |
 
 ## Proposed CLAUDE.md text (for L5; not applied)
 
