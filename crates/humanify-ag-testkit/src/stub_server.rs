@@ -90,10 +90,16 @@ pub struct StubServer {
 
 impl StubServer {
     /// Start a server answering every request with `handler(index, body)`
-    /// after `delay`.
+    /// after `delay`, on a free port.
+    pub fn start(delay: Duration, handler: Handler) -> StubServer {
+        StubServer::serve(0, delay, handler).expect("a local port")
+    }
+
+    /// [`StubServer::start`] on `port` of 127.0.0.1 (0: a free one); Err
+    /// when the port cannot be bound (`cargo dev stub-llm serve --port`).
     // concurrency: test-only stub server (this crate is a dev-dependency): its own runtime and per-connection tasks on its own thread, apart from the code under test
     #[allow(clippy::disallowed_methods)]
-    pub fn start(delay: Duration, handler: Handler) -> StubServer {
+    pub fn serve(port: u16, delay: Duration, handler: Handler) -> Result<StubServer, String> {
         let stats = Arc::new(StubStats::default());
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
         let thread_stats = stats.clone();
@@ -103,10 +109,14 @@ impl StubServer {
                 .build()
                 .expect("the stub's runtime starts");
             runtime.block_on(async move {
-                let listener = TcpListener::bind("127.0.0.1:0")
-                    .await
-                    .expect("a local port");
-                tx.send(listener.local_addr().expect("an address"))
+                let listener = match TcpListener::bind(("127.0.0.1", port)).await {
+                    Ok(l) => l,
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("cannot bind 127.0.0.1:{port}: {e}")));
+                        return;
+                    }
+                };
+                tx.send(listener.local_addr().map_err(|e| e.to_string()))
                     .expect("the starter waits for the address");
                 loop {
                     let Ok((socket, _)) = listener.accept().await else {
@@ -118,11 +128,11 @@ impl StubServer {
                 }
             });
         });
-        let addr = rx.recv().expect("the stub reports its address");
-        StubServer {
+        let addr = rx.recv().expect("the stub reports its address")?;
+        Ok(StubServer {
             base_url: format!("http://{addr}/v1"),
             stats,
-        }
+        })
     }
 
     /// Start a server answering every request with a chat completion
