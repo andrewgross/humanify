@@ -223,12 +223,12 @@ const VERBS: &[Verb] = &[
     },
     Verb {
         words: &["e2e"],
-        usage: "e2e",
+        usage: "e2e [--out D]",
         proves: "the release binary on every committed fixture: fresh, prior, deterministic twice, and the exact export surface",
         cannot_prove: "LLM naming quality: the names come from a stub",
         lane: None,
         today: "",
-        settings: NONE,
+        settings: &["dev.out"],
     },
     Verb {
         words: &["format-golden"],
