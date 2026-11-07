@@ -19,6 +19,11 @@ pub const SHIMS: &[&str] = &["scripts/webcrack-shim.ts"];
 
 const DEADLINE: Duration = Duration::from_secs(60);
 
+/// The parse probe, run as `node -e PROBE <file>`.
+const PROBE: &str = "const m = require('node:module'), fs = require('node:fs'), vm = require('node:vm'); \
+const f = process.argv[1]; \
+new vm.SourceTextModule(m.stripTypeScriptTypes(fs.readFileSync(f, 'utf8')), { identifier: f });";
+
 /// Check `shims` under `root`: each exists and parses.
 pub fn check(root: &Path, shims: &[&str], host: &HostEnv) -> (u8, String, String) {
     let mut out = String::new();
@@ -31,7 +36,15 @@ pub fn check(root: &Path, shims: &[&str], host: &HostEnv) -> (u8, String, String
             ));
             continue;
         }
-        let mut spawn = Spawn::new("node", &["--check", &file.display().to_string()], DEADLINE);
+        let file = file.display().to_string();
+        let args = [
+            "--no-warnings",
+            "--experimental-vm-modules",
+            "-e",
+            PROBE,
+            &file,
+        ];
+        let mut spawn = Spawn::new("node", &args, DEADLINE);
         if host.path.is_some() {
             spawn = spawn.env("PATH", &host.child_path());
         }
