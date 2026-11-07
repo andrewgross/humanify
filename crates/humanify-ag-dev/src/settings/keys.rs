@@ -447,8 +447,9 @@ pub static HARNESS_KEYS: &[Key] = &[
         flag: Some("--files"),
         default: empty,
         unset: "",
-        doc: "Census only these files (the pre-commit hook's staged files); stale-entry \
-              checks are skipped, since a partial scan cannot see every site.",
+        doc: "Census only these files (the pre-commit hook's staged files): only their \
+              unlisted sites, their stale entries and their allow comments are reported; a \
+              list with no `.rs` path is a full run.",
     },
     switch(
         "dev",
