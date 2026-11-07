@@ -390,20 +390,35 @@ fn funnel_rows(trails: &[Value]) -> Vec<(String, [i64; 4], String)> {
         .collect()
 }
 
-fn sorted_counts(v: &Value) -> Vec<(String, i64)> {
-    let mut out: Vec<(String, i64)> = v
-        .as_object()
-        .map(|m| m.iter().map(|(k, x)| (k.clone(), num(x))).collect())
-        .unwrap_or_default();
+/// The JSON object key order of the record's count maps (serde's maps are
+/// alphabetical; JS keeps insertion order, and a count tie keeps it).
+pub type KeyOrders = HashMap<String, Vec<String>>;
+
+/// A count map sorted by count, ties in the record's key order.
+fn sorted_counts(v: &Value, order: Option<&Vec<String>>) -> Vec<(String, i64)> {
+    let Some(m) = v.as_object() else {
+        return Vec::new();
+    };
+    let keys: Vec<String> = match order {
+        Some(o) => o.iter().filter(|k| m.contains_key(*k)).cloned().collect(),
+        None => m.keys().cloned().collect(),
+    };
+    let mut out: Vec<(String, i64)> = keys
+        .into_iter()
+        .map(|k| {
+            let n = num(&m[&k]);
+            (k, n)
+        })
+        .collect();
     out.sort_by_key(|o| std::cmp::Reverse(o.1));
     out
 }
 
-fn terminal_state(ts: &Value, total: i64) -> String {
+fn terminal_state(ts: &Value, total: i64, orders: &KeyOrders) -> String {
     if !ts.is_object() {
         return String::new();
     }
-    let rows: String = sorted_counts(&ts["namedByTier"])
+    let rows: String = sorted_counts(&ts["namedByTier"], orders.get("namedByTier"))
         .iter()
         .map(|(t, n)| {
             format!(
@@ -515,13 +530,17 @@ const STYLE: &str = "<style>
 </style>";
 
 /// The page from a diag record and (optionally) the bundle's diff ledger.
-pub fn render_html(diag: &Value, ledger: Option<&DiffLedger>) -> Result<String, String> {
+pub fn render_html(
+    diag: &Value,
+    orders: &KeyOrders,
+    ledger: Option<&DiffLedger>,
+) -> Result<String, String> {
     let l = &diag["identifierLedger"];
     if !l.is_object() {
         return Err("no identifierLedger — re-run the pipeline with --diagnostics".into());
     }
     let total = num(&l["totalBindings"]);
-    let settled = sorted_counts(&l["transferSettled"]);
+    let settled = sorted_counts(&l["transferSettled"], orders.get("transferSettled"));
     let transfer: i64 = settled.iter().map(|s| s.1).sum();
     let trails: Vec<Value> = diag["strategyTrails"]["trails"]
         .as_array()
@@ -605,7 +624,7 @@ pub fn render_html(diag: &Value, ledger: Option<&DiffLedger>) -> Result<String, 
         rem_s = fmt_int(remaining),
         rem_p = pct(remaining, total),
         unren = fmt_int(num(&l["notRenamed"])),
-        terminal = terminal_state(&l["terminalState"], total),
+        terminal = terminal_state(&l["terminalState"], total, orders),
         diff = ledger.map(diff_section).unwrap_or_default(),
         nclob = clobbers.len(),
         renamed = len(&diag["renamed"]),
@@ -614,6 +633,26 @@ pub fn render_html(diag: &Value, ledger: Option<&DiffLedger>) -> Result<String, 
         u3 = len(&un["duplicate"]),
         u4 = len(&un["invalid"]),
     ))
+}
+
+/// The record's count-map key orders, from its text.
+fn key_orders(text: &str) -> KeyOrders {
+    let mut out = KeyOrders::new();
+    let Ok(v) = humanify_ag_model::js::JsValue::parse(text) else {
+        return out;
+    };
+    for (name, path) in [
+        ("transferSettled", "identifierLedger.transferSettled"),
+        ("namedByTier", "identifierLedger.terminalState.namedByTier"),
+    ] {
+        if let Some(o) = super::card::at(&v, path).and_then(|x| x.as_object()) {
+            out.insert(
+                name.into(),
+                o.entries().iter().map(|(k, _)| k.clone()).collect(),
+            );
+        }
+    }
+    out
 }
 
 /// Write one pair's page from its diag record and its two bundles.
@@ -635,8 +674,11 @@ pub fn write_report(diag: &Path, out: &Path, inputs: &PairInputs) -> Result<(), 
     let fl = meta(&inputs.fresh_tree, "split-ledger.json");
     let pl = meta(&inputs.prior_tree, "split-ledger.json");
     let ledger = diff_ledger(&fresh, &prior, Some((&fl, &pl)));
-    std::fs::write(out, render_html(&d, Some(&ledger))?)
-        .map_err(|e| format!("{}: {e}", out.display()))
+    std::fs::write(
+        out,
+        render_html(&d, &key_orders(&read(diag)?), Some(&ledger))?,
+    )
+    .map_err(|e| format!("{}: {e}", out.display()))
 }
 
 #[cfg(test)]

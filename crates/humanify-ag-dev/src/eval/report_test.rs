@@ -55,10 +55,26 @@ fn the_ledger_buckets_every_fresh_line() {
     assert_eq!(d.shapes[0].shape, "internal-rename");
     let html = render_html(
         &serde_json::json!({"identifierLedger": {"totalBindings": 10, "transferSettled": {"exact": 7}, "llmNamed": 2, "notRenamed": 1, "remainingMinted": 1}}),
+        &KeyOrders::new(),
         Some(&d),
     )
     .unwrap();
     assert!(html.contains("<b>10</b>TOTAL bindings"));
     assert!(html.contains("<tr><td>exact</td><td class=n>7</td><td class=n>70.00%</td></tr>"));
-    assert!(render_html(&serde_json::json!({}), None).is_err());
+    assert!(render_html(&serde_json::json!({}), &KeyOrders::new(), None).is_err());
+}
+
+#[test]
+fn count_ties_keep_the_record_key_order() {
+    let v = serde_json::json!({"retry": 5, "coverage-sweep": 5, "a": 9});
+    let order = vec![
+        "retry".to_string(),
+        "coverage-sweep".to_string(),
+        "a".to_string(),
+    ];
+    let got: Vec<String> = sorted_counts(&v, Some(&order))
+        .into_iter()
+        .map(|x| x.0)
+        .collect();
+    assert_eq!(got, ["a", "retry", "coverage-sweep"]);
 }
