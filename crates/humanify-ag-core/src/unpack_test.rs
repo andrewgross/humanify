@@ -934,16 +934,24 @@ fn keeps_hash_colliding_shims_on_their_own_prior_names() {
 fn loads_prior_vendor_names_from_a_prior_tree() {
     let t = TempDir::new("priortree");
     run_with(UNKNOWN_BUNDLE, &t.0, None, |_| Some("js-yaml".into()));
-    let hash = s(&factories(&read_manifest(&t.0))[0], "structuralHash").to_string();
+    let entry = factories(&read_manifest(&t.0))[0].clone();
+    let hash = s(&entry, "structuralHash").to_string();
     fs::create_dir_all(t.0.join(".humanify")).unwrap();
     let prior_file = t.0.join(".humanify/humanified.js");
     fs::write(&prior_file, "// prior").unwrap();
     let names = load_prior_vendor(&prior_file)
         .and_then(|p| p.names)
         .expect("discovered");
+    // The entry's file and identifier ride with the name (exp194).
+    let identity = crate::modules::vendor_pairing::CarriedIdentity {
+        file_name: Some(s(&entry, "fileName").to_string()),
+        runtime_identifier: Some(s(&entry, "runtimeIdentifier").to_string()),
+    };
     assert_eq!(
         names.get(&hash),
-        Some(&vec![CarriedName::new("js-yaml", Some("llm"))])
+        Some(&vec![
+            CarriedName::new("js-yaml", Some("llm")).with_identity(Some(identity))
+        ])
     );
     assert_eq!(find_prior_tree_root(&prior_file), Some(t.0.clone()));
 }
@@ -1661,6 +1669,71 @@ fn a_module_whose_string_changed_length_keeps_its_name_file_and_identifier() {
 }
 
 #[test]
+fn an_unchanged_module_keeps_the_file_and_identifier_an_earlier_pair_carried() {
+    // exp194 (walk 2.1.211 -> 2.1.212, react-error-codes): hop 2 pairs a
+    // changed module by content and keeps hop 1's file and identifier, so
+    // hop 2's record holds a file and identifier that are NOT derived from
+    // its own structural hash. Hop 3 ships the module unchanged: the exact
+    // structural-hash carry must take that file and identifier too, not
+    // re-derive them from the hash (21,104 changed lines for one renamed
+    // byte-identical file).
+    let answer: fn(&VendorNameRequest) -> Option<String> = |r| {
+        Some(if r.evidence.contains("YAMLException") {
+            "js-yaml".into()
+        } else {
+            "html-render".into()
+        })
+    };
+    let first = TempDir::new("carry-again1");
+    hop_with(
+        &yaml_bundle("expected a YAML document string"),
+        &first.0,
+        None,
+        answer,
+    );
+    let m1 = factories(&read_manifest(&first.0));
+    let before = entry_with(&m1, "YAMLException", &first.0).clone();
+    let changed = yaml_bundle("expected a YAML document as a string");
+    let second = TempDir::new("carry-again2");
+    hop_with(&changed, &second.0, Some(&first.0), answer);
+    // Hop 2's record as the walk's was: the carried identifier, and a
+    // grouped file named by hop 1's stem, neither one hop 2's hash.
+    let mut manifest = read_manifest(&second.0);
+    let carried_id = s(&before, "runtimeIdentifier").to_string();
+    let carried_file = format!("vendor/js-yaml/{carried_id}.js");
+    for e in manifest["factories"].as_array_mut().unwrap() {
+        if s(e, "name") != "js-yaml" {
+            continue;
+        }
+        assert_eq!(s(e, "runtimeIdentifier"), carried_id, "hop 2 paired it");
+        assert!(!carried_id.starts_with(&format!("lib_{}", &s(e, "structuralHash")[..8])));
+        fs::create_dir_all(second.0.join("vendor/js-yaml")).unwrap();
+        fs::rename(
+            second.0.join(s(e, "fileName")),
+            second.0.join(&carried_file),
+        )
+        .unwrap();
+        e["fileName"] = Value::String(carried_file.clone());
+    }
+    fs::write(
+        second.0.join("vendor/_bun-modules.json"),
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+
+    let third = TempDir::new("carry-again3");
+    let asked = hop_with(&changed, &third.0, Some(&second.0), answer);
+    assert!(asked.is_empty(), "nothing is re-asked: {asked:?}");
+    let m3 = factories(&read_manifest(&third.0));
+    let after = entry_with(&m3, "YAMLException", &third.0);
+    assert_eq!(s(after, "name"), "js-yaml");
+    assert_eq!(s(after, "fileName"), carried_file);
+    assert_eq!(s(after, "runtimeIdentifier"), carried_id);
+    let runtime = fs::read_to_string(third.0.join("runtime.js")).unwrap();
+    assert!(runtime.contains(&format!("{carried_id}()")), "{runtime}");
+}
+
+#[test]
 fn an_ambiguous_content_pair_is_left_to_the_model() {
     // Two prior modules equally like the fresh one: no margin, no carry.
     let twin = |tag: &str| {
@@ -1726,6 +1799,39 @@ fn an_app_text_module_is_an_app_asset_named_from_its_text() {
         runtime.contains(&format!("{}()", s(env, "runtimeIdentifier"))),
         "{runtime}"
     );
+}
+
+#[test]
+fn an_unchanged_app_text_asset_keeps_the_identifier_an_earlier_pair_carried() {
+    // exp194 (walk 2.1.211 -> 2.1.212): an asset's identifier an earlier
+    // content pair kept (identifier only) is not its hash's spelling; the
+    // next hop ships the text unchanged and the exact carry must keep it.
+    let first = TempDir::new("asset-again1");
+    hop_with(TEXT_ASSETS_BUNDLE, &first.0, None, |_| Some("react".into()));
+    let mut manifest = read_manifest(&first.0);
+    let kept = "lib_02fe5c26";
+    for e in manifest["factories"].as_array_mut().unwrap() {
+        if s(e, "nameSource") == "asset" {
+            assert_ne!(s(e, "runtimeIdentifier"), kept);
+            e["runtimeIdentifier"] = Value::String(kept.into());
+        }
+    }
+    fs::write(
+        first.0.join("vendor/_bun-modules.json"),
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+    let second = TempDir::new("asset-again2");
+    hop_with(TEXT_ASSETS_BUNDLE, &second.0, Some(&first.0), |_| {
+        Some("react".into())
+    });
+    let entries = factories(&read_manifest(&second.0));
+    let env = entry_with(&entries, "## Environment", &second.0);
+    assert_eq!(s(env, "fileName"), "src/_assets/environment.js");
+    assert_eq!(s(env, "nameSource"), "asset");
+    assert_eq!(s(env, "runtimeIdentifier"), kept);
+    let runtime = fs::read_to_string(second.0.join("runtime.js")).unwrap();
+    assert!(runtime.contains(&format!("{kept}()")), "{runtime}");
 }
 
 // ---- declared library identity (finding #95) ------------------------------

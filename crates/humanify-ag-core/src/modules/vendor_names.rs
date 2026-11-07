@@ -698,8 +698,15 @@ pub fn load_prior_vendor_names(manifest_text: &str) -> Option<HashMap<String, Ve
             .and_then(|v| v.as_u64())
             .map(|v| v as usize)
             .unwrap_or(usize::MAX);
+        let field = |k: &str| entry.get(k).and_then(|v| v.as_str());
         groups.entry(hash.to_string()).or_default().push((
-            CarriedName::new(name, entry.get("nameSource").and_then(|v| v.as_str())),
+            CarriedName::new(name, field("nameSource")).with_identity(
+                super::vendor_pairing::prior_identity(
+                    field("fileName"),
+                    field("runtimeIdentifier"),
+                    VENDOR_DIR,
+                ),
+            ),
             ordinal,
             idx,
         ));
