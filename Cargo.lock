@@ -519,6 +519,7 @@ dependencies = [
  "humanify-ag-core",
  "humanify-ag-model",
  "humanify-ag-testkit",
+ "oxc_allocator",
  "serde",
  "serde_json",
  "sha2",

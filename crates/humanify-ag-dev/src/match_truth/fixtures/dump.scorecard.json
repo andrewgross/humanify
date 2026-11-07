@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "path": "index.js",
+  "functions": {
+    "priorCount": 5,
+    "freshCount": 5,
+    "priorNames": [
+      "keepExact",
+      "",
+      "keepRenamed",
+      "changedSmall",
+      "removedOld"
+    ],
+    "mustMatch": 3,
+    "matchedOfMust": 3,
+    "recall": 1,
+    "duplicateClass": 0,
+    "shouldMatch": 1,
+    "matchedOfShould": 0,
+    "shouldRecall": 0,
+    "reported": 3,
+    "reportedClasses": {
+      "identical": 3,
+      "near": 0,
+      "far": 0
+    },
+    "tierCounts": {
+      "structuralHashUnique": 3
+    },
+    "missedMust": [],
+    "missedShould": [
+      {
+        "priorName": "changedSmall",
+        "freshName": "changedSmall",
+        "priorSlice": "function changedSmall(n) {\n  return n * 2 + 50;\n}"
+      }
+    ],
+    "farPairs": []
+  },
+  "statements": {
+    "priorCount": 5,
+    "freshCount": 5,
+    "mustMatch": 3,
+    "proposedOfMust": 3,
+    "bridgedOfMust": 1,
+    "recall": 1,
+    "duplicateClass": 0
+  }
+}
