@@ -12,6 +12,13 @@ members = [
   "crates/humanify-ag-llm",
   "crates/humanify-ag-cli",
   "crates/humanify-ag-index",
+  # The measurement harness (docs/dev-harness.md, lane L1): never part of
+  # the release artifact; built with the dev-harness profile below and run
+  # as `cargo dev ...` (.cargo/config.toml).
+  "crates/humanify-ag-dev",
+  # The ONE stub LLM server and the seeded-shuffled fake provider, for
+  # tests only (a dev-dependency, never linked into a product binary).
+  "crates/humanify-ag-testkit",
 ]
 
 [workspace.package]
@@ -85,6 +92,15 @@ await_holding_invalid_type = "deny"
 debug = false
 lto = "thin"
 codegen-units = 1
+
+# The harness (`cargo dev`, docs/dev-harness.md §2.1): optimised, but
+# without the release profile's thin LTO and single codegen unit, so a
+# harness edit is not a long rebuild. The release artifact stays
+# `cargo build --release --locked -p humanify-ag-cli`.
+[profile.dev-harness]
+inherits = "release"
+lto = false
+codegen-units = 16
 
 [profile.profiling]
 inherits = "release"

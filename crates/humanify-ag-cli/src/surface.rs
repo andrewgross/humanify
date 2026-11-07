@@ -35,11 +35,13 @@
 
 use std::sync::LazyLock;
 
-use clap::{Arg, ArgAction, ArgMatches};
+use clap::{Arg, ArgAction};
 use serde_json::Value;
 
-use crate::config::file::{FlagValue, Key, Kind, Val};
-use crate::config::keys::{COUNTED_FLAG, KEYS, SECTION_TITLES, SHORT_FLAGS, tuning_section};
+use crate::config::file::{FlagValue, Val};
+use crate::config::keys::PIPELINE;
+pub use crate::registry::flags::FlagSpec;
+use crate::registry::flags::{add_flags, attached_short, flag_values, specs};
 
 /// package.json's version — the single source `-V` prints.
 pub fn package_version() -> String {
@@ -72,136 +74,11 @@ impl CommandOptions {
     }
 }
 
-/// One key's flag, as the command line spells it.
-pub struct FlagSpec {
-    pub key: &'static Key,
-    /// The key, dotted (`llm.concurrency`).
-    pub dotted: String,
-    /// The long name without its dashes (`llm-concurrency`).
-    pub long: String,
-    /// A boolean's off switch (`no-split`).
-    pub negated: Option<String>,
-    pub short: Option<char>,
-    /// Its `--help` heading (`LLM [llm]`).
-    pub heading: String,
-    /// A value flag's placeholder (`n`, `off|report|names`).
-    pub value_name: String,
-}
-
-impl FlagSpec {
-    fn of(key: &'static Key) -> FlagSpec {
-        let long = key.flag_name().trim_start_matches("--").to_string();
-        let dotted = key.dotted();
-        FlagSpec {
-            negated: matches!(key.kind, Kind::Bool).then(|| format!("no-{long}")),
-            short: SHORT_FLAGS
-                .iter()
-                .find(|(d, _)| *d == dotted)
-                .map(|(_, c)| *c),
-            long,
-            dotted,
-            heading: heading(key.section),
-            value_name: value_name(key),
-            key,
-        }
-    }
-}
-
 /// Every key's flag, in registry order — built once.
-pub static FLAGS: LazyLock<Vec<FlagSpec>> =
-    LazyLock::new(|| KEYS.iter().map(FlagSpec::of).collect());
+pub static FLAGS: LazyLock<Vec<FlagSpec>> = LazyLock::new(|| specs(&PIPELINE));
 
 /// The flag `--config` is the one flag that is not a key: it names the file.
 pub const CONFIG_FLAG: &str = "config";
-
-/// What a value flag's placeholder says (`<n>`, `<off|report|names>`).
-fn value_name(key: &Key) -> String {
-    match (&key.kind, key.dotted().as_str()) {
-        (_, "library.index") => "dir|id".to_string(),
-        (_, "matching.prior_version") => "folder|file".to_string(),
-        (_, "llm.model") => "model".to_string(),
-        (Kind::Url, _) => "url".to_string(),
-        (Kind::Int { .. }, _) => "n".to_string(),
-        (Kind::Float { .. }, _) => "x".to_string(),
-        (Kind::List(_), _) => "a,b,...".to_string(),
-        (Kind::Choice(names), _) => {
-            let joined = names().join("|");
-            if joined.len() <= 40 {
-                joined
-            } else {
-                "name".to_string()
-            }
-        }
-        (_, d) if d.ends_with("_dir") || d.ends_with("index_store") => "dir".to_string(),
-        (_, "diagnostics.dump_artifacts" | "diagnostics.rename_ledger") => "dir".to_string(),
-        _ => "path".to_string(),
-    }
-}
-
-/// The doc's first sentence, at most ~100 characters: the `-h` line.
-fn summary(doc: &str) -> String {
-    let first = doc.find(". ").map_or(doc, |i| &doc[..=i]);
-    if first.chars().count() <= 100 {
-        return first.trim_end_matches('.').to_string();
-    }
-    let cut: String = first.chars().take(97).collect();
-    let cut = cut.rsplit_once(' ').map_or(cut.as_str(), |(head, _)| head);
-    format!("{cut}...")
-}
-
-/// What `--help` adds after the doc: the default and the config key.
-fn footnote(spec: &FlagSpec) -> String {
-    let key = spec.key;
-    let default = match ((key.default)(), &spec.negated) {
-        (Some(Val::Bool(b)), Some(no)) => {
-            format!(
-                "default: {}; --{no} turns it off",
-                if b { "on" } else { "off" }
-            )
-        }
-        (Some(v), _) => format!("default: {}", v.render()),
-        (None, _) => format!("unset: {}", key.unset),
-    };
-    format!("[{default}] [config: {}]", key.dotted())
-}
-
-fn heading(section: &str) -> String {
-    let title = SECTION_TITLES
-        .iter()
-        .find(|(s, _)| *s == section)
-        .map_or(section, |(_, t)| *t);
-    format!("{title} [{section}]")
-}
-
-fn flag_arg(spec: &'static FlagSpec) -> Arg {
-    let key = spec.key;
-    let mut arg = Arg::new(spec.long.as_str())
-        .long(spec.long.as_str())
-        .help(summary(key.doc))
-        .long_help(format!("{}\n{}", key.doc, footnote(spec)))
-        .help_heading(spec.heading.as_str())
-        .hide_short_help(tuning_section(key.section));
-    if let Some(c) = spec.short {
-        arg = arg.short(c);
-    }
-    match key.kind {
-        Kind::Bool => arg.action(ArgAction::SetTrue).conflicts_with(
-            spec.negated
-                .as_deref()
-                .expect("a boolean has an off switch"),
-        ),
-        _ if key.dotted() == COUNTED_FLAG => arg.action(ArgAction::Count),
-        _ => arg
-            .action(ArgAction::Set)
-            .value_name(spec.value_name.as_str()),
-    }
-}
-
-/// A boolean's `--no-x`: listed by its `--x` line, not on its own.
-fn negated_arg(spec: &'static FlagSpec) -> Option<Arg> {
-    let no = spec.negated.as_deref()?;
-    Some(Arg::new(no).long(no).action(ArgAction::SetTrue).hide(true))
-}
 
 fn pipeline_command() -> clap::Command {
     // The version is package.json's, read at run time (the crate's own is
@@ -209,7 +86,7 @@ fn pipeline_command() -> clap::Command {
     static VERSION: LazyLock<String> = LazyLock::new(package_version);
     // (`default().name`, not `new`: a clap command, not a subprocess — the
     // concurrency census reads `Command::new` as a spawn.)
-    let mut cmd = clap::Command::default()
+    let cmd = clap::Command::default()
         .name("humanify-ag")
         .about("Unminify JavaScript using an OpenAI-compatible API")
         .version(VERSION.as_str())
@@ -242,66 +119,7 @@ fn pipeline_command() -> clap::Command {
                      A flag that disagrees with the file is refused",
                 ),
         );
-    for spec in FLAGS.iter() {
-        cmd = cmd.arg(flag_arg(spec));
-        if let Some(no) = negated_arg(spec) {
-            cmd = cmd.arg(no);
-        }
-    }
-    cmd
-}
-
-/// A flag's text as the key's value: typed by the key's kind (a range is
-/// checked later, by the resolver, under the flag's name).
-fn typed_flag(spec: &FlagSpec, raw: &str) -> Result<Val, String> {
-    let bad = |what: &str| {
-        format!(
-            "error: invalid value '{raw}' for '--{} <{}>': {what}\n",
-            spec.long, spec.value_name
-        )
-    };
-    match spec.key.kind {
-        Kind::Int { .. } => raw
-            .parse::<u64>()
-            .map(Val::Int)
-            .map_err(|_| bad("a non-negative integer is expected")),
-        Kind::Float { .. } => raw
-            .parse::<f64>()
-            .map(Val::Float)
-            .map_err(|_| bad("a number is expected")),
-        Kind::List(_) => Ok(Val::List(
-            raw.split(',')
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect(),
-        )),
-        _ => Ok(Val::Text(raw.to_string())),
-    }
-}
-
-/// Every flag given, as (key, value).
-fn flag_values(m: &ArgMatches) -> Result<Vec<FlagValue>, String> {
-    let mut out = Vec::new();
-    for spec in FLAGS.iter() {
-        let dotted: &'static str = spec.dotted.as_str();
-        let value = match &spec.negated {
-            Some(no) if m.get_flag(no) => Some(Val::Bool(false)),
-            Some(_) => m.get_flag(&spec.long).then_some(Val::Bool(true)),
-            None if spec.dotted == COUNTED_FLAG => {
-                let n = m.get_count(&spec.long);
-                (n > 0).then(|| Val::Int(u64::from(n)))
-            }
-            None => match m.get_one::<String>(&spec.long) {
-                Some(raw) => Some(typed_flag(spec, raw)?),
-                None => None,
-            },
-        };
-        if let Some(v) = value {
-            out.push((dotted, v));
-        }
-    }
-    Ok(out)
+    add_flags(cmd, FLAGS.as_slice())
 }
 
 /// Spellings renamed by the config sweep (2026-10-13) or by exp179's
@@ -379,42 +197,18 @@ pub const RETIRED_FLAGS: &[(Option<&str>, &str, &str)] = &[
 /// pipeline's): the refusal naming what replaced it, or None. `--flag=value`
 /// counts too; nothing after `--` is a flag.
 pub fn retired_flag(verb: Option<&str>, args: &[String]) -> Option<String> {
-    args.iter().take_while(|a| *a != "--").find_map(|arg| {
-        let name = arg.split_once('=').map_or(arg.as_str(), |(n, _)| n);
-        let retired = RETIRED_FLAGS
-            .iter()
-            .find(|(v, flag, _)| *v == verb && *flag == name)
-            .map(|(_, flag, note)| (*flag, note.to_string()));
-        let renamed = || {
-            RENAMED_FLAGS
-                .iter()
-                .find(|(flag, _)| verb.is_none() && *flag == name)
-                .map(|(flag, new)| (*flag, format!("renamed: use {new}")))
-        };
-        retired
-            .or_else(renamed)
-            .map(|(flag, note)| format!("error: unexpected argument '{flag}' ({note})\n"))
-    })
-}
-
-/// A combined single-dash argument other than the `-v` counter (`-vv`):
-/// clap would read `-c5` as `-c 5` and `-vc 5` as `-v -c 5`; the harness
-/// writes neither, so both are refused rather than guessed at.
-fn attached_short(args: &[String]) -> Option<String> {
-    args.iter()
-        .take_while(|a| *a != "--")
-        .find(|a| {
-            a.len() > 2
-                && a.starts_with('-')
-                && !a.starts_with("--")
-                && !a[1..].bytes().all(|b| b == b'v')
-        })
-        .map(|a| {
-            format!(
-                "error: unexpected argument '{a}': a short option's value is a separate \
-                 argument (`-o out`, not `-oout`), and only -v repeats (`-vv`)\n"
-            )
-        })
+    let renamed: Vec<(&str, String)> = RENAMED_FLAGS
+        .iter()
+        .filter(|_| verb.is_none())
+        .map(|(flag, new)| (*flag, format!("renamed: use {new}")))
+        .collect();
+    let table: Vec<(&str, &str)> = RETIRED_FLAGS
+        .iter()
+        .filter(|(v, _, _)| *v == verb)
+        .map(|(_, flag, note)| (*flag, *note))
+        .chain(renamed.iter().map(|(flag, note)| (*flag, note.as_str())))
+        .collect();
+    crate::registry::retired_in(&table, args)
 }
 
 /// Every long flag the command accepts (`--x` and `--no-x` alike), as
@@ -469,7 +263,7 @@ pub fn parse_pipeline(argv: &[String]) -> PipelineParse {
     }
     let full = std::iter::once("humanify-ag".to_string()).chain(argv.iter().cloned());
     match pipeline_command().try_get_matches_from(full) {
-        Ok(m) => match flag_values(&m) {
+        Ok(m) => match flag_values(FLAGS.as_slice(), &m) {
             Ok(flags) => PipelineParse::Run {
                 input: m.get_one::<String>("input").expect("required").clone(),
                 opts: Box::new(CommandOptions {

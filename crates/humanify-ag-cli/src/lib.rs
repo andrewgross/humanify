@@ -16,6 +16,7 @@ pub mod output_validation;
 pub mod pipeline_config;
 pub mod progress;
 pub mod provider_failures;
+pub mod registry;
 pub mod report;
 pub mod runtime_index;
 pub mod split_stage;

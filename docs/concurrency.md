@@ -20,8 +20,9 @@ carry is canonical OUTPUT, not ordered WORK.
 
 - **9 rules**, below, one section each. Each says which finding it comes
   from; rule 9 was added 2026-10-30 by the ordering audit.
-- **11 patterns**. Every concurrency site in non-test pipeline code must
-  follow one of them.
+- **12 patterns**. Every concurrency site in non-test pipeline code must
+  follow one of them. The twelfth, `test-support` (harness lane L1,
+  2026-11-07), is allowed only in the test-only `humanify-ag-testkit` crate.
 - **85 sites** on the allowlist (`scripts/concurrency-allowlist.json`),
   **2 of them known exceptions**: the two retry layers (R1). It started at
   61 sites and 5 exceptions; the other three — the `diff` subprocess (R3)
@@ -86,6 +87,7 @@ name.
 | `short-lock`     | a std `Mutex`/`RwLock` held for a few field updates, never across slow work                                                       | `metrics.rs`, `llm_sim.rs`                                                           |
 | `stats-counter`  | an atomic used as a counter or a unique-name sequence; nothing decides on it                                                      | `cache.rs` counters, `PRIOR_PARSES`, `hunks.rs` temp-dir `SEQ`                       |
 | `observer`       | a side thread or lock that only watches (progress, profiling, logging)                                                            | `progress.rs`, `profiling.rs`, `log.rs`, `unified.rs` log file                       |
+| `test-support`   | a construct in the test-only crate `humanify-ag-testkit` (a dev-dependency, never linked into a product binary): the stub server  | `humanify-ag-testkit/src/stub_server.rs`; the census refuses it in any other crate   |
 
 ## CPU parallelism
 
@@ -377,6 +379,16 @@ Today the observers are:
   starts in production);
 - the verbose and debug log redirects;
 - the `--log-file` writer.
+
+## Test support
+
+`crates/humanify-ag-testkit` holds the ONE stub LLM server and the
+seeded-shuffled fake provider for every crate's tests. It is a
+dev-dependency only, so nothing in it reaches a product binary, but its
+sources are not `*_test.rs` files, so the census scans them. Its sites use
+the `test-support` pattern: the stub server's own thread and runtime, its
+per-connection tasks, its delay, its counters and its recorded requests.
+The census refuses `test-support` for a file in any other crate.
 
 ## What clippy enforces
 

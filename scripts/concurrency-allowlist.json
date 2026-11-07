@@ -639,6 +639,69 @@
       "construct": "thread-scope",
       "pattern": "subprocess",
       "reason": "the offline index builder's spec planner (exp184) prefetches the next wave's packuments on up to 16 scoped threads, each one registry::load fetch (an npm view subprocess) under its own deadline, joined before return; results land in a name-keyed memo, so completion order never reaches the plan"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/proc.rs",
+      "scope": "run",
+      "construct": "subprocess",
+      "pattern": "subprocess",
+      "reason": "the harness's ONE Command::new: every child it starts goes through humanify_ag_core::subprocess::run (all pipes drained at once, one deadline over the whole run, the process group killed on expiry, every failure returned); callers pick the deadline (git 60 s, a release build 1 h)"
+    },
+    {
+      "file": "crates/humanify-ag-testkit/src/stub_server.rs",
+      "scope": "<module>",
+      "construct": "atomic",
+      "pattern": "test-support",
+      "reason": "test-support crate (a dev-dependency only, never linked into a product binary): the stub's request / in-flight / peak counters (SeqCst), read by the test after the requests it made returned"
+    },
+    {
+      "file": "crates/humanify-ag-testkit/src/stub_server.rs",
+      "scope": "<module>",
+      "construct": "lock",
+      "pattern": "test-support",
+      "reason": "test-support crate (a dev-dependency only, never linked into a product binary): the stub's recorded bodies and headers: one std Mutex each, held for one push or one clone, never across an await"
+    },
+    {
+      "file": "crates/humanify-ag-testkit/src/stub_server.rs",
+      "scope": "StubServer::start",
+      "construct": "channel",
+      "pattern": "test-support",
+      "reason": "test-support crate (a dev-dependency only, never linked into a product binary): a bounded (1) channel that hands the bound address back to the starting test, once"
+    },
+    {
+      "file": "crates/humanify-ag-testkit/src/stub_server.rs",
+      "scope": "StubServer::start",
+      "construct": "thread-spawn",
+      "pattern": "test-support",
+      "reason": "test-support crate (a dev-dependency only, never linked into a product binary): the stub server's own thread, apart from the code under test; it lives until the test process ends"
+    },
+    {
+      "file": "crates/humanify-ag-testkit/src/stub_server.rs",
+      "scope": "StubServer::start",
+      "construct": "runtime-builder",
+      "pattern": "test-support",
+      "reason": "test-support crate (a dev-dependency only, never linked into a product binary): the stub server's own current_thread runtime on its own thread \u2014 never the code under test's runtime, never nested"
+    },
+    {
+      "file": "crates/humanify-ag-testkit/src/stub_server.rs",
+      "scope": "StubServer::start",
+      "construct": "block-on",
+      "pattern": "test-support",
+      "reason": "test-support crate (a dev-dependency only, never linked into a product binary): drives the stub's accept loop on its own runtime, on its own thread"
+    },
+    {
+      "file": "crates/humanify-ag-testkit/src/stub_server.rs",
+      "scope": "StubServer::start",
+      "construct": "tokio-spawn",
+      "pattern": "test-support",
+      "reason": "test-support crate (a dev-dependency only, never linked into a product binary): one task per accepted connection, so concurrent requests overlap and the peak in flight can be measured; they end with their connection"
+    },
+    {
+      "file": "crates/humanify-ag-testkit/src/stub_server.rs",
+      "scope": "serve_connection",
+      "construct": "sleep",
+      "pattern": "test-support",
+      "reason": "test-support crate (a dev-dependency only, never linked into a product binary): tokio::time::sleep: the handler's configured delay, so a test can hold requests in flight"
     }
   ]
 }

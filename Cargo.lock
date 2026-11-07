@@ -511,6 +511,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "humanify-ag-dev"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "humanify-ag-cli",
+ "humanify-ag-core",
+ "humanify-ag-model",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "humanify-ag-index"
 version = "0.0.0"
 dependencies = [
@@ -547,6 +560,16 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "humanify-ag-testkit"
+version = "0.0.0"
+dependencies = [
+ "humanify-ag-model",
+ "serde_json",
+ "sha2",
+ "tokio",
 ]
 
 [[package]]

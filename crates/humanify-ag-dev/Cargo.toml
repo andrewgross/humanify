@@ -1,0 +1,30 @@
+[package]
+name = "humanify-ag-dev"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# The measurement harness (docs/dev-harness.md): every instrument is a verb
+# of this binary, run as `cargo dev <verb>`. Never part of the release
+# artifact.
+[[bin]]
+name = "humanify-ag-dev"
+path = "src/main.rs"
+
+[dependencies]
+# The pipeline's key registry (to validate --pipeline-set keys and read
+# HEAD's defaults) and the shared registry machinery (`registry`).
+humanify-ag-cli = { path = "../humanify-ag-cli" }
+# The one subprocess owner (drained pipes, one deadline, group kill).
+humanify-ag-core = { path = "../humanify-ag-core" }
+# JSON the way JavaScript writes it (the JS spelling of a card).
+humanify-ag-model = { path = "../humanify-ag-model" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+clap.workspace = true
+
+[lints]
+workspace = true
