@@ -146,6 +146,15 @@ pub static HARNESS_KEYS: &[Key] = &[
         "The pipeline binary to run (in some cargo workspace's target/, so its build \
          commit is known).",
     ),
+    path_key(
+        "run",
+        "out",
+        Some("--out"),
+        "the verb's own default: a rescore writes beside the committed results, a dev tool \
+         into a fresh directory it prints",
+        "Where a verb writes its output (a rescore's cards, summary.json and timing.json; \
+         e2e's kept trees; ask-trace's dumps; match-truth's scorecard).",
+    ),
     Key {
         section: "run",
         name: "pipeline_set",
@@ -327,9 +336,16 @@ pub static HARNESS_KEYS: &[Key] = &[
     path_key(
         "libscore",
         "data_root",
-        None,
-        "the corpus's own data root (per host)",
+        Some("--data-root"),
+        "the corpus's root in data-roots.json (per host)",
         "Where the corpus's frozen bundles, truth and raw reports live on this host.",
+    ),
+    path_key(
+        "libscore",
+        "truth",
+        Some("--truth"),
+        "required by `eval vendor-precision check`",
+        "The truth a vendor-precision check judges against: bun-dev:<entry id>, cc216 or none.",
     ),
     // [llm]
     Key {
@@ -377,6 +393,30 @@ pub static HARNESS_KEYS: &[Key] = &[
         doc: "The model the boot gate pins for the walked CLI (the API refuses the \
               account default to CLIs older than 2.1.251).",
     },
+    // [scorer]
+    path_key(
+        "scorer",
+        "work",
+        Some("--work"),
+        "required by rescore",
+        "The label's frozen trees (one directory per scored version, its rebased priors, \
+         and each version's diag record): what `eval rescore` re-scores.",
+    ),
+    path_key(
+        "scorer",
+        "cards",
+        Some("--cards"),
+        "required by rescore",
+        "The label's recorded cards and run records (read-only): which pairs to re-score, \
+         and the records copied beside the new cards.",
+    ),
+    path_key(
+        "scorer",
+        "results",
+        Some("--results"),
+        "experiments/034-eval-harness/results (the committed labels)",
+        "Where the eval's labels live: one directory per label.",
+    ),
     // [index]
     path_key(
         "index",
@@ -433,13 +473,6 @@ pub static HARNESS_KEYS: &[Key] = &[
         doc: "Run only these named parts: `check`'s stage names (the run is then labelled \
               PARTIAL and is never a green gate), or `match-truth`'s package names.",
     },
-    path_key(
-        "dev",
-        "out",
-        Some("--out"),
-        "a fresh directory, printed",
-        "Where a dev tool writes its output.",
-    ),
     Key {
         section: "dev",
         name: "files",
@@ -549,6 +582,7 @@ const SECTION_TITLES: &[(&str, &str)] = &[
     ("libscore", "Library score"),
     ("llm", "LLM"),
     ("boot", "Boot gate"),
+    ("scorer", "Eval scorer"),
     ("index", "Index build"),
     ("dev", "Gate and dev tools"),
 ];

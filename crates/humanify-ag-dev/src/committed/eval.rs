@@ -70,12 +70,28 @@ pub fn pairs(repo: &Path) -> Result<Loaded<Pairs>, String> {
     Ok(loaded)
 }
 
-/// `noise-bands.json`: the measured bands, per naming mode.
+/// `noise-bands.json`: the measured bands, per naming mode. The top level
+/// (and its `byMode`) is scorer 1's, the TS scorer every band before the
+/// Rust scorer was measured with; a later scorer version's bands live
+/// under `byScorer.<version>` in the same shape, never mixed in.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct NoiseBands {
     pub provenance: BandProvenance,
     pub bands: BTreeMap<String, f64>,
+    pub by_mode: BTreeMap<String, ModeBands>,
+    #[serde(default)]
+    pub by_scorer: BTreeMap<String, ScorerBands>,
+}
+
+/// One scorer version's bands: the off mode at its top, other modes under
+/// `byMode`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ScorerBands {
+    pub provenance: BandProvenance,
+    pub bands: BTreeMap<String, f64>,
+    #[serde(default)]
     pub by_mode: BTreeMap<String, ModeBands>,
 }
 
@@ -98,11 +114,32 @@ pub struct BandProvenance {
 }
 
 impl NoiseBands {
-    /// The bands of a naming mode: `off` is the top level.
+    /// Scorer 1's bands of a naming mode: `off` is the top level.
     pub fn for_mode(&self, mode: &str) -> Option<&BTreeMap<String, f64>> {
+        self.for_scorer_mode(1, mode)
+    }
+
+    /// The bands one scorer version measured in a naming mode; None when
+    /// that version has none for it (never another version's or mode's).
+    pub fn for_scorer_mode(&self, scorer: u64, mode: &str) -> Option<&BTreeMap<String, f64>> {
+        self.provenance_and_bands(scorer, mode).map(|(_, b)| b)
+    }
+
+    /// The provenance and bands of one scorer version's naming mode.
+    pub fn provenance_and_bands(
+        &self,
+        scorer: u64,
+        mode: &str,
+    ) -> Option<(&BandProvenance, &BTreeMap<String, f64>)> {
+        let (top, top_bands, by_mode) = if scorer == 1 {
+            (&self.provenance, &self.bands, &self.by_mode)
+        } else {
+            let s = self.by_scorer.get(&scorer.to_string())?;
+            (&s.provenance, &s.bands, &s.by_mode)
+        };
         match mode {
-            "off" => Some(&self.bands),
-            other => self.by_mode.get(other).map(|m| &m.bands),
+            "off" => Some((top, top_bands)),
+            other => by_mode.get(other).map(|m| (&m.provenance, &m.bands)),
         }
     }
 }

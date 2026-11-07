@@ -42,7 +42,7 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use super::forms::STATEMENT;
+use super::forms::{CanonicalForm, STATEMENT, Walk};
 use super::wrapper_spelling::{arrow_serializes_as_function, function_head_fields};
 
 /// The value-bearing part of a node (statement-hash.ts's nodeContent): what
@@ -213,8 +213,22 @@ fn push_children<'a>(stack: &mut Vec<Item<'a>>, child: &'a Value) {
     }
 }
 
-/// Hash one statement (ESTree JSON of the statement).
+/// Hash one statement (ESTree JSON of the statement) under the split's
+/// [`STATEMENT`] form.
 pub fn statement_hash(stmt: &Value) -> String {
+    statement_hash_in(&STATEMENT, stmt)
+}
+
+/// Hash one statement under a [`Walk::Statement`] form: [`STATEMENT`] (the
+/// split's identity, wrapper spelling unified) or
+/// [`super::forms::KPI_STATEMENT`] (the eval scorer's, spellings kept
+/// apart). The form's `wrapper_spelling` is the only setting the walk reads.
+pub fn statement_hash_in(form: &CanonicalForm, stmt: &Value) -> String {
+    debug_assert!(
+        form.walk == Walk::Statement,
+        "{} is not a statement-walk form",
+        form.name
+    );
     let mut hasher = Sha256::new();
     let mut stack: Vec<Item<'_>> = vec![Item::Node(stmt)];
     while let Some(item) = stack.pop() {
@@ -244,7 +258,7 @@ pub fn statement_hash(stmt: &Value) -> String {
                 // function re-serialization keeps the statement's class,
                 // and the function-head fields ride in nodeContent above.
                 let token = if t == "ArrowFunctionExpression"
-                    && STATEMENT.wrapper_spelling
+                    && form.wrapper_spelling
                     && arrow_serializes_as_function(map)
                 {
                     "FunctionExpression"

@@ -83,7 +83,7 @@ pub fn args_of(p: &Parsed, cwd: &Path) -> Result<AskTraceArgs, String> {
     let path = |key: &str| p.settings.text(key).map(|t| cwd.join(t));
     Ok(AskTraceArgs {
         input: cwd.join(input),
-        out: path("dev.out"),
+        out: path("run.out"),
         prior: path("dev.prior"),
         collide: p.settings.text("dev.collide"),
         sequential: p.settings.flag_on("dev.sequential"),

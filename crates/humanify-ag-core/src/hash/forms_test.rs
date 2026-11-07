@@ -18,6 +18,7 @@ fn the_persisted_stamps_keep_their_values() {
     // these; a change is a new era, never a refactor.
     assert_eq!(MATCH_KEY.version, 4);
     assert_eq!(STATEMENT.version, 3);
+    assert_eq!(KPI_STATEMENT.stamp(), "kpi-statement/2"); // the eval scorerVersion
     assert_eq!(LIBRARY_UNITS.stamp(), "units/3"); // the unit model moved (exp097)
     assert_eq!(VENDOR_CONTENT.stamp(), "vendor-content-key/4");
     assert_eq!(LIBRARY_LITERALS_VERSION, 1);
@@ -28,7 +29,13 @@ fn the_persisted_stamps_keep_their_values() {
         .collect();
     assert_eq!(
         stamped,
-        ["match-key", "units", "vendor-content-key", "statement"]
+        [
+            "match-key",
+            "units",
+            "vendor-content-key",
+            "statement",
+            "kpi-statement"
+        ]
     );
 }
 

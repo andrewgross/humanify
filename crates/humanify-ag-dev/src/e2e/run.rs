@@ -980,7 +980,7 @@ pub fn e2e(repo: &Path, out: Option<&Path>, child_path: &str) -> (u8, String, St
 
 /// Run the verb.
 pub fn run(p: &Parsed, host: &HostEnv) -> (u8, String, String) {
-    let out = p.settings.text("dev.out").map(|o| match &host.cwd {
+    let out = p.settings.text("run.out").map(|o| match &host.cwd {
         Some(cwd) => cwd.join(o),
         None => PathBuf::from(o),
     });

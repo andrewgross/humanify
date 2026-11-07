@@ -111,9 +111,11 @@ the mapping complete and (until L5) equal to `check.ts`'s own list.
    No prettier on shims: prettier is an npm tool, and the only shim is the
    webcrack one.
 2. **Flags are harness keys** (one parse point): a new `[dev]` section
-   (`--only`, `--out`, `--files`, `--loose`, `--root`, `--allowlist`,
-   `--base`, `--prior`, `--collide`, `--sequential`, `--port`,
-   `--corpus-dir`). match-truth's `--corpus <dir>` became `--corpus-dir`
+   (`--only`, `--files`, `--loose`, `--root`, `--allowlist`, `--base`,
+   `--prior`, `--collide`, `--sequential`, `--port`, `--corpus-dir`).
+   `--out` is ONE key, `run.out`, shared with L2b's library rescore: both
+   lanes had declared `--out` (`dev.out`, `libscore.out`), which clap
+   refused once main was merged in — one flag, one key. match-truth's `--corpus <dir>` became `--corpus-dir`
    (`--corpus` is the library scorer's); ask-trace's `--set` became
    `--pipeline-set`. The census takes `--files a,b` only (no positional
    files).

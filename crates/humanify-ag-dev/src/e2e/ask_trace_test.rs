@@ -11,7 +11,7 @@ use crate::settings;
 
 /// The settings `ask-trace` reads (its verb-table entry).
 const ACCEPTED: &[&str] = &[
-    "dev.out",
+    "run.out",
     "dev.prior",
     "dev.collide",
     "dev.sequential",

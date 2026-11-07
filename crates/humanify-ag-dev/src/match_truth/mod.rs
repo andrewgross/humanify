@@ -36,7 +36,7 @@ use corpus::{CORPUS, CorpusEntry};
 use score::{Aggregate, Scorecard, score_match_dump, scorecard_json};
 
 /// The settings this verb reads (its row of the verb table).
-pub const ACCEPTED: &[&str] = &["dev.corpus_dir", "run.bin", "dev.out", "dev.only"];
+pub const ACCEPTED: &[&str] = &["dev.corpus_dir", "run.bin", "run.out", "dev.only"];
 
 /// Where the pinned corpus is cached by default (never committed).
 pub const DEFAULT_CORPUS_DIR: &str = "/work/match-truth-corpus";
@@ -167,7 +167,7 @@ fn config(p: &Parsed, host: &HostEnv) -> Result<Config, String> {
         Some(b) => resolve(host, &b),
         None => node_path_resolve(&repo_root().join("target/release/humanify-ag")),
     };
-    let out = match s.text("dev.out") {
+    let out = match s.text("run.out") {
         Some(o) => resolve(host, &o),
         None => fresh_out_dir(),
     };

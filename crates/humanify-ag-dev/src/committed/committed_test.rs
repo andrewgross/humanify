@@ -165,3 +165,38 @@ fn corpus_and_layer_ids_equal_the_recorded_summary_shas() {
         assert_eq!(c.layer_ids[key], recorded(key), "{key}");
     }
 }
+
+#[test]
+fn bands_are_keyed_by_scorer_version() {
+    // Scorer 1 (the TS scorer) is the top level and its `byMode`; a newer
+    // scorer's bands live under `byScorer.<version>`, never mixed in.
+    let text = r#"{"provenance":{"provisional":false,"sources":[],"commit":"c","labels":[]},
+      "bands":{"novel":0,"noise":17},"byMode":{"names":{"provenance":{"provisional":false,"sources":[],"commit":"c","labels":[]},"bands":{"noise":397}}},
+      "byScorer":{"2":{"provenance":{"provisional":false,"sources":[],"commit":"c","labels":[]},"bands":{"noise":20},
+        "byMode":{"names":{"provenance":{"provisional":false,"sources":[],"commit":"c","labels":[]},"bands":{"noise":300}}}}}}"#;
+    let b: eval::NoiseBands = serde_json::from_str(text).unwrap();
+    let get = |scorer: u64, mode: &str| {
+        b.for_scorer_mode(scorer, mode)
+            .and_then(|m| m.get("noise"))
+            .copied()
+    };
+    assert_eq!(get(1, "off"), Some(17.0));
+    assert_eq!(get(1, "names"), Some(397.0));
+    assert_eq!(get(2, "off"), Some(20.0));
+    assert_eq!(get(2, "names"), Some(300.0));
+    assert_eq!(get(3, "off"), None);
+}
+
+#[test]
+fn the_committed_bands_carry_scorer_2_for_both_modes() {
+    let b = eval::noise_bands(&repo_root()).expect("noise-bands.json");
+    let get = |mode: &str, k: &str| {
+        b.value
+            .for_scorer_mode(2, mode)
+            .and_then(|m| m.get(k))
+            .copied()
+    };
+    assert_eq!(get("off", "novel"), Some(0.0));
+    assert_eq!(get("names", "realLn"), Some(0.0));
+    assert!(get("names", "noise").is_some());
+}

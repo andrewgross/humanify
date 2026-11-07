@@ -116,5 +116,123 @@
         "mints:unattributed": 9
       }
     }
+  },
+  "byScorer": {
+    "2": {
+      "provenance": {
+        "provisional": false,
+        "sources": ["measured from 3 same-commit repeats"],
+        "commit": "0f338ffa",
+        "labels": [
+          "ref-scratch-0f338ffa-r1-s2",
+          "ref-scratch-0f338ffa-r2-s2",
+          "ref-scratch-0f338ffa-r3-s2"
+        ]
+      },
+      "bands": {
+        "clean": 17,
+        "noise": 17,
+        "novel": 0,
+        "noiseLn": 1376,
+        "realLn": 0,
+        "reloc": 35,
+        "relocSt": 0,
+        "newName": 13,
+        "mints": 33,
+        "treeLn": 16,
+        "cleanLn": 16,
+        "cleanReal": 74,
+        "reorderLn": 0,
+        "vendorLn": 55,
+        "vendorReal": 32,
+        "app:treeLn": 16,
+        "app:cleanLn": 16,
+        "app:cleanReal": 74,
+        "app:reorderLn": 0,
+        "app:noise": 17,
+        "app:noiseLn": 1376,
+        "app:novel": 0,
+        "app:realLn": 0,
+        "app:reloc": 35,
+        "app:relocSt": 0,
+        "app:newName": 13,
+        "app:mints": 34,
+        "vendor:treeLn": 87,
+        "vendor:vendorLn": 55,
+        "vendor:vendorReal": 32,
+        "vendor:noise": 0,
+        "vendor:noiseLn": 0,
+        "vendor:novel": 0,
+        "vendor:realLn": 0,
+        "vendor:reloc": 0,
+        "vendor:relocSt": 0,
+        "vendor:newName": 0,
+        "vendor:mints": 0,
+        "cross:treeLn": 0,
+        "cross:stmts": 0,
+        "cross:relocSt": 0,
+        "cross:reloc": 0,
+        "mints:unattributed": 1
+      },
+      "byMode": {
+        "names": {
+          "provenance": {
+            "provisional": false,
+            "sources": ["measured from 3 same-commit repeats"],
+            "commit": "0357696ed",
+            "labels": [
+              "ref-names-0357696e-r1-s2",
+              "ref-names-0357696e-r2-s2",
+              "ref-names-0357696e-r3-s2"
+            ]
+          },
+          "bands": {
+            "clean": 397,
+            "noise": 397,
+            "novel": 0,
+            "noiseLn": 15709,
+            "realLn": 0,
+            "reloc": 17,
+            "relocSt": 2,
+            "newName": 34,
+            "mints": 22,
+            "treeLn": 2116,
+            "cleanLn": 2120,
+            "cleanReal": 1042,
+            "reorderLn": 0,
+            "vendorLn": 8,
+            "vendorReal": 96,
+            "app:treeLn": 2116,
+            "app:cleanLn": 2120,
+            "app:cleanReal": 1039,
+            "app:reorderLn": 0,
+            "app:noise": 397,
+            "app:noiseLn": 15718,
+            "app:novel": 0,
+            "app:realLn": 0,
+            "app:reloc": 22,
+            "app:relocSt": 2,
+            "app:newName": 32,
+            "app:mints": 25,
+            "vendor:treeLn": 96,
+            "vendor:vendorLn": 8,
+            "vendor:vendorReal": 96,
+            "vendor:noise": 1,
+            "vendor:noiseLn": 9,
+            "vendor:novel": 0,
+            "vendor:realLn": 0,
+            "vendor:reloc": 1,
+            "vendor:relocSt": 0,
+            "vendor:newName": 2,
+            "vendor:mints": 6,
+            "cross:treeLn": 0,
+            "cross:stmts": 0,
+            "cross:relocSt": 0,
+            "cross:reloc": 4,
+            "mints:unattributed": 9
+          }
+        }
+      }
+    }
   }
 }
