@@ -202,3 +202,22 @@ fn the_fakes_wave_keeps_call_order() {
         [Some("aRenamed".to_string()), Some("bRenamed".to_string())]
     );
 }
+
+#[test]
+fn the_stub_serves_on_a_given_port_and_refuses_a_taken_one() {
+    let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = free.local_addr().unwrap().port();
+    drop(free);
+    let handler: humanify_ag_testkit::stub_server::Handler =
+        Arc::new(|_, body| StubResponse::ok(renamed(body)));
+    let s = StubServer::serve(port, Duration::ZERO, handler.clone()).unwrap();
+    assert_eq!(s.base_url, format!("http://127.0.0.1:{port}/v1"));
+    assert!(post(&s.base_url, &chat("a")).contains("aRenamed"));
+    let taken = StubServer::serve(port, Duration::ZERO, handler)
+        .err()
+        .unwrap();
+    assert!(
+        taken.contains(&format!("cannot bind 127.0.0.1:{port}")),
+        "{taken}"
+    );
+}

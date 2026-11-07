@@ -684,35 +684,35 @@
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
-      "scope": "StubServer::start",
+      "scope": "StubServer::serve",
       "construct": "channel",
       "pattern": "test-support",
       "reason": "test-support crate (a dev-dependency only, never linked into a product binary): a bounded (1) channel that hands the bound address back to the starting test, once"
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
-      "scope": "StubServer::start",
+      "scope": "StubServer::serve",
       "construct": "thread-spawn",
       "pattern": "test-support",
       "reason": "test-support crate (a dev-dependency only, never linked into a product binary): the stub server's own thread, apart from the code under test; it lives until the test process ends"
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
-      "scope": "StubServer::start",
+      "scope": "StubServer::serve",
       "construct": "runtime-builder",
       "pattern": "test-support",
       "reason": "test-support crate (a dev-dependency only, never linked into a product binary): the stub server's own current_thread runtime on its own thread \u2014 never the code under test's runtime, never nested"
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
-      "scope": "StubServer::start",
+      "scope": "StubServer::serve",
       "construct": "block-on",
       "pattern": "test-support",
       "reason": "test-support crate (a dev-dependency only, never linked into a product binary): drives the stub's accept loop on its own runtime, on its own thread"
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
-      "scope": "StubServer::start",
+      "scope": "StubServer::serve",
       "construct": "tokio-spawn",
       "pattern": "test-support",
       "reason": "test-support crate (a dev-dependency only, never linked into a product binary): one task per accepted connection, so concurrent requests overlap and the peak in flight can be measured; they end with their connection"
