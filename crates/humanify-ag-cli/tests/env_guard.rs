@@ -8,7 +8,8 @@
 //!    parse point — `config.rs` (the API key) and `main.rs` (argv);
 //! 3. an argument parser (`clap`) outside the parse point — `surface.rs`
 //!    (the pipeline's declaration), `main.rs` (the stage verbs'),
-//!    `config.rs` — and the index builder's `index` subcommand (`humanify-ag-index/src/cli.rs`);
+//!    `config.rs`, the shared registry's flag builder (`registry/flags.rs`) —
+//!    and the index builder's `index` subcommand (`humanify-ag-index/src/cli.rs`);
 //! 4. a config-file reader (`toml`) outside `config/file.rs`, the
 //!    `--config` file's one reader (config sweep step 5) — and outside
 //!    `humanify-ag-index/src/spec.rs`, whose spec file is the builder's
@@ -52,6 +53,11 @@ const SURFACE: (&str, &str) = (
     "humanify-ag-cli/src/surface.rs",
     "the pipeline's clap declaration",
 );
+const REGISTRY_FLAGS: (&str, &str) = (
+    "humanify-ag-cli/src/registry/flags.rs",
+    "the shared settings registry's flag builder: turns a registry (the pipeline's or the \
+     harness's) into clap arguments; each binary's parse point calls it",
+);
 const INDEX_CLI: (&str, &str) = (
     "humanify-ag-index/src/cli.rs",
     "the library-index builder's `index` subcommand: its own clap declaration (exp186: \
@@ -89,7 +95,7 @@ fn rules() -> Vec<Rule> {
         Rule {
             name: "argument parser outside the parse point",
             hit: |l| l.contains("clap::") || l.contains("use clap"),
-            owners: &[CONFIG, MAIN, SURFACE, INDEX_CLI],
+            owners: &[CONFIG, MAIN, SURFACE, REGISTRY_FLAGS, INDEX_CLI],
         },
         Rule {
             name: "config-file reader outside the config owner",

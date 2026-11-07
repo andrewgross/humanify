@@ -10,12 +10,13 @@ use humanify_ag_core::naming::waves::batch::WaveTunables;
 use humanify_ag_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 use humanify_ag_model::llm::DEFAULT_LLM_TIMEOUT_MS;
 
-use super::file::{Key, Kind, Val};
+use super::file::{Key, Kind, RETIRED_KEYS, Val};
 use super::{
     DEFAULT_CONCURRENCY, DEFAULT_CONTEXT_TOKENS, DEFAULT_ENDPOINT, DEFAULT_MODEL,
     DEFAULT_MODULE_CONCURRENCY, DEFAULT_OUTPUT_DIR, default_retries,
 };
 use crate::pipeline_config::enum_name;
+use crate::registry::Registry;
 use humanify_ag_core::libdetect::discovery::{
     BannerNames, DiscoveryOptions, TARGETED_MIN_NODES, TARGETED_SUPPORT, VetoSupport,
 };
@@ -217,6 +218,28 @@ pub const SECTION_TITLES: &[(&str, &str)] = &[
 pub fn tuning_section(section: &str) -> bool {
     section.starts_with("library.lookup") || section.starts_with("library.discovery")
 }
+
+/// The pipeline's registry: its keys and its command-line rules (the
+/// generic machinery is `crate::registry`; the harness has its own table).
+pub static PIPELINE: Registry = Registry {
+    keys: KEYS,
+    retired_keys: RETIRED_KEYS,
+    // The pipeline's retired and renamed flags are verb-aware
+    // (`crate::surface::RETIRED_FLAGS`, `RENAMED_FLAGS`), checked there.
+    retired_flags: &[],
+    short_flags: SHORT_FLAGS,
+    counted_flag: Some(COUNTED_FLAG),
+    repeatable: &[],
+    section_titles: SECTION_TITLES,
+    short_help_hides: tuning_section,
+    value_names: &[
+        ("library.index", "dir|id"),
+        ("matching.prior_version", "folder|file"),
+        ("llm.model", "model"),
+        ("diagnostics.dump_artifacts", "dir"),
+        ("diagnostics.rename_ledger", "dir"),
+    ],
+};
 
 /// Every setting, in the order the example file lists them.
 pub static KEYS: &[Key] = &[
