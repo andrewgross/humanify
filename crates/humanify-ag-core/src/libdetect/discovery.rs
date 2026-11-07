@@ -120,15 +120,17 @@ pub struct Claim {
 /// Which claims may support an index seed against the isolation veto.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VetoSupport {
-    /// Claims after a fixpoint WITHOUT the MODULE rule (the default). A
-    /// module whose only claims are a fork's kept tables would otherwise
+    /// Claims after a fixpoint WITHOUT the MODULE rule (the default until
+    /// exp192). A module whose only claims are a fork's kept tables would otherwise
     /// fill the app code around them and count the fill as the tables'
     /// support: on Claude Code 2.1.86 that kept 4.5 KB of the app's own
     /// keypress parser claimed as `ink`. Costs ~2.5 KB of real library
     /// claims per release (lab, 2.1.86–2.1.216).
     WithoutModule,
-    /// Every claim after the full fixpoint: the lab prototype's rule, kept
-    /// for the lab's reproduction of its numbers.
+    /// Every claim after the full fixpoint: the lab prototype's rule, the
+    /// recommended default since exp192 (experiments/192-veto-all-rules:
+    /// exp189 scored it on the cb64 index, recall +1.3..+2.8 points on the
+    /// Bun sets with precision held or up and app 0).
     AllRules,
 }
 
@@ -400,7 +402,8 @@ impl DiscoveryOptions {
     /// precision at or above the previous default on all 21 sets); and
     /// since exp176 (experiments/176-whole-seed) `factory_whole_cover =
     /// 0.95` (bun-dev +2.95 MB named, bun-held +0.79 MB, 0 wrong-family or
-    /// app bytes added on any set).
+    /// app bytes added on any set); and since exp192 `veto_support =
+    /// all-rules` ([`VetoSupport::AllRules`]).
     /// `helper_families` stays off.
     /// `Default` stays the engine's baseline (every guard off), which the
     /// unit tests compare each guard against.
@@ -428,6 +431,7 @@ impl DiscoveryOptions {
             factory_whole_seed: true,
             factory_whole_cover: 0.95,
             helper_prints: HelperPrints::Seed,
+            veto_support: VetoSupport::AllRules,
             ..DiscoveryOptions::default()
         }
     }

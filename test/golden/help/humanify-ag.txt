@@ -259,7 +259,7 @@ Library discovery tuning [library.discovery]:
 
       --library-discovery-veto-support <without-module|all-rules>
           What may support a seed against the isolation veto: "without-module" or "all-rules" (the lab prototype's).
-          [default: "without-module"] [config: library.discovery.veto_support]
+          [default: "all-rules"] [config: library.discovery.veto_support]
 
       --library-discovery-evidence-conflict
           Refuse an index seed or a propagated claim when another package family's index prints cover more of the unit than the claimed family's (exp102).

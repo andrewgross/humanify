@@ -72,9 +72,14 @@ BOOT_GATE_MODEL="claude-opus-4-1"
 #   configuration for where it talks to; the launcher's is never it.
 # - its SESSION identity (CLAUDECODE, CLAUDE_CODE_*): the walked CLI would act
 #   as a child of the launching session (walk.sh's list, now shared).
+# ANTHROPIC_SMALL_FAST_MODEL is a model override like the per-tier ones (found
+# leaking by the exp191 boot-gate golden). CLAUDE_CONFIG_DIR is deliberately
+# KEPT: it says where the walked CLI finds its credentials, and the live
+# prompt half needs them.
 BOOT_ENV=(env
   -u ANTHROPIC_MODEL -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL
   -u ANTHROPIC_DEFAULT_HAIKU_MODEL -u ANTHROPIC_DEFAULT_FABLE_MODEL -u CLAUDE_CODE_SUBAGENT_MODEL
+  -u ANTHROPIC_SMALL_FAST_MODEL
   -u ANTHROPIC_BASE_URL -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN
   -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION
   -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_MESSAGING_SOCKET
