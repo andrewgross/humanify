@@ -114,9 +114,9 @@ draw on both sides (the app is renamed by the model live); its ±50 is draw.
 
 `npm run check`, run bare under the heavy lock:
 
-| check         | worktree (`2c21b7083`) | clean checkout (branch tip) | clean checkout (merge commit) |
-| ------------- | ---------------------- | --------------------------- | ----------------------------- |
-| all 13 stages | PASS 13/13             | **CLEAN1**                  | **CLEAN2**                    |
+| check         | worktree (`2c21b7083`) | clean checkout (branch tip) | clean checkout (merge commit)           |
+| ------------- | ---------------------- | --------------------------- | --------------------------------------- |
+| all 13 stages | PASS 13/13             | PASS 13/13 (`0b3375ad3`)    | run after merging (see the lane report) |
 
 ### (c) eval
 
