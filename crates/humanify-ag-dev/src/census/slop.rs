@@ -180,8 +180,8 @@ fn table(out: &mut String, title: &str, kind: Kind, now: &Metrics, then: &Metric
     let _ = writeln!(out, "\n{title}");
     let _ = writeln!(
         out,
-        "  {:<22} {:>6} {:>8}   {:<30} {}",
-        "crate", "fns", "sloc", "erosion (base -> now)", "clone share (base -> now)"
+        "  {:<22} {:>6} {:>8}   {:<30} clone share (base -> now)",
+        "crate", "fns", "sloc", "erosion (base -> now)"
     );
     let empty = CrateStats::default();
     let mut reasons = Vec::new();
@@ -195,21 +195,18 @@ fn table(out: &mut String, title: &str, kind: Kind, now: &Metrics, then: &Metric
             pp(n.erosion() - b.erosion()),
             pp(n.clone_share() - b.clone_share()),
         );
+        let erosion = format!(
+            "{:.1}% -> {:.1}% ({de:+.1}pp)",
+            pp(b.erosion()),
+            pp(n.erosion())
+        );
         let _ = writeln!(
             out,
-            "  {c:<22} {:>6} {:>8}   {:<30} {}",
+            "  {c:<22} {:>6} {:>8}   {erosion:<30} {:.1}% -> {:.1}% ({ds:+.1}pp)",
             n.fns,
             n.sloc,
-            format!(
-                "{:.1}% -> {:.1}% ({de:+.1}pp)",
-                pp(b.erosion()),
-                pp(n.erosion())
-            ),
-            format!(
-                "{:.1}% -> {:.1}% ({ds:+.1}pp)",
-                pp(b.clone_share()),
-                pp(n.clone_share())
-            ),
+            pp(b.clone_share()),
+            pp(n.clone_share())
         );
         if de > REVIEW_RISE_PP {
             reasons.push(format!("{c}: erosion rose {de:+.1}pp"));
