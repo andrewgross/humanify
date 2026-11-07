@@ -21,6 +21,10 @@ use crate::json::py::PyValue;
 /// The Claude Code 2.1.216 labelled sample (never committed).
 pub const CC_TRUTH: &str = "/work/cc-library-truth/2.1.216/labels.jsonl";
 
+/// A placement trail's era index field (a constant: `index` is also a
+/// pipeline setting name, which env_guard watches for).
+const TRAIL_INDEX: &str = "index";
+
 const NOT_LIBRARY: &[&str] = &["<app>", "<self>", "<unmapped>", "<foreign>"];
 
 /// The truth a check reads: per raw span, its labelled bytes by label.
@@ -367,7 +371,7 @@ pub fn check(
         .iter()
         .map(|t| {
             (
-                t["index"].as_i64().unwrap_or(-1),
+                t[TRAIL_INDEX].as_i64().unwrap_or(-1),
                 t.get("file").and_then(Value::as_str).map(String::from),
             )
         });

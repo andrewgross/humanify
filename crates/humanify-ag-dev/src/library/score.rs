@@ -46,6 +46,11 @@ pub const MISS_CLASSES: &[&str] = &[
     "unit-model",
     "factory",
 ];
+/// Card and report field names that are also pipeline setting names: kept
+/// as constants so env_guard's "a setting read out of a JSON map" rule does
+/// not mistake a scorer field for a setting.
+const LIBRARY: &str = "library";
+const BUNDLER: &str = "bundler";
 const SCOPES: [&str; 2] = ["statement", "factory"];
 
 type Ctr = Counter<String>;
@@ -364,7 +369,7 @@ struct ScopeCounts {
 
 fn scope_block(sc: &ScopeCounts) -> PyValue {
     let (t, claimed, old) = (&sc.t, &sc.claimed, &sc.old);
-    let lib = t.get("library");
+    let lib = t.get(LIBRARY);
     let named = claimed.get("right") + claimed.get("family") + claimed.get("origin");
     let old_named = old.get("right") + old.get("family");
     let mut e = vec![kv("libraryBytes", int(lib)), kv("namedBytes", int(named))];
@@ -491,7 +496,7 @@ fn map_body(by_scope: &[ScopeCounts; 2], seeds: &Ctr, names: &Names) -> Vec<(Str
         sum(|x| &x.old),
         sum(|x| &x.misses),
     );
-    let lib = total.get("library");
+    let lib = total.get(LIBRARY);
     let as_shipper = claimed.get("right") + claimed.get("family");
     let named = as_shipper + claimed.get("origin");
     let old_named = old.get("right") + old.get("family");
@@ -799,7 +804,7 @@ impl Scorer<'_> {
                 misses.add(cls.into(), e);
             }
         }
-        let lib = total.get("library");
+        let lib = total.get(LIBRARY);
         let named = claimed.get("right") + claimed.get("family");
         let mut whole_names = Names::default();
         let key: HashMap<(i64, i64), &Unit> = st.iter().map(|u| ((u.s, u.e), *u)).collect();
@@ -1050,7 +1055,7 @@ fn card_sum(card: &PyValue) -> CardSum {
         names: NAME_KEYS.map(|k| names[k]),
         claimed: ints_of(get("claimedBytes")),
         discovery_ran: get("discoveryRan") == &PyValue::Bool(true),
-        bundler_detected: get("detected").get("bundler") == get("toolchain").get("bundler"),
+        bundler_detected: get("detected").get(BUNDLER) == get("toolchain").get(BUNDLER),
         scopes: [scope("statement"), scope("factory")],
         app_claimed_sample_units: ints_of(get("totals")).get("appClaimedSampleUnits").copied(),
     }
