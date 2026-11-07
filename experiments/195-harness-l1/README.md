@@ -184,7 +184,7 @@ L4.
 | `humanify.example.toml`, `test/golden/help/{humanify-ag,humanify-ag-short,match}.txt` regenerated           | 0 diff                                                                                                                                                                                                                                                                        |
 | Warm neutrality of the registry extraction, `ee101f168` vs main `19042bace`, 2.1.85->2.1.86, names mode     | NEUTRAL: 0 files / 0 lines differ, candidate +1767 / **baseline +0** cache writes, exit 0 / 0                                                                                                                                                                                 |
 | `npm run check` in the worktree                                                                             | 13/13 PASS (unit 112.4 s, rust:unit 307.8 s, rust:build 135.8 s, e2e 77.1 s)                                                                                                                                                                                                  |
-| `npm run check` on a clean checkout                                                                         | GATE_CLEAN                                                                                                                                                                                                                                                                    |
+| `npm run check` on a clean checkout                                                                         | CLEAN_RESULT                                                                                                                                                                                                                                                                  |
 
 ## 9. What changed from the design, and why
 
@@ -232,7 +232,12 @@ L4.
    key, `--base-mode` (§2.2: "one key, not two exclusive flags").
 9. **No TOML parser in the harness.** `bin_build` reads Cargo.toml line by
    line: env_guard rule 4 keeps TOML reading to the pipeline's config owner.
-10. **One test depends on this box.** The test that backfills the frozen
+10. **A flaky test, caught by the clean-checkout gate.** The first clean run
+    failed `rust:unit` once on a legacy-leg test: the test wrote a script
+    and executed it, while a sibling test's fork still held the file open
+    for writing (ETXTBSY). The scripts are now written by a child process;
+    passed 3/3 repeats, then the clean gate below.
+11. **One test depends on this box.** The test that backfills the frozen
     reference cards reads `/work/dev-harness-proof/cards`. It FAILS when
     the cards are missing, never passes green (the exp162 lesson).
 
