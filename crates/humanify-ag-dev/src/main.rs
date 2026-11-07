@@ -420,22 +420,23 @@ fn dispatch(args: &[String]) -> (u8, String, String) {
 }
 
 fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
+    let host = env::host();
     match verb.words {
         ["build-bin"] => build_bin(&parsed.positionals),
-        ["check"] => gate::check::run(parsed),
-        ["env-check"] => gate::env_check::run(parsed),
-        ["precommit"] => gate::precommit::run(parsed),
-        ["format-golden"] => gate::format_golden::run(parsed),
-        ["no-private-addresses"] => gate::private_addresses::run(parsed),
-        ["shims"] => gate::shims::run(parsed),
-        ["census", "concurrency"] => census::concurrency::run(parsed),
-        ["census", "clones"] => census::clones::run(parsed),
-        ["census", "slop"] => census::slop::run(parsed),
-        ["e2e"] => e2e::run::run(parsed),
-        ["ask-trace"] => e2e::ask_trace::run(parsed),
-        ["diff-asks"] => e2e::diff_asks::run(parsed),
-        ["stub-llm", "serve"] => e2e::stub_llm::run(parsed),
-        ["match-truth"] => match_truth::run(parsed),
+        ["check"] => gate::check::run(parsed, &host),
+        ["env-check"] => gate::env_check::run(parsed, &host),
+        ["precommit"] => gate::precommit::run(parsed, &host),
+        ["format-golden"] => gate::format_golden::run(parsed, &host),
+        ["no-private-addresses"] => gate::private_addresses::run(parsed, &host),
+        ["shims"] => gate::shims::run(parsed, &host),
+        ["census", "concurrency"] => census::concurrency::run(parsed, &host),
+        ["census", "clones"] => census::clones::run(parsed, &host),
+        ["census", "slop"] => census::slop::run(parsed, &host),
+        ["e2e"] => e2e::run::run(parsed, &host),
+        ["ask-trace"] => e2e::ask_trace::run(parsed, &host),
+        ["diff-asks"] => e2e::diff_asks::run(parsed, &host),
+        ["stub-llm", "serve"] => e2e::stub_llm::run(parsed, &host),
+        ["match-truth"] => match_truth::run(parsed, &host),
         _ => unreachable!("every implemented verb has a runner"),
     }
 }

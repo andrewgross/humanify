@@ -6,7 +6,10 @@
 //!
 //! Three callers: the webcrack shim, `diff` for the normal-diff hunks and
 //! `git rev-parse` for the dump's manifest. Each picks its own deadline
-//! (see their constants and docs/concurrency.md, "Subprocesses").
+//! (see their constants and docs/concurrency.md, "Subprocesses"). The
+//! measurement harness (humanify-ag-dev `proc`) uses [`run`] for every
+//! child it reads, and [`run_inherited`] for a gate stage whose output is
+//! printed as it happens.
 //!
 //! How the wait works: the child goes into its OWN process group, and one
 //! plain thread each drains stdout, drains stderr, feeds stdin and waits
@@ -201,6 +204,47 @@ pub fn run(
         stdout: got.stdout.unwrap_or_default(),
         stderr: got.stderr.unwrap_or_default(),
     })
+}
+
+/// Run `command` with stdout and stderr INHERITED (a gate stage whose
+/// output the person watches as it happens), stdin null, inside ONE
+/// deadline from before spawn. Nothing is piped, so nothing can block on
+/// a full pipe; one plain thread waits for the exit and reports on a
+/// bounded channel, and the caller waits on it with `recv_timeout` — an
+/// event wait, never a poll. On expiry the child's process group is
+/// SIGKILLed, as in [`run`].
+pub fn run_inherited(
+    command: &mut Command,
+    deadline: Duration,
+) -> Result<ExitStatus, SubprocessError> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
+    let mut child = command
+        .spawn()
+        .map_err(|e| SubprocessError::Spawn(e.to_string()))?;
+    let pid = child.id();
+    let (tx, rx) = mpsc::sync_channel::<std::io::Result<ExitStatus>>(1);
+    std::thread::spawn(move || {
+        let _ = tx.send(child.wait());
+    });
+    match rx.recv_timeout(deadline) {
+        Ok(status) => status.map_err(|e| SubprocessError::Io(format!("wait: {e}"))),
+        Err(mpsc::RecvTimeoutError::Timeout) => Err(SubprocessError::TimedOut {
+            after: deadline,
+            killed: kill_group(pid),
+        }),
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            kill_group(pid);
+            Err(SubprocessError::Io("the exit waiter died".to_string()))
+        }
+    }
 }
 
 /// SIGKILL the child's whole process group (it is the group's leader, so

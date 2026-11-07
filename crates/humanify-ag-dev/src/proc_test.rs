@@ -33,3 +33,16 @@ fn git_answers_from_the_repo() {
     let top = git(&root, &["rev-parse", "--show-toplevel"]).unwrap();
     assert!(Path::new(&top).join("Cargo.toml").exists(), "{top}");
 }
+
+#[test]
+fn a_streamed_child_reports_its_status_and_refuses_stdin() {
+    let s = Spawn::new("sh", &["-c", "exit 4"], Duration::from_secs(30));
+    assert_eq!(run_streamed(&s).unwrap().code(), Some(4));
+    let mut with_input = s.clone();
+    with_input.stdin = Some(b"x".to_vec());
+    assert!(
+        run_streamed(&with_input)
+            .unwrap_err()
+            .contains("takes no stdin")
+    );
+}

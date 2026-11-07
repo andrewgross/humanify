@@ -56,10 +56,8 @@ impl Spawn {
     }
 }
 
-/// Run `spawn` to completion within its deadline; any exit status comes
-/// back for the caller to judge. Err when it could not start, timed out
-/// (and was killed), or a pipe failed.
-pub fn run(spawn: &Spawn) -> Result<Finished, String> {
+/// The crate's ONE `Command::new`: `spawn` as a command, unstarted.
+fn command(spawn: &Spawn) -> Command {
     let mut command = Command::new(&spawn.program);
     command.args(&spawn.args);
     if let Some(dir) = &spawn.cwd {
@@ -68,7 +66,28 @@ pub fn run(spawn: &Spawn) -> Result<Finished, String> {
     for (k, v) in &spawn.env {
         command.env(k, v);
     }
-    humanify_ag_core::subprocess::run(&mut command, spawn.stdin.clone(), spawn.deadline)
+    command
+}
+
+/// Run `spawn` to completion within its deadline; any exit status comes
+/// back for the caller to judge. Err when it could not start, timed out
+/// (and was killed), or a pipe failed.
+pub fn run(spawn: &Spawn) -> Result<Finished, String> {
+    humanify_ag_core::subprocess::run(&mut command(spawn), spawn.stdin.clone(), spawn.deadline)
+        .map_err(|e| format!("{}: {e}", spawn.describe()))
+}
+
+/// Run `spawn` with its stdout and stderr going straight to ours (a gate
+/// stage: the person watches it as it happens), inside its deadline; the
+/// exit status comes back. `stdin` must be None. Err as [`run`].
+pub fn run_streamed(spawn: &Spawn) -> Result<std::process::ExitStatus, String> {
+    if spawn.stdin.is_some() {
+        return Err(format!(
+            "{}: a streamed child takes no stdin",
+            spawn.describe()
+        ));
+    }
+    humanify_ag_core::subprocess::run_inherited(&mut command(spawn), spawn.deadline)
         .map_err(|e| format!("{}: {e}", spawn.describe()))
 }
 

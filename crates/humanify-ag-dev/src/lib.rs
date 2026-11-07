@@ -19,6 +19,9 @@ pub mod paths;
 pub mod proc;
 pub mod settings;
 
+/// The host environment a verb receives from main (read once, in `env`).
+pub use env::HostEnv;
+
 /// What a verb whose L4 sub-lane has not landed yet answers.
 pub fn under_construction(verb: &str) -> (u8, String, String) {
     (
