@@ -162,11 +162,15 @@ against `ref-scratch-0f338ffa-r1-s2` is refused on `scorer.version: "1" vs
 
 ## 4. Gate
 
-| Check                            | Result                |
-| -------------------------------- | --------------------- |
-| `cargo test -p humanify-ag-dev`  | see the merge message |
-| `npm run check` (worktree)       | see the merge message |
-| `npm run check` (clean checkout) | see the merge message |
+| Check                                                                  | Result                                                                                                                                  |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `cargo test -p humanify-ag-dev`                                        | 94 + 8 passed                                                                                                                           |
+| `hash_forms_pin_test` + every core hash test (the product's bytes)     | pass, unchanged pins                                                                                                                    |
+| `npm run check` in the worktree                                        | 13/13 PASS                                                                                                                              |
+| `npm run check` on a clean checkout                                    | see the merge commit message                                                                                                            |
+| Re-score of all six labels by the final binary vs the first run        | 24/24 cards byte-identical (determinism; the refactors moved nothing)                                                                   |
+| Report pages vs the TS pages (names refs, the only ones with TS pages) | byte-equal on 2.1.86 and 2.1.216 (×3); 2.1.119 / 2.1.198 differ only in the diff-ledger counts of the 3 async statements                |
+| Red seen first                                                         | KPI form test, token test, legacy-as-v1 backfill test, byScorer loader test (the scorer modules' own tests were written alongside them) |
 
 ## 5. What changed from the design, and why
 
@@ -192,8 +196,9 @@ against `ref-scratch-0f338ffa-r1-s2` is refused on `scorer.version: "1" vs
 
 - That v2 agrees with v1 on trees outside the six references and the
   2.1.207->208 walk pair (the agreement is measured, not argued).
-- The report page is a port of the TS page's HTML, not compared byte for byte
-  (the TS one-line text console output was not ported; run.sh discarded it).
+- The report page's console text (TS `trail-report.ts` stdout, which run.sh
+  discarded) was not ported; only the HTML page, byte-equal to the TS page
+  where the cards agree.
 - `diff-ledger`'s `movedSt` stays 0, as under v1: it reads a `files` object
   the current ledger no longer writes.
 
