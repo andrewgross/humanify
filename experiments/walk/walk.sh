@@ -6,7 +6,13 @@
 #
 #   experiments/walk/walk.sh --pipeline rust|ts --versions <from>..<to> --out <dir>
 #       [--bin <path>]            rust: binary to walk (default: this repo's
-#                                 target/release/humanify, built first)
+#                                 target/release/humanify-ag, built first)
+#       [--library-index <dir>]   rust: the prebuilt library index every hop
+#                                 reads (NAMES mode, the default; default:
+#                                 034's pairs.json libraryIndex — the index the
+#                                 eval hands its names launches)
+#       [--library-matching-off]  rust: OFF mode instead (no index, no vendor/
+#                                 name restoration)
 #       [--ts-tree <dir>]         ts: the frozen TS pipeline checkout
 #                                 (default /work/tsctl-fec64e5-walk: a copy of
 #                                 /work/tsctl-fec64e5 src/ + its OWN npm ci —
@@ -76,7 +82,9 @@ export PATH="$HOME/.cargo/bin:$HOME/.bun/bin:$PATH"
 PIPELINE=""
 VERSIONS_ARG=""
 OUT=""
-BIN="$REPO/target/release/humanify"
+BIN="$REPO/target/release/humanify-ag"
+LIBRARY_INDEX=""
+LIBRARY_OFF=0
 TS_TREE="/work/tsctl-fec64e5-walk"
 RESUME=0
 ENDPOINT_OVERRIDE=""
@@ -95,6 +103,8 @@ while [[ $# -gt 0 ]]; do
     --out)            OUT="$2"; shift ;;
     --bin)            BIN="$2"; shift ;;
     --ts-tree)        TS_TREE="$2"; shift ;;
+    --library-index)  LIBRARY_INDEX="$2"; shift ;;
+    --library-matching-off) LIBRARY_OFF=1 ;;
     --resume)         RESUME=1 ;;
     --endpoint)       ENDPOINT_OVERRIDE="$2"; shift ;;
     --inputs-base)    INPUTS_OVERRIDE="$2"; shift ;;
@@ -129,6 +139,25 @@ APIKEY=$(jq -r .llm.apiKey "$CFG")
 export HUMANIFY_API_KEY="$APIKEY"
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
+
+# NAMING MODE (CLAUDE.md: names is the default since exp171). A names hop with
+# no index would print "no library index ... skipping" and write OFF mode's
+# bytes, so a names walk always hands every hop the eval's prebuilt index.
+if [[ "$PIPELINE" == "rust" ]]; then
+  if [[ "$LIBRARY_OFF" == "1" ]]; then
+    [[ -z "$LIBRARY_INDEX" ]] || { echo "walk.sh: --library-index and --library-matching-off conflict" >&2; exit 2; }
+    NAMING_MODE=off
+    LIBRARY_SETS=(library.matching=off)
+  else
+    [[ -n "$LIBRARY_INDEX" ]] || LIBRARY_INDEX=$(jq -r '.libraryIndex // empty' "$CFG")
+    [[ -d "$LIBRARY_INDEX" ]] || { echo "walk.sh: library index '$LIBRARY_INDEX' is not a directory (names mode needs one; --library-matching-off for off mode)" >&2; exit 2; }
+    NAMING_MODE=names
+    LIBRARY_SETS=("library.index=$LIBRARY_INDEX")
+  fi
+else
+  NAMING_MODE=off
+  LIBRARY_SETS=()
+fi
 
 input_of() { echo "$INPUTS/claude-code-$1/binary-decompiled/src/entrypoints/index.js"; }
 # semver a <= b
@@ -222,14 +251,16 @@ NEW_MANIFEST=$(jq -n --arg pipeline "$PIPELINE" --argjson desc "$PIPE_DESC" \
   --arg effort "$EFFORT" --argjson conc "$CONC" --arg lock "${SLOTS:+slots:$SLOTS}${LOCK:+flock:$LOCK}" \
   --arg bootModel "$BOOT_GATE_MODEL" --argjson bootPrompt "$BOOT_PROMPT_ON" \
   --arg harness "$(git -C "$REPO" rev-parse HEAD 2>/dev/null)" \
+  --arg namingMode "$NAMING_MODE" --arg libraryIndex "$LIBRARY_INDEX" \
   '{pipeline:$pipeline, pipelineRecord:$desc, range:$range, versions:$versions,
     inputsBase:$inputs, llm:{endpoint:$endpoint, model:$model,
     reasoningEffort:$effort, concurrency:$conc, cache:"OFF (cold, rule 10)"},
     heavyLock:$lock, bootGate:{model:$bootModel, prompt:($bootPrompt==1)},
-    harnessCommit:$harness}')
+    harnessCommit:$harness, namingMode:$namingMode,
+    libraryIndex:(if $libraryIndex == "" then null else $libraryIndex end)}')
 if [[ -f "$MANIFEST" ]]; then
   # --resume: the walk must continue with the SAME pipeline and model.
-  for k in .pipeline .pipelineRecord .llm.endpoint .llm.model .inputsBase; do
+  for k in .pipeline .pipelineRecord .llm.endpoint .llm.model .inputsBase .namingMode .libraryIndex; do
     a=$(jq -c "$k" "$MANIFEST"); b=$(jq -c "$k" <<< "$NEW_MANIFEST")
     if [[ "$a" != "$b" ]]; then
       echo "walk.sh: --resume refused: $k differs ($a vs $b)" >&2
@@ -319,6 +350,7 @@ for V in "${VERSIONS[@]}"; do
     HOP_TOML="$OUT/runs/$V.toml"
     npx tsx "$REPO/experiments/lib/pipeline-config.ts" "$HOP_TOML" \
       "llm.reasoning_effort=$EFFORT" "llm.concurrency=$CONC" split.enabled=true \
+      ${LIBRARY_SETS[@]+"${LIBRARY_SETS[@]}"} \
       "diagnostics.stats_json=$STATS" "diagnostics.log_file=$OUT/runs/$V.log" \
       || { echo "walk.sh: could not write $HOP_TOML — aborting" >&2; exit 1; }
     ARGS_JSON=$(printf '%s\n' "$(input_of "$V")" --config "$HOP_TOML" \
