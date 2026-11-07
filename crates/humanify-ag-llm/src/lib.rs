@@ -40,5 +40,3 @@ mod metrics_test;
 mod provider_test;
 #[cfg(test)]
 mod rate_test;
-#[cfg(test)]
-mod stub_server;

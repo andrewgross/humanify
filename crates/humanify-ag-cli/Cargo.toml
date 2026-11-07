@@ -28,6 +28,8 @@ mimalloc.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
+# the ONE stub LLM server and the shuffled fake (docs/dev-harness.md §6)
+humanify-ag-testkit = { path = "../humanify-ag-testkit" }
 # its statistics, for the allocator test (allocator_test.rs)
 mimalloc = { workspace = true, features = ["extended"] }
 

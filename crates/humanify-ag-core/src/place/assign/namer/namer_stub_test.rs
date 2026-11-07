@@ -4,13 +4,14 @@
 //! refused and every entry falls back; the context-derived batches all fit,
 //! and every answer is applied to its own request.
 
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use humanify_ag_llm::LlmClient;
 use humanify_ag_llm::provider::LiveOptions;
 use humanify_ag_model::llm::{LlmConfig, RateLimitConfig};
+use humanify_ag_testkit::answers::{completion, user_prompt};
+use humanify_ag_testkit::stub_server::{StubResponse, StubServer};
 use serde_json::Value;
 
 use super::{NameKind, ProviderSplitNamer, SplitNameRequest, SplitNamer, SplitNamerBudget};
@@ -43,9 +44,9 @@ fn answer(user: &str) -> String {
     Value::Object(entries).to_string()
 }
 
-fn respond(body: &str, seen: &Seen) -> (u16, String) {
+fn respond(body: &str, seen: &Seen) -> StubResponse {
     let v: Value = serde_json::from_str(body).unwrap();
-    let user = v["messages"][1]["content"].as_str().unwrap();
+    let user = user_prompt(body);
     let total = stub_tokens(&v) + v["max_tokens"].as_u64().unwrap();
     let refused = total > CONTEXT_TOKENS;
     seen.lock().unwrap().push((user.len(), refused));
@@ -54,60 +55,22 @@ fn respond(body: &str, seen: &Seen) -> (u16, String) {
             "This model's maximum context length is {CONTEXT_TOKENS} tokens. \
              However, you requested {total} tokens."
         );
-        return (
+        return StubResponse::status(
             400,
             serde_json::json!({"error": {"message": msg}}).to_string(),
         );
     }
-    let completion = serde_json::json!({
-        "choices": [{"message": {"role": "assistant", "content": answer(user)},
-                     "finish_reason": "stop"}],
-        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
-    });
-    (200, completion.to_string())
+    StubResponse::ok(completion(Some(&answer(&user))))
 }
 
-fn serve(stream: std::net::TcpStream, seen: &Seen) {
-    let mut reader = BufReader::new(stream.try_clone().unwrap());
-    let mut len = 0usize;
-    loop {
-        let mut line = String::new();
-        if reader.read_line(&mut line).unwrap_or(0) == 0 {
-            return;
-        }
-        let line = line.trim_end();
-        if line.is_empty() {
-            break;
-        }
-        if let Some((k, v)) = line.split_once(':')
-            && k.eq_ignore_ascii_case("content-length")
-        {
-            len = v.trim().parse().unwrap();
-        }
-    }
-    let mut body = vec![0u8; len];
-    reader.read_exact(&mut body).unwrap();
-    let (status, out) = respond(&String::from_utf8(body).unwrap(), seen);
-    let mut stream = stream;
-    let _ = write!(
-        stream,
-        "HTTP/1.1 {status} STUB\r\ncontent-type: application/json\r\n\
-         content-length: {}\r\nconnection: close\r\n\r\n{out}",
-        out.len()
-    );
-}
-
-/// Start the stub; returns its base URL.
+/// Start the stub; returns its base URL. It lives until the test process
+/// ends.
 fn start(seen: Seen) -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!("http://{}/v1", listener.local_addr().unwrap());
-    std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            let seen = seen.clone();
-            std::thread::spawn(move || serve(stream, &seen));
-        }
-    });
-    url
+    StubServer::start(
+        Duration::ZERO,
+        Arc::new(move |_, body| respond(body, &seen)),
+    )
+    .base_url
 }
 
 fn client(url: &str) -> LlmClient<humanify_ag_llm::provider::LiveStack> {

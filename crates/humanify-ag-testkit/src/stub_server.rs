@@ -4,7 +4,8 @@
 //! header set and the MAXIMUM number of requests in flight at once (a
 //! concurrency cap's measurement), and answers each request from a
 //! handler after an optional delay. A handler can also answer with a
-//! status, extra headers, or by hanging up (a transport failure).
+//! status, extra headers, a delay of its own, by hanging up (a transport
+//! failure), or by stalling after its head (a half-open link).
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -18,6 +19,11 @@ pub struct StubResponse {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: String,
+    /// Waited after the handler answers, before the response is sent.
+    pub delay: Duration,
+    /// `Some(n)`: declare `content-length: n`, send `body` (shorter), then
+    /// hold the connection open forever.
+    pub stall_length: Option<usize>,
 }
 
 impl StubResponse {
@@ -30,7 +36,24 @@ impl StubResponse {
             status,
             headers: Vec::new(),
             body: body.into(),
+            delay: Duration::ZERO,
+            stall_length: None,
         }
+    }
+
+    /// A 200 that declares `declared_length` body bytes, sends only
+    /// `partial`, and then stalls with the connection open.
+    pub fn stalled(declared_length: usize, partial: &str) -> Self {
+        let mut r = StubResponse::ok(partial);
+        r.stall_length = Some(declared_length);
+        r
+    }
+
+    /// Wait `delay` (after the handler, on top of the server's own delay)
+    /// before sending: a later request can finish first.
+    pub fn after(mut self, delay: Duration) -> Self {
+        self.delay = delay;
+        self
     }
 
     /// Close the connection without answering (a transport failure the
@@ -130,6 +153,15 @@ impl StubServer {
     }
 }
 
+/// An endpoint nothing listens on (a port bound, then released): a
+/// connection to it is refused.
+pub fn dead_endpoint() -> String {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a local port");
+    let addr = listener.local_addr().expect("an address");
+    drop(listener);
+    format!("http://{addr}/v1")
+}
+
 /// Read one request: (headers, body), or None when the peer closed.
 async fn read_request(
     reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
@@ -182,6 +214,7 @@ async fn serve_connection(
         stats.headers.lock().expect("not poisoned").push(headers);
         tokio::time::sleep(delay).await;
         let response = handler(index, &body);
+        tokio::time::sleep(response.delay).await;
         stats.in_flight.fetch_sub(1, Ordering::SeqCst);
         if response.status == 0 {
             return;
@@ -189,7 +222,7 @@ async fn serve_connection(
         let mut out = format!(
             "HTTP/1.1 {} STUB\r\ncontent-type: application/json\r\ncontent-length: {}\r\n",
             response.status,
-            response.body.len()
+            response.stall_length.unwrap_or(response.body.len())
         );
         for (name, value) in &response.headers {
             out.push_str(&format!("{name}: {value}\r\n"));
@@ -198,6 +231,11 @@ async fn serve_connection(
         out.push_str(&response.body);
         if write.write_all(out.as_bytes()).await.is_err() {
             return;
+        }
+        if response.stall_length.is_some() {
+            let _ = write.flush().await;
+            // Hold the connection open, never finishing the body.
+            std::future::pending::<()>().await;
         }
     }
 }
