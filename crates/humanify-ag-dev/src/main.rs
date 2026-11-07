@@ -301,12 +301,12 @@ const VERBS: &[Verb] = &[
     },
     Verb {
         words: &["env-check"],
-        usage: "env-check",
+        usage: "env-check [--endpoint URL]",
         proves: "the toolchain pin, clippy and rustfmt are present and the MSRV equals the pin",
         cannot_prove: "anything about the code",
         lane: None,
         today: "",
-        settings: NONE,
+        settings: &["llm.endpoint"],
     },
     Verb {
         words: &["precommit"],

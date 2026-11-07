@@ -1,0 +1,8 @@
+#!/bin/sh
+# The pre-commit hook (install: git config core.hooksPath .githooks).
+# Everything it does is `cargo dev precommit` (crates/humanify-ag-dev
+# src/gate/precommit.rs); the user-level cargo first, for shells that never
+# sourced ~/.profile.
+PATH="$HOME/.cargo/bin:$PATH"
+export PATH
+exec cargo dev precommit
