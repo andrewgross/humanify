@@ -14,19 +14,26 @@ use crate::paths::CONCURRENCY_ALLOWLIST;
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConcurrencyAllowlist {
-    #[serde(rename = "$comment")]
+    #[serde(rename = "$comment", default)]
     pub comment: String,
     pub entries: Vec<ConcurrencySite>,
 }
 
-/// One confirmed site: file + scope + construct, its pattern and why.
+/// One confirmed site: file + scope + construct, its pattern and why. A
+/// missing field reads as empty, so the census can name the malformed
+/// entry (`missing "reason"`) instead of failing the whole load.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ConcurrencySite {
+    #[serde(default)]
     pub file: String,
+    #[serde(default)]
     pub scope: String,
+    #[serde(default)]
     pub construct: String,
+    #[serde(default)]
     pub pattern: String,
+    #[serde(default)]
     pub reason: String,
     /// A known deviation from the rules, naming the open finding.
     pub exception: Option<String>,
@@ -34,5 +41,10 @@ pub struct ConcurrencySite {
 
 /// Load the concurrency allowlist.
 pub fn concurrency_allowlist(repo: &Path) -> Result<Loaded<ConcurrencyAllowlist>, String> {
-    load_json(&repo.join(CONCURRENCY_ALLOWLIST))
+    concurrency_allowlist_at(&repo.join(CONCURRENCY_ALLOWLIST))
+}
+
+/// Load a concurrency allowlist from an explicit path (`--allowlist`).
+pub fn concurrency_allowlist_at(file: &Path) -> Result<Loaded<ConcurrencyAllowlist>, String> {
+    load_json(file)
 }
