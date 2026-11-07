@@ -4,7 +4,14 @@
   "functions": {
     "priorCount": 6,
     "freshCount": 6,
-    "priorNames": ["alpha", "renamed", "near", "far", "dupe", "dupe"],
+    "priorNames": [
+      "alpha",
+      "renamed",
+      "near",
+      "far",
+      "dupe",
+      "dupe"
+    ],
     "mustMatch": 2,
     "matchedOfMust": 2,
     "recall": 1,
