@@ -9,6 +9,7 @@
 pub mod bin_build;
 pub mod committed;
 pub mod env;
+pub mod eval;
 pub mod identity;
 pub mod json;
 pub mod paths;
