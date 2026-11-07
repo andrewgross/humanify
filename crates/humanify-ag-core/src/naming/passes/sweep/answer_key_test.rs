@@ -6,9 +6,10 @@
 //! targets are RE-ASKED with the bad key disclosed — never a silent
 //! "declined".
 
-use std::cell::RefCell;
+use std::cell::Cell;
 
-use humanify_ag_model::llm::{BatchRenameResponse, LlmCall, LlmError, NameProvider, Renames};
+use humanify_ag_model::llm::NameProvider;
+use humanify_ag_testkit::fake::{ShuffledFake, reply};
 use oxc_allocator::Allocator;
 
 use super::sweep_minted_names;
@@ -35,36 +36,27 @@ fn word_for(id: &str) -> String {
     format!("named{tail}")
 }
 
-/// A stub that answers every asked id under the key `key_of(round, id)`,
-/// and keeps every call's identifiers and user prompt.
-struct Keyed<F: Fn(usize, &str) -> String> {
-    key_of: F,
-    calls: RefCell<Vec<(Vec<String>, String)>>,
+/// A fake that answers every asked id under the key `key_of(round, id)`
+/// (`round`: the calls answered before this one).
+fn keyed(key_of: impl Fn(usize, &str) -> String + 'static) -> ShuffledFake {
+    let round = Cell::new(0usize);
+    ShuffledFake::answering(1, move |c| {
+        let r = round.replace(round.get() + 1);
+        reply(
+            c.request
+                .identifiers
+                .iter()
+                .map(|id| (key_of(r, id), Some(word_for(id)))),
+        )
+    })
 }
 
-impl<F: Fn(usize, &str) -> String> NameProvider for Keyed<F> {
-    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-        calls
-            .into_iter()
-            .map(|c| {
-                let round = self.calls.borrow().len();
-                self.calls
-                    .borrow_mut()
-                    .push((c.request.identifiers.clone(), c.user_prompt.clone()));
-                let entries: Vec<(String, Option<String>)> = c
-                    .request
-                    .identifiers
-                    .iter()
-                    .map(|id| ((self.key_of)(round, id), Some(word_for(id))))
-                    .collect();
-                Ok(BatchRenameResponse {
-                    renames: Renames::from_entries(entries),
-                    finish_reason: None,
-                    usage: None,
-                })
-            })
-            .collect()
-    }
+/// Every call's identifiers and user prompt, in answer order.
+fn calls_of(fake: &ShuffledFake) -> Vec<(Vec<String>, String)> {
+    fake.calls()
+        .into_iter()
+        .map(|c| (c.request.identifiers, c.user_prompt))
+        .collect()
 }
 
 /// Run the sweep over `text` and hand the rendered code and the state to
@@ -105,16 +97,13 @@ fn sweep(text: &str, provider: &impl NameProvider, check: impl FnOnce(&str, &Ren
 /// "llm-declined" and never asked again.
 #[test]
 fn a_dollar_mangled_key_lands_on_its_one_asked_identifier() {
-    let provider = Keyed {
-        key_of: |_, id: &str| {
-            if id == "y$_" {
-                "y$".to_string()
-            } else {
-                id.to_string()
-            }
-        },
-        calls: RefCell::new(Vec::new()),
-    };
+    let provider = keyed(|_, id: &str| {
+        if id == "y$_" {
+            "y$".to_string()
+        } else {
+            id.to_string()
+        }
+    });
     sweep(
         "function f() {\n  var y$_ = new Map();\n  return y$_;\n}",
         &provider,
@@ -135,7 +124,7 @@ fn a_dollar_mangled_key_lands_on_its_one_asked_identifier() {
             );
         },
     );
-    assert_eq!(provider.calls.borrow().len(), 1, "no re-ask needed");
+    assert_eq!(provider.calls().len(), 1, "no re-ask needed");
 }
 
 /// `a$_` and `a_$` both read as `a$` once the `$`/`_` run is normalised:
@@ -144,23 +133,20 @@ fn a_dollar_mangled_key_lands_on_its_one_asked_identifier() {
 /// answer applies.
 #[test]
 fn an_ambiguous_key_lands_nowhere_and_both_targets_are_reasked() {
-    let provider = Keyed {
-        key_of: |round, id: &str| {
-            if round == 0 && (id == "a$_" || id == "a_$") {
-                "a$".to_string()
-            } else {
-                id.to_string()
-            }
-        },
-        calls: RefCell::new(Vec::new()),
-    };
+    let provider = keyed(|round, id: &str| {
+        if round == 0 && (id == "a$_" || id == "a_$") {
+            "a$".to_string()
+        } else {
+            id.to_string()
+        }
+    });
     let mut code = String::new();
     sweep(
         "function f() {\n  var a$_ = one();\n  var a_$ = two();\n  return a$_ + a_$;\n}",
         &provider,
         |c, _| code = c.to_string(),
     );
-    let calls = provider.calls.borrow();
+    let calls = calls_of(&provider);
     assert_eq!(calls.len(), 2, "the first ask, then one re-ask: {calls:?}");
     let (ids, prompt) = &calls[1];
     assert_eq!(

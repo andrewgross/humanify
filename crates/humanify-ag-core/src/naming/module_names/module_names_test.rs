@@ -5,9 +5,11 @@
 //! retry with the taken name listed; a wrapper the prior carried is never
 //! asked again.
 
+use std::rc::Rc;
 use std::sync::Mutex;
 
-use humanify_ag_model::llm::{BatchRenameResponse, LlmCall, LlmError, NameProvider, Renames};
+use humanify_ag_model::llm::{BatchRenameResponse, LlmCall, Renames};
+use humanify_ag_testkit::fake::ShuffledFake;
 
 use crate::libindex::table::RestorationRow;
 use crate::naming::driver::{NamingConfig, NamingInput, NamingOutcome, run_naming};
@@ -30,7 +32,8 @@ var Jq = W(() => {\n  Hq();\n  e1 = d1(2);\n});\n";
 /// Answers a module batch per entry by `answer(entry)`; mints a fresh
 /// `renamedX` name for every identifier of any other ask, except the
 /// identifiers in `decline` (no answer — a sweep whose offers all fail).
-struct ModuleProvider {
+/// The answer state of [`ModuleProvider`]'s fake, and what it was asked.
+struct ModuleAnswers {
     answer: fn(&str) -> Option<&'static str>,
     decline: &'static [&'static str],
     prompts: Mutex<Vec<String>>,
@@ -38,17 +41,48 @@ struct ModuleProvider {
     minted: Mutex<usize>,
 }
 
+/// The seeded-shuffled fake answering from a [`ModuleAnswers`]; reads of
+/// the recorded prompts go through to the answers (`Deref`).
+struct ModuleProvider {
+    answers: Rc<ModuleAnswers>,
+    fake: ShuffledFake,
+}
+
 impl ModuleProvider {
     fn new(answer: fn(&str) -> Option<&'static str>) -> Self {
-        ModuleProvider {
+        ModuleProvider::declining(answer, &[])
+    }
+
+    fn declining(
+        answer: fn(&str) -> Option<&'static str>,
+        decline: &'static [&'static str],
+    ) -> Self {
+        let answers = Rc::new(ModuleAnswers {
             answer,
-            decline: &[],
+            decline,
             prompts: Mutex::new(Vec::new()),
             module_prompts: Mutex::new(Vec::new()),
             minted: Mutex::new(0),
-        }
+        });
+        let state = answers.clone();
+        let fake = ShuffledFake::answering(1, move |c| {
+            Ok(BatchRenameResponse {
+                renames: state.respond(c),
+                ..BatchRenameResponse::default()
+            })
+        });
+        ModuleProvider { answers, fake }
     }
+}
 
+impl std::ops::Deref for ModuleProvider {
+    type Target = ModuleAnswers;
+    fn deref(&self) -> &ModuleAnswers {
+        &self.answers
+    }
+}
+
+impl ModuleAnswers {
     fn mint(&self) -> String {
         let mut n = self.minted.lock().expect("lock");
         let mut k = *n;
@@ -87,20 +121,6 @@ impl ModuleProvider {
                 .unwrap_or("");
             (key.clone(), (self.answer)(entry).map(str::to_string))
         }))
-    }
-}
-
-impl NameProvider for ModuleProvider {
-    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-        calls
-            .iter()
-            .map(|c| {
-                Ok(BatchRenameResponse {
-                    renames: self.respond(c),
-                    ..BatchRenameResponse::default()
-                })
-            })
-            .collect()
     }
 }
 
@@ -146,7 +166,7 @@ fn run(fresh: &str, prior: Option<&str>, provider: &ModuleProvider) -> NamingOut
             statement_holds: &[],
         },
         &config(),
-        provider,
+        &provider.fake,
         &mut log,
     )
     .expect("the stage runs")
@@ -349,8 +369,7 @@ fn a_duplicate_name_gets_one_retry_with_the_taken_name_listed() {
 fn a_module_whose_answers_all_collide_gets_its_first_function_name_never_a_minified_one() {
     // Every module answer is `color-utils`, and the sweep declines the
     // wrapper (its offers all fail): on main `Jq` stays minified.
-    let mut provider = ModuleProvider::new(|_| Some("color-utils"));
-    provider.decline = &["Jq"];
+    let provider = ModuleProvider::declining(|_| Some("color-utils"), &["Jq"]);
     let out = run(BUNDLE, None, &provider);
     assert_eq!(out.module_names.retried, 1);
     assert_eq!(out.module_names.disclosed, 1);
@@ -468,7 +487,7 @@ fn run_with_regions(
             statement_holds: &[],
         },
         &config(),
-        provider,
+        &provider.fake,
         &mut log,
     )
     .expect("the stage runs")
@@ -494,7 +513,7 @@ fn run_with_restorations(
             statement_holds: &[],
         },
         &config(),
-        provider,
+        &provider.fake,
         &mut log,
     )
     .expect("the stage runs")
@@ -695,7 +714,7 @@ fn run_bridged(
             statement_holds: &[],
         },
         &config(),
-        provider,
+        &provider.fake,
         &mut log,
     )
     .expect("the stage runs")

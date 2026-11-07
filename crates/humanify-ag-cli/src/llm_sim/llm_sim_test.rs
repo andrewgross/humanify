@@ -1,24 +1,12 @@
-use humanify_ag_model::llm::{
-    BatchRenameRequest, BatchRenameResponse, LlmCall, LlmError, NameProvider, Renames,
-};
+use humanify_ag_model::llm::{BatchRenameRequest, LlmCall, NameProvider};
+use humanify_ag_testkit::fake::{ShuffledFake, reply};
 
 use super::{LatencySim, latency_ms};
 
-struct Echo;
-
-impl NameProvider for Echo {
-    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-        calls
-            .iter()
-            .map(|_| {
-                Ok(BatchRenameResponse {
-                    renames: Renames::from_entries(Vec::new()),
-                    finish_reason: None,
-                    usage: None,
-                })
-            })
-            .collect()
-    }
+/// The inner provider: every call answered with no renames (the sim's
+/// cost model reads only the prompts).
+fn echo() -> ShuffledFake {
+    ShuffledFake::answering(1, |_| reply::<String>([]))
 }
 
 fn call(i: usize) -> LlmCall {
@@ -31,7 +19,8 @@ fn call(i: usize) -> LlmCall {
 
 #[test]
 fn a_wave_costs_its_makespan_on_the_slots() {
-    let sim = LatencySim::new(&Echo, 2);
+    let sim_inner = echo();
+    let sim = LatencySim::new(&sim_inner, 2);
     let calls: Vec<LlmCall> = (0..3).map(call).collect();
     let l: Vec<f64> = calls.iter().map(latency_ms).collect();
     sim.run_wave(calls);
@@ -51,11 +40,13 @@ fn pipelining_beats_the_turn_barrier_on_the_same_chains() {
     // Four chains of three calls each: the barrier pays the max of every
     // turn, the pipeline pays the longest chain.
     let chain = |c: usize, k: usize| call(c * 10 + k);
-    let barrier = LatencySim::new(&Echo, 32);
+    let barrier_inner = echo();
+    let barrier = LatencySim::new(&barrier_inner, 32);
     for k in 0..3 {
         barrier.run_wave((0..4).map(|c| chain(c, k)).collect());
     }
-    let pipe = LatencySim::new(&Echo, 32);
+    let pipe_inner = echo();
+    let pipe = LatencySim::new(&pipe_inner, 32);
     let mut step = [0usize; 4];
     pipe.run_pipelined((0..4).map(|c| (c, chain(c, 0))).collect(), &mut |id, _| {
         step[id] += 1;
