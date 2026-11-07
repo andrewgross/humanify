@@ -519,9 +519,12 @@ dependencies = [
  "humanify-ag-core",
  "humanify-ag-model",
  "humanify-ag-testkit",
+ "proc-macro2",
+ "quote",
  "serde",
  "serde_json",
  "sha2",
+ "syn 2.0.119",
 ]
 
 [[package]]

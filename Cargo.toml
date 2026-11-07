@@ -67,6 +67,14 @@ oxc_span = "=0.150.0"
 oxc_syntax = "=0.150.0"
 oxc_traverse = "=0.150.0"
 
+# The censuses' Rust parser (`cargo dev census clones|slop`, docs/dev-harness.md
+# §7): syn 2 with the full AST and the visitor, the version already locked
+# transitively; quote for an item's token stream, proc-macro2's
+# span-locations for line numbers outside a proc macro.
+syn = { version = "=2.0.119", features = ["full", "visit"] }
+quote = "=1.0.47"
+proc-macro2 = { version = "=1.0.107", features = ["span-locations"] }
+
 [workspace.lints.rust]
 unsafe_code = "warn" # humanify-ag-core forbids it at the crate root (02 §10)
 

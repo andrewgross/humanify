@@ -2,4 +2,5 @@
 
 pub mod clones;
 pub mod concurrency;
+pub mod rust_fns;
 pub mod slop;

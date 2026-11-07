@@ -1,0 +1,4 @@
+{
+  "$comment": "The clone census's reviewed findings (`cargo dev census clones`, crates/humanify-ag-dev/src/census/clones.rs). One entry per finding: its SORTED \"path:functionName\" members (no line numbers, so ordinary edits do not churn it; moving or renaming a member invalidates the entry and the finding is re-judged) and a one-line justification. Prefer unifying the code; allowlist only idiom or deliberate copies. Started EMPTY at the Rust port (lane L4): the TS census's entries named TypeScript functions and do not carry over.",
+  "entries": []
+}

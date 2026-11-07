@@ -21,6 +21,8 @@ pub const LIBRARY_DIR: &str = "experiments/096-library-matching-score";
 pub const LIBRARY_RESULTS: &str = "experiments/096-library-matching-score/results";
 /// The concurrency census's allowlist.
 pub const CONCURRENCY_ALLOWLIST: &str = "scripts/concurrency-allowlist.json";
+/// The clone census's allowlist (reviewed twin groups, each justified).
+pub const CLONE_ALLOWLIST: &str = "scripts/clone-allowlist.json";
 /// The e2e fixtures (one `fixture.config.json` each).
 pub const E2E_FIXTURES: &str = "test/e2e/fixtures";
 /// The git-ignored per-host config (the LLM endpoint).
