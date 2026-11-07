@@ -327,9 +327,23 @@ pub static HARNESS_KEYS: &[Key] = &[
     path_key(
         "libscore",
         "data_root",
-        None,
-        "the corpus's own data root (per host)",
+        Some("--data-root"),
+        "the corpus's root in data-roots.json (per host)",
         "Where the corpus's frozen bundles, truth and raw reports live on this host.",
+    ),
+    path_key(
+        "libscore",
+        "out",
+        Some("--out"),
+        "the committed results dir (a private corpus's cards beside its reports)",
+        "Where a rescore writes its cards, summary.json and timing.json (one directory).",
+    ),
+    path_key(
+        "libscore",
+        "truth",
+        Some("--truth"),
+        "required by `eval vendor-precision check`",
+        "The truth a vendor-precision check judges against: bun-dev:<entry id>, cc216 or none.",
     ),
     // [llm]
     Key {

@@ -1,0 +1,47 @@
+{
+ "conversion": {
+  "converted": 2,
+  "dropped": 1
+ },
+ "exact": {
+  "era:appFiles": [],
+  "era:bytes": 30,
+  "era:files": [
+   "vendor/@s/p/z.js",
+   "vendor/b/m.js",
+   "vendor/root.js"
+  ],
+  "era:wrongFiles": [],
+  "movedBytes": 10,
+  "movedBytesNotClaimedByMover": 0,
+  "movedModules": 1,
+  "movedStatements": 2,
+  "movedStatementsNotClaimedByMover": 1,
+  "regionStatements": 2,
+  "regionStatementsContentCorrect": 1,
+  "regions": 1
+ },
+ "factory": {
+  "factory:appFiles": [],
+  "factory:bytes": 50,
+  "factory:files": [
+   "vendor/f/index.js"
+  ],
+  "factory:wrongFiles": []
+ },
+ "ordinal": {
+  "era:appFiles": [],
+  "era:bytes": 30,
+  "era:files": [
+   "vendor/@s/p/z.js",
+   "vendor/c/n.js",
+   "vendor/root.js"
+  ],
+  "era:wrongFiles": [],
+  "movedBytes": 10,
+  "movedBytesNotClaimedByMover": 10,
+  "movedModules": 1,
+  "movedStatements": 1,
+  "movedStatementsNotClaimedByMover": 1
+ }
+}

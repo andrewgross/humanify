@@ -1,0 +1,21 @@
+{
+  "about": "Where each exp096 corpus's frozen bundles, truth layers and raw discovery reports live on THIS host (never committed: the data is large, and the cc corpus's truth quotes Claude Code). Per-host data, not code (docs/dev-harness.md section 2.3): the library scorer reads a corpus's root from here, and `--data-root` (libscore.data_root) overrides it for one run. Not inside the corpus manifests: a manifest's canonical sha is the corpus identity every label records.",
+  "roots": {
+    "dev": "/work/exp096-data",
+    "test": "/work/exp100-test-data/frozen",
+    "test2": "/work/exp116-test2-data/frozen",
+    "bundlers": "/work/exp105-data/frozen",
+    "apps": "/work/exp107-data/frozen",
+    "pop": "/work/exp112-data/pop/frozen",
+    "remin": "/work/exp126-data/remin/frozen",
+    "remin2": "/work/exp140-data/remin2/frozen",
+    "remin3": "/work/exp141-data/remin3/frozen",
+    "remin4": "/work/exp146-data/remin4/frozen",
+    "bun-dev": "/work/exp150-data/bun-dev/frozen",
+    "bun-held": "/work/exp150-data/bun-held/frozen",
+    "kind-esbuild": "/work/exp181-data/kind-esbuild/frozen",
+    "kind-webpack": "/work/exp181-data/kind-webpack/frozen",
+    "kind-rollup": "/work/exp181-data/kind-rollup/frozen",
+    "cc": "/work/cc-library-truth/frozen"
+  }
+}

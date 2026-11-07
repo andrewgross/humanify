@@ -1,0 +1,47 @@
+{
+  "placementTrails": {
+    "trails": [
+      { "index": 0, "file": "vendor/a/x.js" },
+      { "index": 2, "file": "src/app.js" },
+      { "index": 3, "file": "vendor/@s/p/y.js" },
+      { "index": 3, "file": "vendor/@s/p/z.js" },
+      { "index": 4, "file": "vendor/root.js" }
+    ]
+  },
+  "eraRestoration": {
+    "bodySpans": [
+      [0, 10],
+      [10, 20],
+      [20, 30],
+      [30, 40],
+      [40, 50]
+    ],
+    "bodyRawSpans": [[100, 110], null, [120, 130], [130, 140], [140, 150]],
+    "movedFiles": [
+      [
+        "vendor/b/m.js",
+        [
+          [10, 20],
+          [0, 10]
+        ]
+      ]
+    ],
+    "ordinalMovedFiles": [["vendor/c/n.js", [[20, 30]]]],
+    "regions": [
+      {
+        "statements": [0, 1],
+        "rawSpans": [
+          [100, 110],
+          [999, 1000]
+        ],
+        "claims": ["b", null]
+      }
+    ],
+    "ordinalRegions": [],
+    "factoryFiles": [
+      [[0, 50], "vendor/f/index.js"],
+      [[60, 70], "src/x.js"]
+    ],
+    "conversion": { "converted": 2, "dropped": 1 }
+  }
+}

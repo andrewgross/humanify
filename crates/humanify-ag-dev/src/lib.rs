@@ -11,6 +11,7 @@ pub mod committed;
 pub mod env;
 pub mod identity;
 pub mod json;
+pub mod library;
 pub mod paths;
 pub mod proc;
 pub mod settings;

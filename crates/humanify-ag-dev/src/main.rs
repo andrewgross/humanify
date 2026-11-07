@@ -36,6 +36,8 @@ const NEUTRALITY_SETTINGS: &[&str] = &[
 ];
 const LIBRARY_SETTINGS: &[&str] = &["run.force_mixed", "run.pipeline_set", "libscore"];
 const FORCE: &[&str] = &["run.force_mixed"];
+const DETERMINISM_SETTINGS: &[&str] = &["libscore.corpus", "libscore.data_root"];
+const RESCORE_SETTINGS: &[&str] = &["libscore.corpus", "libscore.data_root", "libscore.out"];
 const INDEX_SECTION: &str = "index";
 const INDEX_SETTINGS: &[&str] = &[INDEX_SECTION];
 const NONE: &[&str] = &[];
@@ -115,19 +117,19 @@ const VERBS: &[Verb] = &[
     },
     Verb {
         words: &["eval", "vendor-precision"],
-        usage: "eval vendor-precision check <diag.json> --truth bun-dev:<id>|cc216|none  |  eval vendor-precision bun-dev <bin> <label> [jobs]",
+        usage: "eval vendor-precision check <diag.json> --truth bun-dev:<id>|cc216|none  |  eval vendor-precision aggregate <label-dir>",
         proves: "app/wrong-package bytes among the truth-LABELLED vendor bytes, through the run's own raw-to-era bridge",
         cannot_prove: "anything about unlabelled bytes, or a run without the bridge (pre-exp166 binaries)",
-        lane: Some("L2b"),
+        lane: None,
         today: "npm run eval -- vendor-precision",
-        settings: NONE,
+        settings: &["libscore.truth"],
     },
     Verb {
         words: &["eval", "cjs-placement"],
-        usage: "eval cjs-placement <label>",
+        usage: "eval cjs-placement <census.jsonl> <runs-dir> [<out.json>]",
         proves: "where a CommonJS app's modules were placed against the bun-dev census",
         cannot_prove: "anything outside the census's bundles",
-        lane: Some("L2b"),
+        lane: None,
         today: "python3 experiments/172-cjs-app-placement/score.py",
         settings: NONE,
     },
@@ -154,45 +156,63 @@ const VERBS: &[Verb] = &[
         usage: "library score <label> --index <dir> --rule agreement|structural [--commit REF] [--jobs N] [--cpus LIST] [--corpus NAME] [--sets a,b] [--force-mixed] [--pipeline-set library.<key>=value]...",
         proves: "precision / recall / F0.5 of library naming on a frozen corpus, and that no app code was claimed",
         cannot_prove: "anything about a bundle outside the corpus",
-        lane: Some("L2b"),
+        lane: Some("L3"),
         today: "npm run eval -- library",
         settings: LIBRARY_SETTINGS,
+    },
+    Verb {
+        words: &["library", "rescore"],
+        usage: "library rescore <label> [--corpus NAME] [--data-root DIR] [--out DIR]",
+        proves: "the label's cards and summary from its raw discovery reports, byte for byte what score.py (scorer 14) writes",
+        cannot_prove: "anything the reports do not hold: it re-scores, it never re-runs discovery",
+        lane: None,
+        today: "",
+        settings: RESCORE_SETTINGS,
+    },
+    Verb {
+        words: &["library", "proof"],
+        usage: "library proof <label>... --out SCRATCH",
+        proves: "re-scoring each committed label today reproduces its committed cards and summary byte for byte (proof b)",
+        cannot_prove: "anything about a label whose raw reports or index are gone from this host",
+        lane: None,
+        today: "",
+        settings: &["libscore.out"],
     },
     Verb {
         words: &["library", "leaderboard"],
         usage: "library leaderboard <label> <label> [label...] [--force-mixed]",
         proves: "relative library-matching movement between labels on the fixed corpus (band 0: every delta is real)",
         cannot_prove: "why a delta happened when libraryBytes moved too",
-        lane: Some("L2b"),
+        lane: None,
         today: "npm run eval -- library-leaderboard",
         settings: FORCE,
     },
     Verb {
         words: &["library", "determinism"],
-        usage: "library determinism <a> <b>",
+        usage: "library determinism <a> <b> [--corpus NAME] [--data-root DIR]",
         proves: "two labels of one configuration are byte-identical (the band-0 claim)",
         cannot_prove: "anything about two different configurations",
-        lane: Some("L2b"),
+        lane: None,
         today: "python3 experiments/096-library-matching-score/determinism.py",
-        settings: NONE,
+        settings: DETERMINISM_SETTINGS,
     },
     Verb {
         words: &["library", "corpus"],
-        usage: "library corpus build|freeze|verify <corpus>",
+        usage: "library corpus verify <corpus> [--data-root DIR]",
         proves: "a corpus's frozen files are byte-identical to its manifest",
         cannot_prove: "that the truth labels are correct",
-        lane: Some("L2b"),
+        lane: None,
         today: "python3 experiments/096-library-matching-score/corpus.py",
-        settings: NONE,
+        settings: &["libscore.data_root"],
     },
     Verb {
         words: &["library", "layers"],
-        usage: "library layers <corpus>",
+        usage: "library layers <corpus> --out DIR [--data-root DIR]",
         proves: "re-freezing a corpus's truth layers reproduces every committed layer sha",
         cannot_prove: "that a layer's rule is the right rule",
-        lane: Some("L2b"),
+        lane: None,
         today: "experiments/150-bun-testbed/scripts/layers.sh",
-        settings: NONE,
+        settings: &["libscore.data_root", "libscore.out"],
     },
     Verb {
         words: &["index", "build"],
@@ -398,8 +418,295 @@ fn dispatch(args: &[String]) -> (u8, String, String) {
 fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
     match verb.words {
         ["build-bin"] => build_bin(&parsed.positionals),
+        ["library", "rescore"] => library_rescore(parsed),
+        ["library", "layers"] => library_layers(parsed),
+        ["library", "proof"] => library_proof(parsed),
+        ["library", "corpus"] => library_corpus(parsed),
+        ["eval", "vendor-precision"] => vendor_precision(parsed),
+        ["eval", "cjs-placement"] => cjs_placement(&parsed.positionals),
+        ["library", "leaderboard"] => library_leaderboard(parsed),
+        ["library", "determinism"] => library_determinism(parsed),
         _ => unreachable!("every implemented verb has a runner"),
     }
+}
+
+fn library_rescore(parsed: &settings::Parsed) -> (u8, String, String) {
+    use humanify_ag_dev::library::score::{Out, rescore};
+    let [label] = parsed.positionals.as_slice() else {
+        return (2, String::new(), "usage: humanify-ag-dev library rescore <label> [--corpus NAME] [--data-root DIR] [--out DIR]\n".into());
+    };
+    let s = &parsed.settings;
+    let corpus = s.text("libscore.corpus").unwrap_or_else(|| "dev".into());
+    let out = s
+        .text("libscore.out")
+        .map_or(Out::Committed, |d| Out::Dir(d.into()));
+    match rescore(
+        &humanify_ag_dev::paths::repo_root(),
+        label,
+        &corpus,
+        s.text("libscore.data_root").as_deref(),
+        &out,
+    ) {
+        Ok(log) => (0, log, String::new()),
+        Err(e) => (1, String::new(), format!("library rescore: {e}\n")),
+    }
+}
+
+fn library_leaderboard(parsed: &settings::Parsed) -> (u8, String, String) {
+    let repo = humanify_ag_dev::paths::repo_root();
+    let bands = repo
+        .join(humanify_ag_dev::paths::LIBRARY_DIR)
+        .join("bands.json")
+        .exists();
+    let force = parsed.settings.flag_on("run.force_mixed");
+    let results = repo.join(humanify_ag_dev::paths::LIBRARY_RESULTS);
+    match humanify_ag_dev::library::leaderboard::leaderboard(
+        &results,
+        bands,
+        &parsed.positionals,
+        force,
+    ) {
+        Ok(text) => (0, text, String::new()),
+        Err(e) => (2, String::new(), format!("{e}\n")),
+    }
+}
+
+fn library_determinism(parsed: &settings::Parsed) -> (u8, String, String) {
+    use humanify_ag_dev::library::{corpus::Corpus, determinism::determinism};
+    let [a, b] = parsed.positionals.as_slice() else {
+        return (
+            2,
+            String::new(),
+            "usage: humanify-ag-dev library determinism <a> <b> [--corpus NAME]\n".into(),
+        );
+    };
+    let repo = humanify_ag_dev::paths::repo_root();
+    let s = &parsed.settings;
+    let corpus_name = s.text("libscore.corpus").unwrap_or_else(|| "dev".into());
+    let corpus = match Corpus::open(&repo, &corpus_name, s.text("libscore.data_root").as_deref()) {
+        Ok(c) => c,
+        Err(e) => return (2, String::new(), format!("{e}\n")),
+    };
+    let results = repo.join(humanify_ag_dev::paths::LIBRARY_RESULTS);
+    match determinism(&corpus, &results, a, b) {
+        Ok((line, bands)) => {
+            let path = repo
+                .join(humanify_ag_dev::paths::LIBRARY_DIR)
+                .join("bands.json");
+            match std::fs::write(&path, bands) {
+                Ok(()) => (0, line, String::new()),
+                Err(e) => (1, line, format!("{}: {e}\n", path.display())),
+            }
+        }
+        Err((msg, code)) => (code, format!("{msg}\n"), String::new()),
+    }
+}
+
+fn vendor_precision(parsed: &settings::Parsed) -> (u8, String, String) {
+    use humanify_ag_dev::library::{families::Families, vendor_precision as vp};
+    let usage = "usage: humanify-ag-dev eval vendor-precision check <diag.json> --truth bun-dev:<id>|cc216|none  |  aggregate <label-dir>\n";
+    match parsed.positionals.as_slice() {
+        [mode, dir] if mode == "aggregate" => match vp::aggregate(std::path::Path::new(dir)) {
+            Ok(text) => (0, text, String::new()),
+            Err(e) => (1, String::new(), format!("{e}\n")),
+        },
+        [mode, diag] if mode == "check" => {
+            let Some(spec) = parsed.settings.text("libscore.truth") else {
+                return (2, String::new(), usage.into());
+            };
+            let run = || -> Result<String, String> {
+                let text = std::fs::read_to_string(diag).map_err(|e| format!("{diag}: {e}"))?;
+                let d: serde_json::Value =
+                    serde_json::from_str(&text).map_err(|e| format!("{diag}: {e}"))?;
+                let repo = humanify_ag_dev::paths::repo_root();
+                let truth = if let Some(id) = spec.strip_prefix("bun-dev:") {
+                    Some(vp::truth_bundev(&repo, id)?)
+                } else if spec == "cc216" {
+                    Some(vp::truth_cc(std::path::Path::new(vp::CC_TRUTH))?)
+                } else {
+                    None
+                };
+                let fam = truth.as_ref().map(|_| Families::shipped());
+                Ok(vp::card_text(&vp::check(&d, truth.as_ref(), fam.as_ref())?))
+            };
+            match run() {
+                Ok(text) => (0, text, String::new()),
+                Err(e) => (1, String::new(), format!("{e}\n")),
+            }
+        }
+        _ => (2, String::new(), usage.into()),
+    }
+}
+
+fn cjs_placement(positionals: &[String]) -> (u8, String, String) {
+    use std::path::Path;
+    let (census, runs, out) = match positionals {
+        [c, r] => (c, r, None),
+        [c, r, o] => (c, r, Some(o)),
+        _ => {
+            return (2, String::new(), "usage: humanify-ag-dev eval cjs-placement <census.jsonl> <runs-dir> [<out.json>]\n".into());
+        }
+    };
+    match humanify_ag_dev::library::cjs_placement::score(Path::new(census), Path::new(runs)) {
+        Ok((text, json)) => match out.map(|o| std::fs::write(o, json)) {
+            Some(Err(e)) => (1, text, format!("{e}\n")),
+            _ => (0, text, String::new()),
+        },
+        Err(e) => (1, String::new(), format!("{e}\n")),
+    }
+}
+
+fn library_proof(parsed: &settings::Parsed) -> (u8, String, String) {
+    let Some(out) = parsed.settings.text("libscore.out") else {
+        return (
+            2,
+            String::new(),
+            "usage: humanify-ag-dev library proof <label>... --out SCRATCH\n".into(),
+        );
+    };
+    let repo = humanify_ag_dev::paths::repo_root();
+    let (mut ok, mut text) = (true, String::new());
+    for label in &parsed.positionals {
+        match humanify_ag_dev::library::score::proof(&repo, label, std::path::Path::new(&out)) {
+            Ok((same, line)) => {
+                ok &= same;
+                text.push_str(&line);
+            }
+            Err(e) => {
+                ok = false;
+                text.push_str(&format!("{label}: FAILED: {e}\n"));
+            }
+        }
+    }
+    (if ok { 0 } else { 1 }, text, String::new())
+}
+
+fn library_corpus(parsed: &settings::Parsed) -> (u8, String, String) {
+    use humanify_ag_dev::library::corpus::{Corpus, verify};
+    let [mode, name] = parsed.positionals.as_slice() else {
+        return (
+            2,
+            String::new(),
+            "usage: humanify-ag-dev library corpus verify <corpus> [--data-root DIR]\n".into(),
+        );
+    };
+    if mode != "verify" {
+        return (
+            2,
+            String::new(),
+            format!(
+                "library corpus {mode}: not ported (only `verify`; freezing a NEW corpus still runs corpus.py / kind_corpus.py)\n"
+            ),
+        );
+    }
+    let repo = humanify_ag_dev::paths::repo_root();
+    match Corpus::open(
+        &repo,
+        name,
+        parsed.settings.text("libscore.data_root").as_deref(),
+    ) {
+        Ok(c) => {
+            let bad = verify(&c);
+            if bad.is_empty() {
+                (0, "corpus OK\n".into(), String::new())
+            } else {
+                (
+                    1,
+                    format!("{}\ncorpus BROKEN: {} file(s)\n", bad.join("\n"), bad.len()),
+                    String::new(),
+                )
+            }
+        }
+        Err(e) => (2, String::new(), format!("{e}\n")),
+    }
+}
+
+fn refrozen_line(r: &humanify_ag_dev::library::layers::Refrozen) -> String {
+    format!(
+        "{:12} {}/{} entries reproduce the committed sha; manifest {}{}\n",
+        r.kind.prefix(),
+        r.same,
+        r.entries,
+        if r.manifest_same {
+            "identical"
+        } else {
+            "DIFFERS"
+        },
+        if r.differ.is_empty() {
+            String::new()
+        } else {
+            format!("; differ: {}", r.differ.join(" "))
+        }
+    )
+}
+
+fn library_layers(parsed: &settings::Parsed) -> (u8, String, String) {
+    use humanify_ag_dev::committed::library::LayerKind;
+    use humanify_ag_dev::library::{corpus::Corpus, layers};
+    let usage = "usage: humanify-ag-dev library layers <corpus> --out DIR [--data-root DIR]\n";
+    let ([name], Some(out)) = (
+        parsed.positionals.as_slice(),
+        parsed.settings.text("libscore.out"),
+    ) else {
+        return (2, String::new(), usage.into());
+    };
+    let repo = humanify_ag_dev::paths::repo_root();
+    let corpus = match Corpus::open(
+        &repo,
+        name,
+        parsed.settings.text("libscore.data_root").as_deref(),
+    ) {
+        Ok(c) => c,
+        Err(e) => return (2, String::new(), format!("{e}\n")),
+    };
+    let mut text = String::new();
+    let mut ok = true;
+    for layer in &layers::ORIGIN_LAYERS {
+        let r = layers::refreeze_origin_layer(
+            &corpus,
+            layer,
+            std::path::Path::new(&out),
+            std::path::Path::new(layers::REGISTRY),
+            std::path::Path::new(layers::BUNDLED),
+        );
+        match r {
+            Ok(r) => {
+                ok &= r.differ.is_empty() && r.manifest_same;
+                text.push_str(&refrozen_line(&r));
+            }
+            Err(e) => {
+                ok = false;
+                text.push_str(&format!("{:12} FAILED: {e}\n", layer.kind.prefix()));
+            }
+        }
+    }
+    for kind in [
+        LayerKind::Chained,
+        LayerKind::Chained9,
+        LayerKind::Chained11,
+    ] {
+        match layers::refreeze_chained_layer(
+            &corpus,
+            kind,
+            std::path::Path::new(&out),
+            std::path::Path::new(humanify_ag_dev::library::chained::NPM_REGISTRY),
+        ) {
+            Ok(r) => {
+                ok &= r.differ.is_empty() && r.manifest_same;
+                text.push_str(&refrozen_line(&r));
+            }
+            Err(e) => {
+                ok = false;
+                text.push_str(&format!("{:12} FAILED: {e}\n", kind.prefix()));
+            }
+        }
+    }
+    for (layer, builder) in layers::unported() {
+        text.push_str(&format!(
+            "{layer:12} not re-frozen (builder not ported: {builder})\n"
+        ));
+    }
+    (if ok { 0 } else { 1 }, text, String::new())
 }
 
 fn build_bin(positionals: &[String]) -> (u8, String, String) {

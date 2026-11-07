@@ -1,0 +1,17 @@
+band: 0 (measured: two runs byte-identical, bands.json) — every delta is real
+
+label               commit        index         index MB  rule        app bar  P bar           wall s  peak MB
+cc-exp150-main      2a24ae54e70c  c4d2bd6cfd31      7109  structural  PASS     1/1 sets pass        8     1508
+cc-exp153-ix4-base  79ae36447d9c  53a1d8746fc8     30757  structural  PASS     1/1 sets pass        8     1507
+
+precision / recall / F0.5 (the headline: beta 0.5, precision over recall) / F1 over bytes, the ORIGIN-AWARE truth (a claim naming the shipping package OR, for a
+vendored / pre-bundled copy, its origin is right). precision = named / (named + wrong family + app
+claimed); bar: precision >= 99.8% and app claimed = 0. [shipper] = the old shipper-only truth; as origin =
+named bytes right only through the origin; deltas against the first label
+
+Claude Code 2.1.216 (sample est.)
+  label               precision (delta)  recall  (delta)    F0.5  (delta)      F1  (delta)  [shipper P/R]  as origin  app claimed  wrong fam KB  not indexed  version  too small  hash differs  guard  other pkg  no discovery
+  cc-exp150-main         100.0% ( +0.0)   81.9% ( +0.0)   95.8% ( +0.0)   90.1% ( +0.0)  100.0%/ 81.9%       0.0%            0           0.0         4.7%     7.6%       0.3%          4.6%    0.9%       0.0%          0.0%
+                      statement scope 100.0%/ 81.9%/F0.5  95.8%  |  factory scope   0.0%/  0.0%/F0.5   0.0%  (  0.0% of library bytes)
+  cc-exp153-ix4-base     100.0% ( +0.0)   81.9% ( +0.0)   95.8% ( +0.0)   90.1% ( +0.0)  100.0%/ 81.9%       0.0%            0           0.0         4.7%     7.6%       0.3%          4.6%    0.9%       0.0%          0.0%
+                      statement scope 100.0%/ 81.9%/F0.5  95.8%  |  factory scope   0.0%/  0.0%/F0.5   0.0%  (  0.0% of library bytes)
