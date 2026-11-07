@@ -281,6 +281,28 @@ pub const STATEMENT: CanonicalForm = CanonicalForm {
     parent_names: ParentNames::Oxc,
 };
 
+/// The eval scorer's statement identity (`humanify-ag-dev`'s `eval`
+/// scorer: every `novel` / `realLn` / `noise` KPI keys on it): the
+/// statement walk WITHOUT the wrapper-spelling rule. The scorer reports a
+/// packaging tool's arrow -> function re-serialization apart, as the
+/// advisory `spellingIdenticalLines` (pairs equal under [`STATEMENT`] but
+/// not under this form), so this form must keep the two spellings apart.
+/// Version = the eval scorecards' `scorerVersion`:
+///
+/// 1 = the TS harness's Babel statement hash
+///     (`experiments/lib/js/statement-hash.ts`: Babel node names in
+///     `VISITOR_KEYS` order), which every card scored before the Rust
+///     scorer carries. 2 = this walk over oxc's ESTree (harness lane L2a,
+///     2026-11-07). Never the same bytes, so cards of the two versions are
+///     never compared (the leaderboard's identity guard refuses it).
+pub const KPI_STATEMENT: CanonicalForm = CanonicalForm {
+    name: "kpi-statement",
+    version: 2,
+    stamped_in: Some("eval scorecard scorerVersion"),
+    wrapper_spelling: false,
+    ..STATEMENT
+};
+
 // ---------------------------------------------------------------------------
 // The statement-align walk (close tier, in-run)
 // ---------------------------------------------------------------------------
@@ -333,7 +355,7 @@ pub const ALIGN_CONTENT: CanonicalForm = CanonicalForm {
 // ---------------------------------------------------------------------------
 
 /// Every form, in this file's order.
-pub const FORMS: [&CanonicalForm; 11] = [
+pub const FORMS: [&CanonicalForm; 12] = [
     &MATCH_KEY,
     &MATCH_KEY_PRIVATES_BLINDED,
     &LIBRARY_UNITS,
@@ -341,6 +363,7 @@ pub const FORMS: [&CanonicalForm; 11] = [
     &IDENTITY_KEY,
     &RENAME_SIGNATURE,
     &STATEMENT,
+    &KPI_STATEMENT,
     &ALIGN_UNIT,
     &ALIGN_GROUP,
     &ALIGN_EXACT,
