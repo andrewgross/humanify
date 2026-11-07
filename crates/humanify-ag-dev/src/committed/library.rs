@@ -1,8 +1,8 @@
 //! The exp096 library scorer's committed files: each corpus's frozen
 //! manifest and its truth-layer manifests (each layer's per-entry sha),
 //! and `bands.json`. One typed loader per file KIND; the corpus table
-//! replaces lib096's `CORPORA` dict (its per-host data roots included,
-//! overridable by `libscore.data_root`).
+//! replaces lib096's `CORPORA` dict; its per-host data roots moved into
+//! `data-roots.json`, overridable by `libscore.data_root`.
 //!
 //! The layer manifests' scorer-specific blocks (`rules`, `tables`,
 //! `npmVerdicts`, ...) are kept as opaque JSON here: their KEYS are
@@ -18,55 +18,62 @@ use serde_json::Value;
 use super::{Loaded, load_json};
 use crate::paths::LIBRARY_DIR;
 
-/// One corpus: its name, the suffix of its files, and its data root.
+/// One corpus: its name and the suffix of its files. Where its data
+/// lives on this host is per-host data ([`data_roots`]), not code.
 #[derive(Clone, Copy, Debug)]
 pub struct Corpus {
     pub name: &'static str,
     /// The manifests' file-name suffix: `corpus<suffix>.json`.
     pub suffix: &'static str,
-    /// Where the frozen bundles, truth and raw reports live (per host,
-    /// never committed).
-    pub data_root: &'static str,
 }
 
 /// The sixteen corpora (lib096 `CORPORA`).
 pub const CORPORA: &[Corpus] = &[
-    corpus("dev", "", "/work/exp096-data"),
-    corpus("test", "-test", "/work/exp100-test-data/frozen"),
-    corpus("test2", "-test2", "/work/exp116-test2-data/frozen"),
-    corpus("bundlers", "-bundlers", "/work/exp105-data/frozen"),
-    corpus("apps", "-apps", "/work/exp107-data/frozen"),
-    corpus("pop", "-pop", "/work/exp112-data/pop/frozen"),
-    corpus("remin", "-remin", "/work/exp126-data/remin/frozen"),
-    corpus("remin2", "-remin2", "/work/exp140-data/remin2/frozen"),
-    corpus("remin3", "-remin3", "/work/exp141-data/remin3/frozen"),
-    corpus("remin4", "-remin4", "/work/exp146-data/remin4/frozen"),
-    corpus("bun-dev", "-bun-dev", "/work/exp150-data/bun-dev/frozen"),
-    corpus("bun-held", "-bun-held", "/work/exp150-data/bun-held/frozen"),
-    corpus(
-        "kind-esbuild",
-        "-kind-esbuild",
-        "/work/exp181-data/kind-esbuild/frozen",
-    ),
-    corpus(
-        "kind-webpack",
-        "-kind-webpack",
-        "/work/exp181-data/kind-webpack/frozen",
-    ),
-    corpus(
-        "kind-rollup",
-        "-kind-rollup",
-        "/work/exp181-data/kind-rollup/frozen",
-    ),
-    corpus("cc", "-cc", "/work/cc-library-truth/frozen"),
+    corpus("dev", ""),
+    corpus("test", "-test"),
+    corpus("test2", "-test2"),
+    corpus("bundlers", "-bundlers"),
+    corpus("apps", "-apps"),
+    corpus("pop", "-pop"),
+    corpus("remin", "-remin"),
+    corpus("remin2", "-remin2"),
+    corpus("remin3", "-remin3"),
+    corpus("remin4", "-remin4"),
+    corpus("bun-dev", "-bun-dev"),
+    corpus("bun-held", "-bun-held"),
+    corpus("kind-esbuild", "-kind-esbuild"),
+    corpus("kind-webpack", "-kind-webpack"),
+    corpus("kind-rollup", "-kind-rollup"),
+    corpus("cc", "-cc"),
 ];
 
-const fn corpus(name: &'static str, suffix: &'static str, data_root: &'static str) -> Corpus {
-    Corpus {
-        name,
-        suffix,
-        data_root,
+const fn corpus(name: &'static str, suffix: &'static str) -> Corpus {
+    Corpus { name, suffix }
+}
+
+/// `data-roots.json`: each corpus's data root on this host (frozen
+/// bundles, truth layers, raw reports), overridable by `libscore.data_root`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DataRoots {
+    pub about: String,
+    pub roots: BTreeMap<String, String>,
+}
+
+/// Load `data-roots.json`; every corpus must have a root.
+pub fn data_roots(repo: &Path) -> Result<Loaded<DataRoots>, String> {
+    let loaded: Loaded<DataRoots> = load_json(&repo.join(LIBRARY_DIR).join("data-roots.json"))?;
+    if let Some(c) = CORPORA
+        .iter()
+        .find(|c| !loaded.value.roots.contains_key(c.name))
+    {
+        return Err(format!(
+            "{}: no data root for corpus {}",
+            loaded.path.display(),
+            c.name
+        ));
     }
+    Ok(loaded)
 }
 
 /// The corpus named `name`.
