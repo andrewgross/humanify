@@ -1,0 +1,3 @@
+# `cargo dev <verb> ...` — the measurement harness (docs/dev-harness.md §2.1).
+[alias]
+dev = "run --profile dev-harness --locked -p humanify-ag-dev --"

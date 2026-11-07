@@ -1,0 +1,21 @@
+[package]
+name = "humanify-ag-testkit"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Test support only: the ONE stub LLM server and the seeded-shuffled fake
+# name provider (docs/dev-harness.md §6). Product crates take it as a
+# DEV-dependency. It depends on humanify-ag-model alone — never on core —
+# so a core dev-dependency on it cannot give two copies of core's types.
+
+[dependencies]
+humanify-ag-model = { path = "../humanify-ag-model" }
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true, features = ["rt", "time", "sync", "net", "io-util"] }
+
+[lints]
+workspace = true

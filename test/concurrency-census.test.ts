@@ -180,6 +180,25 @@ describe("concurrency census", () => {
     assert.match(out, /atomic-relaxed must use pattern "stats-counter"/);
   });
 
+  it("allows the test-support pattern only in the testkit crate", () => {
+    const kit = "crates/humanify-ag-testkit/src/lib.rs";
+    const entry = (file: string): Entry => ({
+      file,
+      scope: "Pool::launch",
+      construct: "tokio-spawn",
+      pattern: "test-support",
+      reason: "the stub server's connections"
+    });
+    const green = census({ [kit]: SPAWNING }, [entry(kit)]);
+    assert.strictEqual(green.status, 0, `expected GREEN, got:\n${green.out}`);
+    const red = census({ [LIB]: SPAWNING }, [entry(LIB)]);
+    assert.strictEqual(red.status, 1, `expected RED, got:\n${red.out}`);
+    assert.match(
+      red.out,
+      /test-support is only for crates\/humanify-ag-testkit/
+    );
+  });
+
   it("--files checks only the named files", () => {
     const other = "crates/demo/src/other.rs";
     const { status, out } = census(

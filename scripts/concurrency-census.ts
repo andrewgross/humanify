@@ -63,8 +63,12 @@ const PATTERNS: Readonly<Record<string, string>> = {
   subprocess: "subprocesses",
   "short-lock": "shared-state",
   "stats-counter": "shared-state",
-  observer: "observers"
+  observer: "observers",
+  "test-support": "test-support"
 };
+
+/** The one crate whose sites may use the test-support pattern. */
+const TEST_SUPPORT_CRATE = "crates/humanify-ag-testkit/";
 
 interface Construct {
   id: string;
@@ -582,6 +586,29 @@ function unexplainedAllows(f: Scanned): string[] {
   return bad;
 }
 
+/** What is wrong with an entry's pattern: unknown, or not allowed for
+ * its file or construct. */
+function patternProblems(e: Partial<Entry>, where: string): string[] {
+  const problems: string[] = [];
+  if (e.pattern && !(e.pattern in PATTERNS))
+    problems.push(
+      `  ${where}: unknown pattern "${e.pattern}" — one of: ${Object.keys(PATTERNS).join(", ")} (${DOC}#the-patterns)`
+    );
+  if (
+    e.pattern === "test-support" &&
+    !(e.file ?? "").startsWith(TEST_SUPPORT_CRATE)
+  )
+    problems.push(
+      `  ${where}: test-support is only for ${TEST_SUPPORT_CRATE} (a test-only crate, never linked into a product binary)`
+    );
+  const required = e.construct ? REQUIRED_PATTERN[e.construct] : undefined;
+  if (required && e.pattern !== required)
+    problems.push(
+      `  ${where}: ${e.construct} must use pattern "${required}" — ${CONSTRUCTS.find((c) => c.id === e.construct)?.rule}`
+    );
+  return problems;
+}
+
 function entryProblems(e: Partial<Entry>, i: number): string[] {
   const where = `entry ${i} (${e.file ?? "?"} ${e.scope ?? "?"} ${e.construct ?? "?"})`;
   const problems: string[] = [];
@@ -595,17 +622,9 @@ function entryProblems(e: Partial<Entry>, i: number): string[] {
     if (typeof e[k] !== "string" || (e[k] as string).trim() === "")
       problems.push(`  ${where}: missing "${k}"`);
   }
-  if (e.pattern && !(e.pattern in PATTERNS))
-    problems.push(
-      `  ${where}: unknown pattern "${e.pattern}" — one of: ${Object.keys(PATTERNS).join(", ")} (${DOC}#the-patterns)`
-    );
   if (e.construct && !CONSTRUCTS.some((c) => c.id === e.construct))
     problems.push(`  ${where}: unknown construct "${e.construct}"`);
-  const required = e.construct ? REQUIRED_PATTERN[e.construct] : undefined;
-  if (required && e.pattern !== required)
-    problems.push(
-      `  ${where}: ${e.construct} must use pattern "${required}" — ${CONSTRUCTS.find((c) => c.id === e.construct)?.rule}`
-    );
+  problems.push(...patternProblems(e, where));
   return problems;
 }
 

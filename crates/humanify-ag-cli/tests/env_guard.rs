@@ -3,7 +3,8 @@
 //! non-test sources and fails:
 //!
 //! 1. a `std::env` read (or `dotenvy`) outside `humanify-ag-cli/src/env.rs`,
-//!    the one process-input reader;
+//!    the one process-input reader (and the harness's twin,
+//!    `humanify-ag-dev/src/env.rs`);
 //! 2. a call into that reader (`env::get`, `env::user_args`) outside the
 //!    parse point — `config.rs` (the API key) and `main.rs` (argv);
 //! 3. an argument parser (`clap`) outside the parse point — `surface.rs`
@@ -58,6 +59,18 @@ const REGISTRY_FLAGS: (&str, &str) = (
     "the shared settings registry's flag builder: turns a registry (the pipeline's or the \
      harness's) into clap arguments; each binary's parse point calls it",
 );
+const DEV_ENV: (&str, &str) = (
+    "humanify-ag-dev/src/env.rs",
+    "the measurement harness's one process-input reader (docs/dev-harness.md §2.1)",
+);
+const DEV_MAIN: (&str, &str) = (
+    "humanify-ag-dev/src/main.rs",
+    "the harness binary's entry: argv and the host environment in, once",
+);
+const DEV_SETTINGS: (&str, &str) = (
+    "humanify-ag-dev/src/settings/mod.rs",
+    "the harness's one parse point: its clap command, built from the HARNESS registry",
+);
 const INDEX_CLI: (&str, &str) = (
     "humanify-ag-index/src/cli.rs",
     "the library-index builder's `index` subcommand: its own clap declaration (exp186: \
@@ -81,7 +94,7 @@ fn rules() -> Vec<Rule> {
                         || l.contains("env::var(")
                         || l.contains("dotenvy"))
             },
-            owners: &[ENV_MODULE],
+            owners: &[ENV_MODULE, DEV_ENV],
         },
         Rule {
             name: "process-input reader called outside the parse point",
@@ -90,12 +103,19 @@ fn rules() -> Vec<Rule> {
                     || l.contains("env::user_args(")
                     || l.contains("crate::env::")
             },
-            owners: &[ENV_MODULE, CONFIG, MAIN],
+            owners: &[ENV_MODULE, CONFIG, MAIN, DEV_ENV, DEV_MAIN],
         },
         Rule {
             name: "argument parser outside the parse point",
             hit: |l| l.contains("clap::") || l.contains("use clap"),
-            owners: &[CONFIG, MAIN, SURFACE, REGISTRY_FLAGS, INDEX_CLI],
+            owners: &[
+                CONFIG,
+                MAIN,
+                SURFACE,
+                REGISTRY_FLAGS,
+                INDEX_CLI,
+                DEV_SETTINGS,
+            ],
         },
         Rule {
             name: "config-file reader outside the config owner",
