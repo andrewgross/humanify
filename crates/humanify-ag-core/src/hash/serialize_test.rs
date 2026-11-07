@@ -436,3 +436,42 @@ fn literal_class_keeps_the_template_tail_as_its_own_part() {
         None
     );
 }
+
+#[test]
+fn canonical_tokens_cut_the_same_stream_at_token_boundaries() {
+    // The token view (the eval's vendor scorer compares token by token and
+    // shingles content tokens) is the SAME walk: its tokens concatenate to
+    // the canonical stream, and its hash is the canonical hash.
+    use crate::hash::serialize::canonical_tokens;
+    let code =
+        "var t = `a${x}b`; function f(e) { lbl: for (;;) { break lbl; } return e.k + 1 + \"s\"; }";
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, code);
+    let tables = SymbolTables::build(ingest.semantic());
+    let json = program_estree_json(ingest.program);
+    let whole = canonical_serialize(&json, &tables, &IDENTITY_KEY);
+    let (out, tokens) = canonical_tokens(&json, &tables, &IDENTITY_KEY);
+    assert_eq!(out.hash, whole.hash);
+    assert_eq!(tokens.concat(), whole.parts);
+    for t in [
+        "VariableDeclaration{",
+        "I=k",
+        "$0",
+        "L0",
+        "N=1",
+        "S=\"s\"",
+        "Q=\"a\"",
+        ",tail=false",
+        "kind:",
+        "\"var\"",
+        ";",
+        "}",
+        "[",
+        ",",
+    ] {
+        assert!(
+            tokens.iter().any(|x| x == t),
+            "missing token {t}: {tokens:?}"
+        );
+    }
+}

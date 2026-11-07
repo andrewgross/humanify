@@ -8,7 +8,7 @@
 
 use std::process::ExitCode;
 
-use humanify_ag_dev::{bin_build, env, settings};
+use humanify_ag_dev::{bin_build, env, eval, settings};
 
 /// One verb.
 struct Verb {
@@ -39,6 +39,9 @@ const FORCE: &[&str] = &["run.force_mixed"];
 const INDEX_SECTION: &str = "index";
 const INDEX_SETTINGS: &[&str] = &[INDEX_SECTION];
 const NONE: &[&str] = &[];
+const SCORER: &[&str] = &["scorer"];
+const RESULTS: &[&str] = &["scorer.results"];
+const FORCE_RESULTS: &[&str] = &["run.force_mixed", "scorer.results"];
 
 const VERBS: &[Verb] = &[
     Verb {
@@ -61,47 +64,47 @@ const VERBS: &[Verb] = &[
     },
     Verb {
         words: &["eval", "rescore"],
-        usage: "eval rescore <label> --work <dir>",
-        proves: "what the current scorer reads off a label's recorded trees",
+        usage: "eval rescore <label> --cards <dir> --work <dir> [--results <dir>]",
+        proves: "what the current scorer (v2) reads off a label's recorded trees, every partition checked, old -> new per KPI",
         cannot_prove: "anything about the pipeline: no binary runs",
-        lane: Some("L2a"),
-        today: "npx tsx experiments/170-app-vendor-split/rescore.ts",
-        settings: NONE,
+        lane: None,
+        today: "",
+        settings: SCORER,
     },
     Verb {
         words: &["eval", "summarize"],
-        usage: "eval summarize <label>",
+        usage: "eval summarize <label> [--results <dir>]",
         proves: "nothing new — a re-render of recorded cards and verdicts",
         cannot_prove: "validity of cards recorded without run-status (UNKNOWN, not clean)",
-        lane: Some("L2a"),
-        today: "npm run eval -- summarize",
-        settings: NONE,
+        lane: None,
+        today: "",
+        settings: RESULTS,
     },
     Verb {
         words: &["eval", "leaderboard"],
-        usage: "eval leaderboard <label> [label...] [--force-mixed]",
-        proves: "relative KPI movement between labels whose identities the guard accepts",
+        usage: "eval leaderboard <label> [label...] [--force-mixed] [--results <dir>]",
+        proves: "relative KPI movement between labels whose identities the guard accepts (base mode, naming mode, index, scorer version, model, pair inputs)",
         cannot_prove: "that a sub-noise-floor delta is real; only novel/realLn have proven draw-invariance",
-        lane: Some("L2a"),
-        today: "npm run eval -- leaderboard",
-        settings: FORCE,
+        lane: None,
+        today: "",
+        settings: FORCE_RESULTS,
     },
     Verb {
         words: &["eval", "bands"],
-        usage: "eval bands <label> <label> [label...]",
-        proves: "how much two runs of IDENTICAL code disagree per KPI — the floor a delta must clear",
-        cannot_prove: "anything from labels at different commits — that measures a change, not a floor (refused)",
-        lane: Some("L2a"),
-        today: "npm run eval -- bands",
-        settings: NONE,
+        usage: "eval bands <label> <label> [label...] [--results <dir>]",
+        proves: "how much two runs of IDENTICAL code disagree per KPI — the floor a delta must clear (written per scorer version and naming mode)",
+        cannot_prove: "anything from labels at different commits, modes or scorer versions — that measures a change, not a floor (refused)",
+        lane: None,
+        today: "",
+        settings: RESULTS,
     },
     Verb {
         words: &["eval", "diff"],
-        usage: "eval diff <priorTree> <freshTree>",
+        usage: "eval diff <priorTree> <freshTree> [label]",
         proves: "what the on-disk diff between THESE two trees is made of, git-capped",
         cannot_prove: "which mechanism caused a line",
-        lane: Some("L2a"),
-        today: "npm run eval -- diff",
+        lane: None,
+        today: "",
         settings: NONE,
     },
     Verb {
@@ -398,6 +401,11 @@ fn dispatch(args: &[String]) -> (u8, String, String) {
 fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
     match verb.words {
         ["build-bin"] => build_bin(&parsed.positionals),
+        ["eval", "rescore"] => eval::verbs::rescore(parsed),
+        ["eval", "summarize"] => eval::verbs::summarize(parsed),
+        ["eval", "leaderboard"] => eval::verbs::leaderboard(parsed),
+        ["eval", "bands"] => eval::verbs::bands(parsed),
+        ["eval", "diff"] => eval::verbs::diff(parsed),
         _ => unreachable!("every implemented verb has a runner"),
     }
 }

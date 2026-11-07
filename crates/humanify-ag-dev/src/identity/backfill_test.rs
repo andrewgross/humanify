@@ -29,8 +29,8 @@ fn every_committed_eval_label_backfills() {
                 id.corpus.entry
             );
             assert!(
-                id.scorer.version.known().is_none(),
-                "legacy: no scorer version"
+                id.scorer.version.known().is_some(),
+                "a card's scorer version: its record, else 1"
             );
         }
         cards += ids.len();
@@ -98,9 +98,15 @@ fn the_frozen_names_references_backfill_comparably() {
             .is_some()
     );
     assert_eq!(label_cards(&r1), Ok(()), "a label's cards agree");
-    // Legacy cards record no scorer version, so even same-commit repeats
-    // are refused for the leaderboard until re-scored (or forced).
-    let m = comparable(Purpose::Leaderboard, &r1[0], &r2[0]).unwrap_err();
+    // Legacy cards record no scorer version: they read as scorer 1 (the TS
+    // scorer, lane L2a's decision), so same-commit repeats compare...
+    assert_eq!(r1[0].scorer.version.known().map(String::as_str), Some("1"));
+    assert_eq!(comparable(Purpose::Leaderboard, &r1[0], &r2[0]), Ok(()));
+    // ...and a card the Rust scorer wrote (`scorerVersion: 2`) is refused
+    // against them, by that field alone.
+    let mut v2 = r2[0].clone();
+    v2.scorer.version = crate::identity::F::Known("2".into());
+    let m = comparable(Purpose::Leaderboard, &r1[0], &v2).unwrap_err();
     let fields: Vec<&str> = m.iter().map(|x| x.field.as_str()).collect();
     assert_eq!(fields, ["scorer.version"]);
     // Off-mode references against names-mode ones: the naming mode and

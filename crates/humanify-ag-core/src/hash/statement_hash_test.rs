@@ -347,3 +347,38 @@ mod wrapper_spelling {
 fn _json_used() -> serde_json::Value {
     json!({})
 }
+
+#[test]
+fn the_kpi_form_keeps_the_wrapper_spelling_apart_and_statement_unifies_it() {
+    // The eval scorer's statement identity (`KPI_STATEMENT`) is the
+    // statement walk WITHOUT the wrapper-spelling rule: a packaging tool's
+    // arrow -> function re-serialization stays a different statement (its
+    // mass is reported apart, as `spellingIdenticalLines`), while the
+    // split's `STATEMENT` form unifies the two spellings.
+    use crate::hash::forms::{KPI_STATEMENT, STATEMENT};
+    use crate::hash::statement_hash::statement_hash_in;
+    let arrow = wrapper_statements(&parse_to_estree(
+        "(function(){ var m = (0, ns.def)((a, b) => { a.x = b; }); })()",
+    ));
+    let func = wrapper_statements(&parse_to_estree(
+        "(function(){ var m = (0, ns.def)(function (a, b) { a.x = b; }); })()",
+    ));
+    assert_eq!(
+        statement_hash_in(&STATEMENT, &arrow[0]),
+        statement_hash_in(&STATEMENT, &func[0])
+    );
+    assert_eq!(
+        statement_hash(&arrow[0]),
+        statement_hash_in(&STATEMENT, &arrow[0])
+    );
+    assert_ne!(
+        statement_hash_in(&KPI_STATEMENT, &arrow[0]),
+        statement_hash_in(&KPI_STATEMENT, &func[0])
+    );
+    // Only the spelling rule differs: a function-spelled statement hashes
+    // the same under both forms.
+    assert_eq!(
+        statement_hash_in(&KPI_STATEMENT, &func[0]),
+        statement_hash_in(&STATEMENT, &func[0])
+    );
+}

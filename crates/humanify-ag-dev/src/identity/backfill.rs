@@ -142,6 +142,15 @@ struct LibraryBlock {
 #[derive(Deserialize)]
 struct CardPair {
     pair: String,
+    /// The scorer version the card records (the Rust scorer writes it;
+    /// a TS card has none: version 1).
+    #[serde(default, rename = "scorerVersion")]
+    scorer_version: Option<u64>,
+}
+
+/// A JSON file's fields, or None when it is absent or not that shape.
+fn read_json_lenient<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {
+    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Option<T>, String> {
@@ -341,18 +350,19 @@ pub fn eval_label(dir: &Path) -> Result<Vec<Identity>, String> {
     let mut out = Vec::new();
     for v in versions {
         let manifest: Option<Manifest> = read_json(&dir.join(format!("{v}-run.json")))?;
-        let pair = match &manifest {
-            Some(m) => m.pair.clone(),
-            None => {
-                let card: Option<CardPair> = read_json(&dir.join(format!("{v}.json")))?;
-                card.map(|c| c.pair).unwrap_or_else(|| v.clone())
-            }
+        let card: Option<CardPair> = read_json_lenient(&dir.join(format!("{v}.json")));
+        let pair = match (&manifest, &card) {
+            (Some(m), _) => m.pair.clone(),
+            (None, Some(c)) => c.pair.clone(),
+            (None, None) => v.clone(),
         };
+        let scorer = card.and_then(|c| c.scorer_version).unwrap_or(1);
         out.push(eval_card(
             &pipeline,
             commit.as_deref(),
             manifest.as_ref(),
             pair,
+            scorer,
         ));
     }
     Ok(out)
@@ -363,6 +373,7 @@ fn eval_card(
     commit: Option<&str>,
     m: Option<&Manifest>,
     pair: String,
+    scorer_version: u64,
 ) -> Identity {
     let naming_mode = naming_mode_of(p, m);
     let base_mode = match (
@@ -411,9 +422,11 @@ fn eval_card(
             entry: pair,
             inputs: inputs_of(m),
         },
+        // A card records its scorer version since the Rust scorer (v2);
+        // one without the field is the TS scorer's: version 1.
         scorer: Scorer {
             name: "034-kpi".into(),
-            version: F::unknown("legacy cards record no scorer version"),
+            version: F::Known(scorer_version.to_string()),
         },
         boot_gate_model: F::from_option(p.boot_gate_model.clone().map(Some), "not recorded"),
         run_config_sha256: F::from_option(

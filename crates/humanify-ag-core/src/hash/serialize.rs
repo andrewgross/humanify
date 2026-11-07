@@ -123,7 +123,45 @@ pub fn canonical_serialize(
         "{} is not a setting of the canonical walk",
         form.name
     );
+    let (output, _) = walk(root, tables, form, false);
+    output
+}
+
+/// [`canonical_serialize`] with the stream cut at its TOKEN boundaries
+/// (node type + `{`, a field label `k:`, `;`, `}`, `[`, `,`, `]`, each
+/// scalar, identifier, slot, label, private name and literal; a template
+/// element's `,tail=` is its own token, as the TS serializer pushed it).
+/// The same walk: the tokens concatenate to `parts` and the hash is the
+/// canonical hash. For consumers that compare streams token by token or
+/// shingle them (the eval's vendor scorer).
+pub fn canonical_tokens(
+    root: &Value,
+    tables: &SymbolTables,
+    form: &CanonicalForm,
+) -> (CanonicalOutput, Vec<String>) {
+    let (output, bounds) = walk(root, tables, form, true);
+    let mut tokens = Vec::with_capacity(bounds.len());
+    let mut start = 0;
+    for end in bounds {
+        if end > start {
+            tokens.push(output.parts[start..end].to_string());
+        }
+        start = end;
+    }
+    if start < output.parts.len() {
+        tokens.push(output.parts[start..].to_string());
+    }
+    (output, tokens)
+}
+
+fn walk(
+    root: &Value,
+    tables: &SymbolTables,
+    form: &CanonicalForm,
+    record_tokens: bool,
+) -> (CanonicalOutput, Vec<usize>) {
     let mut state = State {
+        bounds: record_tokens.then(Vec::new),
         tables,
         slot_by_symbol: HashMap::new(),
         label_slots: HashMap::new(),
@@ -135,14 +173,20 @@ pub fn canonical_serialize(
         parts: String::with_capacity(4096),
     };
     serialize_value(root, None, "", &mut state);
-    CanonicalOutput {
-        hash: sha256_16(state.parts.as_bytes()),
-        mapping: state.mapping,
-        parts: state.parts,
-    }
+    let bounds = state.bounds.take().unwrap_or_default();
+    (
+        CanonicalOutput {
+            hash: sha256_16(state.parts.as_bytes()),
+            mapping: state.mapping,
+            parts: state.parts,
+        },
+        bounds,
+    )
 }
 
 struct State<'a> {
+    /// Token ends (byte offsets into `parts`) when the caller wants tokens.
+    bounds: Option<Vec<usize>>,
     tables: &'a SymbolTables,
     slot_by_symbol: HashMap<SymbolId, String>,
     label_slots: HashMap<String, String>,
@@ -152,6 +196,15 @@ struct State<'a> {
     blind_privates: bool,
     wrapper_spelling: bool,
     parts: String,
+}
+
+impl State<'_> {
+    /// End the current token (a no-op unless tokens are recorded).
+    fn cut(&mut self) {
+        if let Some(b) = self.bounds.as_mut() {
+            b.push(self.parts.len());
+        }
+    }
 }
 
 fn sha256_16(bytes: &[u8]) -> String {
@@ -183,14 +236,20 @@ fn serialize_value(value: &Value, parent: Option<&Value>, key: &str, state: &mut
         Value::String(s) => state.parts.push_str(&json_escape(s)),
         Value::Array(items) => {
             state.parts.push('[');
+            state.cut();
             for item in items {
                 serialize_value(item, parent, key, state);
                 state.parts.push(',');
+                state.cut();
             }
             state.parts.push(']');
         }
-        Value::Object(_) => serialize_node(value, parent, key, state),
+        Value::Object(_) => {
+            serialize_node(value, parent, key, state);
+            return;
+        }
     }
+    state.cut();
 }
 
 fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut State<'_>) {
@@ -215,12 +274,22 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
         let name = map.get("name").and_then(|v| v.as_str()).unwrap_or("");
         let token = private_name_token(name, state);
         state.parts.push_str(&token);
+        state.cut();
         return;
     }
 
-    // Literals: the form's classes.
-    if let Some(token) = literal_token(map, &node_type, state.keep_strings) {
-        state.parts.push_str(&token);
+    // Literals: the form's classes (a template element's `,tail=` is its
+    // own token; the stream concatenates the two).
+    if let Some(class) = literal_class(map, &node_type, state.keep_strings) {
+        match class {
+            LiteralClass::One(token) => state.parts.push_str(&token),
+            LiteralClass::Template { element, tail } => {
+                state.parts.push_str(&element);
+                state.cut();
+                state.parts.push_str(&format!(",tail={tail}"));
+            }
+        }
+        state.cut();
         return;
     }
 
@@ -247,6 +316,7 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
         state.parts.push_str(&node_type);
     }
     state.parts.push('{');
+    state.cut();
     // serde_json's Map is a BTreeMap: keys iterate alphabetically — a fixed
     // total order, never insertion order (02 §5).
     for (k, v) in map.iter() {
@@ -258,10 +328,13 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
         }
         state.parts.push_str(k);
         state.parts.push(':');
+        state.cut();
         serialize_value(v, Some(node), k, state);
         state.parts.push(';');
+        state.cut();
     }
     state.parts.push('}');
+    state.cut();
 }
 
 /// Which spelling of an object member a walk's parents carry — the ONE
@@ -400,21 +473,7 @@ fn serialize_identifier(
             }
         }
     }
-}
-
-/// The literal token for one literal node, or None when not a literal
-/// (structural-hash.ts:712-741): this walk's spelling of [`literal_class`],
-/// a template element as ONE part (the hash concatenates the parts, so
-/// the merge is byte-identical to the TS's two pushes).
-fn literal_token(
-    map: &serde_json::Map<String, Value>,
-    node_type: &str,
-    keep: bool,
-) -> Option<String> {
-    Some(match literal_class(map, node_type, keep)? {
-        LiteralClass::One(token) => token,
-        LiteralClass::Template { element, tail } => format!("{element},tail={tail}"),
-    })
+    state.cut();
 }
 
 /// A literal node's class token(s).
