@@ -518,6 +518,7 @@ dependencies = [
  "humanify-ag-cli",
  "humanify-ag-core",
  "humanify-ag-model",
+ "humanify-ag-testkit",
  "serde",
  "serde_json",
  "sha2",

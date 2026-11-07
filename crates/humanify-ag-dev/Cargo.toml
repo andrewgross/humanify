@@ -21,6 +21,9 @@ humanify-ag-cli = { path = "../humanify-ag-cli" }
 humanify-ag-core = { path = "../humanify-ag-core" }
 # JSON the way JavaScript writes it (the JS spelling of a card).
 humanify-ag-model = { path = "../humanify-ag-model" }
+# The ONE stub LLM (e2e, ask-trace, `stub-llm serve`) — the harness is
+# not a product binary, so it links the test support directly.
+humanify-ag-testkit = { path = "../humanify-ag-testkit" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
