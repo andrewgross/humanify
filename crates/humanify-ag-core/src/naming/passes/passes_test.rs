@@ -6,7 +6,7 @@
 //! natively, and the reconcile/permutation units keep their own module
 //! tests.
 
-use humanify_ag_model::llm::{BatchRenameResponse, LlmCall, LlmError, NameProvider, Renames};
+use humanify_ag_testkit::fake::{ShuffledFake, names, reply};
 use oxc_allocator::Allocator;
 
 use super::sweep::{DecidedNames, collect_sweep_targets, run_deferred_sweep, sweep_minted_names};
@@ -46,48 +46,33 @@ fn a_sweep_collision_gets_one_disclosed_reask() {
     // First ask: decline `f`, suggest the sibling's name for `Kq_` (the
     // collision). Re-ask: a fresh name — and the re-ask's prompt must
     // disclose the collision.
-    struct CollisionSweep {
-        asks: std::cell::Cell<usize>,
-    }
-    impl NameProvider for CollisionSweep {
-        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-            calls
-                .into_iter()
-                .map(|c| {
-                    let n = self.asks.get();
-                    self.asks.set(n + 1);
-                    if n > 0 {
-                        assert_eq!(c.request.identifiers, ["Kq_"], "only the rejected id re-asks");
-                        assert!(
-                            c.user_prompt.contains(
-                                "\"Kq_\" was suggested as \"used\" but that name is already used by another variable in the same scope"
-                            ),
-                            "the re-ask discloses the collision: {}",
-                            c.user_prompt
-                        );
-                        assert!(
-                            c.user_prompt.contains("DO NOT suggest these names: used"),
-                            "the re-ask blocklists the rejected name: {}",
-                            c.user_prompt
-                        );
-                    }
-                    let suggestion = if n == 0 { "used" } else { "usedRunner" };
-                    Ok(BatchRenameResponse {
-                        renames: Renames::from_entries(vec![(
-                            "Kq_".to_string(),
-                            Some(suggestion.to_string()),
-                        )]),
-                        finish_reason: None,
-                        usage: None,
-                    })
-                })
-                .collect()
+    let asks = std::rc::Rc::new(std::cell::Cell::new(0usize));
+    let counter = asks.clone();
+    let provider = ShuffledFake::answering(1, move |c| {
+        let n = counter.replace(counter.get() + 1);
+        if n > 0 {
+            assert_eq!(
+                c.request.identifiers,
+                ["Kq_"],
+                "only the rejected id re-asks"
+            );
+            assert!(
+                c.user_prompt.contains(
+                    "\"Kq_\" was suggested as \"used\" but that name is already used by another variable in the same scope"
+                ),
+                "the re-ask discloses the collision: {}",
+                c.user_prompt
+            );
+            assert!(
+                c.user_prompt.contains("DO NOT suggest these names: used"),
+                "the re-ask blocklists the rejected name: {}",
+                c.user_prompt
+            );
         }
-    }
+        let suggestion = if n == 0 { "used" } else { "usedRunner" };
+        reply([("Kq_", Some(suggestion.to_string()))])
+    });
 
-    let provider = CollisionSweep {
-        asks: std::cell::Cell::new(0),
-    };
     let mut state = RenameState::new(
         semantic,
         Anchor::Fresh,
@@ -111,7 +96,7 @@ fn a_sweep_collision_gets_one_disclosed_reask() {
             semantic,
         ),
     );
-    assert_eq!(provider.asks.get(), 2, "exactly one re-ask (it applied)");
+    assert_eq!(asks.get(), 2, "exactly one re-ask (it applied)");
     assert_eq!(r.reasked, 1, "the retry is recorded");
     assert_eq!(r.named, 1, "the re-asked suggestion applied");
     // 2026-09-30 provenance targeting: the never-asked descriptive `used`
@@ -154,30 +139,7 @@ fn a_stubborn_sweep_gives_up_after_the_default_two_reasks() {
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
     let params = humanify_ag_model::llm::CacheKeyParams::default();
-    struct Stubborn {
-        asks: std::cell::Cell<usize>,
-    }
-    impl NameProvider for Stubborn {
-        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-            self.asks.set(self.asks.get() + calls.len());
-            calls
-                .into_iter()
-                .map(|_| {
-                    Ok(BatchRenameResponse {
-                        renames: Renames::from_entries(vec![(
-                            "Kq_".to_string(),
-                            Some("used".to_string()),
-                        )]),
-                        finish_reason: None,
-                        usage: None,
-                    })
-                })
-                .collect()
-        }
-    }
-    let stubborn = Stubborn {
-        asks: std::cell::Cell::new(0),
-    };
+    let stubborn = ShuffledFake::answering(1, |_| reply([("Kq_", Some("used".to_string()))]));
     let mut state = RenameState::new(
         semantic,
         Anchor::Fresh,
@@ -202,7 +164,7 @@ fn a_stubborn_sweep_gives_up_after_the_default_two_reasks() {
         ),
     );
     assert_eq!(
-        stubborn.asks.get(),
+        stubborn.calls().len(),
         3,
         "the initial ask plus the two re-asks of the default budget"
     );
@@ -230,62 +192,46 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
     // DIFFERENT reaskable class, so the second re-ask's disclosure must
     // carry both reasons). Re-ask 2: the sibling's name again; the budget
     // is spent and the target gives up.
-    struct TwoCollisions {
-        asks: std::cell::Cell<usize>,
-    }
-    impl NameProvider for TwoCollisions {
-        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-            self.asks.set(self.asks.get() + calls.len());
-            calls
-                .into_iter()
-                .map(|c| {
-                    let n = self.asks.get();
-                    let suggestion = match n {
-                        1 => "used",
-                        2 => "console",
-                        _ => "used",
-                    };
-                    if n >= 2 {
-                        assert_eq!(c.request.identifiers, ["Kq_"]);
-                    }
-                    if n == 3 {
-                        // The second re-ask carries the whole history —
-                        // both suggestions, each with its own reason.
-                        assert!(
-                            c.user_prompt.contains(
-                                "\"Kq_\" was suggested as \"used\" but that name is already used by another variable in the same scope"
-                            ),
-                            "the collision disclosed: {}",
-                            c.user_prompt
-                        );
-                        assert!(
-                            c.user_prompt.contains(
-                                "\"Kq_\" was suggested as \"console\" which is not allowed (reserved word, global built-in, or invalid syntax)"
-                            ),
-                            "the invalid target disclosed: {}",
-                            c.user_prompt
-                        );
-                        assert!(
-                            c.user_prompt.contains("DO NOT suggest these names: used, console"),
-                            "the accumulated blocklist: {}",
-                            c.user_prompt
-                        );
-                    }
-                    Ok(BatchRenameResponse {
-                        renames: Renames::from_entries(vec![(
-                            "Kq_".to_string(),
-                            Some(suggestion.to_string()),
-                        )]),
-                        finish_reason: None,
-                        usage: None,
-                    })
-                })
-                .collect()
+    let provider = ShuffledFake::answering(1, {
+        let asks = std::cell::Cell::new(0usize);
+        move |c| {
+            asks.set(asks.get() + 1);
+            let n = asks.get();
+            let suggestion = match n {
+                1 => "used",
+                2 => "console",
+                _ => "used",
+            };
+            if n >= 2 {
+                assert_eq!(c.request.identifiers, ["Kq_"]);
+            }
+            if n == 3 {
+                // The second re-ask carries the whole history —
+                // both suggestions, each with its own reason.
+                assert!(
+                c.user_prompt.contains(
+                    "\"Kq_\" was suggested as \"used\" but that name is already used by another variable in the same scope"
+                ),
+                "the collision disclosed: {}",
+                c.user_prompt
+            );
+                assert!(
+                c.user_prompt.contains(
+                    "\"Kq_\" was suggested as \"console\" which is not allowed (reserved word, global built-in, or invalid syntax)"
+                ),
+                "the invalid target disclosed: {}",
+                c.user_prompt
+            );
+                assert!(
+                    c.user_prompt
+                        .contains("DO NOT suggest these names: used, console"),
+                    "the accumulated blocklist: {}",
+                    c.user_prompt
+                );
+            }
+            reply([("Kq_", Some(suggestion.to_string()))])
         }
-    }
-    let provider = TwoCollisions {
-        asks: std::cell::Cell::new(0),
-    };
+    });
     let mut state = RenameState::new(
         semantic,
         Anchor::Fresh,
@@ -309,7 +255,7 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
             semantic,
         ),
     );
-    assert_eq!(provider.asks.get(), 3, "bounded: no third re-ask");
+    assert_eq!(provider.calls().len(), 3, "bounded: no third re-ask");
     assert_eq!(r.reasked, 2, "one re-ask round each");
     assert_eq!(r.reask_dropped, 1, "the give-up is recorded");
     assert_eq!(r.named, 0);
@@ -331,40 +277,16 @@ fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
     let params = humanify_ag_model::llm::CacheKeyParams::default();
-    struct Naming {
-        asked: std::cell::RefCell<Vec<Vec<String>>>,
-    }
-    impl NameProvider for Naming {
-        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-            calls
-                .into_iter()
-                .map(|c| {
-                    self.asked.borrow_mut().push(c.request.identifiers.clone());
-                    let renames: Vec<(String, Option<String>)> = c
-                        .request
-                        .identifiers
-                        .iter()
-                        .map(|id| {
-                            let answer = match id.as_str() {
-                                "i" => "index",
-                                "f" => "handler",
-                                _ => panic!("unexpected sweep target {id:?}"),
-                            };
-                            (id.clone(), Some(answer.to_string()))
-                        })
-                        .collect();
-                    Ok(BatchRenameResponse {
-                        renames: Renames::from_entries(renames),
-                        finish_reason: None,
-                        usage: None,
-                    })
-                })
-                .collect()
-        }
-    }
-    let provider = Naming {
-        asked: std::cell::RefCell::new(Vec::new()),
-    };
+    let provider = ShuffledFake::answering(1, |c| {
+        names(c, |id| {
+            match id {
+                "i" => "index",
+                "f" => "handler",
+                _ => panic!("unexpected sweep target {id:?}"),
+            }
+            .to_string()
+        })
+    });
     let mut state = RenameState::new(
         semantic,
         Anchor::Fresh,
@@ -389,7 +311,11 @@ fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
             semantic,
         ),
     );
-    let asked: Vec<String> = provider.asked.borrow().iter().flatten().cloned().collect();
+    let asked: Vec<String> = provider
+        .calls()
+        .into_iter()
+        .flat_map(|c| c.request.identifiers)
+        .collect();
     assert!(
         asked.iter().any(|id| id == "i"),
         "the loop counter `i` is asked: {asked:?}"
@@ -418,34 +344,16 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
     let params = humanify_ag_model::llm::CacheKeyParams::default();
-    struct LetterAnswer;
-    impl NameProvider for LetterAnswer {
-        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-            calls
-                .into_iter()
-                .map(|c| {
-                    let renames: Vec<(String, Option<String>)> = c
-                        .request
-                        .identifiers
-                        .iter()
-                        .map(|id| {
-                            let answer = match id.as_str() {
-                                "Kq_" => "i",
-                                "f" => "handler",
-                                _ => panic!("unexpected sweep target {id:?}"),
-                            };
-                            (id.clone(), Some(answer.to_string()))
-                        })
-                        .collect();
-                    Ok(BatchRenameResponse {
-                        renames: Renames::from_entries(renames),
-                        finish_reason: None,
-                        usage: None,
-                    })
-                })
-                .collect()
-        }
-    }
+    let letter_answer = ShuffledFake::answering(1, |c| {
+        names(c, |id| {
+            match id {
+                "Kq_" => "i",
+                "f" => "handler",
+                _ => panic!("unexpected sweep target {id:?}"),
+            }
+            .to_string()
+        })
+    });
     let mut state = RenameState::new(
         semantic,
         Anchor::Fresh,
@@ -458,7 +366,7 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         &mut state,
         &eligible,
         &taint,
-        &LetterAnswer,
+        &letter_answer,
         &mut log,
         Anchor::Fresh,
         &params,
@@ -498,7 +406,7 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         &mut state,
         &eligible,
         &taint,
-        &LetterAnswer,
+        &letter_answer,
         &mut log,
         Anchor::Fresh,
         &params,
@@ -529,34 +437,16 @@ fn sweep_junk_answers_are_still_refused() {
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
     let params = humanify_ag_model::llm::CacheKeyParams::default();
-    struct Junk;
-    impl NameProvider for Junk {
-        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-            calls
-                .into_iter()
-                .map(|c| {
-                    let renames: Vec<(String, Option<String>)> = c
-                        .request
-                        .identifiers
-                        .iter()
-                        .map(|id| {
-                            let answer = match id.as_str() {
-                                "Kq_" => "a1b",
-                                "f" => "x_",
-                                _ => panic!("unexpected sweep target {id:?}"),
-                            };
-                            (id.clone(), Some(answer.to_string()))
-                        })
-                        .collect();
-                    Ok(BatchRenameResponse {
-                        renames: Renames::from_entries(renames),
-                        finish_reason: None,
-                        usage: None,
-                    })
-                })
-                .collect()
-        }
-    }
+    let junk = ShuffledFake::answering(1, |c| {
+        names(c, |id| {
+            match id {
+                "Kq_" => "a1b",
+                "f" => "x_",
+                _ => panic!("unexpected sweep target {id:?}"),
+            }
+            .to_string()
+        })
+    });
     let mut state = RenameState::new(
         semantic,
         Anchor::Fresh,
@@ -569,7 +459,7 @@ fn sweep_junk_answers_are_still_refused() {
         &mut state,
         &eligible,
         &taint,
-        &Junk,
+        &junk,
         &mut log,
         Anchor::Fresh,
         &params,
@@ -612,53 +502,29 @@ fn a_sweep_answer_borrowing_a_minified_stem_is_refused_and_reasked() {
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
     let params = humanify_ag_model::llm::CacheKeyParams::default();
-    struct Borrowing {
-        reasks: std::cell::Cell<usize>,
-    }
-    impl NameProvider for Borrowing {
-        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-            calls
-                .into_iter()
-                .map(|c| {
-                    let retry = c.request.prior_rejects.is_some();
-                    if retry {
-                        self.reasks.set(self.reasks.get() + 1);
-                        assert!(
-                            c.user_prompt.contains(
-                                "- \"Kq_\" was suggested as \"setMethodH6t\" which reuses the minified name \"H6t\""
-                            ),
-                            "the re-ask names the borrowed stem: {}",
-                            c.user_prompt
-                        );
-                    }
-                    let renames: Vec<(String, Option<String>)> = c
-                        .request
-                        .identifiers
-                        .iter()
-                        .map(|id| {
-                            let answer = match id.as_str() {
-                                "Kq_" if retry => "methodSetter",
-                                "Kq_" => "setMethodH6t",
-                                // Everything else DECLINES (an empty
-                                // answer): echoing `H6t` would now be a
-                                // refused echo (round 2), not a decline.
-                                _ => "",
-                            };
-                            (id.clone(), Some(answer.to_string()))
-                        })
-                        .collect();
-                    Ok(BatchRenameResponse {
-                        renames: Renames::from_entries(renames),
-                        finish_reason: None,
-                        usage: None,
-                    })
-                })
-                .collect()
+    let provider = ShuffledFake::answering(1, |c| {
+        let retry = c.request.prior_rejects.is_some();
+        if retry {
+            assert!(
+                c.user_prompt.contains(
+                    "- \"Kq_\" was suggested as \"setMethodH6t\" which reuses the minified name \"H6t\""
+                ),
+                "the re-ask names the borrowed stem: {}",
+                c.user_prompt
+            );
         }
-    }
-    let provider = Borrowing {
-        reasks: std::cell::Cell::new(0),
-    };
+        names(c, |id| {
+            match id {
+                "Kq_" if retry => "methodSetter",
+                "Kq_" => "setMethodH6t",
+                // Everything else DECLINES (an empty answer): echoing
+                // `H6t` would now be a refused echo (round 2), not a
+                // decline.
+                _ => "",
+            }
+            .to_string()
+        })
+    });
     let mut state = RenameState::new(
         semantic,
         Anchor::Fresh,
@@ -688,7 +554,7 @@ fn a_sweep_answer_borrowing_a_minified_stem_is_refused_and_reasked() {
         "the junk never lands: {code}"
     );
     assert!(code.contains("var methodSetter = two(H6t);"), "{code}");
-    assert_eq!(provider.reasks.get(), 1, "one disclosed re-ask");
+    assert_eq!(reasks(&provider), 1, "one disclosed re-ask");
     assert_eq!(r.reasked, 1);
 }
 
@@ -706,52 +572,22 @@ fn a_sweep_echo_of_a_minified_name_is_refused_and_reasked() {
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
     let params = humanify_ag_model::llm::CacheKeyParams::default();
-    struct Echoing {
-        reasks: std::cell::Cell<usize>,
-        relent: bool,
-    }
-    impl NameProvider for Echoing {
-        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-            calls
-                .into_iter()
-                .map(|c| {
-                    let retry = c.request.prior_rejects.is_some();
-                    if retry {
-                        self.reasks.set(self.reasks.get() + 1);
-                        assert!(
-                            c.user_prompt.contains(
-                                "- \"yl\" is the minified name; suggest a descriptive name"
-                            ),
-                            "the re-ask says the echo IS the minified name: {}",
-                            c.user_prompt
-                        );
-                    }
-                    let renames: Vec<(String, Option<String>)> = c
-                        .request
-                        .identifiers
-                        .iter()
-                        .map(|id| {
-                            let answer = match id.as_str() {
-                                "yl" if retry && self.relent => "itemTotal",
-                                other => other,
-                            };
-                            (id.clone(), Some(answer.to_string()))
-                        })
-                        .collect();
-                    Ok(BatchRenameResponse {
-                        renames: Renames::from_entries(renames),
-                        finish_reason: None,
-                        usage: None,
-                    })
-                })
-                .collect()
-        }
-    }
     for relent in [true, false] {
-        let provider = Echoing {
-            reasks: std::cell::Cell::new(0),
-            relent,
-        };
+        let provider = ShuffledFake::answering(1, move |c| {
+            let retry = c.request.prior_rejects.is_some();
+            if retry {
+                assert!(
+                    c.user_prompt
+                        .contains("- \"yl\" is the minified name; suggest a descriptive name"),
+                    "the re-ask says the echo IS the minified name: {}",
+                    c.user_prompt
+                );
+            }
+            names(c, |id| match id {
+                "yl" if retry && relent => "itemTotal".to_string(),
+                other => other.to_string(),
+            })
+        });
         let mut state = RenameState::new(
             semantic,
             Anchor::Fresh,
@@ -778,10 +614,10 @@ fn a_sweep_echo_of_a_minified_name_is_refused_and_reasked() {
         let code = render_program(semantic, &state);
         if relent {
             assert!(code.contains("var itemTotal = two();"), "{code}");
-            assert_eq!(provider.reasks.get(), 1, "one disclosed re-ask");
+            assert_eq!(reasks(&provider), 1, "one disclosed re-ask");
         } else {
             assert!(code.contains("var yl = two();"), "{code}");
-            assert_eq!(provider.reasks.get(), 2, "the budget");
+            assert_eq!(reasks(&provider), 2, "the budget");
             assert_eq!(r.exhausted_names, ["yl"], "still a target; `i` is a keep");
         }
         assert!(code.contains("var i = one();"), "{code}");
@@ -955,29 +791,7 @@ fn the_deferred_sweep_skips_decided_names_and_keeps_exhausted_ones() {
     let text = "var Kq_ = one();\nvar kept_ = two();\nvar Och_ = three();\nvar renamed = four();\nfunction f() { return Kq_ + kept_ + Och_ + renamed; }";
     let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let params = humanify_ag_model::llm::CacheKeyParams::default();
-    struct Declining {
-        asked: std::cell::RefCell<Vec<String>>,
-    }
-    impl NameProvider for Declining {
-        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-            calls
-                .into_iter()
-                .map(|c| {
-                    self.asked
-                        .borrow_mut()
-                        .extend(c.request.identifiers.iter().cloned());
-                    Ok(BatchRenameResponse {
-                        renames: Renames::default(),
-                        finish_reason: None,
-                        usage: None,
-                    })
-                })
-                .collect()
-        }
-    }
-    let provider = Declining {
-        asked: std::cell::RefCell::new(Vec::new()),
-    };
+    let provider = ShuffledFake::answering(1, |_| reply::<String>([]));
     let decided = DecidedNames {
         renamed_to: ["renamed".to_string()].into_iter().collect(),
         asked: ["kept_".to_string()].into_iter().collect(),
@@ -1000,7 +814,11 @@ fn the_deferred_sweep_skips_decided_names_and_keeps_exhausted_ones() {
         &[],
     )
     .expect("the sweep parses its text");
-    let asked = provider.asked.borrow().clone();
+    let asked: Vec<String> = provider
+        .calls()
+        .into_iter()
+        .flat_map(|c| c.request.identifiers)
+        .collect();
     assert!(
         asked.iter().any(|n| n == "Kq_"),
         "the never-asked name is asked: {asked:?}"
@@ -1047,30 +865,8 @@ fn the_sweep_reask_budget_is_configurable() {
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
     let params = humanify_ag_model::llm::CacheKeyParams::default();
-    struct Counting {
-        asks: std::cell::Cell<usize>,
-    }
-    impl NameProvider for Counting {
-        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-            self.asks.set(self.asks.get() + calls.len());
-            calls
-                .into_iter()
-                .map(|_| {
-                    Ok(BatchRenameResponse {
-                        renames: Renames::from_entries(vec![(
-                            "Kq_".to_string(),
-                            Some("used".to_string()),
-                        )]),
-                        finish_reason: None,
-                        usage: None,
-                    })
-                })
-                .collect()
-        }
-    }
-    let one = Counting {
-        asks: std::cell::Cell::new(0),
-    };
+    let counting = || ShuffledFake::answering(1, |_| reply([("Kq_", Some("used".to_string()))]));
+    let one = counting();
     let mut state = RenameState::new(
         semantic,
         Anchor::Fresh,
@@ -1097,13 +893,15 @@ fn the_sweep_reask_budget_is_configurable() {
             semantic,
         ),
     );
-    assert_eq!(one.asks.get(), 2, "a single-reask budget is the old bound");
+    assert_eq!(
+        one.calls().len(),
+        2,
+        "a single-reask budget is the old bound"
+    );
     assert_eq!(r.reasked, 1);
     assert_eq!(r.reask_dropped, 1, "the give-up is still recorded");
 
-    let zero = Counting {
-        asks: std::cell::Cell::new(0),
-    };
+    let zero = counting();
     let mut state = RenameState::new(
         semantic,
         Anchor::Fresh,
@@ -1130,7 +928,7 @@ fn the_sweep_reask_budget_is_configurable() {
             semantic,
         ),
     );
-    assert_eq!(zero.asks.get(), 1, "a zero budget never re-asks");
+    assert_eq!(zero.calls().len(), 1, "a zero budget never re-asks");
     assert_eq!(r.reasked, 0);
     assert_eq!(r.reask_dropped, 0);
     assert_eq!(
@@ -1139,27 +937,12 @@ fn the_sweep_reask_budget_is_configurable() {
     );
 }
 
-/// A declining provider that records every sweep ask's (identifiers, code).
-struct RecordingDecliner {
-    asks: std::cell::RefCell<Vec<(Vec<String>, String)>>,
-}
-
-impl NameProvider for RecordingDecliner {
-    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-        calls
-            .into_iter()
-            .map(|c| {
-                self.asks
-                    .borrow_mut()
-                    .push((c.request.identifiers.clone(), c.request.code.clone()));
-                Ok(BatchRenameResponse {
-                    renames: Renames::default(),
-                    finish_reason: None,
-                    usage: None,
-                })
-            })
-            .collect()
-    }
+/// How many re-asks (calls carrying prior rejections) `fake` answered.
+fn reasks(fake: &ShuffledFake) -> usize {
+    fake.calls()
+        .iter()
+        .filter(|c| c.request.prior_rejects.is_some())
+        .count()
 }
 
 /// A big wrapper (the Claude Code shape): `filler` lines of calls, then
@@ -1188,9 +971,8 @@ fn a_sweep_target_past_line_500_is_shown_in_its_window() {
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
     let params = humanify_ag_model::llm::CacheKeyParams::default();
-    let provider = RecordingDecliner {
-        asks: std::cell::RefCell::new(Vec::new()),
-    };
+    // Declines everything; the fake records every sweep ask.
+    let provider = ShuffledFake::answering(1, |_| reply::<String>([]));
     let mut state = RenameState::new(
         semantic,
         Anchor::Fresh,
@@ -1211,7 +993,11 @@ fn a_sweep_target_past_line_500_is_shown_in_its_window() {
         None,
         &crate::rename::floor::MinifiedStems::empty(crate::rename::name_profile::NameProfile::Bun),
     );
-    let asks = provider.asks.borrow();
+    let asks: Vec<(Vec<String>, String)> = provider
+        .calls()
+        .into_iter()
+        .map(|c| (c.request.identifiers, c.request.code))
+        .collect();
     assert!(
         asks.iter().any(|(ids, _)| ids.iter().any(|n| n == "Kq_")),
         "the deep target is asked: {:?}",

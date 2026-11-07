@@ -17,7 +17,8 @@ use crate::client::{OpenAiClient, status_error};
 use crate::metrics::MetricsTracker;
 use crate::provider::AsyncProvider;
 use crate::rate::{RateLimited, is_retryable};
-use crate::stub_server::{Handler, StubResponse, StubServer, completion};
+use humanify_ag_testkit::answers::completion;
+use humanify_ag_testkit::stub_server::{Handler, StubResponse, StubServer};
 
 /// `makeRequest(identifiers)`.
 fn make_request(identifiers: &[&str]) -> LlmCall {

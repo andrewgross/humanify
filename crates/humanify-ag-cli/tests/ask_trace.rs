@@ -5,11 +5,11 @@
 //! deterministic run to run (the pipeline is completion-order-independent
 //! by design and the stub answers deterministically).
 
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use humanify_ag_testkit::answers::user_prompt;
+use humanify_ag_testkit::stub_server::StubServer;
 use serde_json::Value;
 
 /// Two module-level nodes whose stub suggestions collide on `eventHooks`
@@ -91,53 +91,10 @@ fn answer(user: &str) -> String {
     Value::Object(entries).to_string()
 }
 
-fn serve(stream: std::net::TcpStream) {
-    let mut reader = BufReader::new(stream.try_clone().unwrap());
-    let mut len = 0usize;
-    loop {
-        let mut line = String::new();
-        if reader.read_line(&mut line).unwrap_or(0) == 0 {
-            return;
-        }
-        let line = line.trim_end();
-        if line.is_empty() {
-            break;
-        }
-        if let Some((k, v)) = line.split_once(':')
-            && k.eq_ignore_ascii_case("content-length")
-        {
-            len = v.trim().parse().unwrap();
-        }
-    }
-    let mut body = vec![0u8; len];
-    reader.read_exact(&mut body).unwrap();
-    let v: Value = serde_json::from_slice(&body).unwrap();
-    let user = v["messages"][1]["content"].as_str().unwrap_or("");
-    let out = serde_json::json!({
-        "choices": [{"message": {"role": "assistant", "content": answer(user)},
-                     "finish_reason": "stop"}],
-        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
-    })
-    .to_string();
-    let mut stream = stream;
-    let _ = write!(
-        stream,
-        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
-         content-length: {}\r\nconnection: close\r\n\r\n{out}",
-        out.len()
-    );
-}
-
 /// The stub on an ephemeral port, answering every request deterministically.
+/// It lives until the test process ends.
 fn start_stub() -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!("http://{}/v1", listener.local_addr().unwrap());
-    std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            std::thread::spawn(move || serve(stream));
-        }
-    });
-    url
+    StubServer::answering(|body| answer(&user_prompt(body))).base_url
 }
 
 /// One run; `extra` are `--config` settings (dotted TOML lines) beside

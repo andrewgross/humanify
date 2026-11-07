@@ -254,31 +254,11 @@ fn the_verdict_names_the_failed_invariant() {
     );
 }
 
-/// A provider naming every requested identifier `<id>Named`.
-struct SuffixProvider;
-
-impl humanify_ag_model::llm::NameProvider for SuffixProvider {
-    fn run_wave(
-        &self,
-        calls: Vec<humanify_ag_model::llm::LlmCall>,
-    ) -> Vec<Result<humanify_ag_model::llm::BatchRenameResponse, humanify_ag_model::llm::LlmError>>
-    {
-        calls
-            .into_iter()
-            .map(|c| {
-                Ok(humanify_ag_model::llm::BatchRenameResponse {
-                    renames: humanify_ag_model::llm::Renames::from_entries(
-                        c.request
-                            .identifiers
-                            .iter()
-                            .map(|i| (i.clone(), Some(format!("{i}Named")))),
-                    ),
-                    finish_reason: None,
-                    usage: None,
-                })
-            })
-            .collect()
-    }
+/// A fake naming every requested identifier `<id>Named`.
+fn suffix() -> humanify_ag_testkit::fake::ShuffledFake {
+    humanify_ag_testkit::fake::ShuffledFake::answering(1, |c| {
+        humanify_ag_testkit::fake::names(c, |i| format!("{i}Named"))
+    })
 }
 
 fn ledger_config() -> super::NamingConfig {
@@ -340,7 +320,7 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
                 statement_holds: &[],
             },
             &ledger_config(),
-            &SuffixProvider,
+            &suffix(),
             &mut retain_log(),
         )
         .expect("the stage runs");
@@ -373,7 +353,7 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
             statement_holds: &[],
         },
         &ledger_config(),
-        &SuffixProvider,
+        &suffix(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -402,7 +382,7 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
             statement_holds: &[],
         },
         &config,
-        &SuffixProvider,
+        &suffix(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -429,7 +409,7 @@ fn the_llm_ref_count_counts_each_reference_once() {
                 statement_holds: &[],
             },
             &ledger_config(),
-            &SuffixProvider,
+            &suffix(),
             &mut retain_log(),
         )
         .expect("the stage runs");
@@ -525,7 +505,7 @@ fn a_cold_run_holds_the_module_names_once_not_once_per_function() {
             statement_holds: &[],
         },
         &config,
-        &SuffixProvider,
+        &suffix(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -578,7 +558,7 @@ fn the_wave_gauges_read_every_retained_owner_on_a_cold_run() {
                 statement_holds: &[],
             },
             &config,
-            &SuffixProvider,
+            &suffix(),
             log,
         )
         .expect("the stage runs")
@@ -642,7 +622,7 @@ fn the_profile_names_the_wave_setup_and_render_constituents() {
             statement_holds: &[],
         },
         &ledger_config(),
-        &SuffixProvider,
+        &suffix(),
         &mut retain_log(),
     );
     let report = profiler.finalize(None);
@@ -694,7 +674,7 @@ fn a_prior_that_binds_nothing_warns() {
             statement_holds: &[],
         },
         &ledger_config(),
-        &SuffixProvider,
+        &suffix(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -739,7 +719,7 @@ fn a_bound_prior_does_not_warn() {
                 statement_holds: &[],
             },
             &ledger_config(),
-            &SuffixProvider,
+            &suffix(),
             &mut retain_log(),
         )
         .expect("the stage runs");
@@ -798,41 +778,18 @@ fn assert_binding_split(b: &humanify_ag_model::stats::BindingProvenance) {
 ///   finding #64 named.
 #[test]
 fn the_census_splits_single_letter_survivors_by_provenance() {
-    struct MeterProvider;
-    impl humanify_ag_model::llm::NameProvider for MeterProvider {
-        fn run_wave(
-            &self,
-            calls: Vec<humanify_ag_model::llm::LlmCall>,
-        ) -> Vec<
-            Result<humanify_ag_model::llm::BatchRenameResponse, humanify_ag_model::llm::LlmError>,
-        > {
-            calls
-                .into_iter()
-                .map(|c| {
-                    let renames: Vec<(String, Option<String>)> = c
-                        .request
-                        .identifiers
-                        .iter()
-                        .map(|id| {
-                            let answer = if id == "Kq_" {
-                                Some("i".to_string())
-                            } else if id.encode_utf16().count() == 1 {
-                                None // the model declines to rename a single letter
-                            } else {
-                                Some(format!("{id}Named"))
-                            };
-                            (id.clone(), answer)
-                        })
-                        .collect();
-                    Ok(humanify_ag_model::llm::BatchRenameResponse {
-                        renames: humanify_ag_model::llm::Renames::from_entries(renames),
-                        finish_reason: None,
-                        usage: None,
-                    })
-                })
-                .collect()
-        }
-    }
+    let meter = humanify_ag_testkit::fake::ShuffledFake::answering(1, |c| {
+        humanify_ag_testkit::fake::reply(c.request.identifiers.iter().map(|id| {
+            let answer = if id == "Kq_" {
+                Some("i".to_string())
+            } else if id.encode_utf16().count() == 1 {
+                None // the model declines to rename a single letter
+            } else {
+                Some(format!("{id}Named"))
+            };
+            (id.clone(), answer)
+        }))
+    });
     let fresh = "function one() {\n  var Kq_ = start();\n  var j = Kq_ + 1;\n  return Kq_ * j;\n}\nfunction keep() {\n  var x = 1;\n  eval(\"x\");\n  return x;\n}\nconsume(one, keep);\n";
     let mut config = ledger_config();
     config.emit_rename_ledger = false;
@@ -848,7 +805,7 @@ fn the_census_splits_single_letter_survivors_by_provenance() {
             statement_holds: &[],
         },
         &config,
-        &MeterProvider,
+        &meter,
         &mut log,
     )
     .expect("the stage runs");
@@ -995,7 +952,7 @@ console.log(require_dep().label(appCounter));
             statement_holds: &[],
         },
         &config,
-        &SuffixProvider,
+        &suffix(),
         &mut log,
     )
     .expect("the stage runs");
@@ -1022,61 +979,34 @@ console.log(require_dep().label(appCounter));
     }
 }
 
-/// A provider naming every requested identifier a fresh descriptive word
-/// (`renamedA`, `renamedB`, … — never a minified stem, so no answer is
-/// refused) and keeping every user prompt it was sent, in dispatch order.
-#[derive(Default)]
-struct RecordingProvider {
-    prompts: std::sync::Mutex<Vec<String>>,
-    minted: std::sync::Mutex<usize>,
-}
-
-impl RecordingProvider {
-    fn mint(&self) -> String {
-        let mut n = self.minted.lock().expect("lock");
-        let mut k = *n;
-        *n += 1;
-        let mut word = String::from("renamed");
-        loop {
-            word.push(char::from(b'A' + (k % 26) as u8));
-            k /= 26;
-            if k == 0 {
-                return word;
+/// A fake naming every requested identifier a fresh descriptive word
+/// (`renamedA`, `renamedB`, … in answer order — never a minified stem, so
+/// no answer is refused); the fake keeps every call it was sent.
+fn recording() -> humanify_ag_testkit::fake::ShuffledFake {
+    let minted = std::cell::Cell::new(0usize);
+    humanify_ag_testkit::fake::ShuffledFake::answering(1, move |c| {
+        humanify_ag_testkit::fake::names(c, |_| {
+            let mut k = minted.replace(minted.get() + 1);
+            let mut word = String::from("renamed");
+            loop {
+                word.push(char::from(b'A' + (k % 26) as u8));
+                k /= 26;
+                if k == 0 {
+                    return word;
+                }
             }
-        }
-    }
+        })
+    })
 }
 
-impl humanify_ag_model::llm::NameProvider for RecordingProvider {
-    fn run_wave(
-        &self,
-        calls: Vec<humanify_ag_model::llm::LlmCall>,
-    ) -> Vec<Result<humanify_ag_model::llm::BatchRenameResponse, humanify_ag_model::llm::LlmError>>
-    {
-        let mut seen = self.prompts.lock().expect("lock");
-        seen.extend(calls.iter().map(|c| c.user_prompt.clone()));
-        drop(seen);
-        calls
-            .into_iter()
-            .map(|c| {
-                Ok(humanify_ag_model::llm::BatchRenameResponse {
-                    renames: humanify_ag_model::llm::Renames::from_entries(
-                        c.request
-                            .identifiers
-                            .iter()
-                            .map(|i| (i.clone(), Some(self.mint()))),
-                    ),
-                    finish_reason: None,
-                    usage: None,
-                })
-            })
-            .collect()
-    }
+/// Every user prompt `fake` was sent, in answer order.
+fn prompts(fake: &humanify_ag_testkit::fake::ShuffledFake) -> Vec<String> {
+    fake.calls().into_iter().map(|c| c.user_prompt).collect()
 }
 
 /// Every user prompt a fresh run of `fresh` sends, in dispatch order.
 fn prompts_of(fresh: &str, group: usize) -> Vec<String> {
-    let provider = RecordingProvider::default();
+    let provider = recording();
     let mut config = ledger_config();
     config.module_group_size = group;
     super::run_naming(
@@ -1094,7 +1024,7 @@ fn prompts_of(fresh: &str, group: usize) -> Vec<String> {
         &mut retain_log(),
     )
     .expect("the stage runs");
-    provider.prompts.into_inner().expect("lock")
+    prompts(&provider)
 }
 
 /// The one prompt that asks for `id` in its first round.
@@ -1186,7 +1116,7 @@ fn asks_for(prompts: &[String], id: &str) -> bool {
 /// answers echoed it (`initErrorHandlingOnce`, 1,642 names in 2.1.198).
 #[test]
 fn the_lazy_init_helper_is_named_by_the_pipeline_not_the_model() {
-    let provider = RecordingProvider::default();
+    let provider = recording();
     let out = super::run_naming(
         &super::NamingInput {
             fresh: LAZY_INIT_BUNDLE,
@@ -1202,7 +1132,7 @@ fn the_lazy_init_helper_is_named_by_the_pipeline_not_the_model() {
         &mut retain_log(),
     )
     .expect("the stage runs");
-    let prompts = provider.prompts.into_inner().expect("lock");
+    let prompts = prompts(&provider);
     assert!(
         !asks_for(&prompts, "b"),
         "the helper is never asked: {prompts:#?}"
@@ -1234,7 +1164,7 @@ fn the_plumbing_name_overrides_a_model_name_carried_from_the_prior() {
             statement_holds: &[],
         },
         &ledger_config(),
-        &RecordingProvider::default(),
+        &recording(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1255,7 +1185,7 @@ const LIBRARY_IMPORT_BUNDLE: &str = "var Ap, Bq, Cr, Dz, Ez, Fw;\nfunction In() 
 /// twice, a wrapped require and a function-local binding stay the model's.
 #[test]
 fn a_repeated_library_import_is_named_from_its_specifier_not_asked() {
-    let provider = RecordingProvider::default();
+    let provider = recording();
     let out = super::run_naming(
         &super::NamingInput {
             fresh: LIBRARY_IMPORT_BUNDLE,
@@ -1271,7 +1201,7 @@ fn a_repeated_library_import_is_named_from_its_specifier_not_asked() {
         &mut retain_log(),
     )
     .expect("the stage runs");
-    let prompts = provider.prompts.into_inner().expect("lock");
+    let prompts = prompts(&provider);
     for id in ["Ap", "Bq", "Cr"] {
         assert!(!asks_for(&prompts, id), "{id} is never asked: {prompts:#?}");
     }
@@ -1315,7 +1245,7 @@ fn a_library_import_carried_from_the_prior_keeps_its_name() {
             statement_holds: &[],
         },
         &ledger_config(),
-        &RecordingProvider::default(),
+        &recording(),
         &mut retain_log(),
     )
     .expect("the stage runs");

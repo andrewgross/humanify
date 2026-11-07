@@ -13,6 +13,16 @@
 //! `scripts/ask-trace.ts`, run.sh `--pipeline-arg`, neutrality.sh and the
 //! crate's own integration tests, plus one row per flag.
 //!
+//! Lane L4 (2026-11-07): the launches outside the eval's two goldens were
+//! a hand-transcribed list here, and it had gone stale (its neutrality
+//! entry still read `--llm-cache ... --prior-version p.js`). They are now
+//! read from the goldens lane L0 recorded from the real launchers
+//! (`experiments/034-eval-harness/launch-goldens/`), half three below.
+//! The test stays in this crate, not the dev crate that loads those
+//! goldens: what it checks is this crate's private parse surface
+//! (`surface::parse_pipeline`, `Config::build`), and a product crate never
+//! depends on the dev crate.
+//!
 //! Config sweep step 4 (2026-10-13) changed two things DELIBERATELY, and
 //! the fixture is untouched (it stays the commander port's capture):
 //!
@@ -152,73 +162,106 @@ fn words(s: &str) -> Vec<String> {
     s.split_whitespace().map(str::to_string).collect()
 }
 
-/// The launches outside the goldens, transcribed from their launchers.
-fn transcribed_launches() -> Vec<Vec<String>> {
-    let e2e = "--endpoint http://127.0.0.1:41000/v1 --retries 0";
-    let run = "in.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b \
-               --reasoning-effort low -c 472 -o out";
-    let test = "--endpoint http://127.0.0.1:9/v1 --retries 0";
-    [
-        // scripts/e2e.ts runBinary: fresh / prior / sequential legs.
-        format!("v1.js --split --stats-json fresh.stats.json -o fresh {e2e}"),
-        format!("v1.js -o fresh {e2e}"),
-        format!("v2.js --prior-version prior.js --split -o prior {e2e}"),
-        format!("v2.js --prior-version prior.js -o prior {e2e}"),
-        format!("v1.js --split --sequential --batch-size 10 -o seq {e2e}"),
-        format!("v2.js --prior-version prior.js --sequential --batch-size 10 --split -o seq {e2e}"),
-        // scripts/ask-trace.ts.
-        "in.js -o out --dump-asks asks.jsonl --retries 0 \
-         --endpoint http://127.0.0.1:41001/v1 --batch-size 25"
-            .to_string(),
-        "in.js -o out --dump-asks asks.jsonl --retries 0 \
-         --endpoint http://127.0.0.1:41001/v1 --batch-size 25 --prior-version p.js --sequential"
-            .to_string(),
-        // run.sh / eval --pipeline-arg (appended to every launch).
-        format!("{run} -vv --log-file l.log --sequential"),
-        format!("{run} --prior-version p.js --disable family-permute"),
-        format!("{run} --prior-version p.js --disable family-permute,content-anchor"),
-        format!("{run} --prior-version p.js --probe shingle-probe"),
-        format!("{run} --prior-version p.js --batch-size 10"),
-        // neutrality.sh legs.
-        format!("{run} --llm-cache /work/neutrality-cache --prior-version p.js"),
-        // crates/humanify-ag-cli/tests: pipeline_stages, replay_determinism,
-        // provider_errors, ask_trace.
-        format!("in.js -o out {test}"),
-        format!("in.js --split -o out {test}"),
-        format!("in.js --llm-cache cache -o out {test}"),
-        format!("in.js --no-skip-libraries -o out {test}"),
-        format!("in.js --prior-version p.js -o out {test}"),
-        format!("in.js --split --prior-version p.js --perf-trace t.json -o out {test}"),
-        "in.js --model stub-model -c 8 --retries 0 --endpoint http://e/v1 -o out".to_string(),
-        "in.js --model stub-model -c 4 --retries 0 --endpoint http://e/v1 -o out".to_string(),
-        "in.js --split --model stub-model -c 4 --retries 0 --endpoint http://e/v1 \
-         --stats-json s.json -o out"
-            .to_string(),
-        "in.js --model stub-model --retries 0 --endpoint http://e/v1 -o out \
-         --dump-asks a.jsonl --dump-artifacts art --rename-retries 1"
-            .to_string(),
-        // One row per remaining flag, so every option's resolution is pinned.
-        "in.js --skip-libraries".to_string(),
-        "in.js --no-naming-floor".to_string(),
-        "in.js --no-naming-floor-sweep".to_string(),
-        "in.js --prior-version p.js --no-reconcile-prior-diff".to_string(),
-        "in.js --relaxed-levers window-lanes".to_string(),
-        "in.js --split --split-pure --split-ledger l.json".to_string(),
-        "in.js --split-pure".to_string(),
-        "in.js --bundler bun --minifier bun".to_string(),
-        "in.js --bundler foobar".to_string(),
-        "in.js --max-tokens 4096 --context-tokens 131072 --module-concurrency 33".to_string(),
-        "in.js --timeout 1234 --max-retries 3 --max-free-retries 7 --lane-threshold 11".to_string(),
-        "in.js --rename-ledger rl --diagnostics d.json --library-index idx \
-         --library-discovery-units --simulate-llm-latency sim.json"
-            .to_string(),
-        "in.js -v --reasoning-effort high -m some-model --output-dir o".to_string(),
-        "in.js --endpoint=http://eq/v1 --concurrency=9".to_string(),
-        "in.js".to_string(),
-    ]
-    .iter()
-    .map(|s| words(s))
-    .collect()
+/// Lane L0's launch goldens (`humanify-ag-dev`'s `paths::LAUNCH_GOLDENS`;
+/// a product crate does not depend on the dev crate, so the path and the
+/// small parser below are this test's own): one recorded launch per line,
+/// `<program> [(in <dir>)] [ENV=v ...] :: <argv>`, each followed by the
+/// `humanify-config| <line>` lines of the `--config` file it was given.
+const LAUNCH_GOLDENS: &str = "experiments/034-eval-harness/launch-goldens";
+
+/// Every PIPELINE launch of THIS binary in one L0 golden: the program is
+/// `.../humanify-ag` and the argv is a run (not `--help`, not a
+/// subcommand: the first word is the input path). A baseline leg's older binary (`.../humanify`) answers to
+/// its own commit's surface, not this one.
+fn recorded_launches(text: &str) -> Vec<Launch> {
+    let mut out: Vec<Launch> = Vec::new();
+    let mut attach = false;
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("humanify-config|") {
+            if attach {
+                let last = out.last_mut().expect("a config line follows its launch");
+                last.1.push_str(rest.strip_prefix(' ').unwrap_or(rest));
+                last.1.push('\n');
+            }
+            continue;
+        }
+        attach = false;
+        let Some((head, argv)) = line.split_once(" :: ") else {
+            continue;
+        };
+        let program = head.split_whitespace().next().unwrap_or("");
+        let argv = words(argv);
+        let first = argv.first().map(String::as_str).unwrap_or("");
+        // A run's first word is its input PATH; a subcommand's is a bare
+        // word (`detect`, `discover`, `index`, ...).
+        let is_run = first.contains('/') && !first.starts_with('-');
+        if program.ends_with("/humanify-ag") && is_run {
+            out.push((argv, String::new()));
+            attach = true;
+        }
+    }
+    out
+}
+
+/// Every pipeline launch in every L0 launch golden, by golden file name.
+fn recorded_corpus() -> Vec<(String, Launch)> {
+    let dir = format!("{}/../../{LAUNCH_GOLDENS}", env!("CARGO_MANIFEST_DIR"));
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("{dir}: {e}"))
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| n.ends_with(".golden.txt"))
+        .collect();
+    names.sort();
+    let mut out = Vec::new();
+    for name in names {
+        let text = repo_file(&format!("{LAUNCH_GOLDENS}/{name}"));
+        out.extend(
+            recorded_launches(&text)
+                .into_iter()
+                .map(|l| (name.clone(), l)),
+        );
+    }
+    out
+}
+
+/// The record with every PATH-valued (and free-text) field reduced to
+/// whether it is set: a recorded launch runs under `<TMP>`/`<REPO>`
+/// placeholders and a captured one under `in.js`/`out`, and parity is
+/// about the configuration, not the spelling of a path.
+fn path_free(mut record: Value) -> Value {
+    const TOP: [&str; 14] = [
+        "input",
+        "outputDir",
+        "splitLedger",
+        "priorVersion",
+        "logFile",
+        "diagnostics",
+        "libraryIndex",
+        "perfTrace",
+        "renameLedger",
+        "statsJson",
+        "dumpArtifacts",
+        "dumpAsks",
+        "simulateLlmLatency",
+        "libraryDiscoveryUnits",
+    ];
+    const SETTINGS: [&str; 3] = ["endpoint", "model", "llmCacheDir"];
+    let set = |v: &mut Value| *v = json!(!v.is_null());
+    if let Some(o) = record.as_object_mut() {
+        for k in TOP {
+            if let Some(v) = o.get_mut(k) {
+                set(v);
+            }
+        }
+    }
+    if let Some(o) = record["settings"]["Ok"].as_object_mut() {
+        for k in SETTINGS {
+            if let Some(v) = o.get_mut(k) {
+                set(v);
+            }
+        }
+    }
+    record
 }
 
 /// Every launch in today's goldens.
@@ -419,17 +462,6 @@ fn every_captured_launch_resolves_to_its_captured_settings() {
         );
     }
     assert!(rows.len() >= 50, "the corpus shrank: {}", rows.len());
-    // The transcribed launchers (e2e, ask-trace, the crate's tests, one
-    // row per flag) are all captured.
-    let captured: Vec<Vec<String>> = rows
-        .iter()
-        .map(|r| {
-            without_api_key(&serde_json::from_value::<Vec<String>>(r["argv"].clone()).unwrap())
-        })
-        .collect();
-    for argv in transcribed_launches() {
-        assert!(captured.contains(&argv), "not captured: {argv:?}");
-    }
 }
 
 /// Half two: every launch the harness makes TODAY (the re-recorded
@@ -471,4 +503,106 @@ fn every_golden_launch_resolves_to_a_captured_launchs_settings() {
             "a golden launch whose settings no captured launch had:\n{launch:?}\n{got:#}"
         );
     }
+}
+
+/// Settings in which a recorded launch may differ from every captured
+/// launch, by golden — each a combination the launcher makes TODAY that
+/// the commander port was never launched with, so there is no capture to
+/// compare that key against (every other key must still match one
+/// captured launch exactly; each key's own resolution is pinned by the
+/// one-row-per-flag captures):
+///
+/// - `e2e.golden.txt` `split`: the unsplittable fixtures (ES modules,
+///   `disambiguation`, `r1b-synthetic`) run their `--sequential` legs
+///   UNSPLIT; the captured e2e sequential legs were split ones.
+/// - `ask-trace.golden.txt` `split` and `settings.batchSize`: the ask
+///   trace grew a split leg, and its sequential prior leg asks in batches
+///   of 10 (captured: 25).
+const NEW_COMBINATIONS: [(&str, &[&str]); 2] = [
+    ("e2e.golden.txt", &["split"]),
+    ("ask-trace.golden.txt", &["split", "settings.batchSize"]),
+];
+
+/// The keys (`settings.<key>` inside the settings block) in which `got`
+/// differs from `captured`, as `key: got vs captured`.
+fn differences(got: &Value, captured: &Value) -> Vec<(String, String)> {
+    let flat = |v: &Value| -> Vec<(String, Value)> {
+        let mut out = Vec::new();
+        for (k, x) in v.as_object().into_iter().flatten() {
+            match x["Ok"].as_object() {
+                Some(inner) if k == "settings" => out.extend(
+                    inner
+                        .iter()
+                        .map(|(ik, iv)| (format!("settings.{ik}"), iv.clone())),
+                ),
+                _ => out.push((k.clone(), x.clone())),
+            }
+        }
+        out
+    };
+    let theirs = flat(captured);
+    flat(got)
+        .into_iter()
+        .filter_map(|(k, v)| {
+            let other = theirs
+                .iter()
+                .find(|(tk, _)| *tk == k)
+                .map_or(Value::Null, |(_, tv)| tv.clone());
+            (other != v).then(|| (k.clone(), format!("{k}: {v} vs {other}")))
+        })
+        .collect()
+}
+
+/// Half three (lane L4, replacing a hand-transcribed list of the e2e,
+/// ask-trace, neutrality and integration-test launches that had gone
+/// stale): every pipeline launch lane L0 RECORDED from the real launchers
+/// (`launch-goldens/`, read live — a new golden is covered the day it is
+/// committed) resolves, paths aside, to the effective settings of a
+/// captured launch.
+#[test]
+fn every_recorded_launch_resolves_to_a_captured_launchs_settings() {
+    let rows: Vec<Value> = serde_json::from_str(&repo_file(FIXTURE)).expect("the fixture is JSON");
+    let wanted: Vec<Value> = rows
+        .iter()
+        .map(|r| path_free(effective(&r["record"])))
+        .collect();
+    let launches = recorded_corpus();
+    for family in ["e2e", "ask-trace", "neutrality-off", "neutrality-names"] {
+        assert!(
+            launches
+                .iter()
+                .any(|(g, _)| g == &format!("{family}.golden.txt")),
+            "no recorded pipeline launch in {family}.golden.txt"
+        );
+    }
+    let mut missing = Vec::new();
+    for (golden, launch) in &launches {
+        let mut got = path_free(parsed_record(launch));
+        // exp171, as in half two: a names launch is handed the eval's
+        // library index, the one deliberate difference from the captures.
+        got["libraryIndex"] = json!(false);
+        let allowed: &[&str] = NEW_COMBINATIONS
+            .iter()
+            .find(|(g, _)| g == golden)
+            .map_or(&[], |(_, keys)| keys);
+        let diffs: Vec<Vec<(String, String)>> =
+            wanted.iter().map(|w| differences(&got, w)).collect();
+        if !diffs
+            .iter()
+            .any(|d| d.iter().all(|(k, _)| allowed.contains(&k.as_str())))
+        {
+            let nearest = diffs.into_iter().min_by_key(Vec::len).unwrap_or_default();
+            let nearest: Vec<String> = nearest.into_iter().map(|(_, d)| d).collect();
+            missing.push(format!(
+                "{golden}: {launch:?}\n  nearest captured launch differs in {nearest:?}"
+            ));
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "{} of {} recorded launches resolve to settings no captured launch had:\n{}",
+        missing.len(),
+        launches.len(),
+        missing.join("\n")
+    );
 }

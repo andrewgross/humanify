@@ -9,13 +9,13 @@
 //! extension-configuration arrow in several (AWS) clients, so one naming
 //! wave holds the same request more than once.
 
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::time::Duration;
 
+use humanify_ag_testkit::answers::{completion, user_prompt};
+use humanify_ag_testkit::stub_server::{StubResponse, StubServer};
 use serde_json::Value;
 
 const INPUT: &str = concat!(
@@ -59,72 +59,22 @@ fn answer(user: &str, n: usize) -> String {
     Value::Object(entries).to_string()
 }
 
-// concurrency: test: the stub delays answers by varying wall time so they complete out of order (the determinism under test)
-#[allow(clippy::disallowed_methods)]
-fn serve(stream: std::net::TcpStream, counter: &AtomicUsize, seen: &Mutex<Vec<String>>) {
-    let mut reader = BufReader::new(stream.try_clone().unwrap());
-    let mut len = 0usize;
-    loop {
-        let mut line = String::new();
-        if reader.read_line(&mut line).unwrap_or(0) == 0 {
-            return;
-        }
-        let line = line.trim_end();
-        if line.is_empty() {
-            break;
-        }
-        if let Some((k, v)) = line.split_once(':')
-            && k.eq_ignore_ascii_case("content-length")
-        {
-            len = v.trim().parse().unwrap();
-        }
-    }
-    let mut body = vec![0u8; len];
-    reader.read_exact(&mut body).unwrap();
-    let n = counter.fetch_add(1, Ordering::SeqCst);
-    // Earlier requests answer later: completion order is not dispatch order.
-    std::thread::sleep(std::time::Duration::from_millis(((7 - n % 7) * 15) as u64));
-    let v: Value = serde_json::from_slice(&body).unwrap();
-    let user = v["messages"][1]["content"].as_str().unwrap_or("");
-    seen.lock().unwrap().push(user.to_string());
-    let out = serde_json::json!({
-        "choices": [{"message": {"role": "assistant", "content": answer(user, n)},
-                     "finish_reason": "stop"}],
-        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
-    })
-    .to_string();
-    let mut stream = stream;
-    let _ = write!(
-        stream,
-        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
-         content-length: {}\r\nconnection: close\r\n\r\n{out}",
-        out.len()
-    );
+/// The user prompts the stub was sent, in arrival order.
+fn prompts(stub: &StubServer) -> Vec<String> {
+    stub.bodies().iter().map(|b| user_prompt(b)).collect()
 }
 
-type Seen = Arc<Mutex<Vec<String>>>;
-
-/// Start the stub; returns its base URL, its request counter and the user
-/// prompts it was sent.
-fn start_recording() -> (String, Arc<AtomicUsize>, Seen) {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!("http://{}/v1", listener.local_addr().unwrap());
-    let counter = Arc::new(AtomicUsize::new(0));
-    let seen: Seen = Arc::default();
-    let (c, s) = (counter.clone(), seen.clone());
-    std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            let (c, s) = (c.clone(), s.clone());
-            std::thread::spawn(move || serve(stream, &c, &s));
-        }
-    });
-    (url, counter, seen)
-}
-
-/// Start the stub; returns its base URL and its request counter.
-fn start() -> (String, Arc<AtomicUsize>) {
-    let (url, counter, _) = start_recording();
-    (url, counter)
+/// Start the stub: request `n` (arrival order) is answered `answer(_, n)`
+/// after `(7 - n % 7) * 15` ms — earlier requests answer later, so
+/// completion order is not dispatch order.
+fn start() -> StubServer {
+    StubServer::start(
+        Duration::ZERO,
+        Arc::new(|n, body| {
+            let wait = Duration::from_millis(((7 - n % 7) * 15) as u64);
+            StubResponse::ok(completion(Some(&answer(&user_prompt(body), n)))).after(wait)
+        }),
+    )
 }
 
 fn run(dir: &Path, input: &str, out: &Path, cache: &Path, endpoint: &str) -> Output {
@@ -196,24 +146,23 @@ fn a_replay_of_a_live_run_asks_nothing_new_and_writes_the_same_tree() {
     std::fs::write(&input, INPUT).unwrap();
     let input = input.display().to_string();
     let cache = s.0.join("cache");
-    let (url, counter) = start();
+    let stub = start();
+    let url = stub.base_url.clone();
 
     let live = run(&s.0, &input, &s.0.join("live"), &cache, &url);
     let err = String::from_utf8_lossy(&live.stderr).into_owned();
     assert_eq!(live.status.code(), Some(0), "{err}");
-    assert!(
-        counter.load(Ordering::SeqCst) > 0,
-        "the live run asked the stub"
-    );
+    assert!(stub.requests() > 0, "the live run asked the stub");
     let filled = cache_entries(&cache);
 
     // The replay's endpoint is a second stub that must never be asked.
-    let (replay_url, replay_counter) = start();
+    let replay_stub = start();
+    let replay_url = replay_stub.base_url.clone();
     let replay = run(&s.0, &input, &s.0.join("replay"), &cache, &replay_url);
     let err = String::from_utf8_lossy(&replay.stderr).into_owned();
     assert_eq!(replay.status.code(), Some(0), "{err}");
     assert_eq!(
-        replay_counter.load(Ordering::SeqCst),
+        replay_stub.requests(),
         0,
         "the replay asked a question the live run never did"
     );
@@ -261,7 +210,8 @@ fn the_ordered_mode_writes_the_conservative_schedule_s_tree() {
     std::fs::write(&input, INPUT).unwrap();
     let input = input.display().to_string();
     let cache = s.0.join("cache");
-    let (url, counter) = start();
+    let stub = start();
+    let url = stub.base_url.clone();
 
     // The live leg: the CONSERVATIVE schedule (naming.schedule =
     // "sequential", the config sweep's spelling of the old --sequential).
@@ -279,16 +229,14 @@ fn the_ordered_mode_writes_the_conservative_schedule_s_tree() {
     .unwrap();
     let err = String::from_utf8_lossy(&live.stderr).into_owned();
     assert_eq!(live.status.code(), Some(0), "{err}");
-    assert!(
-        counter.load(Ordering::SeqCst) > 0,
-        "the live run asked the stub"
-    );
+    assert!(stub.requests() > 0, "the live run asked the stub");
     let filled = cache_entries(&cache);
     let live_tree = tree(&s.0.join("live"));
     assert!(!live_tree.is_empty());
 
     // The replay's endpoint is a stub that must never be asked.
-    let (replay_url, replay_counter) = start();
+    let replay_stub = start();
+    let replay_url = replay_stub.base_url.clone();
     let out = s.0.join("ordered");
     let replay = command(
         &s.0,
@@ -302,7 +250,7 @@ fn the_ordered_mode_writes_the_conservative_schedule_s_tree() {
     let err = String::from_utf8_lossy(&replay.stderr).into_owned();
     assert_eq!(replay.status.code(), Some(0), "{err}");
     assert_eq!(
-        replay_counter.load(Ordering::SeqCst),
+        replay_stub.requests(),
         0,
         "the ordered replay asked a question the conservative run never did"
     );
@@ -327,15 +275,16 @@ fn without_a_cache_identical_requests_reach_the_model_once() {
     let input = s.0.join("bundle.js");
     std::fs::write(&input, INPUT).unwrap();
     let input = input.display().to_string();
-    let (url, counter, seen) = start_recording();
+    let stub = start();
+    let url = stub.base_url.clone();
 
     let out = command(&s.0, &input, &s.0.join("out"), &url, "")
         .output()
         .unwrap();
     let err = String::from_utf8_lossy(&out.stderr).into_owned();
     assert_eq!(out.status.code(), Some(0), "{err}");
-    let prompts = seen.lock().unwrap().clone();
-    assert_eq!(prompts.len(), counter.load(Ordering::SeqCst));
+    let prompts = prompts(&stub);
+    assert_eq!(prompts.len(), stub.requests());
     let mut distinct = prompts.clone();
     distinct.sort();
     distinct.dedup();

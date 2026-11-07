@@ -10,7 +10,8 @@ use humanify_ag_model::llm::{BatchRenameRequest, LlmCall, LlmConfig, LlmErrorKin
 
 use crate::client::{OpenAiClient, parse_renames_from_content, renames_from_content, status_error};
 use crate::provider::AsyncProvider;
-use crate::stub_server::{StubResponse, StubServer, completion};
+use humanify_ag_testkit::answers::completion;
+use humanify_ag_testkit::stub_server::{StubResponse, StubServer};
 
 /// `makeRequest(identifiers)` — code "function a(b, c) { return b + c; }".
 fn make_request(identifiers: &[&str]) -> LlmCall {
@@ -70,7 +71,8 @@ fn parses_valid_json_response() {
     let usage = result.usage.unwrap();
     assert_eq!(
         (usage.total_tokens, usage.input_tokens, usage.output_tokens),
-        (Some(15), Some(10), Some(5))
+        (Some(2), Some(1), Some(1)),
+        "the stub's usage block (humanify_ag_testkit::answers::completion)"
     );
 }
 
@@ -194,11 +196,8 @@ fn sdk_layer_retries_a_5xx() {
         Duration::ZERO,
         Arc::new(move |i, _| {
             if i == 0 {
-                StubResponse {
-                    status: 503,
-                    headers: vec![("retry-after-ms".to_string(), "1".to_string())],
-                    body: r#"{"error":{"message":"busy"}}"#.to_string(),
-                }
+                StubResponse::status(503, r#"{"error":{"message":"busy"}}"#)
+                    .with_header("retry-after-ms", "1")
             } else {
                 StubResponse::ok(ok.clone())
             }
@@ -229,11 +228,7 @@ fn sdk_layer_does_not_retry_a_400() {
 fn sdk_layer_obeys_x_should_retry() {
     let server = StubServer::start(
         Duration::ZERO,
-        Arc::new(|_, _| StubResponse {
-            status: 500,
-            headers: vec![("x-should-retry".to_string(), "false".to_string())],
-            body: String::new(),
-        }),
+        Arc::new(|_, _| StubResponse::status(500, "").with_header("x-should-retry", "false")),
     );
     let client = provider(&server, |_| {});
     let error = run(client.suggest_all_names(&make_request(&["a"]))).unwrap_err();
@@ -336,42 +331,11 @@ fn status_error_messages_match_the_sdk() {
 /// then stalls with the connection open (a half-open link, a wedged
 /// proxy). Returns its base URL.
 fn stalling_server() -> String {
-    use std::io::{BufRead, BufReader, Read, Write};
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!("http://{}/v1", listener.local_addr().unwrap());
-    std::thread::spawn(move || {
-        let mut held = Vec::new();
-        for stream in listener.incoming().flatten() {
-            let mut reader = BufReader::new(stream.try_clone().unwrap());
-            let mut len = 0usize;
-            loop {
-                let mut line = String::new();
-                if reader.read_line(&mut line).unwrap_or(0) == 0 {
-                    break;
-                }
-                let line = line.trim_end();
-                if line.is_empty() {
-                    break;
-                }
-                if let Some((k, v)) = line.split_once(':')
-                    && k.eq_ignore_ascii_case("content-length")
-                {
-                    len = v.trim().parse().unwrap_or(0);
-                }
-            }
-            let mut body = vec![0u8; len];
-            let _ = reader.read_exact(&mut body);
-            let mut stream = stream;
-            let _ = stream.write_all(
-                b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
-                  content-length: 1000\r\n\r\n{\"choi",
-            );
-            let _ = stream.flush();
-            // Never finish the body; keep the socket open.
-            held.push(stream);
-        }
-    });
-    url
+    StubServer::start(
+        Duration::ZERO,
+        Arc::new(|_, _| StubResponse::stalled(1000, "{\"choi")),
+    )
+    .base_url
 }
 
 /// The SDK cleared its AbortController once the headers arrived, so a

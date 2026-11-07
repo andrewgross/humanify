@@ -1,49 +1,26 @@
+use humanify_ag_testkit::fake::{ShuffledFake, names};
 use std::collections::BTreeSet;
-use std::sync::Mutex;
-
-use humanify_ag_model::llm::{BatchRenameResponse, LlmCall, LlmError, NameProvider, Renames};
 
 use super::{VendorBody, join_bodies, name_vendor_bodies, split_bodies};
 
-/// Names every asked identifier `<prefix><Id>` and records what it was asked.
-struct Namer {
-    prefix: &'static str,
-    asked: Mutex<Vec<String>>,
+/// Names every asked identifier `<prefix><Id>`; the fake records what
+/// it was asked.
+fn namer(prefix: &'static str) -> ShuffledFake {
+    ShuffledFake::answering(1, move |c| {
+        names(c, |i| {
+            let mut cap = i.trim_start_matches('$').to_string();
+            cap[..1].make_ascii_uppercase();
+            format!("{prefix}{cap}")
+        })
+    })
 }
 
-impl Namer {
-    fn new(prefix: &'static str) -> Self {
-        Namer {
-            prefix,
-            asked: Mutex::new(Vec::new()),
-        }
-    }
-    fn asked(&self) -> Vec<String> {
-        self.asked.lock().expect("lock").clone()
-    }
-}
-
-impl NameProvider for Namer {
-    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-        calls
-            .into_iter()
-            .map(|c| {
-                self.asked
-                    .lock()
-                    .expect("lock")
-                    .extend(c.request.identifiers.iter().cloned());
-                Ok(BatchRenameResponse {
-                    renames: Renames::from_entries(c.request.identifiers.iter().map(|i| {
-                        let mut cap = i.trim_start_matches('$').to_string();
-                        cap[..1].make_ascii_uppercase();
-                        (i.clone(), Some(format!("{}{cap}", self.prefix)))
-                    })),
-                    finish_reason: None,
-                    usage: None,
-                })
-            })
-            .collect()
-    }
+/// Every identifier `fake` was asked, in answer order.
+fn asked(fake: &ShuffledFake) -> Vec<String> {
+    fake.calls()
+        .into_iter()
+        .flat_map(|c| c.request.identifiers)
+        .collect()
 }
 
 fn config() -> crate::naming::driver::NamingConfig {
@@ -105,7 +82,7 @@ fn the_joined_text_splits_back_into_its_bodies() {
 
 #[test]
 fn an_unrestored_factory_bodys_identifiers_are_asked_of_the_model() {
-    let namer = Namer::new("asked");
+    let namer = namer("asked");
     let out = name_vendor_bodies(
         &[body("vendor/semver/functions/coerce.js", SEMVER_LIKE, &[])],
         None,
@@ -115,7 +92,7 @@ fn an_unrestored_factory_bodys_identifiers_are_asked_of_the_model() {
     )
     .expect("runs")
     .expect("named");
-    let asked = namer.asked();
+    let asked = asked(&namer);
     for id in ["r", "n", "i", "o"] {
         assert!(asked.iter().any(|a| a == id), "{id} asked: {asked:?}");
     }
@@ -130,7 +107,7 @@ fn an_unrestored_factory_bodys_identifiers_are_asked_of_the_model() {
 
 #[test]
 fn a_restored_name_is_held_not_asked() {
-    let namer = Namer::new("asked");
+    let namer = namer("asked");
     let text = "function(e,t){var parseVersion=function(i){return i.split(\".\")},r=parseVersion(e);t.exports=r}";
     let out = name_vendor_bodies(
         &[body("vendor/a/b.js", text, &["parseVersion"])],
@@ -141,7 +118,7 @@ fn a_restored_name_is_held_not_asked() {
     )
     .expect("runs")
     .expect("named");
-    let asked = namer.asked();
+    let asked = asked(&namer);
     assert!(!asked.iter().any(|a| a == "parseVersion"), "{asked:?}");
     assert!(asked.iter().any(|a| a == "r"), "{asked:?}");
     assert!(out.texts[0].contains("parseVersion"), "{}", out.texts[0]);
@@ -153,7 +130,7 @@ fn an_unchanged_body_carries_its_names_from_the_prior() {
         &[body("vendor/semver/functions/coerce.js", SEMVER_LIKE, &[])],
         None,
         &config(),
-        &Namer::new("prior"),
+        &namer("prior"),
         &mut log(),
     )
     .expect("runs")
@@ -166,7 +143,7 @@ fn an_unchanged_body_carries_its_names_from_the_prior() {
         .replace("r.f", "s.f")
         .replace(",n=", ",u=")
         .replace("=n}", "=u}");
-    let namer = Namer::new("fresh");
+    let namer = namer("fresh");
     let out = name_vendor_bodies(
         &[body("vendor/semver/functions/coerce.js", &next, &[])],
         Some(&first.joined),
@@ -177,7 +154,7 @@ fn an_unchanged_body_carries_its_names_from_the_prior() {
     .expect("runs")
     .expect("named");
     assert!(out.prior_used);
-    assert!(namer.asked().is_empty(), "asked {:?}", namer.asked());
+    assert!(asked(&namer).is_empty(), "asked {:?}", asked(&namer));
     assert_eq!(out.texts[0], first.texts[0]);
 }
 
@@ -190,7 +167,7 @@ fn bodies_are_joined_in_path_order_and_returned_in_input_order() {
         ],
         None,
         &config(),
-        &Namer::new("asked"),
+        &namer("asked"),
         &mut log(),
     )
     .expect("runs")
@@ -212,7 +189,7 @@ fn a_body_with_a_lone_surrogate_ships_as_extracted_and_the_rest_still_carry() {
         ],
         None,
         &config(),
-        &Namer::new("prior"),
+        &namer("prior"),
         &mut log(),
     )
     .expect("runs")
@@ -225,7 +202,7 @@ fn a_body_with_a_lone_surrogate_ships_as_extracted_and_the_rest_still_carry() {
             super::Skip::LoneSurrogate
         )]
     );
-    let namer = Namer::new("fresh");
+    let namer = namer("fresh");
     let out = name_vendor_bodies(
         &[
             body("vendor/semver/functions/coerce.js", SEMVER_LIKE, &[]),
@@ -239,7 +216,7 @@ fn a_body_with_a_lone_surrogate_ships_as_extracted_and_the_rest_still_carry() {
     .expect("runs")
     .expect("named");
     assert!(out.prior_used, "the prior is read");
-    assert!(namer.asked().is_empty(), "asked {:?}", namer.asked());
+    assert!(asked(&namer).is_empty(), "asked {:?}", asked(&namer));
     assert_eq!(out.texts[0], first.texts[0]);
 }
 
@@ -249,7 +226,7 @@ fn a_body_with_a_line_too_long_for_a_prompt_ships_as_extracted() {
         "function(e,t){{var r=\"{}\";t.exports=r}}",
         "x".repeat(super::MAX_LINE_CHARS + 1)
     );
-    let namer = Namer::new("asked");
+    let namer = namer("asked");
     let out = name_vendor_bodies(
         &[
             body("vendor/hl/lang.js", &long, &[]),
@@ -265,9 +242,9 @@ fn a_body_with_a_line_too_long_for_a_prompt_ships_as_extracted() {
     assert_eq!(out.texts[0], long);
     assert!(out.texts[1].contains("askedQ"), "{}", out.texts[1]);
     assert!(
-        !namer.asked().iter().any(|a| a == "r"),
+        !asked(&namer).iter().any(|a| a == "r"),
         "{:?}",
-        namer.asked()
+        asked(&namer)
     );
     assert_eq!(
         out.skipped,

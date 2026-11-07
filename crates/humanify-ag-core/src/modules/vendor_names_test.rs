@@ -1040,38 +1040,20 @@ fn hash_ordinal_serializes_after_the_identity() {
     );
 }
 
-/// A provider answering the fixed renames for every batch.
-struct FixedProvider(humanify_ag_model::llm::Renames);
-
-impl humanify_ag_model::llm::NameProvider for FixedProvider {
-    fn run_wave(
-        &self,
-        calls: Vec<humanify_ag_model::llm::LlmCall>,
-    ) -> Vec<Result<humanify_ag_model::llm::BatchRenameResponse, humanify_ag_model::llm::LlmError>>
-    {
-        calls
-            .iter()
-            .map(|_| {
-                Ok(humanify_ag_model::llm::BatchRenameResponse {
-                    renames: self.0.clone(),
-                    ..Default::default()
-                })
-            })
-            .collect()
-    }
-}
-
 /// `createVendorNamer`'s classifyProposal: an ECHO of the key and an empty
 /// answer are non-answers (null), counted apart from real names — the TS
 /// vendor-namer.test.ts "returns null per entry on decline or echo" and
 /// "separates named, declined, echoed and thrown" cases.
 #[test]
 fn provider_namer_nulls_echoes_and_counts_outcomes() {
-    let provider = FixedProvider(humanify_ag_model::llm::Renames::from_entries([
-        ("lib_aaaabbbb".to_string(), Some("lib_aaaabbbb".to_string())),
-        ("lib_ccccdddd".to_string(), Some(String::new())),
-        ("lib_eeeeffff".to_string(), Some("js-yaml".to_string())),
-    ]));
+    // Every batch answered with the same fixed renames.
+    let provider = humanify_ag_testkit::fake::ShuffledFake::answering(1, |_| {
+        humanify_ag_testkit::fake::reply([
+            ("lib_aaaabbbb", Some("lib_aaaabbbb".to_string())),
+            ("lib_ccccdddd", Some(String::new())),
+            ("lib_eeeeffff", Some("js-yaml".to_string())),
+        ])
+    });
     let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(
         humanify_ag_model::llm::CacheKeyParams::default(),
     );

@@ -16,7 +16,8 @@ use humanify_ag_model::llm::{
 use crate::cache_test::tmp_dir;
 use crate::metrics::MetricsTracker;
 use crate::provider::{LiveOptions, LlmClient};
-use crate::stub_server::{StubResponse, StubServer, completion};
+use humanify_ag_testkit::answers::completion;
+use humanify_ag_testkit::stub_server::{StubResponse, StubServer};
 
 fn call(i: usize) -> LlmCall {
     LlmCall {

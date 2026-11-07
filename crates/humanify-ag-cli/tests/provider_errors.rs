@@ -6,6 +6,10 @@
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
+use std::time::Duration;
+
+use humanify_ag_testkit::stub_server::{StubResponse, StubServer, dead_endpoint};
 
 const INPUT: &str = concat!(
     "var dA=(H,_)=>{let q=Object.assign(H);_.forEach($=>$.configure(q));return Object.assign(H,q)};",
@@ -18,14 +22,6 @@ impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
-}
-
-/// An endpoint nothing listens on (bound, then released).
-fn dead_endpoint() -> String {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let addr = listener.local_addr().unwrap();
-    drop(listener);
-    format!("http://{addr}/v1")
 }
 
 #[test]
@@ -78,45 +74,15 @@ fn provider_errors_are_reported_at_the_default_verbosity() {
 
 /// A stub endpoint that fails EVERY call with a 503 the client is told not
 /// to retry (`x-should-retry: false`), so each call is one request: the
-/// fault-injection half of audit recommendation 1c. Returns its base URL
-/// and its request counter.
-fn failing_endpoint() -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
-    use std::io::{BufRead, BufReader, Read, Write};
-    use std::sync::atomic::Ordering;
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!("http://{}/v1", listener.local_addr().unwrap());
-    let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let seen = count.clone();
-    std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            let seen = seen.clone();
-            std::thread::spawn(move || {
-                let mut reader = BufReader::new(stream);
-                let mut length = 0usize;
-                let mut line = String::new();
-                while reader.read_line(&mut line).unwrap_or(0) > 0 {
-                    if line == "\r\n" {
-                        break;
-                    }
-                    if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
-                        length = v.trim().parse().unwrap_or(0);
-                    }
-                    line.clear();
-                }
-                let mut body = vec![0u8; length];
-                let _ = reader.read_exact(&mut body);
-                seen.fetch_add(1, Ordering::SeqCst);
-                let out = r#"{"error":{"message":"injected fault"}}"#;
-                let _ = write!(
-                    reader.get_mut(),
-                    "HTTP/1.1 503 Service Unavailable\r\ncontent-type: application/json\r\n\
-                     x-should-retry: false\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{out}",
-                    out.len()
-                );
-            });
-        }
-    });
-    (url, count)
+/// fault-injection half of audit recommendation 1c.
+fn failing_endpoint() -> StubServer {
+    StubServer::start(
+        Duration::ZERO,
+        Arc::new(|_, _| {
+            StubResponse::status(503, r#"{"error":{"message":"injected fault"}}"#)
+                .with_header("x-should-retry", "false")
+        }),
+    )
 }
 
 /// What one run against the failing endpoint reported: the
@@ -128,7 +94,6 @@ struct FailedRun {
 }
 
 fn run_failing(fixture: &str) -> FailedRun {
-    use std::sync::atomic::Ordering;
     let dir = std::env::temp_dir().join(format!(
         "humanify-provider-stats-{fixture}-{}",
         std::process::id()
@@ -140,7 +105,8 @@ fn run_failing(fixture: &str) -> FailedRun {
         "../../test/e2e/fixtures/{fixture}/build/v1.0.0/build/index.js"
     ));
     let stats = s.0.join("stats.json");
-    let (endpoint, requests) = failing_endpoint();
+    let stub = failing_endpoint();
+    let endpoint = stub.base_url.clone();
     let config = s.0.join("humanify.toml");
     std::fs::write(
         &config,
@@ -175,7 +141,7 @@ fn run_failing(fixture: &str) -> FailedRun {
         serde_json::from_str(&std::fs::read_to_string(&stats).unwrap()).unwrap();
     FailedRun {
         provider_errors: json["providerErrors"].clone(),
-        requests: requests.load(Ordering::SeqCst),
+        requests: stub.requests(),
         text,
     }
 }
