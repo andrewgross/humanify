@@ -42,6 +42,7 @@ use sha2::{Digest, Sha256};
 use super::forms::{
     CanonicalForm, Locals, Numbers, ParentNames, Privates, PropertyNames, Strings, Walk,
 };
+use super::identity_transforms::{Rewrite, TransformSet};
 
 /// The symbol tables one walk consults: span start -> symbol for
 /// declarations and resolved references. Built once per semantic and
@@ -169,7 +170,7 @@ fn walk(
         counter: 0,
         keep_strings: form.strings == Strings::Exact,
         blind_privates: form.privates == Privates::Blinded,
-        wrapper_spelling: form.wrapper_spelling,
+        transforms: form.transforms,
         parts: String::with_capacity(4096),
     };
     serialize_value(root, None, "", &mut state);
@@ -194,7 +195,7 @@ struct State<'a> {
     counter: u32,
     keep_strings: bool,
     blind_privates: bool,
-    wrapper_spelling: bool,
+    transforms: TransformSet,
     parts: String,
 }
 
@@ -301,19 +302,18 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
         return;
     }
 
-    // exp094 (wrapper spelling): a SAFE arrow walks under the
-    // FunctionExpression token, so the same code twice-spelled by the
-    // packaging tool (arrow vs function expression) hashes equal under
-    // every form with the rule on (the match-key family). The ONE rule
-    // lives in `hash::wrapper_spelling` (the statement hash's arm reads it
-    // too, exp094b).
-    if node_type == "ArrowFunctionExpression"
-        && state.wrapper_spelling
-        && super::wrapper_spelling::arrow_serializes_as_function(map)
-    {
-        state.parts.push_str("FunctionExpression");
-    } else {
-        state.parts.push_str(&node_type);
+    // The form's identity transforms (`hash::identity_transforms`): a
+    // replacement node walks in the original's place (and is offered to
+    // every transform again); a type-token rename keeps the fields — the
+    // exp094 wrapper spelling, where a SAFE arrow walks under the
+    // FunctionExpression token.
+    match state.transforms.rewrite(&node_type, map) {
+        Rewrite::Node(replacement) => {
+            serialize_node(&replacement, parent, key, state);
+            return;
+        }
+        Rewrite::TypeToken(token) => state.parts.push_str(token),
+        Rewrite::Keep => state.parts.push_str(&node_type),
     }
     state.parts.push('{');
     state.cut();
@@ -657,8 +657,8 @@ pub(crate) fn unwrappable_block<'a>(
 }
 
 // The wrapper-spelling rule (exp094) lives in `super::wrapper_spelling` —
-// shared with the statement hash since exp094b, one rule for both Rust
-// arms plus the TS instruments' `experiments/lib/js/wrapper-spelling.ts`.
+// shared with the statement hash since exp094b — and reaches this walk as
+// one entry of `super::identity_transforms`.
 
 /// Private-name tokens (structural-hash.ts:841-864): VERBATIM — the TS
 /// default. The TS's `privateNamesAsSlots` mode (per-class order-keyed

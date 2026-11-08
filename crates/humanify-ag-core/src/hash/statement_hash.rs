@@ -43,7 +43,8 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::forms::{CanonicalForm, STATEMENT, Walk};
-use super::wrapper_spelling::{arrow_serializes_as_function, function_head_fields};
+use super::identity_transforms::Rewrite;
+use super::wrapper_spelling::function_head_fields;
 
 /// The value-bearing part of a node (statement-hash.ts's nodeContent): what
 /// distinguishes two structurally-identical trees; identifier names
@@ -222,7 +223,7 @@ pub fn statement_hash(stmt: &Value) -> String {
 /// Hash one statement under a [`Walk::Statement`] form: [`STATEMENT`] (the
 /// split's identity, wrapper spelling unified) or
 /// [`super::forms::KPI_STATEMENT`] (the eval scorer's, spellings kept
-/// apart). The form's `wrapper_spelling` is the only setting the walk reads.
+/// apart). The form's `transforms` are the only setting the walk reads.
 pub fn statement_hash_in(form: &CanonicalForm, stmt: &Value) -> String {
     debug_assert!(
         form.walk == Walk::Statement,
@@ -230,7 +231,17 @@ pub fn statement_hash_in(form: &CanonicalForm, stmt: &Value) -> String {
         form.name
     );
     let mut hasher = Sha256::new();
-    let mut stack: Vec<Item<'_>> = vec![Item::Node(stmt)];
+    hash_into(form, stmt, &mut hasher);
+    let digest = hasher.finalize();
+    digest[..8].iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The walk itself, into `hasher`: iterative over the tree; a node an
+/// identity transform REPLACES is walked in place by a nested call on the
+/// replacement (only a transform's small rewrites nest, so the depth is
+/// theirs, never the tree's).
+fn hash_into(form: &CanonicalForm, root: &Value, hasher: &mut Sha256) {
+    let mut stack: Vec<Item<'_>> = vec![Item::Node(root)];
     while let Some(item) = stack.pop() {
         match item {
             Item::Close => {
@@ -250,20 +261,21 @@ pub fn statement_hash_in(form: &CanonicalForm, stmt: &Value) -> String {
                 // match the TS side's for the partition gate. Identifiers
                 // contribute their type alone (names masked); scalars not
                 // in nodeContent are dropped, exactly as the TS walk drops
-                // everything outside VISITOR_KEYS + nodeContent. The ONE
-                // exception since exp094b is the wrapper-spelling rule's
-                // own surface: a SAFE arrow's node line walks under the
-                // FunctionExpression token (shared predicate,
-                // `hash::wrapper_spelling`) so a bundler's arrow ->
-                // function re-serialization keeps the statement's class,
-                // and the function-head fields ride in nodeContent above.
-                let token = if t == "ArrowFunctionExpression"
-                    && form.wrapper_spelling
-                    && arrow_serializes_as_function(map)
-                {
-                    "FunctionExpression"
-                } else {
-                    t
+                // everything outside VISITOR_KEYS + nodeContent. The
+                // exceptions are the form's identity transforms
+                // (`hash::identity_transforms`): since exp094b a SAFE
+                // arrow's node line walks under the FunctionExpression
+                // token (the wrapper spelling, shared predicate) so a
+                // bundler's arrow -> function re-serialization keeps the
+                // statement's class, and the function-head fields ride in
+                // nodeContent above.
+                let token = match form.transforms.rewrite(t, map) {
+                    Rewrite::Node(replacement) => {
+                        hash_into(form, &replacement, hasher);
+                        continue;
+                    }
+                    Rewrite::TypeToken(token) => token,
+                    Rewrite::Keep => t,
                 };
                 hasher.update(format!("({token}\x00{}\x00", node_content(map)));
                 stack.push(Item::Close);
@@ -275,6 +287,4 @@ pub fn statement_hash_in(form: &CanonicalForm, stmt: &Value) -> String {
             }
         }
     }
-    let digest = hasher.finalize();
-    digest[..8].iter().map(|b| format!("{b:02x}")).collect()
 }

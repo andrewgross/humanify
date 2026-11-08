@@ -38,6 +38,11 @@
 //! between an old digest and a silent half-join (exp093's lesson).
 //! `hash_forms_pin_test` pins every form's bytes over the e2e fixtures.
 
+use super::identity_transforms::{Transform, TransformSet};
+
+/// exp094's set: the wrapper-spelling unification alone.
+const WRAPPER_SPELLING_ONLY: TransformSet = TransformSet::of(&[Transform::WrapperSpelling]);
+
 /// Which walk produces the form's stream (module doc: why three).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Walk {
@@ -134,9 +139,11 @@ pub struct CanonicalForm {
     pub property_names: PropertyNames,
     pub privates: Privates,
     pub free_names: FreeNames,
-    /// exp094: a SAFE arrow walks under the `FunctionExpression` token
-    /// (`hash::wrapper_spelling`, the one rule).
-    pub wrapper_spelling: bool,
+    /// The identity transforms the walk applies (`hash::identity_transforms`:
+    /// each one a spelling pair the form hashes as one — exp094's wrapper
+    /// spelling was the first). A form's set is part of its era: adding
+    /// or changing a transform in it is a new version.
+    pub transforms: TransformSet,
     pub parent_names: ParentNames,
 }
 
@@ -177,7 +184,7 @@ pub const MATCH_KEY: CanonicalForm = CanonicalForm {
     property_names: PropertyNames::Verbatim,
     privates: Privates::Verbatim,
     free_names: FreeNames::Verbatim,
-    wrapper_spelling: true,
+    transforms: WRAPPER_SPELLING_ONLY,
     parent_names: ParentNames::Oxc,
 };
 
@@ -231,7 +238,7 @@ pub const IDENTITY_KEY: CanonicalForm = CanonicalForm {
     property_names: PropertyNames::Verbatim,
     privates: Privates::Verbatim,
     free_names: FreeNames::Verbatim,
-    wrapper_spelling: false,
+    transforms: TransformSet::NONE,
     parent_names: ParentNames::Oxc,
 };
 
@@ -277,7 +284,7 @@ pub const STATEMENT: CanonicalForm = CanonicalForm {
     property_names: PropertyNames::Masked,
     privates: Privates::Masked,
     free_names: FreeNames::Masked,
-    wrapper_spelling: true,
+    transforms: WRAPPER_SPELLING_ONLY,
     parent_names: ParentNames::Oxc,
 };
 
@@ -299,7 +306,7 @@ pub const KPI_STATEMENT: CanonicalForm = CanonicalForm {
     name: "kpi-statement",
     version: 2,
     stamped_in: Some("eval scorecard scorerVersion"),
-    wrapper_spelling: false,
+    transforms: TransformSet::NONE,
     ..STATEMENT
 };
 
@@ -320,7 +327,7 @@ pub const ALIGN_UNIT: CanonicalForm = CanonicalForm {
     property_names: PropertyNames::Verbatim,
     privates: Privates::Verbatim,
     free_names: FreeNames::Verbatim,
-    wrapper_spelling: false,
+    transforms: TransformSet::NONE,
     parent_names: ParentNames::Babel,
 };
 

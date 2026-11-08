@@ -85,10 +85,24 @@ fn each_form_names_a_walk_that_can_produce_it() {
             }
             Walk::AlignTokens => {
                 assert_eq!(form.parent_names, ParentNames::Babel, "{}", form.name);
-                assert!(!form.wrapper_spelling, "{}", form.name);
+                assert!(form.transforms.is_empty(), "{}", form.name);
             }
         }
     }
-    // The identity key is byte-exact: no wrapper-spelling rule.
-    const { assert!(!IDENTITY_KEY.wrapper_spelling && !RENAME_SIGNATURE.wrapper_spelling) };
+    // The identity key is byte-exact: no identity transform.
+    assert!(IDENTITY_KEY.transforms.is_empty() && RENAME_SIGNATURE.transforms.is_empty());
+}
+
+#[test]
+fn every_transform_a_form_lists_is_applied_by_its_walk() {
+    for form in FORMS {
+        for t in form.transforms.iter() {
+            assert!(
+                t.spec().walks.contains(&form.walk),
+                "{} lists {} but its walk does not apply it",
+                form.name,
+                t.spec().name
+            );
+        }
+    }
 }
