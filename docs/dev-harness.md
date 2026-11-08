@@ -645,7 +645,10 @@ correctness verdict. Its job is to make a reviewer look.
 7. **Locks.** `build-index.sh` takes `/work/heavy.lock` itself, and the
    standing rule is ONE lock layer. `cargo dev` must have one lock owner:
    long verbs take the lock themselves, with `HELD_LOCK` honoured, and are
-   never wrapped in an outer `flock`.
+   never wrapped in an outer `flock`. (Superseded by exp205, 2026-11-08:
+   there is no host-wide lock; the coordinating agent schedules heavy work
+   from each verb's `footprint`, and `runners::claim` refuses two runs on
+   one folder.)
 8. **Concurrency census scope.** The dev crate's subprocesses, threads and
    waits are many. If they are allowlisted lazily, the pass / fail census
    becomes noise. Better: one subprocess helper with a deadline and drained

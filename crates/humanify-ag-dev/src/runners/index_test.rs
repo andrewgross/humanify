@@ -16,8 +16,6 @@ fn build(rec: &Rec, chunks: u32) -> IndexBuild {
         chunks,
         jobs: 4,
         merge_jobs: 2,
-        heavy_lock: r.join("heavy.lock"),
-        build_lock: r.join("index-build.lock"),
     }
 }
 
@@ -93,4 +91,32 @@ fn a_failed_chunk_stops_the_merge() {
         ctx.transcript()
     );
     assert!(!rec.calls().contains("--merge-only"));
+}
+
+/// Two builds must not write one store (a shard's temp name is fixed, so
+/// two writers of one shard collide) or one work dir: a second build on a
+/// claimed store is refused at once, launching nothing — never queued.
+#[test]
+fn a_store_another_live_build_writes_is_refused() {
+    let rec = Rec::new("index-claimed");
+    let repo = sandbox_repo(
+        &rec,
+        &[Commit {
+            files: vec![(
+                "crates/humanify-ag-cli/Cargo.toml",
+                cargo_toml("humanify-ag-cli", "humanify-ag"),
+            )],
+            branch: None,
+        }],
+    );
+    let ctx = rec.ctx(&repo);
+    let b = build(&rec, 2);
+    let _other = crate::runners::claim::claim_folder(&b.store, "index build other-spec").unwrap();
+    assert_eq!(run(&ctx, &b), 1);
+    let said = ctx.transcript();
+    assert!(said.contains("index build other-spec"), "{said}");
+    assert!(
+        !rec.calls().contains("index build --spec"),
+        "nothing launched"
+    );
 }

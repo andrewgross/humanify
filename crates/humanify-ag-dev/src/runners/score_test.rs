@@ -527,3 +527,25 @@ fn assert_ran(h: &Harness) {
         h.said
     );
 }
+
+/// Two runs of one label must not write one work folder: a run whose
+/// `<workdir>/<label>` another live run holds is refused before it builds
+/// or launches anything.
+#[test]
+fn a_label_folder_another_live_run_writes_is_refused() {
+    let held = std::cell::RefCell::new(None);
+    let h = run_score(&bin_flags(), |rec| {
+        let label = format!(
+            "__run-launch-test-{}",
+            rec.root.file_name().unwrap().to_string_lossy()
+        );
+        let folder = rec.root.join("work").join(label);
+        *held.borrow_mut() = Some(
+            crate::runners::claim::claim_folder(&folder, "eval score (the other run)").unwrap(),
+        );
+    })
+    .unwrap();
+    assert_eq!(h.status, 2, "{}", h.said);
+    assert!(h.said.contains("eval score (the other run)"), "{}", h.said);
+    assert!(h.launches.is_empty(), "nothing launched: {}", h.launches);
+}

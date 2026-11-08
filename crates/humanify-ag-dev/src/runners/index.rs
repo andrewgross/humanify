@@ -13,11 +13,13 @@
 //! then ONE `--merge-only`. A rerun skips every shard the store holds, so
 //! a stopped build resumes.
 //!
-//! Locks: ONE owner. The verb takes `/work/heavy.lock` itself — unless the
-//! caller holds it (`HELD_LOCK`): never wrap it in an outer flock (a nested
-//! flock on the same file deadlocked exp155 / exp176 / exp192). It also
-//! takes `/work/index-build.lock` — a second file, not a nesting — so two
-//! index builds of any kind cannot share a store.
+//! No host-wide lock (exp205): the coordinating agent decides what runs
+//! beside a build, from its footprint. Two builds must still never write
+//! one store (a shard's temp name is fixed per shard, so two writers of one
+//! shard collide) or one work dir (logs, the dry run's state), so the build
+//! CLAIMS both (`super::claim`): a second build on either is refused at
+//! once, never queued. The registry snapshot is shared on purpose (a
+//! fetched packument is never fetched again; the chunks read it offline).
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -42,8 +44,6 @@ pub struct IndexBuild {
     pub chunks: u32,
     pub jobs: u32,
     pub merge_jobs: u32,
-    pub heavy_lock: PathBuf,
-    pub build_lock: PathBuf,
 }
 
 impl IndexBuild {
@@ -167,12 +167,13 @@ pub fn run(ctx: &Ctx, b: &IndexBuild) -> u8 {
 }
 
 fn run_inner(ctx: &Ctx, b: &IndexBuild) -> Result<(), String> {
+    let what = format!("index build {}", text(&b.spec));
+    let _store = super::claim::claim_folder(&b.store, &what)?;
+    let _work = super::claim::claim_folder(&b.work, &what)?;
     let rec = ctx.build(&ctx.repo)?;
     for d in [&b.registry, &b.work] {
         std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
     }
-    let _heavy = super::heavy_lock(ctx, &b.heavy_lock)?;
-    let _build = super::lock_file(ctx, &b.build_lock)?;
     dry_run(ctx, &rec.path, b)?;
     chunks(ctx, &rec.path, b)?;
     merge(ctx, &rec.path, b)

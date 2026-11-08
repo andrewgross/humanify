@@ -13,6 +13,7 @@
 pub mod batch;
 pub mod bin;
 pub mod boot;
+pub mod claim;
 pub mod index;
 pub mod leg;
 pub mod library;
@@ -225,42 +226,8 @@ pub fn dirty(repo: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// The host's one heavy-job lock (docs/concurrency.md). Every heavy verb
-/// takes it itself (`Verb::lock` in main.rs says when); callers never wrap.
-pub const HEAVY_LOCK: &str = "/work/heavy.lock";
-
-/// Take `/work/heavy.lock` for a long verb — unless the caller already
-/// holds it (`HELD_LOCK`): ONE lock layer, a nested flock on the same file
-/// deadlocks every lane (exp155, exp176, exp192). Returns the guard; the
-/// lock is released when it drops.
-pub fn heavy_lock(ctx: &Ctx, path: &Path) -> Result<Option<std::fs::File>, String> {
-    if ctx.host.held_lock {
-        ctx.say(format!(
-            "HELD_LOCK set: the caller holds {} — not taking it again",
-            path.display()
-        ));
-        return Ok(None);
-    }
-    lock_file(ctx, path).map(Some)
-}
-
-/// Block until an exclusive flock on `path` is ours (`File::lock` is
-/// flock(2), the same lock the `flock` tool and every shell script take on
-/// `/work/heavy.lock`). The returned file holds the lock until it drops.
-/// The wait has no deadline on purpose: it is a queue behind another
-/// lane's heavy job, which may legitimately run for hours.
-pub fn lock_file(ctx: &Ctx, path: &Path) -> Result<std::fs::File, String> {
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .map_err(|e| format!("{}: {e}", path.display()))?;
-    ctx.say(format!("waiting for {} ...", path.display()));
-    file.lock()
-        .map_err(|e| format!("flock {}: {e}", path.display()))?;
-    ctx.say(format!("holding {}", path.display()));
-    Ok(file)
-}
+#[cfg(test)]
+mod claim_test;
 
 #[cfg(test)]
 mod recording_test;

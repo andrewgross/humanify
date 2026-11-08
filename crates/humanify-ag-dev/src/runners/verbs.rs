@@ -1,5 +1,5 @@
 //! The verb glue: a parsed command line → the runner, in the live context
-//! (this checkout, the host's HOME / PATH / HELD_LOCK). Each returns the
+//! (this checkout, the host's HOME / PATH). Each returns the
 //! exit code; the runners print as they go.
 
 use std::path::{Path, PathBuf};
@@ -22,28 +22,10 @@ fn refuse(ctx: &Ctx, verb: &str, e: &str) -> u8 {
     2
 }
 
-/// The heavy lock for a verb that holds it for its whole run, taken AFTER
-/// the arguments are checked (a bad flag fails at once, not after hours in
-/// the queue). `Some(None)`: the caller holds it (`HELD_LOCK`).
-fn take_heavy_lock(ctx: &Ctx, verb: &str) -> Option<Option<std::fs::File>> {
-    match super::heavy_lock(ctx, Path::new(super::HEAVY_LOCK)) {
-        Ok(lock) => Some(lock),
-        Err(e) => {
-            refuse(ctx, verb, &e);
-            None
-        }
-    }
-}
-
 pub fn score(ctx: &Ctx, parsed: &Parsed, accepted: &[&str]) -> u8 {
     let Ok(pairs) = load_pairs(ctx) else { return 2 };
     match super::score::config_from(parsed, &pairs, ctx) {
-        Ok(cfg) => {
-            let Some(_lock) = take_heavy_lock(ctx, "eval score") else {
-                return 2;
-            };
-            super::score::run(ctx, &cfg, &run_config("eval score", accepted, parsed))
-        }
+        Ok(cfg) => super::score::run(ctx, &cfg, &run_config("eval score", accepted, parsed)),
         Err(e) => refuse(ctx, "eval score", &e),
     }
 }
@@ -57,9 +39,6 @@ pub fn neutrality(ctx: &Ctx, parsed: &Parsed, accepted: &[&str]) -> u8 {
                 let resolved = super::records::obj(super::neutrality::resolved_record(&cfg));
                 o.insert("resolved", resolved);
             }
-            let Some(_lock) = take_heavy_lock(ctx, "eval neutrality") else {
-                return 2;
-            };
             super::neutrality::run(ctx, &cfg, &pairs, &rc)
         }
         Err(e) => refuse(ctx, "eval neutrality", &e),
@@ -151,8 +130,6 @@ pub fn index_build(ctx: &Ctx, parsed: &Parsed) -> u8 {
             chunks: s.int("index.chunks").unwrap_or(8) as u32,
             jobs: s.int("index.jobs").unwrap_or(4) as u32,
             merge_jobs: s.int("index.merge_jobs").unwrap_or(1) as u32,
-            heavy_lock: PathBuf::from(super::HEAVY_LOCK),
-            build_lock: PathBuf::from("/work/index-build.lock"),
         })
     })();
     match build {
@@ -234,9 +211,6 @@ pub fn library_score(ctx: &Ctx, parsed: &Parsed) -> u8 {
         force_mixed: s.flag_on("run.force_mixed"),
         settings: sets,
         data_root: s.text("libscore.data_root"),
-    };
-    let Some(_lock) = take_heavy_lock(ctx, "library score") else {
-        return 2;
     };
     match super::library::score_label(ctx, &c) {
         Ok(log) => {
