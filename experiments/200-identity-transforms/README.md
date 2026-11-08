@@ -1,6 +1,10 @@
 # exp200 — identity transforms: the code-identity hash ignores the minifier's STYLE
 
-STATUS: PHASE 1 BUILT AND HOP-PROVEN, NOT MERGED (2026-11-08), branch
+STATUS: PHASE 1 BUILT, HOP-PROVEN AND EVAL-SCORED, NOT MERGED (2026-11-08):
+the 5-pair names eval `exp200-e75f9e25` passes every hold column and
+cuts 179->181 vendor noise 53,310 -> 6,202, but total mints read 260
+against the reference's 243 (band ±14) — held for a decision (§7).
+Earlier status line:, branch
 `exp200-identity-transforms`, rebased on main `d293aa886` (exp201 landed).
 Steady state on 2.1.179 -> 2.1.181: vendor noise 53,338 -> 6,254 lines
 (-88%), real change unchanged; the 2.1.197 -> 2.1.198 control is unchanged.
@@ -311,3 +315,51 @@ On 2.1.179, of those 136: 96 are index-placed today but only by package
 at 2.1.181, and only the whole-module answer (unit-level recall would also
 rise wherever the app's copy is concise-spelled and the index's is not, or
 the reverse).
+
+
+## 7. The full eval (5 pairs, names mode, scratch bases)
+
+`cargo dev eval score exp200-e75f9e25` from a frozen worktree of
+`e75f9e254` (rebased on main `21a8e21f0`; it took the heavy lock itself),
+compared with `ref-names-111401fe-r1` (bands `byScorer.2 byMode.names`,
+measured at `111401fe4`). All five runs exit 0, every boot gate OK, no
+rebase failure, no OOM; warm self-hop byte-identical with 0 cache writes;
+cold self-hop 2 lines (reference range 2-22).
+
+Totals:
+
+| KPI | ref r1 | exp200 | delta | band | verdict |
+| --- | --- | --- | --- | --- | --- |
+| novel | 5,336 | 5,336 | = | 0 | hold column exact |
+| realLn | 556,875 | 556,875 | = | 0 | hold column exact |
+| noise | 3,365 | 3,084 | -281 | ±9 | down (all on 179->181) |
+| noiseLn | 77,578 | 71,945 | -5,633 | ±989 | down (179->181: 27,919 -> 22,322) |
+| treeLn | 179,098 | 177,712 | -1,386 | ±745 | down |
+| vendorLn | 54,887 | 7,777 | -47,110 | ±64 | down |
+| vendorReal | 45,346 | 25,486 | -19,860 | ±148 | moved — ALL of it on 179->181, where relocated vendor files fall 101 -> 11 (a module filed under a new path was charged as a whole-file remove + add); on the other four pairs vendorReal is inside the three reference runs' spread |
+| cleanReal | 108,184 | 107,462 | -722 | ±375 | moved — app-side; follows the same relocations (179->181) |
+| reloc | 1,708 | 1,689 | ~0 | ±24 | inside |
+| newName | 4,096 | 4,069 | -27 | ±26 | just down |
+| **mints** | 243 | **260** | **+17** | **±14** | **OUTSIDE the band** (reference r1/r2/r3: 243 / 229 / 232) |
+
+Per pair (exp200 vs the three reference runs):
+
+| pair | vendor noise (r1/r2/r3 -> exp200) | vendor real | mints | functions deterministic | close-match asks |
+| --- | --- | --- | --- | --- | --- |
+| 2.1.85 -> 86 | 236/256/246 -> 234 | 170/162/162 -> 164 | 55/54/46 -> 58 | 35,242 -> 35,241 | 722 -> 670 |
+| 2.1.118 -> 119 | 10/10/10 -> 10 | 506 -> 506 | 33/44/41 -> 52 | 41,077 -> 41,077 | 424 -> 404 |
+| **2.1.179 -> 181** | **53,310/53,226/53,298 -> 6,202** | 35,554/35,686/35,702 -> 15,704 | 40/28/44 -> 36 | 52,124 -> **52,377** | 1,170 -> **890** |
+| 2.1.197 -> 198 | 1,148 -> 1,148 | 7,923/7,865/7,931 -> 7,919 | 58/53/54 -> 41 | 56,769 -> 56,769 | 957 -> 942 |
+| 2.1.215 -> 216 | 183 -> 183 | 1,193 -> 1,193 | 57/50/47 -> **73** | 63,396 -> 63,396 | 704 -> 689 |
+
+**The mints excess, read as far as one run allows:** it sits on 2.1.216
+(+16 over the reference's highest) and 2.1.119 (+8); 2.1.198 is 12 under.
+On both pairs the deterministic function count is IDENTICAL to the
+reference's and the close-match asks are FEWER, so the change did not
+alter what was matched there; 2.1.216's naming leg simply drew more model
+rejections (late rejections 21 vs 14/19/16, failed windows 131 vs
+126/108/113). That points at the LLM draw, not the hash — but it is one
+cold run against a band of three, and rule 11 says the gate cannot tell.
+Resolving it means two more cold repeats of this label (`-r2`, `-r3`) and
+comparing the mints spread, or accepting it as inside a band re-measured
+with this binary.
