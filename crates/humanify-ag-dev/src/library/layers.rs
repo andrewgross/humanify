@@ -277,8 +277,21 @@ pub fn refreeze_chained_layer(
     out: &Path,
     npm_cache: &Path,
 ) -> Result<Refrozen, String> {
-    let committed = corpus.layer(kind)?;
     let (shas, text) = super::chained::refreeze(corpus, kind, out, npm_cache)?;
+    compare(corpus, kind, out, &shas, &text)
+}
+
+/// Write a re-frozen layer's manifest beside its files and compare every
+/// per-entry sha and the manifest's canonical identity with the committed
+/// layer's.
+pub fn compare(
+    corpus: &Corpus,
+    kind: LayerKind,
+    out: &Path,
+    shas: &BTreeMap<String, String>,
+    text: &str,
+) -> Result<Refrozen, String> {
+    let committed = corpus.layer(kind)?;
     let differ: Vec<String> = shas
         .iter()
         .filter(|(id, sha)| committed.entries.get(*id) != Some(*sha))
@@ -289,7 +302,8 @@ pub fn refreeze_chained_layer(
         kind.prefix(),
         corpus.loaded.corpus.suffix
     ));
-    std::fs::write(&mpath, &text).map_err(|e| format!("{}: {e}", mpath.display()))?;
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    std::fs::write(&mpath, text).map_err(|e| format!("{}: {e}", mpath.display()))?;
     Ok(Refrozen {
         kind,
         entries: shas.len(),
@@ -299,18 +313,166 @@ pub fn refreeze_chained_layer(
     })
 }
 
-/// The layer builders not ported yet (each layer's frozen files stay
-/// readable; only re-freezing them is not available).
-pub fn unported() -> &'static [(&'static str, &'static str)] {
-    &[
-        ("copies2", "experiments/129-helpers-copies/copies2.py"),
-        (
-            "misattr13",
-            "experiments/132-factory-precision/scorer13/misattr13.py",
-        ),
-        (
-            "mapdefect14",
-            "experiments/137-scorer-mapdefect/scorer14/mapdefect14.py + tokens14.mjs",
-        ),
-    ]
+/// A string block of the committed layer manifest (`unitsLabel`).
+pub fn committed_text(corpus: &Corpus, kind: LayerKind, key: &str) -> Result<String, String> {
+    corpus
+        .layer(kind)?
+        .blocks
+        .get(key)
+        .and_then(Value::as_str)
+        .map(String::from)
+        .ok_or_else(|| {
+            format!(
+                "{}: no string `{key}` in the committed manifest",
+                kind.prefix()
+            )
+        })
+}
+
+/// Re-freeze scorer 13's `misattr13` layer; `units` defaults to the
+/// committed manifest's `unitsLabel`.
+pub fn refreeze_misattr13(
+    corpus: &Corpus,
+    out: &Path,
+    units: Option<&str>,
+) -> Result<Refrozen, String> {
+    let label = match units {
+        Some(u) => u.to_string(),
+        None => committed_text(corpus, LayerKind::Misattr13, "unitsLabel")?,
+    };
+    let (shas, text) = super::misattr13::build(corpus, &label, out)?;
+    compare(corpus, LayerKind::Misattr13, out, &shas, &text)
+}
+
+/// What the unit-reading builders need beyond the corpus: the run
+/// label(s) whose units they read and copies2's evidence index (each
+/// defaults to what the committed manifest names), and copies2's workers.
+#[derive(Clone, Debug, Default)]
+pub struct Options {
+    pub units: Option<Vec<String>>,
+    pub index: Option<PathBuf>,
+    pub jobs: usize,
+}
+
+/// Every layer kind a builder re-freezes, in build order (layers.sh, then
+/// layers2.sh). The retired v1 `copies` layer has no builder.
+pub const BUILT: [LayerKind; 10] = [
+    LayerKind::Chained,
+    LayerKind::Origins,
+    LayerKind::Origins7,
+    LayerKind::Chained9,
+    LayerKind::Origins10,
+    LayerKind::Chained11,
+    LayerKind::Origins12,
+    LayerKind::Copies2,
+    LayerKind::Misattr13,
+    LayerKind::Mapdefect14,
+];
+
+/// The layers to re-freeze: `want` (by prefix), else every built one.
+pub fn plan(want: Option<&[String]>) -> Result<Vec<LayerKind>, String> {
+    let Some(want) = want else {
+        return Ok(BUILT.to_vec());
+    };
+    want.iter()
+        .map(|w| {
+            BUILT
+                .iter()
+                .copied()
+                .find(|k| k.prefix() == w)
+                .ok_or_else(|| {
+                    let names: Vec<&str> = BUILT.iter().map(|k| k.prefix()).collect();
+                    format!("no layer builder `{w}` (layers: {})", names.join(", "))
+                })
+        })
+        .collect()
+}
+
+/// Re-freeze one layer of `corpus` into `out` and compare it.
+pub fn refreeze(
+    corpus: &Corpus,
+    kind: LayerKind,
+    out: &Path,
+    opts: &Options,
+) -> Result<Refrozen, String> {
+    match kind {
+        LayerKind::Origins | LayerKind::Origins7 | LayerKind::Origins10 | LayerKind::Origins12 => {
+            let layer = ORIGIN_LAYERS
+                .iter()
+                .find(|l| l.kind == kind)
+                .expect("an origin layer");
+            refreeze_origin_layer(corpus, layer, out, Path::new(REGISTRY), Path::new(BUNDLED))
+        }
+        LayerKind::Chained | LayerKind::Chained9 | LayerKind::Chained11 => {
+            refreeze_chained_layer(corpus, kind, out, Path::new(super::chained::NPM_REGISTRY))
+        }
+        LayerKind::Misattr13 => {
+            let units = one_label(opts.units.as_deref())?;
+            refreeze_misattr13(corpus, out, units.as_deref())
+        }
+        LayerKind::Copies2 => {
+            let labels = match &opts.units {
+                Some(u) => u.clone(),
+                None => committed_text(corpus, kind, "unitsFrom")?
+                    .split(',')
+                    .map(String::from)
+                    .collect(),
+            };
+            let ixs = copies2_indexes(corpus, opts.index.as_deref())?;
+            let (shas, text) = super::copies2::build(corpus, &labels, &ixs, out)?;
+            compare(corpus, kind, out, &shas, &text)
+        }
+        LayerKind::Mapdefect14 => {
+            let labels = match &opts.units {
+                Some(u) => u.clone(),
+                None => match corpus.layer(kind)?.blocks.get("unitsLabels") {
+                    Some(Value::Array(xs)) => xs
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(String::from)
+                        .collect(),
+                    _ => return Err("mapdefect14: no unitsLabels in the committed manifest".into()),
+                },
+            };
+            let (shas, text) = super::mapdefect14::build(corpus, &labels, out)?;
+            compare(corpus, kind, out, &shas, &text)
+        }
+        other => Err(format!("{}: no builder", other.prefix())),
+    }
+}
+
+/// copies2's evidence indexes: `--index`, else each index the committed
+/// manifest names, under `INDEX_ROOT` by its basename, refused when its
+/// manifest.json is not the recorded one.
+fn copies2_indexes(corpus: &Corpus, given: Option<&Path>) -> Result<Vec<PathBuf>, String> {
+    if let Some(ix) = given {
+        return Ok(vec![ix.to_path_buf()]);
+    }
+    let layer = corpus.layer(LayerKind::Copies2)?;
+    let Some(Value::Object(ixs)) = layer.blocks.get("indexes") else {
+        return Err("copies2: the committed manifest names no indexes".into());
+    };
+    let mut out = Vec::new();
+    for (name, sha) in ixs {
+        let dir = Path::new(super::copies2::INDEX_ROOT).join(name);
+        let got = super::corpus::sha256_file(&dir.join("manifest.json"))?;
+        if Some(got.as_str()) != sha.as_str() {
+            return Err(format!(
+                "REFUSED: copies2 index {} is not the recorded one (manifest sha {} != {})",
+                dir.display(),
+                &got[..12],
+                sha.as_str().unwrap_or("?")
+            ));
+        }
+        out.push(dir);
+    }
+    Ok(out)
+}
+
+fn one_label(units: Option<&[String]>) -> Result<Option<String>, String> {
+    match units {
+        None => Ok(None),
+        Some([one]) => Ok(Some(one.clone())),
+        Some(_) => Err("misattr13 reads ONE units label".into()),
+    }
 }

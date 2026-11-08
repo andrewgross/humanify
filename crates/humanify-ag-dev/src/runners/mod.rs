@@ -10,6 +10,7 @@
 //! and any extra child variables a test plants), and every child goes
 //! through `crate::proc`.
 
+pub mod batch;
 pub mod bin;
 pub mod boot;
 pub mod index;

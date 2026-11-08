@@ -137,9 +137,51 @@ struct ReportDoc {
 
 /// score.py `run_units`.
 fn run_units(report: &Report) -> Result<Vec<Unit>, String> {
-    report
-        .unit_rows
-        .iter()
+    units_of(&report.unit_rows)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UnitsOnly {
+    unit_rows: Vec<UnitRow>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UnitsDoc {
+    library_discovery: Option<UnitsOnly>,
+}
+
+/// A label's run of `entry`: `run_units` of its report's
+/// `libraryDiscovery` (`Ok(None)` when the report has none), or
+/// `Err` when the report is missing (the layer builders' readers: a
+/// builder that tolerates a missing report checks first).
+pub fn label_units(
+    corpus: &Corpus,
+    label: &str,
+    entry: &CorpusEntry,
+) -> Result<Option<Vec<Unit>>, String> {
+    let p = report_path(corpus, label, entry);
+    let bytes = std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+    let doc: UnitsDoc =
+        serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", p.display()))?;
+    doc.library_discovery
+        .map(|r| units_of(&r.unit_rows))
+        .transpose()
+}
+
+/// `<DATA>/results/<label>/reports/<id>.json`.
+pub fn report_path(corpus: &Corpus, label: &str, entry: &CorpusEntry) -> PathBuf {
+    corpus
+        .data
+        .join("results")
+        .join(label)
+        .join("reports")
+        .join(format!("{}.json", entry.id))
+}
+
+fn units_of(rows: &[UnitRow]) -> Result<Vec<Unit>, String> {
+    rows.iter()
         .enumerate()
         .map(|(i, r)| {
             let w = match &r.whole {
@@ -207,7 +249,7 @@ fn factory_units(units: &[Unit]) -> Vec<&Unit> {
         .collect()
 }
 
-fn scored_units(units: &[Unit]) -> Vec<&Unit> {
+pub fn scored_units(units: &[Unit]) -> Vec<&Unit> {
     let keep: HashSet<usize> = statement_units(units)
         .iter()
         .chain(factory_units(units).iter())

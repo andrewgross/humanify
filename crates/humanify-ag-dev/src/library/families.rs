@@ -138,6 +138,12 @@ impl Families {
         self.root.get(a).map_or(a, String::as_str)
     }
 
+    /// `Families.linked(a, b)`: ONLY the derived links make a and b one
+    /// family.
+    pub fn linked(&self, a: &str, b: &str) -> bool {
+        self.libix.family(a) != self.libix.family(b) && self.find(a) == self.find(b)
+    }
+
     /// `Families.same(a, b)`; None is never one family with anything.
     pub fn same(&self, a: Option<&str>, b: Option<&str>) -> bool {
         let (Some(a), Some(b)) = (a, b) else {
