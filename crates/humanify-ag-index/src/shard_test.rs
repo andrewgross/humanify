@@ -4,7 +4,9 @@
 use crate::bun_node;
 use humanify_ag_core::libindex::recipe::Recipe;
 
-use super::shard::{Shard, ShardInputs, ShardKind, ShardModule, read_current, write_shard};
+use super::shard::{
+    Shard, ShardInputs, ShardKind, ShardModule, has_current, read_current, shard_path, write_shard,
+};
 
 fn inputs() -> ShardInputs {
     ShardInputs {
@@ -88,6 +90,38 @@ fn a_stored_shard_is_reused_only_while_its_key_matches() {
         ..inputs()
     };
     assert!(read_current(&store, &newer).is_none());
+    std::fs::remove_dir_all(&store).expect("cleanup");
+}
+
+#[test]
+fn the_plan_s_reuse_check_reads_the_key_and_agrees_with_the_full_read() {
+    // exp204: the plan asks "is this shard current?" of every stored shard
+    // (~285 GB on the full Bun store); the answer reads the key at the head
+    // of the file, never the rows, and must agree with `read_current`.
+    let store = temp_store("has-current");
+    let newer = ShardInputs {
+        bundler: Some("bun@1.4.3".into()),
+        ..inputs()
+    };
+    assert!(!has_current(&store, &inputs()), "no file");
+    let mut shard = Shard::new(&inputs());
+    shard.modules.push(ShardModule {
+        owner: "ms".into(),
+        version: "2.1.3".into(),
+        file: "index.js".into(),
+        key: "k1".into(),
+    });
+    write_shard(&store, &shard).expect("write");
+    assert!(has_current(&store, &inputs()));
+    assert!(!has_current(&store, &newer));
+    // a file whose head is not a shard's falls back to the full read
+    let path = shard_path(&store, &inputs().kind.name(), "ms", "2.1.3");
+    std::fs::write(&path, "not json").expect("overwrite");
+    assert!(!has_current(&store, &inputs()));
+    assert_eq!(
+        has_current(&store, &inputs()),
+        read_current(&store, &inputs()).is_some()
+    );
     std::fs::remove_dir_all(&store).expect("cleanup");
 }
 
