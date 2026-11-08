@@ -50,9 +50,11 @@ deleted, moved or retired and why; tag `m4` is the last tree that has it. The
 only JavaScript left is `tools/webcrack-shim.ts`, which the binary runs (with
 `npx tsx`) to unpack webpack / browserify bundles, and node itself, which e2e
 uses to import every output. `package.json` holds exactly the shim's runtime.
-(Until exp202 lands, a short list of library-truth builders it is porting
-stays in their experiment folders: `experiments/203-harness-l5/README.md`
-lists them.)
+(The index builder's bundler recipes, `crates/humanify-ag-index/recipes/`,
+are configs it hands to rollup / webpack, not harness code.) The library truth
+layers, corpus freezes, bundle builds and npm caches are `cargo dev library
+layers|corpus freeze|corpus build|npm`; every committed layer re-freezes
+byte-identically on the corpora this host still has (exp202).
 
 What the stages prove:
 
