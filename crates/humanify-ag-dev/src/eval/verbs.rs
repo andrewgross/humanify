@@ -85,10 +85,13 @@ pub fn leaderboard(parsed: &Parsed) -> Out {
 }
 
 pub fn bands(parsed: &Parsed) -> Out {
-    let file = crate::paths::repo_root()
-        .join(crate::paths::EVAL_DIR)
-        .join("noise-bands.json");
-    match super::bands::bands(&results_dir(parsed), &parsed.positionals, &file) {
+    let dir = crate::paths::repo_root().join(crate::paths::EVAL_DIR);
+    match super::bands::bands(
+        &results_dir(parsed),
+        &parsed.positionals,
+        &dir.join("noise-bands.json"),
+        &dir.join("self-hop-reference.json"),
+    ) {
         Ok(s) => (0, s, String::new()),
         Err(e) => (2, String::new(), format!("eval bands: {e}\n")),
     }
