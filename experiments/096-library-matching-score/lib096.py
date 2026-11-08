@@ -10,83 +10,87 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "../.."))
 MISSES = os.path.join(REPO, "experiments/095-library-fingerprints/misses/scripts")
+# The committed corpus and truth-layer manifests and the labels moved to dev/library/ (harness lane L5,
+# exp203); this file stays only until exp202 ports the last builders that import it.
+CORPORA_DIR = os.path.join(REPO, "dev/library/corpora")
+RESULTS_DIR = os.path.join(REPO, "dev/library/results")
 # Two corpora, never mixed in one label. `dev` is the corpus every tuning lane reads (Claude Code, the 67 held-out
 # apps, wrangler, the esbuild app). `test` is exp100's FROZEN test split: new apps chosen by rule, built with four
 # bundlers, scored only to judge — its per-bundle cards and raw reports stay under its own data dir (not committed,
 # not for tuning lanes); a test label commits its summary (per-set aggregates) only.
 CORPORA = {
-    "dev": {"manifest": os.path.join(HERE, "corpus.json"), "origins": os.path.join(HERE, "origins.json"),
-            "copies": os.path.join(HERE, "copies.json"), "chained": os.path.join(HERE, "chained.json"),
+    "dev": {"manifest": os.path.join(CORPORA_DIR, "corpus.json"), "origins": os.path.join(CORPORA_DIR, "origins.json"),
+            "copies": os.path.join(CORPORA_DIR, "copies.json"), "chained": os.path.join(CORPORA_DIR, "chained.json"),
             "data": "/work/exp096-data"},
-    "test": {"manifest": os.path.join(HERE, "corpus-test.json"), "origins": os.path.join(HERE, "origins-test.json"),
-             "copies": os.path.join(HERE, "copies-test.json"), "chained": os.path.join(HERE, "chained-test.json"),
+    "test": {"manifest": os.path.join(CORPORA_DIR, "corpus-test.json"), "origins": os.path.join(CORPORA_DIR, "origins-test.json"),
+             "copies": os.path.join(CORPORA_DIR, "copies-test.json"), "chained": os.path.join(CORPORA_DIR, "chained-test.json"),
              "data": "/work/exp100-test-data/frozen"},
     # exp116's FROZEN test split v2: new apps no lane has seen (exp100's split was partly spent by aggregate
     # diagnoses), the untouched final judge; private exactly as `test` (summaries only, never tuned on)
-    "test2": {"manifest": os.path.join(HERE, "corpus-test2.json"), "origins": os.path.join(HERE, "origins-test2.json"),
-              "copies": os.path.join(HERE, "copies-test2.json"), "chained": os.path.join(HERE, "chained-test2.json"),
+    "test2": {"manifest": os.path.join(CORPORA_DIR, "corpus-test2.json"), "origins": os.path.join(CORPORA_DIR, "origins-test2.json"),
+              "copies": os.path.join(CORPORA_DIR, "copies-test2.json"), "chained": os.path.join(CORPORA_DIR, "chained-test2.json"),
               "data": "/work/exp116-test2-data/frozen"},
     # exp105's DEV-SIDE webpack and rollup builds (experiments/105-webpack-rollup/scripts/dev_apps.py): small apps
     # made from the step-4 index's packages, never the test split's; a dev corpus (its cards are committed)
-    "bundlers": {"manifest": os.path.join(HERE, "corpus-bundlers.json"),
-                 "origins": os.path.join(HERE, "origins-bundlers.json"),
-                 "copies": os.path.join(HERE, "copies-bundlers.json"),
-                 "chained": os.path.join(HERE, "chained-bundlers.json"),
+    "bundlers": {"manifest": os.path.join(CORPORA_DIR, "corpus-bundlers.json"),
+                 "origins": os.path.join(CORPORA_DIR, "origins-bundlers.json"),
+                 "copies": os.path.join(CORPORA_DIR, "copies-bundlers.json"),
+                 "chained": os.path.join(CORPORA_DIR, "chained-bundlers.json"),
                  "data": "/work/exp105-data/frozen"},
     # exp107's DEV-SIDE esbuild, webpack and rollup builds of 32 real apps drawn from exp095's TRAINING apps (never
     # held-out, never test; experiments/107-zero-app-claims/scripts/dev_apps.py); a dev corpus (cards committed)
-    "apps": {"manifest": os.path.join(HERE, "corpus-apps.json"), "origins": os.path.join(HERE, "origins-apps.json"),
-             "copies": os.path.join(HERE, "copies-apps.json"),
-             "chained": os.path.join(HERE, "chained-apps.json"), "data": "/work/exp107-data/frozen"},
+    "apps": {"manifest": os.path.join(CORPORA_DIR, "corpus-apps.json"), "origins": os.path.join(CORPORA_DIR, "origins-apps.json"),
+             "copies": os.path.join(CORPORA_DIR, "copies-apps.json"),
+             "chained": os.path.join(CORPORA_DIR, "chained-apps.json"), "data": "/work/exp107-data/frozen"},
     # exp112's DEV analogue of the test split's POPULATION: exp108 TRAINING apps (GitHub topic:electron by stars,
     # npm CLIs past rank 7,863; never held-out, never test) built with exp100's Bun and esbuild recipes, one stratum
     # chosen by a pre-bundled-copy mechanism read from training installs (experiments/112-test-precision/scripts/
     # dev_pop.py); a dev corpus (cards committed)
-    "pop": {"manifest": os.path.join(HERE, "corpus-pop.json"), "origins": os.path.join(HERE, "origins-pop.json"),
-            "copies": os.path.join(HERE, "copies-pop.json"), "chained": os.path.join(HERE, "chained-pop.json"),
+    "pop": {"manifest": os.path.join(CORPORA_DIR, "corpus-pop.json"), "origins": os.path.join(CORPORA_DIR, "origins-pop.json"),
+            "copies": os.path.join(CORPORA_DIR, "copies-pop.json"), "chained": os.path.join(CORPORA_DIR, "chained-pop.json"),
             "data": "/work/exp112-data/pop/frozen"},
     # exp126's DEV corpus of RE-MINIFIED bundles: exp108 TRAINING apps (never held-out, test, test2, apps or pop)
     # bundled against the packages' published minified entries, then minified again by terser and by esbuild
     # (experiments/126-reminified/scripts/dev_remin.py); a dev corpus (cards committed)
-    "remin": {"manifest": os.path.join(HERE, "corpus-remin.json"), "origins": os.path.join(HERE, "origins-remin.json"),
-              "copies": os.path.join(HERE, "copies-remin.json"), "chained": os.path.join(HERE, "chained-remin.json"),
+    "remin": {"manifest": os.path.join(CORPORA_DIR, "corpus-remin.json"), "origins": os.path.join(CORPORA_DIR, "origins-remin.json"),
+              "copies": os.path.join(CORPORA_DIR, "copies-remin.json"), "chained": os.path.join(CORPORA_DIR, "chained-remin.json"),
               "data": "/work/exp126-data/remin/frozen"},
     # exp140's JUDGE corpus of RE-MINIFIED bundles: exp126's recipe at another seed over exp108 TRAINING apps in no
     # other corpus (remin's 36 included); private exactly as test2 (summaries only, never tuned on, never diagnosed)
-    "remin2": {"manifest": os.path.join(HERE, "corpus-remin2.json"), "origins": os.path.join(HERE, "origins-remin2.json"),
-               "copies": os.path.join(HERE, "copies-remin2.json"), "chained": os.path.join(HERE, "chained-remin2.json"),
+    "remin2": {"manifest": os.path.join(CORPORA_DIR, "corpus-remin2.json"), "origins": os.path.join(CORPORA_DIR, "origins-remin2.json"),
+               "copies": os.path.join(CORPORA_DIR, "copies-remin2.json"), "chained": os.path.join(CORPORA_DIR, "chained-remin2.json"),
                "data": "/work/exp140-data/remin2/frozen"},
     # exp141's second DEV corpus of RE-MINIFIED bundles: exp126's recipe at seed 141, 24 apps per kind, over exp108
     # TRAINING apps in no other corpus (remin2's included); a dev corpus (cards committed)
-    "remin3": {"manifest": os.path.join(HERE, "corpus-remin3.json"), "origins": os.path.join(HERE, "origins-remin3.json"),
-               "copies": os.path.join(HERE, "copies-remin3.json"), "chained": os.path.join(HERE, "chained-remin3.json"),
+    "remin3": {"manifest": os.path.join(CORPORA_DIR, "corpus-remin3.json"), "origins": os.path.join(CORPORA_DIR, "origins-remin3.json"),
+               "copies": os.path.join(CORPORA_DIR, "copies-remin3.json"), "chained": os.path.join(CORPORA_DIR, "chained-remin3.json"),
                "data": "/work/exp141-data/remin3/frozen"},
     # exp146's third DEV corpus of RE-MINIFIED bundles: exp126's recipe at seed 146, 48 apps per kind, over exp108
     # TRAINING apps in no other corpus (remin2's and remin3's included); a dev corpus (cards committed)
-    "remin4": {"manifest": os.path.join(HERE, "corpus-remin4.json"), "origins": os.path.join(HERE, "origins-remin4.json"),
-               "copies": os.path.join(HERE, "copies-remin4.json"), "chained": os.path.join(HERE, "chained-remin4.json"),
+    "remin4": {"manifest": os.path.join(CORPORA_DIR, "corpus-remin4.json"), "origins": os.path.join(CORPORA_DIR, "origins-remin4.json"),
+               "copies": os.path.join(CORPORA_DIR, "copies-remin4.json"), "chained": os.path.join(CORPORA_DIR, "chained-remin4.json"),
                "data": "/work/exp146-data/remin4/frozen"},
     # exp150's Bun test bed (library-names plan step 0): exp108 TRAINING apps in no other corpus built by Bun 1.4.0
     # with --target node and --target bun; bun-dev is a dev corpus (cards committed), bun-held its held-out split
     # (private as test2: summaries only, scored once per candidate)
-    "bun-dev": {"manifest": os.path.join(HERE, "corpus-bun-dev.json"), "origins": os.path.join(HERE, "origins-bun-dev.json"),
-                "copies": os.path.join(HERE, "copies-bun-dev.json"), "chained": os.path.join(HERE, "chained-bun-dev.json"),
+    "bun-dev": {"manifest": os.path.join(CORPORA_DIR, "corpus-bun-dev.json"), "origins": os.path.join(CORPORA_DIR, "origins-bun-dev.json"),
+                "copies": os.path.join(CORPORA_DIR, "copies-bun-dev.json"), "chained": os.path.join(CORPORA_DIR, "chained-bun-dev.json"),
                 "data": "/work/exp150-data/bun-dev/frozen"},
-    "bun-held": {"manifest": os.path.join(HERE, "corpus-bun-held.json"),
-                 "origins": os.path.join(HERE, "origins-bun-held.json"),
-                 "copies": os.path.join(HERE, "copies-bun-held.json"),
-                 "chained": os.path.join(HERE, "chained-bun-held.json"), "data": "/work/exp150-data/bun-held/frozen"},
+    "bun-held": {"manifest": os.path.join(CORPORA_DIR, "corpus-bun-held.json"),
+                 "origins": os.path.join(CORPORA_DIR, "origins-bun-held.json"),
+                 "copies": os.path.join(CORPORA_DIR, "copies-bun-held.json"),
+                 "chained": os.path.join(CORPORA_DIR, "chained-bun-held.json"), "data": "/work/exp150-data/bun-held/frozen"},
     # exp181's bundler-kind beds: exp150's 45 bun-dev APPS built by esbuild 0.28.2, webpack 5.111.1 and rollup 4.64.5
     # with the run-time build's pinned tools (experiments/181-index-all-bundlers/scripts/kind_corpus.py); dev corpora
-    **{f"kind-{k}": {"manifest": os.path.join(HERE, f"corpus-kind-{k}.json"),
-                     "origins": os.path.join(HERE, f"origins-kind-{k}.json"),
-                     "copies": os.path.join(HERE, f"copies-kind-{k}.json"),
-                     "chained": os.path.join(HERE, f"chained-kind-{k}.json"),
+    **{f"kind-{k}": {"manifest": os.path.join(CORPORA_DIR, f"corpus-kind-{k}.json"),
+                     "origins": os.path.join(CORPORA_DIR, f"origins-kind-{k}.json"),
+                     "copies": os.path.join(CORPORA_DIR, f"copies-kind-{k}.json"),
+                     "chained": os.path.join(CORPORA_DIR, f"chained-kind-{k}.json"),
                      "data": f"/work/exp181-data/kind-{k}/frozen"} for k in ("esbuild", "webpack", "rollup")},
     # exp150's Claude Code corpus: 2.1.216 with the exp095 negatives sample re-labelled (seed 95 redraw). Its truth
     # quotes no code but sits beside the labels, which do: under /work/cc-library-truth/, never committed
-    "cc": {"manifest": os.path.join(HERE, "corpus-cc.json"), "origins": os.path.join(HERE, "origins-cc.json"),
-           "copies": os.path.join(HERE, "copies-cc.json"), "chained": os.path.join(HERE, "chained-cc.json"),
+    "cc": {"manifest": os.path.join(CORPORA_DIR, "corpus-cc.json"), "origins": os.path.join(CORPORA_DIR, "origins-cc.json"),
+           "copies": os.path.join(CORPORA_DIR, "copies-cc.json"), "chained": os.path.join(CORPORA_DIR, "chained-cc.json"),
            "data": "/work/cc-library-truth/frozen"},
 }
 # frozen judges: a label on one commits per-set aggregates only (no per-bundle cards, no bundle names in its log)

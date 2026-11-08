@@ -2,7 +2,7 @@
 //! launch is logged: the `--config` TOML writer (successor of
 //! `experiments/lib/pipeline-config.ts` for these two launchers), bash's
 //! `printf %q` (scripts/lib/launch-golden.ts `shellQuote`), and the launch
-//! log the goldens under `experiments/034-eval-harness/launch-goldens/`
+//! log the goldens under `dev/eval/goldens/`
 //! hold, line for line in the recorder shape (test/launch-recorder.ts).
 //!
 //! Private to `e2e` on purpose: lane L3 owns `src/launch/` and writes its

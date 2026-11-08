@@ -1,6 +1,6 @@
-//! `scripts/concurrency-allowlist.json`: every confirmed concurrency site
+//! `dev/census/concurrency-allowlist.json`: every confirmed concurrency site
 //! with its documented pattern (docs/concurrency.md); and
-//! `scripts/clone-allowlist.json`: every reviewed twin group of the clone
+//! `dev/census/clone-allowlist.json`: every reviewed twin group of the clone
 //! census (`cargo dev census clones`) with its justification.
 
 use std::path::Path;

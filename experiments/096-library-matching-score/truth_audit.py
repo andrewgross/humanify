@@ -36,7 +36,7 @@ _MIS13 = {}
 
 def misattr13_manifest_path():
     c = lib096.CORPUS
-    return os.path.join(lib096.HERE, "misattr13.json" if c == "dev" else f"misattr13-{c}.json")
+    return os.path.join(lib096.CORPORA_DIR, "misattr13.json" if c == "dev" else f"misattr13-{c}.json")
 
 
 def load_misattr13(entry):
@@ -69,7 +69,7 @@ _MD14 = {}
 
 def mapdefect14_manifest_path():
     c = lib096.CORPUS
-    return os.path.join(lib096.HERE, "mapdefect14.json" if c == "dev" else f"mapdefect14-{c}.json")
+    return os.path.join(lib096.CORPORA_DIR, "mapdefect14.json" if c == "dev" else f"mapdefect14-{c}.json")
 
 
 def load_mapdefect14_manifest():
@@ -339,7 +339,7 @@ _CHAINED11 = {}
 
 def chained11_manifest_path():
     c = lib096.CORPUS
-    return os.path.join(lib096.HERE, "chained11.json" if c == "dev" else f"chained11-{c}.json")
+    return os.path.join(lib096.CORPORA_DIR, "chained11.json" if c == "dev" else f"chained11-{c}.json")
 
 
 def load_chained11_manifest():
@@ -380,7 +380,7 @@ _CHAINED9 = {}
 
 def chained9_manifest_path():
     c = lib096.CORPUS
-    return os.path.join(lib096.HERE, "chained9.json" if c == "dev" else f"chained9-{c}.json")
+    return os.path.join(lib096.CORPORA_DIR, "chained9.json" if c == "dev" else f"chained9-{c}.json")
 
 
 def load_chained9_manifest():
@@ -416,7 +416,7 @@ def load_chained9(entry):
 # .json.gz + origins7[-<corpus>].json. Every rule off: the scorer 4-6 layer (origins7.py verify: byte-identical).
 def origins7_manifest_path():
     c = lib096.CORPUS
-    return os.path.join(lib096.HERE, "origins7.json" if c == "dev" else f"origins7-{c}.json")
+    return os.path.join(lib096.CORPORA_DIR, "origins7.json" if c == "dev" else f"origins7-{c}.json")
 
 
 def rules7():
@@ -445,7 +445,7 @@ def origins7_sha():
 # scorer 7 layer segment for segment (origins10.py verify). When on, origin_layer reads it in place of scorer 7's.
 def origins10_manifest_path():
     c = lib096.CORPUS
-    return os.path.join(lib096.HERE, "origins10.json" if c == "dev" else f"origins10-{c}.json")
+    return os.path.join(lib096.CORPORA_DIR, "origins10.json" if c == "dev" else f"origins10-{c}.json")
 
 
 def rules10():
@@ -483,7 +483,7 @@ def origins10_sha():
 # origin_layer reads it in place of scorer 10's.
 def origins12_manifest_path():
     c = lib096.CORPUS
-    return os.path.join(lib096.HERE, "origins12.json" if c == "dev" else f"origins12-{c}.json")
+    return os.path.join(lib096.CORPORA_DIR, "origins12.json" if c == "dev" else f"origins12-{c}.json")
 
 
 def rules12():

@@ -338,7 +338,7 @@ def init(label, rows_path, corpus):
 
 
 def copies2_path(corpus):
-    return os.path.join(SCORE, "copies2.json" if corpus == "dev" else f"copies2-{corpus}.json")
+    return os.path.join(lib096.CORPORA_DIR, "copies2.json" if corpus == "dev" else f"copies2-{corpus}.json")
 
 
 def cmd_derive(argv):

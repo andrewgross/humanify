@@ -40,10 +40,7 @@ fn corpus(rec: &Rec) {
 }
 
 fn sandbox(rec: &Rec, baseline: Baseline) -> PathBuf {
-    let pairs = (
-        "experiments/034-eval-harness/pairs.json",
-        committed("experiments/034-eval-harness/pairs.json"),
-    );
+    let pairs = ("dev/eval/pairs.json", committed("dev/eval/pairs.json"));
     let new_crate = (
         "crates/humanify-ag-cli/Cargo.toml",
         cargo_toml("humanify-ag-cli", "humanify-ag"),

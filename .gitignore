@@ -37,13 +37,13 @@ experiments/results/
 split-output/
 
 # Eval run logs. The per-run JSON summaries under
-# `experiments/034-eval-harness/results/<label>/` ARE committed — they are the
+# `dev/eval/results/<label>/` ARE committed — they are the
 # references later runs are scored against — but the raw pipeline logs beside
 # them are not, and never have been (0 of them are tracked). They are also
 # ~10 GB, so with nothing ignoring them every `git status` listed them and a
 # `git add -A` at the repo root would have tried to commit all of it.
-experiments/034-eval-harness/results/*/*.log
-experiments/034-eval-harness/results/*/*.stdout
+dev/eval/results/*/*.log
+dev/eval/results/*/*.stdout
 
 # exp092 match ground-truth: the corpus cache (npm tarballs + extracted
 # builds, re-downloadable from the pinned versions) and the per-pair raw
@@ -57,10 +57,14 @@ experiments/092-match-ground-truth/.runs/
 # rather than by decision.
 .devcontainer/
 docs/plan-server-migration.md
-# The LLM server's address (experiments/lib/llm-endpoint.sh). Per-machine,
-# and private: test/no-private-addresses.test.ts fails on one in a tracked file.
+# The LLM server's address (`cargo dev` reads it: committed::local). Per-machine,
+# and private: the `no-private-addresses` gate stage fails on one in a tracked file.
 .humanify.local.json
 experiments/*/results/*
+# The harness's labels: committed references are force-added; every other
+# run label stays local (the same rule experiments/*/results/* had).
+dev/eval/results/*
+dev/library/results/*
 
 # Rust workspace build output (rust-port migration)
 /target/

@@ -17,7 +17,7 @@
 //! a hand-transcribed list here, and it had gone stale (its neutrality
 //! entry still read `--llm-cache ... --prior-version p.js`). They are now
 //! read from the goldens lane L0 recorded from the real launchers
-//! (`experiments/034-eval-harness/launch-goldens/`), half three below.
+//! (`dev/eval/goldens/`), half three below.
 //! The test stays in this crate, not the dev crate that loads those
 //! goldens: what it checks is this crate's private parse surface
 //! (`surface::parse_pipeline`, `Config::build`), and a product crate never
@@ -72,8 +72,8 @@ fn repo_file(rel: &str) -> String {
 }
 
 const GOLDENS: [&str; 2] = [
-    "experiments/034-eval-harness/run-launch.golden.txt",
-    "experiments/034-eval-harness/run-launch.seeded-base.golden.txt",
+    "dev/eval/goldens/run-launch.golden.txt",
+    "dev/eval/goldens/run-launch.seeded-base.golden.txt",
 ];
 
 /// One launch: its argv and the TOML of the `--config` file it passed
@@ -167,7 +167,7 @@ fn words(s: &str) -> Vec<String> {
 /// small parser below are this test's own): one recorded launch per line,
 /// `<program> [(in <dir>)] [ENV=v ...] :: <argv>`, each followed by the
 /// `humanify-config| <line>` lines of the `--config` file it was given.
-const LAUNCH_GOLDENS: &str = "experiments/034-eval-harness/launch-goldens";
+const LAUNCH_GOLDENS: &str = "dev/eval/goldens";
 
 /// Every PIPELINE launch of THIS binary in one L0 golden: the program is
 /// `.../humanify-ag` and the argv is a run (not `--help`, not a
@@ -210,6 +210,9 @@ fn recorded_corpus() -> Vec<(String, Launch)> {
         .unwrap_or_else(|e| panic!("{dir}: {e}"))
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .filter(|n| n.ends_with(".golden.txt"))
+        // the two run-launch goldens share the directory but are run.sh's
+        // format, read through GOLDENS above
+        .filter(|n| !GOLDENS.iter().any(|g| g.ends_with(n.as_str())))
         .collect();
     names.sort();
     let mut out = Vec::new();
@@ -483,8 +486,8 @@ fn every_golden_launch_resolves_to_a_captured_launchs_settings() {
     // deliberate difference from the captured launches; the record is
     // compared with it taken back out (every other setting must still
     // match a captured launch).
-    let pairs: Value = serde_json::from_str(&repo_file("experiments/034-eval-harness/pairs.json"))
-        .expect("pairs.json is JSON");
+    let pairs: Value =
+        serde_json::from_str(&repo_file("dev/eval/pairs.json")).expect("pairs.json is JSON");
     let eval_index = pairs["libraryIndex"].clone();
     assert!(eval_index.is_string(), "pairs.json names the eval's index");
     for launch in launches {

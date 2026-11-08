@@ -6,7 +6,7 @@
 //! - `*.rs`: rustfmt in place and re-staged (a file that also has
 //!   unstaged changes is refused instead: formatting it would stage
 //!   them), then the concurrency census over just those files;
-//! - `scripts/concurrency-allowlist.json` staged: the whole census;
+//! - `dev/census/concurrency-allowlist.json` staged: the whole census;
 //! - every staged file's STAGED content: no private network address.
 //!
 //! The hook is not the gate: it never runs the test suites.

@@ -55,7 +55,7 @@ def truth_bundev(entry_id):
     lib096.use("bun-dev")
     entries = {
         e["id"]: e
-        for e in json.load(open(os.path.join(SCORER, "corpus-bun-dev.json")))["entries"]
+        for e in json.load(open(os.path.join(SCORER, "../../dev/library/corpora/corpus-bun-dev.json")))["entries"]
     }
     with gzip.open(lib096.truth_path(entries[entry_id]), "rt") as fh:
         t = json.load(fh)

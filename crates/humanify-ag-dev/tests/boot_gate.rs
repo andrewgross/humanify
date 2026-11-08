@@ -84,8 +84,8 @@ fn the_boot_gate_launches_and_scrub_equal_the_golden() {
     let calls = std::fs::read_to_string(root.join("calls.log"))
         .unwrap()
         .replace(&root.display().to_string(), "<TMP>");
-    let golden_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../experiments/034-eval-harness/launch-goldens/boot-gate.golden.txt");
+    let golden_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../dev/eval/goldens/boot-gate.golden.txt");
     let golden = std::fs::read_to_string(golden_path)
         .unwrap()
         .replace(" OLDPWD ", " ")

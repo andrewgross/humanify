@@ -188,11 +188,10 @@ pub fn self_hop_reference(repo: &Path) -> Result<Loaded<SelfHopReference>, Strin
     load_json(&repo.join(EVAL_DIR).join("self-hop-reference.json"))
 }
 
-/// Every launch golden: run.sh's two and lane L0's under `launch-goldens/`,
-/// by file name.
+/// Every launch golden (`dev/eval/goldens/`), by file name.
 pub fn launch_goldens(repo: &Path) -> Result<BTreeMap<String, Loaded<String>>, String> {
     let mut out = BTreeMap::new();
-    for dir in [repo.join(EVAL_DIR), repo.join(LAUNCH_GOLDENS)] {
+    for dir in [repo.join(LAUNCH_GOLDENS)] {
         let entries = std::fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         for entry in entries {
             let path = entry.map_err(|e| e.to_string())?.path();

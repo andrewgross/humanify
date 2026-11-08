@@ -1,5 +1,5 @@
 //! match-truth's launches against lane L0's golden
-//! (experiments/034-eval-harness/launch-goldens/match-truth.golden.txt),
+//! (dev/eval/goldens/match-truth.golden.txt),
 //! byte for byte. The golden was recorded from the TS runner (run.ts) with
 //! recorders in place of npm and the binary (test/launch-recorder.ts); the
 //! recorders here are the same two scripts, and the Rust runner is pointed

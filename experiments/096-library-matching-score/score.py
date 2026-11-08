@@ -671,7 +671,7 @@ def main():
     if truth_audit.RULES14["mapdefect"] and \
             truth_audit.load_mapdefect14_manifest()["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 14 map-defect layer was frozen for another corpus manifest")
-    out_dir = os.path.join(HERE, "results", label)
+    out_dir = os.path.join(lib096.RESULTS_DIR, label)
     # a test label's per-bundle cards are NOT committed (tuning lanes must not read per-app test misses)
     cards_dir = os.path.join(run_dir if test else out_dir, "cards")
     os.makedirs(out_dir, exist_ok=True)

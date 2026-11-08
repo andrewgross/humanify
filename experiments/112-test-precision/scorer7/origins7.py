@@ -68,7 +68,7 @@ def layer7_path(entry):
 
 
 def manifest7_path():
-    return os.path.join(lib096.HERE, "origins7.json" if lib096.CORPUS == "dev" else f"origins7-{lib096.CORPUS}.json")
+    return os.path.join(lib096.CORPORA_DIR, "origins7.json" if lib096.CORPUS == "dev" else f"origins7-{lib096.CORPUS}.json")
 
 
 def load(entry):

@@ -167,12 +167,7 @@ pub fn cargo_toml(package: &str, binary: &str) -> String {
 
 /// A committed launch golden.
 pub fn golden(name: &str) -> String {
-    let dir = if name.starts_with("run-launch") {
-        crate::paths::EVAL_DIR
-    } else {
-        crate::paths::LAUNCH_GOLDENS
-    };
-    committed(&format!("{dir}/{name}"))
+    committed(&format!("{}/{name}", crate::paths::LAUNCH_GOLDENS))
 }
 
 /// Compare a recorded log with its golden; on a difference, name the
