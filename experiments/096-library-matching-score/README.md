@@ -1,5 +1,24 @@
 # exp096: a library-matching score we can track over time
 
+## STATUS (2026-11-08): the scorer is Rust now
+
+The library score is `cargo dev library score <label> --index D --rule
+agreement|structural` (the runner, exp198) and `cargo dev library rescore
+<label>` (scorer 14, byte-identical to `score.py` on every label on this host,
+exp197); `library leaderboard`, `library determinism`, `library corpus verify`,
+`library layers` and `library proof` replace `leaderboard.py`,
+`determinism.py`, `corpus.py verify` and the origin / chained builders. The
+committed data moved byte for byte (harness lane L5, exp203): the corpus and
+truth-layer manifests to `dev/library/corpora/`, `bands.json` and
+`data-roots.json` to `dev/library/`, `results/` to `dev/library/results/`.
+`run.sh`, `run.py`, `leaderboard.py`, `determinism.py`, `handcheck_draw.py`,
+`lazy_modules.py` and `merge_index.py` are deleted (tag
+`experiments-code-final`). `score.py`, `lib096.py`, `truth_audit.py`,
+`decoder.py`, `origins.py`, `families_lib.py` and `corpus.py` stay ONLY until
+exp202 ports the last layer builders and corpus freezers that import them
+(lib096 now reads the corpora from `dev/library/corpora/`). §6 and §7 below
+describe the old files.
+
 ## STATUS (2026-10-15)
 
 - **Scorer 9 (exp120, `experiments/120-truth-families/README.md`).** Two truth-side fixes, re-scoring all 237

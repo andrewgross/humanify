@@ -15,7 +15,7 @@ use crate::proc::{self, Spawn};
 use crate::settings::Parsed;
 
 /// Every shim file, relative to the repository root.
-pub const SHIMS: &[&str] = &["scripts/webcrack-shim.ts"];
+pub const SHIMS: &[&str] = &["tools/webcrack-shim.ts"];
 
 const DEADLINE: Duration = Duration::from_secs(60);
 

@@ -1,6 +1,5 @@
-//! Where the harness's committed files are TODAY. The `dev/` move is lane
-//! L5 (docs/dev-harness.md §2.1); until then every path is read where it
-//! lives now, and only this module names one.
+//! Where the harness's committed files live (`dev/`, docs/dev-harness.md
+//! §2.1; moved there byte for byte by lane L5). Only this module names one.
 
 use std::path::{Path, PathBuf};
 
@@ -9,20 +8,23 @@ pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// The 034 eval harness directory (pairs.json, bands, goldens, results).
-pub const EVAL_DIR: &str = "experiments/034-eval-harness";
-/// The eval's committed labels.
-pub const EVAL_RESULTS: &str = "experiments/034-eval-harness/results";
-/// The launch goldens recorded by lane L0.
-pub const LAUNCH_GOLDENS: &str = "experiments/034-eval-harness/launch-goldens";
-/// The exp096 library scorer's directory (corpora, layers, bands).
-pub const LIBRARY_DIR: &str = "experiments/096-library-matching-score";
-/// The library scorer's committed labels.
-pub const LIBRARY_RESULTS: &str = "experiments/096-library-matching-score/results";
+/// The eval's committed config (pairs.json, noise-bands.json,
+/// self-hop-reference.json).
+pub const EVAL_DIR: &str = "dev/eval";
+/// The eval's labels (the committed references and local runs).
+pub const EVAL_RESULTS: &str = "dev/eval/results";
+/// Every launch golden (lane L0's recordings and the run-launch goldens).
+pub const LAUNCH_GOLDENS: &str = "dev/eval/goldens";
+/// The library scorer's committed config (bands.json, data-roots.json).
+pub const LIBRARY_DIR: &str = "dev/library";
+/// The library corpora: each corpus manifest and its truth-layer manifests.
+pub const LIBRARY_CORPORA: &str = "dev/library/corpora";
+/// The library scorer's labels.
+pub const LIBRARY_RESULTS: &str = "dev/library/results";
 /// The concurrency census's allowlist.
-pub const CONCURRENCY_ALLOWLIST: &str = "scripts/concurrency-allowlist.json";
+pub const CONCURRENCY_ALLOWLIST: &str = "dev/census/concurrency-allowlist.json";
 /// The clone census's allowlist (reviewed twin groups, each justified).
-pub const CLONE_ALLOWLIST: &str = "scripts/clone-allowlist.json";
+pub const CLONE_ALLOWLIST: &str = "dev/census/clone-allowlist.json";
 /// The e2e fixtures (one `fixture.config.json` each).
 pub const E2E_FIXTURES: &str = "test/e2e/fixtures";
 /// The git-ignored per-host config (the LLM endpoint).

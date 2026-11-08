@@ -29,6 +29,16 @@ That means:
   RESULTS files and data stay; a README that says "run `npx tsx
 experiments/NNN/foo.ts`" refers to a script that exists at tag `m4`, not
   here. To re-run one: `git worktree add --detach /work/m4 m4`.
+- **No experiment CODE is in this tree any more (2026-11-08, harness lane L5,
+  [exp203](./203-harness-l5/)).** The measurement harness moved into the Rust
+  crate `crates/humanify-ag-dev` (`cargo dev ...`, exp195-exp199), its data into
+  `dev/`, and every old experiment's scripts (`.ts`, `.py`, `.sh`, `.mjs`,
+  proto crates) were deleted after tag **`experiments-code-final`**, which has
+  them all. READMEs, RESULTS files, data, corpora and fixtures stay. A README
+  that says "run `npx tsx experiments/NNN/foo.ts`" or `python3 ... .py` refers
+  to a script at that tag: `git worktree add --detach /work/xcf
+  experiments-code-final`. (Until exp202 lands, a short list of library-truth
+  builders it is porting stays here; exp203's README lists them.)
 
 Each README in the active arc below carries a **STATUS block** at the top giving
 its outcome, what superseded it, and which of its own claims are refuted. A
@@ -49,13 +59,13 @@ has to pass.
 | #                                        | What it was                                                             | Status                                                      |
 | ---------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------- |
 | [033](./033-naming-noise/)               | naming-noise harness, Lever B ceiling                                   | landed                                                      |
-| [034](./034-eval-harness/)               | **the eval harness and gate** — 4 fixed pairs, KPIs, self-hop invariant | **live tooling, not an experiment**                         |
+| [034](./034-eval-harness/)               | **the eval harness and gate** — 4 fixed pairs, KPIs, self-hop invariant | **now `cargo dev eval`**; its README is the KPI reference   |
 | [035](./035-naming-state/)               | deterministic naming state, minted census                               | landed                                                      |
 | [036](./036-interchangeable-assignment/) | stable names for indistinguishable siblings                             | **concluded — positional assignment is DEAD, do not retry** |
 | [037](./037-noise-source-decomposition/) | handoff decomposing the residual                                        | reference                                                   |
 | [038](./038-dependency-aware-reorder/)   | dependency-aware emit order                                             | landed — reorder 33% → 4.4%                                 |
 | [039](./039-naming-drift/)               | naming drift                                                            | **brief only; its correspondence hypothesis is REFUTED**    |
-| [040](./040-diff-census/)                | per-run census of the real git diff                                     | live tooling (`relocation-churn.ts`)                        |
+| [040](./040-diff-census/)                | per-run census of the real git diff                                     | historical (`relocation-churn.ts` at `experiments-code-final`) |
 | [041](./041-content-anchor/)             | content anchor + all-same vote                                          | **shipped** — relocation −50.5%                             |
 | [042](./042-anchor-preempt/)             | anchor preempts a minted-counter name vote                              | **shipped** — −41.8%; **its own brief's premise was wrong** |
 | [043](./043-name-family/)                | preempt on corroborated content                                         | **shipped** — −69.2%, cumulative −91.1%                     |
@@ -159,18 +169,20 @@ That is a gap, not a filing convention.
    **landed** or **failed**, with numbers. Totals-first tables.
 4. **Judge every hop on its own** — 118→119 is the regression canary, and a big
    hop masks a regression on a small one.
-5. Gate with `experiments/041-content-anchor/gate-verdict.sh <control> <label>`.
+5. Gate with `cargo dev eval leaderboard <control> <label>` (judged against
+   the measured bands) and, for a should-change-nothing change,
+   `cargo dev eval neutrality <ref>`.
 6. When it is over, **put a STATUS block at the top of the README** saying what
    happened and which of its own claims did not survive. That block is what makes
    the next person's reading cheap instead of misleading.
 
 ## Fixtures and shared tooling
 
-`fixtures/`, `fixtures.json`, `ground-truth.ts`, `metrics.ts`,
-`prepare-ground-truth.ts`, `prepare-humanified.ts` — the original library-fixture
-harness (Preact, zod, hono). Still used by the perturbation lab and the
-clustering experiments; the noise arc scores real Claude Code releases through
-[034](./034-eval-harness/) instead.
+`fixtures/` and `fixtures.json` — the original library-fixture data (Preact,
+zod, hono). Its scripts (`ground-truth.ts`, `metrics.ts`,
+`prepare-ground-truth.ts`, `prepare-humanified.ts`) are at tag
+`experiments-code-final`; the noise arc scores real Claude Code releases
+through `cargo dev eval` ([034](./034-eval-harness/)) instead.
 
 `EXPERIMENT-PLAN.md` and `EXPERIMENT-RESULTS.md` are the original clustering plan
 and its reference-clustering results. They describe the Preact/zod/hono workflow

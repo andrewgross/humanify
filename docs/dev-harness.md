@@ -1,7 +1,16 @@
 # The dev harness: one Rust crate for every measurement (design)
 
-STATUS: DESIGN ONLY (exp185, 2026-11-05). Nothing here is built. Every number
-below was read off main at `701d7631a` on 2026-11-05. Where this doc says
+STATUS (2026-11-08): BUILT. Lanes L0-L5 landed it (exp191, exp195-exp199,
+exp203); L5 deleted the TS / Python / sh harness after tag
+`experiments-code-final` and moved the committed data into `dev/` (§2.1). Two
+amendments the lanes made are binding over the text below: the eval KPI scorer
+is a NEW scorer version (v2, exp196), not a Babel-shape port (§4a and §8 risk 1
+are superseded); the walk is ported (`cargo dev eval walk`). Left until exp202
+lands: the copies2 / misattr13 / mapdefect14 layer builders, the corpus
+freezers, the npm cache fillers and the bun-dev stub-run batches (exp203's
+README lists the files). The rest of this document is the design as written
+(exp185, 2026-11-05); every number below was read off main at `701d7631a` on
+2026-11-05. Where this doc says
 "verified", the claim was checked against the code or the data on this box.
 Where it says "not verified", it was not.
 

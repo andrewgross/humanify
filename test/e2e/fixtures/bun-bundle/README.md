@@ -49,7 +49,7 @@ committed builds; on main @ 342650cf it failed (`esbuild`).
 - a deterministic 29/30-line stdout report. Node runs Bun's CJS output as
   a bare function expression and calls nothing, so the e2e boot step runs
   the input the way Bun's loader does (`BUN_CJS_LOADER` in
-  `scripts/e2e.ts`: evaluate the file to the wrapper, call it with a real
+  `cargo dev e2e` (`e2e::run`): evaluate the file to the wrapper, call it with a real
   CommonJS module) and compares that with `node run.cjs` in the split tree.
 
 v1.1.0 perturbs the last dep (adds `tripled`), the late module's output

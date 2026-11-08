@@ -74,7 +74,7 @@ start end size from emit listeners parent node props state self window document 
 
 def manifest_path(corpus=None):
     c = corpus or lib096.CORPUS
-    return os.path.join(SCORE, "mapdefect14.json" if c == "dev" else f"mapdefect14-{c}.json")
+    return os.path.join(lib096.CORPORA_DIR, "mapdefect14.json" if c == "dev" else f"mapdefect14-{c}.json")
 
 
 def clean(toks):

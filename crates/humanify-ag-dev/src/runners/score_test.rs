@@ -105,13 +105,10 @@ fn run_score(flags: &[&str], prep: impl Fn(&Rec)) -> Result<Harness, Vec<String>
         &rec,
         &[Commit {
             files: vec![
+                ("dev/eval/pairs.json", committed("dev/eval/pairs.json")),
                 (
-                    "experiments/034-eval-harness/pairs.json",
-                    committed("experiments/034-eval-harness/pairs.json"),
-                ),
-                (
-                    "experiments/034-eval-harness/self-hop-reference.json",
-                    committed("experiments/034-eval-harness/self-hop-reference.json"),
+                    "dev/eval/self-hop-reference.json",
+                    committed("dev/eval/self-hop-reference.json"),
                 ),
             ],
             branch: None,

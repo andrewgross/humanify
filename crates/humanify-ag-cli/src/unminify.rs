@@ -20,7 +20,7 @@ use humanify_ag_model::profiling::JsObject;
 use crate::log::verbose;
 use crate::progress::ProgressRenderer;
 
-/// The webcrack shim command for a `scripts/webcrack-shim.ts` path: `npx
+/// The webcrack shim command for a `tools/webcrack-shim.ts` path: `npx
 /// tsx <script> <out>`, run from the repo root (the script's grandparent,
 /// where node_modules resolves).
 pub fn webcrack_shim(script: &Path) -> WebcrackShim {
@@ -35,10 +35,10 @@ pub fn webcrack_shim(script: &Path) -> WebcrackShim {
     }
 }
 
-/// The pipeline's shim: this checkout's `scripts/webcrack-shim.ts` (the
+/// The pipeline's shim: this checkout's `tools/webcrack-shim.ts` (the
 /// webcrack plugin is absorbed by the shim, never ported — WPB.2).
 pub fn repo_webcrack_shim() -> WebcrackShim {
-    webcrack_shim(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/webcrack-shim.ts"))
+    webcrack_shim(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/webcrack-shim.ts"))
 }
 
 /// What stage 3 handed downstream.

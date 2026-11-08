@@ -5,7 +5,7 @@
 //! docs/concurrency.md: a FIXED set of patterns, each with its rules. This
 //! census finds every concurrency construct in non-test Rust under
 //! `<root>/crates/` and requires each one to be on the allowlist
-//! (scripts/concurrency-allowlist.json) with the pattern it follows and a
+//! (dev/census/concurrency-allowlist.json) with the pattern it follows and a
 //! reason. An unlisted site FAILS — the "did you really mean this?" flag
 //! for whoever added it: the message names the construct, the doc section
 //! with its rules, and the exact entry to add once the site is confirmed.

@@ -25,7 +25,7 @@
 //!
 //! **Strict mode (the gate's `census:clones`, ADVISORY)**: every finding
 //! with at least one NON-TEST member must be on the allowlist
-//! (`scripts/clone-allowlist.json`: an entry per finding, its sorted
+//! (`dev/census/clone-allowlist.json`: an entry per finding, its sorted
 //! `path:functionName` members and a one-line justification), or the
 //! census exits 1 — the gate prints REVIEW, never FAIL. Act on a finding
 //! by unifying the code (CLAUDE.md code style) or allowlisting it with a
@@ -359,7 +359,7 @@ fn verdict(out: &mut String, p: &Partition) -> (u8, String, String) {
          not proof of duplication — this census cannot tell copy-paste from coincidence or idiom. \
          Act on each group: unify the code (when it really is one question answered twice — see \
          CLAUDE.md code style) or add its sorted \"path:functionName\" members to \
-         scripts/clone-allowlist.json with a one-line justification (when it is idiom or \
+         dev/census/clone-allowlist.json with a one-line justification (when it is idiom or \
          deliberate). In the check gate this prints REVIEW, never FAIL.",
         p.fresh.len()
     );

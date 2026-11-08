@@ -6,7 +6,7 @@ it finds in its store (`library.index_store_dir`, default
 `.humanify/library-index` under the working directory), and when there is none
 prints one line and skips library name matching (exp175); only
 `--library-index-from-bundle` builds one at run time. The e2e stage
-(`scripts/e2e.ts`) points every launch at this committed store explicitly and
+(`cargo dev e2e`) points every launch at this committed store explicitly and
 runs every fixture in the default mode: every Bun fixture takes the FOUND path
 (no fetch, no build: a launch that prints the run-time build's notice fails the
 stage), so the default mode runs end to end — index lookup, vendor placement,

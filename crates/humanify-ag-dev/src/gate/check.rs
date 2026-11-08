@@ -102,7 +102,7 @@ pub const STAGES: &[Stage] = &[
     },
     Stage {
         name: "census:concurrency",
-        why: "every concurrency site in non-test crates/ (threads, rayon, tokio, locks, channels, atomics, subprocesses, sleeps, timeouts) is on scripts/concurrency-allowlist.json with a documented pattern and a reason (docs/concurrency.md); an unlisted or stale site fails — confirm a new one by adding its entry, or use the sanctioned primitive",
+        why: "every concurrency site in non-test crates/ (threads, rayon, tokio, locks, channels, atomics, subprocesses, sleeps, timeouts) is on dev/census/concurrency-allowlist.json with a documented pattern and a reason (docs/concurrency.md); an unlisted or stale site fails — confirm a new one by adding its entry, or use the sanctioned primitive",
         run: Run::Dev(&["census", "concurrency"]),
         advisory: false,
         deadline: Duration::from_secs(10 * 60),
@@ -144,7 +144,8 @@ pub const STAGES: &[Stage] = &[
     },
 ];
 
-/// Every stage of the TS gate (`scripts/check.ts` `STAGES`, 13) and what
+/// Every stage of the deleted TS gate (`scripts/check.ts` `STAGES`, 13; tag
+/// `experiments-code-final` has it) and what
 /// replaces it here: a stage name in [`STAGES`], or `MOOT: <why>`.
 pub const SUCCESSORS: &[(&str, &str)] = &[
     ("typecheck", "shims"),

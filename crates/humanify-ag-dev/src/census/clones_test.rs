@@ -68,7 +68,7 @@ pub fn summarize_lines(text: &str, width: usize) -> String {
 "#;
 
 const EMPTY_ALLOWLIST: &str = r#"{"$comment": "test", "entries": []}"#;
-const ALLOW: &str = "scripts/clone-allowlist.json";
+const ALLOW: &str = "dev/census/clone-allowlist.json";
 
 fn run_on(root: &Path, loose: bool) -> (u8, String) {
     let (code, out, err) = census(root, loose);

@@ -31,10 +31,7 @@ fn setup() -> (Rec, std::path::PathBuf) {
     let repo = sandbox_repo(
         &rec,
         &[Commit {
-            files: vec![(
-                "experiments/034-eval-harness/pairs.json",
-                committed("experiments/034-eval-harness/pairs.json"),
-            )],
+            files: vec![("dev/eval/pairs.json", committed("dev/eval/pairs.json"))],
             branch: None,
         }],
     );

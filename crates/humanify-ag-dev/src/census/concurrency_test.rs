@@ -116,7 +116,10 @@ fn fails_on_a_new_unlisted_tokio_spawn_and_says_how_to_confirm_it() {
     );
     assert!(out.contains("tokio-spawn"), "{out}");
     assert!(out.contains("docs/concurrency.md#async-io"), "{out}");
-    assert!(out.contains("scripts/concurrency-allowlist.json"), "{out}");
+    assert!(
+        out.contains("dev/census/concurrency-allowlist.json"),
+        "{out}"
+    );
     assert!(out.contains(r#""construct": "tokio-spawn""#), "{out}");
     // exactly one site: the comment and the string were not counted
     assert!(

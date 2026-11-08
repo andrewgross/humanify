@@ -5,7 +5,7 @@ fn every_listed_shim_is_tracked_and_parses() {
     let repo = crate::paths::repo_root();
     let (code, out, err) = check(&repo, SHIMS, &HostEnv::default());
     assert_eq!(code, 0, "{out}{err}");
-    assert!(out.contains("scripts/webcrack-shim.ts"), "{out}");
+    assert!(out.contains("tools/webcrack-shim.ts"), "{out}");
 }
 
 #[test]

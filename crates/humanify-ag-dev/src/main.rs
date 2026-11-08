@@ -138,7 +138,7 @@ const VERBS: &[Verb] = &[
         proves: "app/wrong-package bytes among the truth-LABELLED vendor bytes, through the run's own raw-to-era bridge",
         cannot_prove: "anything about unlabelled bytes, or a run without the bridge (pre-exp166 binaries)",
         lane: None,
-        today: "npm run eval -- vendor-precision",
+        today: "",
         settings: &["libscore.truth"],
     },
     Verb {
@@ -147,7 +147,7 @@ const VERBS: &[Verb] = &[
         proves: "where a CommonJS app's modules were placed against the bun-dev census",
         cannot_prove: "anything outside the census's bundles",
         lane: None,
-        today: "python3 experiments/172-cjs-app-placement/score.py",
+        today: "",
         settings: NONE,
     },
     Verb {
@@ -210,7 +210,7 @@ const VERBS: &[Verb] = &[
         proves: "relative library-matching movement between labels on the fixed corpus (band 0: every delta is real)",
         cannot_prove: "why a delta happened when libraryBytes moved too",
         lane: None,
-        today: "npm run eval -- library-leaderboard",
+        today: "",
         settings: FORCE,
     },
     Verb {
@@ -219,7 +219,7 @@ const VERBS: &[Verb] = &[
         proves: "two labels of one configuration are byte-identical (the band-0 claim)",
         cannot_prove: "anything about two different configurations",
         lane: None,
-        today: "python3 experiments/096-library-matching-score/determinism.py",
+        today: "",
         settings: DETERMINISM_SETTINGS,
     },
     Verb {

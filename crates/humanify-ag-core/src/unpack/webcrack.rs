@@ -15,7 +15,7 @@ use std::time::Duration;
 use super::{ModuleMetadata, UnpackResult, UnpackedFile};
 
 /// How to launch the shim: the program and its leading arguments (e.g.
-/// `npx tsx <repo>/scripts/webcrack-shim.ts`); the output directory is
+/// `npx tsx <repo>/tools/webcrack-shim.ts`); the output directory is
 /// appended as the last argument.
 #[derive(Clone, Debug)]
 pub struct WebcrackShim {

@@ -43,7 +43,7 @@ reference exp075 verified against).
 The single-file fixtures run the pipeline without `--split` (their output
 is one rewritten file). A bundle's unpack output is a TREE (`vendor/` +
 `runtime.js`), so bundle fixtures run every leg WITH `--split` and boot the
-runnable CJS module graph in place; `scripts/e2e.ts` reads the flag. The
+runnable CJS module graph in place; `cargo dev e2e` reads the flag. The
 legacy-golden comparison is skipped for this pair (no pre-2026-09-28
 binary ever ran it — there is no golden to prove anything against), with a
 printed note.

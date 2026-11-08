@@ -131,21 +131,6 @@ fn every_ts_gate_stage_maps_to_a_successor() {
     assert_eq!(advisory, ["census:clones", "census:slop"]);
 }
 
-/// While `scripts/check.ts` exists, its `STAGES` must equal the frozen
-/// list above — a stage added to the TS gate after the port would
-/// otherwise have no successor. L5 deletes this test with check.ts.
-#[test]
-fn the_frozen_ts_stage_list_equals_check_ts() {
-    let text = std::fs::read_to_string(crate::paths::repo_root().join("scripts/check.ts"))
-        .expect("scripts/check.ts exists until L5 deletes it (and this test)");
-    let names: Vec<&str> = text
-        .lines()
-        .filter_map(|l| l.trim().strip_prefix("name: \""))
-        .filter_map(|l| l.strip_suffix("\","))
-        .collect();
-    assert_eq!(names, TS_STAGES);
-}
-
 #[test]
 fn an_in_crate_stage_reruns_this_binary_with_the_user_tools_on_path() {
     let host = HostEnv {

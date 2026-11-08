@@ -16,7 +16,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{Loaded, load_json};
-use crate::paths::LIBRARY_DIR;
+use crate::paths::{LIBRARY_CORPORA, LIBRARY_DIR};
 
 /// One corpus: its name and the suffix of its files. Where its data
 /// lives on this host is per-host data ([`data_roots`]), not code.
@@ -268,7 +268,7 @@ pub fn layer(
     kind: LayerKind,
     corpus: &Corpus,
 ) -> Result<Option<Loaded<Layer>>, String> {
-    let path = layer_file(&repo.join(LIBRARY_DIR), kind, corpus);
+    let path = layer_file(&repo.join(LIBRARY_CORPORA), kind, corpus);
     if !path.exists() {
         return Ok(None);
     }
@@ -317,7 +317,7 @@ pub fn canonical_id(path: &Path) -> Result<String, String> {
 /// the same corpus sha.
 pub fn load_corpus(repo: &Path, name: &str) -> Result<LoadedCorpus, String> {
     let corpus = corpus_named(name)?;
-    let dir = repo.join(LIBRARY_DIR);
+    let dir = repo.join(LIBRARY_CORPORA);
     let manifest: Loaded<CorpusManifest> =
         load_json(&dir.join(format!("corpus{}.json", corpus.suffix)))?;
     let mut layers = Vec::new();

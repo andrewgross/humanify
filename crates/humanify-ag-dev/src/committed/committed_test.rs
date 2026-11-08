@@ -118,7 +118,7 @@ fn the_endpoint_resolves_from_the_flag_then_the_local_files() {
 #[test]
 fn a_layer_with_a_block_its_kind_does_not_have_fails_the_load() {
     let repo = std::env::temp_dir().join(format!("dev-layer-{}", std::process::id()));
-    let dir = repo.join(crate::paths::LIBRARY_DIR);
+    let dir = repo.join(crate::paths::LIBRARY_CORPORA);
     std::fs::create_dir_all(&dir).unwrap();
     let dev = library::corpus_named("dev").unwrap();
     let body = r#"{"schema":"s","corpusSha256":"c","entries":{"a":"b"}"#;
@@ -199,4 +199,56 @@ fn the_committed_bands_carry_scorer_2_for_both_modes() {
     assert_eq!(get("off", "novel"), Some(0.0));
     assert_eq!(get("names", "realLn"), Some(0.0));
     assert!(get("names", "noise").is_some());
+}
+
+/// Every committed file under `dev/` (the labels aside, which have their
+/// own readers) is read by its typed loader: a file moved there that no
+/// loader reads — or a loader still pointing at the old home — fails.
+#[test]
+fn every_committed_dev_file_is_read_by_its_loader() {
+    use std::collections::BTreeSet;
+    let repo = repo_root();
+    let mut read: BTreeSet<std::path::PathBuf> = BTreeSet::new();
+    let mut note = |p: &std::path::Path| {
+        read.insert(p.canonicalize().expect("a loaded file exists"));
+    };
+    note(&eval::pairs(&repo).unwrap().path);
+    note(&eval::noise_bands(&repo).unwrap().path);
+    note(&eval::self_hop_reference(&repo).unwrap().path);
+    for g in eval::launch_goldens(&repo).unwrap().values() {
+        note(&g.path);
+    }
+    note(&library::data_roots(&repo).unwrap().path);
+    note(&library::bands(&repo).unwrap().path);
+    for c in library::CORPORA {
+        let loaded = library::load_corpus(&repo, c.name).unwrap();
+        note(&loaded.manifest.path);
+        for l in &loaded.layers {
+            note(&l.path);
+        }
+    }
+    note(&census::concurrency_allowlist(&repo).unwrap().path);
+    note(&census::clone_allowlist(&repo).unwrap().path);
+
+    let mut on_disk = BTreeSet::new();
+    let mut stack = vec![repo.join("dev")];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if name != "results" {
+                    stack.push(path);
+                }
+            } else if name != ".gitignore" {
+                on_disk.insert(path.canonicalize().unwrap());
+            }
+        }
+    }
+    let unread: Vec<_> = on_disk.difference(&read).collect();
+    assert!(
+        unread.is_empty(),
+        "files under dev/ no loader reads: {unread:?}"
+    );
+    assert!(read.len() > 150, "only {} files read", read.len());
 }

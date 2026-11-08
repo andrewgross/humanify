@@ -20,7 +20,7 @@ fn rust_files_get_rustfmt_and_the_staged_file_census() {
 
 #[test]
 fn a_staged_allowlist_runs_the_whole_census() {
-    let plan = plan(&s(&["scripts/concurrency-allowlist.json"]));
+    let plan = plan(&s(&["dev/census/concurrency-allowlist.json"]));
     assert!(plan.rustfmt.is_empty());
     assert_eq!(plan.census, Some(Vec::new()), "empty = the whole tree");
 }

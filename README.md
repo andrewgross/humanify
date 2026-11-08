@@ -88,8 +88,9 @@ Prerequisites:
 - Rust, via [rustup](https://rustup.rs). The toolchain is pinned in
   `rust-toolchain.toml`; the first `cargo` call inside the repo installs it.
 - Node.js >= 20 and npm — only for webpack/browserify inputs (the unpacker
-  shells out to `scripts/webcrack-shim.ts`) and for the measurement harness.
-  Bun-compiled and plain bundles need no Node.
+  shells out to `tools/webcrack-shim.ts`; `npm ci --ignore-scripts` installs
+  its two dependencies) and for the gate's e2e stage, which imports every
+  output. Bun-compiled and plain bundles need no Node.
 
 ```shell
 git clone <repo-url>
@@ -168,7 +169,7 @@ from (one `<id>/` directory per index, named by the sha256 of its
 neither, the run prints one line saying no index for that kind was found and
 how to get one (the offline builder, `humanify-ag index build --spec …`; the
 default spec is `crates/humanify-ag-index/specs/default.toml`, and
-`scripts/build-index.sh` runs it chunked), and goes on
+`cargo dev index build <spec> ...` runs it chunked), and goes on
 with library name matching skipped. A `--library-index` that has nothing for
 the bundle's kind fails the run. `--library-index-from-bundle` instead builds
 one at run time from the npm packages the bundle itself reveals (library
@@ -212,11 +213,14 @@ crates/
   humanify-ag-index/    # the offline library index builder (`humanify-ag index`)
   humanify-ag-llm/      # the OpenAI-compatible client and the response cache
   humanify-ag-model/    # shared data types (ledgers, dumps, stats)
-scripts/             # the gate (check.ts), the eval dispatcher (eval.ts),
-                     #   the e2e stage, the webcrack shim
-experiments/         # the measurement harness (lib/, 034-eval-harness/) and
-                     #   the experiment records
-test/                # harness tests, the e2e fixtures, test/parity goldens
+  humanify-ag-dev/      # the measurement harness, run as `cargo dev <verb>`:
+                        #   the gate, the eval, the library score, censuses
+  humanify-ag-testkit/  # the one stub LLM and the shuffled fake (tests only)
+dev/                 # the harness's committed data: eval pairs, bands,
+                     #   launch goldens, labels, library corpora, allowlists
+tools/               # the webcrack shim (the only JavaScript left)
+experiments/         # the experiment records (READMEs, RESULTS, data)
+test/                # the e2e fixtures, test/parity goldens, help goldens
 docs/                # architecture, measurement rules, the Rust-port record
 ```
 
@@ -225,17 +229,18 @@ docs/                # architecture, measurement rules, the Rust-port record
 One command runs every check, and prints which ran:
 
 ```shell
-npm run check
+cargo dev check
 ```
 
-It covers the Rust pipeline (fmt, clippy, unit, the release build, the
-formatter's frozen goldens, an end-to-end run of the binary on the
-committed fixtures with a boot check) and the TypeScript measurement
-harness (typecheck, lint, knip, unit). `CLAUDE.md` lists the stages.
+It covers every crate (fmt, clippy, unit tests — the pipeline's and the
+harness's own — the release build, the formatter's frozen goldens, an
+end-to-end run of the binary on the committed fixtures), the censuses, the
+webcrack shim and a public-repo address check. `CLAUDE.md` lists the stages.
+Install the pre-commit hook once per clone: `git config core.hooksPath .githooks`.
 
 ### Measuring a change
 
-`npm run eval` is the cross-version eval: it builds the binary, humanifies
+`cargo dev eval score <label>` is the cross-version eval: it builds the binary, humanifies
 four real release pairs cold, and scores the diff between them as real change
 vs. reducible noise. Read `CLAUDE.md` ("Validating cross-version changes")
 and `docs/measurement-pitfalls.md` before trusting a number from it.

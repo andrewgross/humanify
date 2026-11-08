@@ -400,7 +400,7 @@ pub static HARNESS_KEYS: &[Key] = &[
         "scorer",
         "results",
         Some("--results"),
-        "experiments/034-eval-harness/results (the committed labels)",
+        "dev/eval/results (the committed labels)",
         "Where the eval's labels live: one directory per label.",
     ),
     // [index]
@@ -544,7 +544,7 @@ pub static HARNESS_KEYS: &[Key] = &[
         "dev",
         "allowlist",
         Some("--allowlist"),
-        "scripts/concurrency-allowlist.json",
+        "dev/census/concurrency-allowlist.json",
         "The concurrency census's allowlist file.",
     ),
     Key {

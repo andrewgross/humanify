@@ -121,7 +121,7 @@ enum Command {
         /// declared-identity carries (finding #95) with their keys.
         #[arg(long)]
         carries: Option<String>,
-        /// The webcrack shim script (scripts/webcrack-shim.ts), run with
+        /// The webcrack shim script (tools/webcrack-shim.ts), run with
         /// `npx tsx` from its repo root; required for webpack/browserify.
         #[arg(long)]
         webcrack_shim: Option<String>,
@@ -226,7 +226,7 @@ enum Command {
         /// Keep the work dir even when it was a default temp dir.
         #[arg(long, default_value_t = false)]
         keep_work_dir: bool,
-        /// The webcrack shim script (scripts/webcrack-shim.ts), required
+        /// The webcrack shim script (tools/webcrack-shim.ts), required
         /// to unpack webpack/browserify bundles.
         #[arg(long)]
         webcrack_shim: Option<String>,

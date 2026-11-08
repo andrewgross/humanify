@@ -1,27 +1,7 @@
 {
   "name": "humanify-ag",
   "version": "2.2.2",
-  "description": "Deobfuscate a minified JavaScript bundle into a readable, version-stable source tree. The pipeline is the Rust binary (crates/humanify-ag-cli); this package holds its measurement harness.",
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "npm run check",
-    "test:unit": "find test experiments -name '*.test.ts' -not -path '*/node_modules/*' -not -path '*/.tmp-clone/*' -not -path '*/results/*' | xargs tsx --test",
-    "test:e2e": "tsx scripts/e2e.ts",
-    "lint": "npm run lint:prettier && npm run lint:biome",
-    "lint:prettier": "prettier --check 'test/**/*.ts' 'scripts/**/*.ts' 'experiments/**/lib/**/*.ts'",
-    "lint:biome": "biome check test/ scripts/ experiments/lib/",
-    "check": "tsx scripts/check.ts",
-    "check:all": "npm run check",
-    "knip": "knip",
-    "knip:prod": "knip --production --tags=-internal",
-    "prepare": "husky",
-    "eval": "tsx scripts/eval.ts",
-    "census:clones": "tsx scripts/clone-census.ts",
-    "census:concurrency": "tsx scripts/concurrency-census.ts",
-    "ask-trace": "tsx scripts/ask-trace.ts",
-    "diff-asks": "tsx scripts/diff-asks.ts",
-    "match-truth": "tsx experiments/lib/match-truth/run.ts"
-  },
+  "description": "Deobfuscate a minified JavaScript bundle into a readable, version-stable source tree. The pipeline is the Rust binary (crates/humanify-ag-cli) and the measurement harness is `cargo dev` (crates/humanify-ag-dev); this package holds only what the binary's webcrack shim (tools/webcrack-shim.ts, webpack/browserify unpacking) needs at run time.",
   "type": "module",
   "keywords": [
     "humanify",
@@ -44,30 +24,8 @@
   "author": "Jesse Luoto",
   "license": "MIT",
   "dependencies": {
-    "webcrack": "^2.13.0"
-  },
-  "lint-staged": {
-    "*.{ts,js,json,md}": "prettier --write",
-    "*.{ts,js}": "biome check --write --no-errors-on-unmatched",
-    "*.rs": [
-      "scripts/rustfmt-staged.sh",
-      "tsx scripts/concurrency-census.ts --files"
-    ],
-    "scripts/concurrency-allowlist.json": "tsx scripts/concurrency-census.ts"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.25.2",
-    "@babel/traverse": "^7.25.2",
-    "@babel/types": "^7.25.2",
-    "@biomejs/biome": "^2.4.6",
-    "@types/babel__core": "^7.20.5",
-    "@types/node": "^22.0.0",
-    "husky": "^9.1.7",
-    "knip": "^5.86.0",
-    "lint-staged": "^16.3.3",
-    "prettier": "^3.3.3",
     "tsx": "^4.16.2",
-    "typescript": "^5.5.4"
+    "webcrack": "^2.13.0"
   },
   "private": true
 }

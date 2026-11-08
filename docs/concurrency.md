@@ -23,7 +23,7 @@ carry is canonical OUTPUT, not ordered WORK.
 - **12 patterns**. Every concurrency site in non-test pipeline code must
   follow one of them. The twelfth, `test-support` (harness lane L1,
   2026-11-07), is allowed only in the test-only `humanify-ag-testkit` crate.
-- **85 sites** on the allowlist (`scripts/concurrency-allowlist.json`),
+- **85 sites** on the allowlist (`dev/census/concurrency-allowlist.json`),
   **2 of them known exceptions**: the two retry layers (R1). It started at
   61 sites and 5 exceptions; the other three — the `diff` subprocess (R3)
   and the webcrack and `git` subprocesses with no deadline — were fixed
@@ -350,7 +350,7 @@ the `--profile` spans) differ too; they are timing gauges by nature.
     `humanify-ag-cli/src/provider_failures.rs`) and is printed once, after the
     split. `--stats-json` carries the same counts as `providerErrors` (a
     total plus each namer), and the eval refuses to score a card whose
-    scored run or rebuilt base lost any (`experiments/lib/invariants.ts`).
+    scored run or rebuilt base lost any (`humanify_ag_dev::runners::records`).
   - Whether too many failures should make the run exit non-zero is Andrew's
     decision (audit recommendation 1a).
 - **The target: retries in exactly one layer**, with full jitter and a cap
@@ -447,8 +447,8 @@ These questions are what the census makes someone answer, once per site.
 
 ## The concurrency census
 
-`npm run census:concurrency` (`scripts/concurrency-census.ts`) is gate stage
-`census:concurrency`, and it is pass/fail.
+`cargo dev census concurrency` (`humanify_ag_dev::census::concurrency`) is
+gate stage `census:concurrency`, and it is pass/fail.
 
 **What it scans:**
 
@@ -483,7 +483,7 @@ comment that mentions `block_on` does not count.
   does not churn the allowlist. Moving it to another function makes it a
   new site to judge.
 
-**The allowlist** (`scripts/concurrency-allowlist.json`) gives every site a
+**The allowlist** (`dev/census/concurrency-allowlist.json`) gives every site a
 `pattern` from the table above and a `reason`. A known deviation from these
 rules gets an `exception` field that names the open finding.
 
@@ -502,7 +502,7 @@ this doc with its rule, and prints the exact entry to add:
 ```
   crates/demo/src/lib.rs:7  Pool::launch  —  tokio-spawn
     Rule (docs/concurrency.md#async-io): no detached tasks: every future is driven to completion by the provider's run_wave/run_pipelined
-    If this is intended, confirm it: add to scripts/concurrency-allowlist.json:
+    If this is intended, confirm it: add to dev/census/concurrency-allowlist.json:
       {
         "file": "crates/demo/src/lib.rs",
         "scope": "Pool::launch",
@@ -518,7 +518,8 @@ mean this?" flag for whoever added the site, usually an agent. Either
 confirm the site, by writing down which pattern it follows and why it meets
 that pattern's rules, or switch to the sanctioned primitive.
 
-**Pre-commit:** lint-staged runs the census on the staged `.rs` files
-(`--files`) and reports only on those. A staged
+**Pre-commit:** the hook (`.githooks/pre-commit` -> `cargo dev precommit`)
+runs the census on the staged `.rs` files (`--files`) and reports only on
+those. A staged
 `concurrency-allowlist.json` runs it in full. The full scan takes about a
 second.

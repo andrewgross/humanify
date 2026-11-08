@@ -60,7 +60,7 @@ SIZE_SLACK = 8192
 
 def manifest_path(corpus=None):
     c = corpus or lib096.CORPUS
-    return os.path.join(SCORE, "misattr13.json" if c == "dev" else f"misattr13-{c}.json")
+    return os.path.join(lib096.CORPORA_DIR, "misattr13.json" if c == "dev" else f"misattr13-{c}.json")
 
 
 def package_root(path):
