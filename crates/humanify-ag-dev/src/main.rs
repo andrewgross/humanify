@@ -219,6 +219,22 @@ const VERBS: &[Verb] = &[
         settings: FORCE,
     },
     Verb {
+        words: &["library", "npm"],
+        usage: "library npm <corpus> [--npm-registry DIR] [--npm-bundled DIR] [--packages a,b] [--jobs N]",
+        proves: "the npm caches the truth layers read hold every manifest and license collection the corpus needs (resumable: a cached file is never fetched again)",
+        cannot_prove: "that the registry still answers as it did when a layer was frozen",
+        lane: None,
+        today: "experiments/112 origins7.py needs|owners, 104 fetch_metadata.py, 112 bundled.py",
+        settings: &[
+            "libscore.bundled",
+            "libscore.data_root",
+            "libscore.jobs",
+            "libscore.packages",
+            "libscore.registry",
+            "run.out",
+        ],
+    },
+    Verb {
         words: &["library", "tokens14"],
         usage: "library tokens14 < request.json",
         proves: "scorer 14's name evidence (tokens14.mjs's protocol: units / files mode) from the ported acorn tokenizer",
@@ -533,6 +549,7 @@ fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
         ["library", "leaderboard"] => library_leaderboard(parsed),
         ["library", "determinism"] => library_determinism(parsed),
         ["library", "tokens14"] => library_tokens14(),
+        ["library", "npm"] => library_npm(parsed),
         ["eval", "score"] => done(verbs::score(&live(), parsed, verb.settings)),
         ["eval", "neutrality"] => done(verbs::neutrality(&live(), parsed, verb.settings)),
         ["eval", "walk"] => done(verbs::walk(&live(), parsed)),
@@ -583,6 +600,46 @@ fn library_leaderboard(parsed: &settings::Parsed) -> (u8, String, String) {
     ) {
         Ok(text) => (0, text, String::new()),
         Err(e) => (2, String::new(), format!("{e}\n")),
+    }
+}
+
+fn library_npm(parsed: &settings::Parsed) -> (u8, String, String) {
+    use humanify_ag_dev::library::{corpus::Corpus, npm};
+    let [name] = parsed.positionals.as_slice() else {
+        return (
+            2,
+            String::new(),
+            "usage: humanify-ag-dev library npm <corpus>\n".into(),
+        );
+    };
+    let s = &parsed.settings;
+    let corpus = match Corpus::open(
+        &humanify_ag_dev::paths::repo_root(),
+        name,
+        s.text("libscore.data_root").as_deref(),
+    ) {
+        Ok(c) => c,
+        Err(e) => return (2, String::new(), format!("{e}\n")),
+    };
+    let registry = s
+        .text("libscore.registry")
+        .unwrap_or_else(|| npm::REGISTRY.into());
+    let bundled = s
+        .text("libscore.bundled")
+        .unwrap_or_else(|| npm::BUNDLED.into());
+    let jobs = s.int("libscore.jobs").unwrap_or(4) as usize;
+    let only = s.list("libscore.packages");
+    let record = s.text("run.out").map(std::path::PathBuf::from);
+    match npm::fill(
+        &corpus,
+        std::path::Path::new(&registry),
+        std::path::Path::new(&bundled),
+        jobs,
+        only.as_deref(),
+        record.as_deref(),
+    ) {
+        Ok((text, fails)) => (u8::from(fails > 0), text, String::new()),
+        Err(e) => (1, String::new(), format!("{e}\n")),
     }
 }
 
@@ -846,6 +903,13 @@ fn library_corpus(parsed: &settings::Parsed) -> (u8, String, String) {
 }
 
 fn refrozen_line(r: &humanify_ag_dev::library::layers::Refrozen) -> String {
+    if !r.committed {
+        return format!(
+            "{:12} {} entries built; no committed manifest (a NEW layer: review, then commit its manifest)\n",
+            r.kind.prefix(),
+            r.entries
+        );
+    }
     format!(
         "{:12} {}/{} entries reproduce the committed sha; manifest {}{}\n",
         r.kind.prefix(),

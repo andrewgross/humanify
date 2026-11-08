@@ -24,6 +24,7 @@ pub mod layers;
 pub mod leaderboard;
 pub mod mapdefect14;
 pub mod misattr13;
+pub mod npm;
 pub mod origins;
 pub mod py;
 mod pyclass_table;

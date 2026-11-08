@@ -1,9 +1,12 @@
 //! `library layers <corpus>`: re-freeze a corpus's truth layers into a
-//! scratch directory and compare every per-entry sha with the committed
-//! layer manifest (docs/dev-harness.md §4 proof b'). Ported builders so
-//! far: the origin layers of scorers 4, 7, 10 and 12 (corpus.py
-//! `build_origins`, origins7/10/12.py `build`). The other layers' builders
-//! are listed by `unported()`; their frozen files are read as they are.
+//! directory and compare every per-entry sha with the committed layer
+//! manifest (docs/dev-harness.md §4 proof b'). Every builder is ported:
+//! the origin layers of scorers 4, 7, 10 and 12 (corpus.py
+//! `build_origins`, origins7/10/12.py `build`), the chained layers of
+//! scorers 5, 9 and 11, and the unit-reading layers copies2 (scorer 12),
+//! misattr13 (scorer 13) and mapdefect14 (scorer 14), in layers.sh /
+//! layers2.sh's order (`BUILT`). A layer with no committed manifest is a
+//! NEW layer: it is written for review and commit, not compared.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -35,15 +38,15 @@ struct RawTruth {
 /// origins7.py `load`: the raw truth and the source map's sources /
 /// contents, the segments re-decoded with scorer 4's decoder and checked
 /// against the frozen truth.
-struct Loaded {
-    segs: Vec<(i64, i64, i64)>,
-    shippers: Vec<String>,
-    versions: Vec<Option<String>>,
-    paths: Vec<Option<String>>,
-    contents: Vec<Option<String>>,
+pub(crate) struct Loaded {
+    pub(crate) segs: Vec<(i64, i64, i64)>,
+    pub(crate) shippers: Vec<String>,
+    pub(crate) versions: Vec<Option<String>>,
+    pub(crate) paths: Vec<Option<String>>,
+    pub(crate) contents: Vec<Option<String>>,
 }
 
-fn load(corpus: &Corpus, entry: &CorpusEntry) -> Result<Loaded, String> {
+pub(crate) fn load(corpus: &Corpus, entry: &CorpusEntry) -> Result<Loaded, String> {
     let truth: RawTruth = corpus.truth(entry)?;
     let bpath = corpus.corpus_path(entry, Role::Bundle)?;
     let text = std::fs::read_to_string(&bpath).map_err(|e| format!("{}: {e}", bpath.display()))?;
@@ -195,6 +198,8 @@ pub struct Refrozen {
     pub differ: Vec<String>,
     /// The re-frozen manifest's canonical id equals the committed one's.
     pub manifest_same: bool,
+    /// A committed manifest existed to compare with.
+    pub committed: bool,
 }
 
 /// Re-freeze one origin layer of `corpus` into `out` (gz files under
@@ -208,9 +213,7 @@ pub fn refreeze_origin_layer(
 ) -> Result<Refrozen, String> {
     let inputs = Inputs::new(registry, bundled);
     let fam = Families::shipped();
-    let committed = corpus.layer(layer.kind)?;
     let mut shas: BTreeMap<String, String> = BTreeMap::new();
-    let mut differ = Vec::new();
     let entries: Vec<&CorpusEntry> = corpus
         .entries()
         .iter()
@@ -221,11 +224,7 @@ pub fn refreeze_origin_layer(
         let suffix = format!(".{}.json.gz", layer.kind.prefix());
         let p: PathBuf = out.join("truth").join(format!("{}{suffix}", e.id));
         super::gz::write_gz(&p, compact(&doc).as_bytes())?;
-        let sha = super::corpus::sha256_file(&p)?;
-        if committed.entries.get(&e.id) != Some(&sha) {
-            differ.push(e.id.clone());
-        }
-        shas.insert(e.id.clone(), sha);
+        shas.insert(e.id.clone(), super::corpus::sha256_file(&p)?);
     }
     let entries_v = dict(shas.iter().map(|(k, v)| (k.clone(), s(v))).collect());
     let manifest = if layer.rules.is_none() {
@@ -253,21 +252,7 @@ pub fn refreeze_origin_layer(
         ])
     };
     let text = crate::json::py_text(&manifest, true);
-    let mpath = out.join(format!(
-        "{}{}.json",
-        layer.kind.prefix(),
-        corpus.loaded.corpus.suffix
-    ));
-    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
-    std::fs::write(&mpath, &text).map_err(|e| format!("{}: {e}", mpath.display()))?;
-    let id = crate::committed::sha256_hex(text.as_bytes());
-    Ok(Refrozen {
-        kind: layer.kind,
-        entries: entries.len(),
-        same: entries.len() - differ.len(),
-        differ,
-        manifest_same: corpus.layer_id(layer.kind)? == id,
-    })
+    compare(corpus, layer.kind, out, &shas, &text)
 }
 
 /// Re-freeze a chained layer and compare it with the committed manifest.
@@ -291,12 +276,6 @@ pub fn compare(
     shas: &BTreeMap<String, String>,
     text: &str,
 ) -> Result<Refrozen, String> {
-    let committed = corpus.layer(kind)?;
-    let differ: Vec<String> = shas
-        .iter()
-        .filter(|(id, sha)| committed.entries.get(*id) != Some(*sha))
-        .map(|(id, _)| id.clone())
-        .collect();
     let mpath = out.join(format!(
         "{}{}.json",
         kind.prefix(),
@@ -304,12 +283,30 @@ pub fn compare(
     ));
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     std::fs::write(&mpath, text).map_err(|e| format!("{}: {e}", mpath.display()))?;
+    // a corpus with no committed manifest for this layer: a NEW layer,
+    // written for review and commit (nothing to compare)
+    let Ok(committed) = corpus.layer(kind) else {
+        return Ok(Refrozen {
+            kind,
+            entries: shas.len(),
+            same: 0,
+            differ: Vec::new(),
+            manifest_same: true,
+            committed: false,
+        });
+    };
+    let differ: Vec<String> = shas
+        .iter()
+        .filter(|(id, sha)| committed.entries.get(*id) != Some(*sha))
+        .map(|(id, _)| id.clone())
+        .collect();
     Ok(Refrozen {
         kind,
         entries: shas.len(),
         same: shas.len() - differ.len(),
         differ,
         manifest_same: corpus.layer_id(kind)? == crate::committed::sha256_hex(text.as_bytes()),
+        committed: true,
     })
 }
 
