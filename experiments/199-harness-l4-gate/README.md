@@ -214,4 +214,14 @@ and the individual-stage list with the `cargo dev <verb>` spellings of §1.
 
 ## 8. Gate
 
-Filled in below at merge time.
+| Gate                                          | Worktree (`a3fec5fc7`, before main's L2b)  | Clean checkout of the merge into main (`bd7a78112`, parent `4580f429f`)        |
+| --------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------ |
+| `npm run check` (the TS gate, still the gate) | ALL 13 STAGES PASSED                       | ALL 13 STAGES PASSED (unit 114 s, rust:unit 311 s, rust:build 136 s, e2e 77 s) |
+| `cargo dev check` (its successor)             | ALL 11 STAGES PASSED, census:clones REVIEW | ALL 11 STAGES PASSED, census:clones REVIEW (rust:unit 269 s, e2e 79 s)         |
+| `cargo test -p humanify-ag-dev`               | 136 + 8 + 2 pass                           | inside rust:unit (248 lib tests after the L2b merge)                           |
+
+Merging main (L2b) in needed one real fix: both lanes had declared `--out`
+(see §4.2).
+
+The README edit that records this table is the only commit after the
+gated merge; it changes no code.
