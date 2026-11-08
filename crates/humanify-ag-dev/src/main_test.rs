@@ -130,3 +130,34 @@ fn a_verbs_help_is_its_usage() {
         "{out}"
     );
 }
+
+/// Every heavy verb takes `/work/heavy.lock` itself (ONE lock owner): a
+/// caller never wraps a `cargo dev` verb in flock, and never has to know
+/// which verbs need wrapping. The table says when each one takes it.
+#[test]
+fn every_heavy_verb_takes_the_heavy_lock_itself() {
+    let heavy = [
+        "eval score",
+        "eval neutrality",
+        "eval walk",
+        "eval vendor-precision",
+        "eval cjs-placement",
+        "library score",
+        "library corpus",
+        "index build",
+    ];
+    for v in VERBS {
+        let n = name(v);
+        assert_eq!(
+            !v.lock.is_empty(),
+            heavy.contains(&n.as_str()),
+            "{n}: lock = {:?}",
+            v.lock
+        );
+    }
+    let t = table();
+    assert!(
+        t.contains("lock:         takes /work/heavy.lock itself"),
+        "the table prints each verb's lock policy"
+    );
+}

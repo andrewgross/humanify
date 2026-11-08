@@ -23,7 +23,16 @@ struct Verb {
     today: &'static str,
     /// The settings it reads: harness keys or whole sections.
     settings: &'static [&'static str],
+    /// When it takes `/work/heavy.lock` itself ("" = never: a light verb).
+    /// ONE lock owner: never wrap a `cargo dev` verb in flock (a nested
+    /// flock on the same file deadlocks every lane — exp155, exp176,
+    /// exp192); `HELD_LOCK` tells a verb its caller already holds it.
+    lock: &'static str,
 }
+
+const NO_LOCK: &str = "";
+const WHOLE_RUN: &str =
+    "takes /work/heavy.lock itself, for the whole run, after its arguments are checked";
 
 const SCORE_SETTINGS: &[&str] = &["run", "eval", "llm", "boot"];
 const NEUTRALITY_SETTINGS: &[&str] = &[
@@ -68,6 +77,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.only"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["eval", "score"],
@@ -77,6 +87,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: SCORE_SETTINGS,
+        lock: WHOLE_RUN,
     },
     Verb {
         words: &["eval", "rescore"],
@@ -86,6 +97,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: SCORER,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["eval", "summarize"],
@@ -95,6 +107,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: RESULTS,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["eval", "leaderboard"],
@@ -104,6 +117,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: FORCE_RESULTS,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["eval", "bands"],
@@ -113,6 +127,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: RESULTS,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["eval", "diff"],
@@ -122,6 +137,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["eval", "neutrality"],
@@ -131,6 +147,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NEUTRALITY_SETTINGS,
+        lock: WHOLE_RUN,
     },
     Verb {
         words: &["eval", "vendor-precision"],
@@ -145,6 +162,7 @@ const VERBS: &[Verb] = &[
             "run.out",
             "eval.library_index",
         ],
+        lock: "takes /work/heavy.lock itself for the bun-dev batch (`--bundev`)",
     },
     Verb {
         words: &["eval", "cjs-placement"],
@@ -154,6 +172,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["libscore.jobs", "run.out", "eval.library_index"],
+        lock: "takes /work/heavy.lock itself for the bun-dev batch runs",
     },
     Verb {
         words: &["eval", "walk"],
@@ -163,6 +182,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: WALK_SETTINGS,
+        lock: "takes /work/heavy.lock itself for each hop's pipeline run, releasing it between hops (the boot gate and scoring run outside it)",
     },
     Verb {
         words: &["eval", "walk-report"],
@@ -172,6 +192,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["walk.report_dir"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["run", "stub"],
@@ -181,6 +202,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["run.pipeline_set", "eval.library_index"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["library", "score"],
@@ -190,6 +212,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: LIBRARY_SETTINGS,
+        lock: WHOLE_RUN,
     },
     Verb {
         words: &["library", "rescore"],
@@ -199,6 +222,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: RESCORE_SETTINGS,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["library", "proof"],
@@ -208,6 +232,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["run.out"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["library", "leaderboard"],
@@ -217,6 +242,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: FORCE,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["library", "npm"],
@@ -233,6 +259,7 @@ const VERBS: &[Verb] = &[
             "libscore.registry",
             "run.out",
         ],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["library", "tokens14"],
@@ -242,6 +269,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &[],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["library", "determinism"],
@@ -251,6 +279,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: DETERMINISM_SETTINGS,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["library", "corpus"],
@@ -265,6 +294,7 @@ const VERBS: &[Verb] = &[
             "libscore.jobs",
             "run.out",
         ],
+        lock: "`corpus build` takes /work/heavy.lock itself for the whole build; `corpus freeze` is light",
     },
     Verb {
         words: &["library", "layers"],
@@ -281,6 +311,7 @@ const VERBS: &[Verb] = &[
             "libscore.units",
             "run.out",
         ],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["index", "build"],
@@ -290,6 +321,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: INDEX_SETTINGS,
+        lock: "takes /work/heavy.lock itself for the whole build",
     },
     Verb {
         words: &["boot-gate"],
@@ -299,6 +331,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["boot"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["build-bin"],
@@ -308,6 +341,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["run.workdir"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["e2e"],
@@ -317,6 +351,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["run.out"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["format-golden"],
@@ -326,6 +361,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["census", "clones"],
@@ -335,6 +371,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.loose", "dev.root"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["census", "concurrency"],
@@ -344,6 +381,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.files", "dev.root", "dev.allowlist"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["census", "slop"],
@@ -353,6 +391,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.base", "dev.root"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["ask-trace"],
@@ -368,6 +407,7 @@ const VERBS: &[Verb] = &[
             "dev.sequential",
             "run.pipeline_set",
         ],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["diff-asks"],
@@ -377,6 +417,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["match-truth"],
@@ -386,6 +427,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.corpus_dir", "run.bin", "run.out", "dev.only"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["env-check"],
@@ -395,6 +437,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["llm.endpoint"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["precommit"],
@@ -404,6 +447,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["stub-llm", "serve"],
@@ -413,6 +457,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.port"],
+        lock: NO_LOCK,
     },
     Verb {
         words: &["no-private-addresses"],
@@ -422,6 +467,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
+        lock: NO_LOCK,
     },
     Verb {
         words: &["shims"],
@@ -431,6 +477,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
+        lock: NO_LOCK,
     },
 ];
 
@@ -463,6 +510,9 @@ fn table() -> String {
             v.proves,
             v.cannot_prove
         ));
+        if !v.lock.is_empty() {
+            out.push_str(&format!("      lock:         {}\n", v.lock));
+        }
     }
     out
 }
@@ -938,7 +988,7 @@ fn library_corpus_build(parsed: &settings::Parsed, name: &str) -> (u8, String, S
         }
     });
     let ctx = live();
-    let _lock = match runners::heavy_lock(&ctx, std::path::Path::new("/work/heavy.lock")) {
+    let _lock = match runners::heavy_lock(&ctx, std::path::Path::new(runners::HEAVY_LOCK)) {
         Ok(l) => l,
         Err(e) => return (2, String::new(), format!("{e}\n")),
     };

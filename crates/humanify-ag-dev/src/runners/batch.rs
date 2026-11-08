@@ -70,7 +70,7 @@ pub fn vendor_precision_bundev(
     let list = bundev_list(&ctx.repo)?;
     let fam = Families::shipped();
     let lines = {
-        let _lock = super::heavy_lock(ctx, Path::new("/work/heavy.lock"))?;
+        let _lock = super::heavy_lock(ctx, Path::new(super::HEAVY_LOCK))?;
         super::each(&list, jobs, |(id, bundle)| -> String {
             let card = out.join(format!("{id}.precision.json"));
             if nonempty(&card) {
@@ -157,7 +157,7 @@ pub fn cjs_runs(
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let list = bundev_list(&ctx.repo)?;
     let lines = {
-        let _lock = super::heavy_lock(ctx, Path::new("/work/heavy.lock"))?;
+        let _lock = super::heavy_lock(ctx, Path::new(super::HEAVY_LOCK))?;
         super::each(&list, jobs, |(id, bundle)| -> String {
             let dir = out.join(id);
             if nonempty(&dir.join("tree.tsv")) {

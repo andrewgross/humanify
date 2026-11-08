@@ -225,6 +225,10 @@ pub fn dirty(repo: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// The host's one heavy-job lock (docs/concurrency.md). Every heavy verb
+/// takes it itself (`Verb::lock` in main.rs says when); callers never wrap.
+pub const HEAVY_LOCK: &str = "/work/heavy.lock";
+
 /// Take `/work/heavy.lock` for a long verb — unless the caller already
 /// holds it (`HELD_LOCK`): ONE lock layer, a nested flock on the same file
 /// deadlocks every lane (exp155, exp176, exp192). Returns the guard; the

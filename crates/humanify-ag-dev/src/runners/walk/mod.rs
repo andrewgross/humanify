@@ -126,7 +126,7 @@ pub fn config_from(parsed: &Parsed, pairs: &Pairs, repo: &Path) -> Result<WalkCo
         boot_model: s
             .text("boot.model")
             .unwrap_or_else(|| "claude-opus-4-1".into()),
-        heavy_lock: PathBuf::from("/work/heavy.lock"),
+        heavy_lock: PathBuf::from(super::HEAVY_LOCK),
     })
 }
 
