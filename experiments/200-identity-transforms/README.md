@@ -4,8 +4,10 @@ STATUS: PHASE 1 BUILT AND HOP-PROVEN, NOT MERGED (2026-11-08), branch
 `exp200-identity-transforms`, rebased on main `d293aa886` (exp201 landed).
 Steady state on 2.1.179 -> 2.1.181: vendor noise 53,338 -> 6,254 lines
 (-88%), real change unchanged; the 2.1.197 -> 2.1.198 control is unchanged.
-COST: the first hop after the upgrade (the match-key era bump) pays a
-one-off ~34,000-38,000 vendor noise lines (§5). The full eval was NOT run.
+The one-off cost of the first hop after the upgrade (the match-key era
+bump, ~38,000 vendor noise lines) is FIXED: the stale-era re-key now carries
+each module's file and identifier, and that hop reads 2,076 (main 1,176)
+(§5a). The full eval was NOT run.
 Phase 2 (re-fingerprinting the library index) is costed only (§6).
 
 Andrew, 2026-11-07: "in our hash we can treat those ops the same, and have
@@ -19,16 +21,19 @@ an easy way of adding identity transforms as plugins".
   realLn 140,489 identical. Control hop 2.1.197 -> 2.1.198: vendor noise
   1,978 / 1,978, novel 1,262 / realLn 136,399 identical.** The main
   control matches exp201's reference on this pair (~53,300 / ~35,600).
-- **The era-bump hop costs once:** the first run of the new binary on a
+- **The era-bump hop's one-off cost is fixed (§5a):** 2.1.178 -> 179 from
+  main's tree now reads vendor noise 2,076 (main 1,176; 38,436 before the
+  fix), and the steady-state 2.1.179 -> 181 after it is unchanged at 6,254.
+- **What the fix fixed — the era-bump hop as first built:** the first run of the new binary on a
   main-written prior (manifest `hashVersion 4`) re-keys every vendor
   module by content. That re-key was broken for names-mode priors (it
   compared the prior's FORMATTED vendor files with raw bundle text: 194 of
   1,594 joined) — fixed here (both sides read through the formatter: 1,553
   of 1,594). It still re-derives every module's runtime identifier and
-  re-names its body, so that hop reads 38,436 (2.1.178 -> 179) and 33,917
-  (2.1.196 -> 197) vendor noise lines against main's 1,176 and 12. A
-  follow-up can remove it: carry the identity (file, identifier, body
-  names) through the stale-era re-key as the exact carry does (exp194).
+  re-names its body, so that hop read 38,436 (2.1.178 -> 179) and 33,917
+  (2.1.196 -> 197) vendor noise lines against main's 1,176 and 12 — until
+  the re-key carried the identity (file, identifier) as the exact carry
+  does (exp194; Andrew's step 1, 2026-11-08).
 - **Census, 2.1.179 -> 2.1.181:** 177 factory hashes gone / 167 new; 129
   of them pair up as the same module. Every one of the 129 differs ONLY by
   three minifier spellings: a concise arrow body (`x => E` vs
@@ -228,6 +233,19 @@ hop read vendor noise 58,850 (main 53,334); 2.1.197 -> 198 read 8,759
 (main 1,978). After the fix: 1,553 / 1,470 joined, vendor noise 85,038 /
 35,695 — every identifier and body name re-derived (above). That is what
 §Totals calls the one-off era-bump cost.
+
+**(5a) The migration fix** (`/work/exp200-runs/chain3`, binary at
+`fa1b56440`'s tree; same protocol: from main's walk tree 2.1.178, two hops
+on its own output):
+
+| hop | binary | vendor noise | vendor real | relocated files | src noise | nameOnly | novel | realLn | vendor carry |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2.1.178 -> 2.1.179 | main | 1,176 | 103 | 2 | 470 | 2,144 | 512 | 81,908 | exact 1,566 carried |
+| 2.1.178 -> 2.1.179 | exp200 before the fix | 38,436 | 12,718 | 25 | 3,720 | 4,868 | 512 | 81,908 | re-key, identity re-derived |
+| 2.1.178 -> 2.1.179 | **exp200 with the fix** | **2,076** | 99 | 1 | 478 | 2,136 | 512 | 81,908 | re-key 1,592 / 1,594 joined; 1,566 carried |
+| 2.1.179 -> 2.1.181 | main | 53,338 | 35,662 | 101 | 4,134 | 10,924 | 1,145 | 140,489 | 1,390 + 154 index |
+| 2.1.179 -> 2.1.181 | exp200 before the fix | 6,254 | 15,986 | 11 | 2,884 | 9,972 | 1,145 | 140,489 | 1,557 |
+| 2.1.179 -> 2.1.181 | **exp200 with the fix** | **6,254** | 15,714 | 11 | 2,882 | 9,998 | 1,145 | 140,489 | 1,557 |
 
 **(c) Gate** — `cargo dev check`, bare, under the heavy lock, after the
 rebase onto main `d293aa886`; the clean checkout is `0dba3d33e` (a detached worktree, fresh `npm ci --ignore-scripts`, cold build). ALL 11 STAGES PASSED in both:
