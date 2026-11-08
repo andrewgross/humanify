@@ -41,6 +41,9 @@ use humanify_ag_model::llm::{
     BatchRenameResponse, CacheKeyParams, LlmCall, LlmError, Renames, Usage, cache_key_of,
 };
 
+use humanify_ag_model::call_ledger::{CallLedger, Served};
+use humanify_ag_model::llm::CallSite;
+
 use crate::debug::{LlmLogEvent, LogSink, emit};
 use crate::provider::AsyncProvider;
 
@@ -205,9 +208,24 @@ pub struct AnswerMemo<P> {
     writes: AtomicUsize,
     asked: AtomicUsize,
     shared: AtomicUsize,
+    /// The run's call ledger: every call's outcome and what the memo or
+    /// the disk served (recording only).
+    ledger: Option<Arc<CallLedger>>,
 }
 
 impl<P> AnswerMemo<P> {
+    /// Record into the run's call ledger.
+    pub fn with_ledger(mut self, ledger: Option<Arc<CallLedger>>) -> Self {
+        self.ledger = ledger;
+        self
+    }
+
+    fn note_served(&self, site: CallSite, from: Served) {
+        if let Some(ledger) = &self.ledger {
+            ledger.served(site, from);
+        }
+    }
+
     /// A memo with no disk behind it (a run without `--llm-cache`).
     pub fn in_memory(inner: P, params: CacheKeyParams) -> Self {
         AnswerMemo::build(inner, None, params, None)
@@ -241,6 +259,7 @@ impl<P> AnswerMemo<P> {
             writes: AtomicUsize::new(0),
             asked: AtomicUsize::new(0),
             shared: AtomicUsize::new(0),
+            ledger: None,
         }
     }
 
@@ -343,10 +362,12 @@ impl<P> AnswerMemo<P> {
         if let Some(response) = self.recorded(key) {
             self.shared.fetch_add(1, Ordering::Relaxed);
             self.hits.fetch_add(1, Ordering::Relaxed);
+            self.note_served(call.site, Served::Memo);
             return Ok(response);
         }
         if let Some(response) = self.read_disk(key) {
             self.hits.fetch_add(1, Ordering::Relaxed);
+            self.note_served(call.site, Served::Disk);
             return Ok(response);
         }
         self.misses.fetch_add(1, Ordering::Relaxed);
@@ -367,6 +388,9 @@ impl<P: AsyncProvider> AsyncProvider for AnswerMemo<P> {
             self.serve(&key, call).await
         };
         self.release(&key, gate);
+        if let Some(ledger) = &self.ledger {
+            ledger.outcome(call, &result);
+        }
         result
     }
 

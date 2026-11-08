@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use humanify_ag_model::llm::{BatchRenameResponse, LlmCall, LlmError};
 
-use crate::provider::AsyncProvider;
+use crate::provider::{AsyncProvider, CallTrace};
 
 /// One `debug.llmRoundtrip` block (the fields the `-vv` log prints).
 #[derive(Clone, Debug, PartialEq)]
@@ -100,6 +100,14 @@ fn prompt_summary(call: &LlmCall) -> String {
 
 impl<P: AsyncProvider> AsyncProvider for DebugProvider<P> {
     async fn suggest_all_names(&self, call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
+        self.suggest_traced(call, &CallTrace::default()).await
+    }
+
+    async fn suggest_traced(
+        &self,
+        call: &LlmCall,
+        trace: &CallTrace,
+    ) -> Result<BatchRenameResponse, LlmError> {
         let identifiers = call.request.identifiers.clone();
         emit(
             &self.log,
@@ -109,7 +117,7 @@ impl<P: AsyncProvider> AsyncProvider for DebugProvider<P> {
             },
         );
         let start = Instant::now();
-        let result = self.inner.suggest_all_names(call).await;
+        let result = self.inner.suggest_traced(call, trace).await;
         let (ok, raw_response, user_prompt) = match &result {
             Ok(response) => (true, Some(response.to_json()), Some(prompt_summary(call))),
             Err(error) => (false, Some(error.message.clone()), None),

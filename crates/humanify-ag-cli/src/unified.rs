@@ -40,6 +40,7 @@ use humanify_ag_core::place::method::MarkerOffer;
 use humanify_ag_core::toolchain::{Toolchain, resolve_toolchain};
 use humanify_ag_llm::LlmClient;
 use humanify_ag_llm::provider::{LiveOptions, LiveStack};
+use humanify_ag_model::call_ledger::CallLedger;
 use humanify_ag_model::llm::{CacheKeyParams, LlmConfig, NameProvider, RateLimitConfig};
 
 use crate::config::{Config, LibraryMatching};
@@ -126,12 +127,16 @@ pub fn run(config: &Config) -> i32 {
         );
     }
 
-    let provider = match build_provider(&config.llm) {
+    // The run's call ledger (exp206): every LLM call's fate, per namer.
+    let ledger = Arc::new(CallLedger::new(
+        humanify_ag_core::rename::validated::target::is_valid_rename_target,
+    ));
+    let provider = match build_provider(&config.llm, &ledger) {
         Ok(p) => p,
         Err(e) => return crash(&mut *renderer, &e, log_file.is_some()),
     };
 
-    let ended = run_pipeline(config, &provider, &profiler, &mut *renderer);
+    let ended = run_pipeline(config, &provider, &ledger, &profiler, &mut *renderer);
     report_memo(&provider, &mut *renderer);
     // The TS `finally`.
     finalize_profile(config, &profiler, &mut *renderer);
@@ -224,16 +229,17 @@ fn finalize_profile(
 fn run_pipeline(
     config: &Config,
     provider: &dyn NameProvider,
+    ledger: &CallLedger,
     profiler: &humanify_ag_core::profiling::Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<i32, Crash> {
     let Some(sim_path) = &config.perf.simulate_llm_latency else {
-        return pipeline_body(config, provider, profiler, renderer);
+        return pipeline_body(config, provider, ledger, profiler, renderer);
     };
     // The instrument: the run's own answers, priced on a virtual clock
     // with the rate limiter's slot count (crate::llm_sim).
     let sim = crate::llm_sim::LatencySim::new(provider, config.llm.concurrency as usize);
-    let ended = pipeline_body(config, &sim, profiler, renderer);
+    let ended = pipeline_body(config, &sim, ledger, profiler, renderer);
     let report = sim.report();
     renderer.message(&format!(
         "LLM latency simulation: {} calls, simulated LLM wall {:.1}s (effective concurrency {:.1})",
@@ -267,7 +273,10 @@ fn split_namer_budget(llm: &crate::config::Llm) -> SplitNamerBudget {
 /// wrapper), then the rate limiter sized over both lanes, the debug
 /// wrapper, the HTTP client. A miss goes to the endpoint and a non-empty
 /// answer is written to the cache, exactly as the TS provider stack does.
-fn build_provider(llm: &crate::config::Llm) -> Result<LlmClient<LiveStack>, String> {
+fn build_provider(
+    llm: &crate::config::Llm,
+    ledger: &Arc<CallLedger>,
+) -> Result<LlmClient<LiveStack>, String> {
     let reasoning_effort = llm.reasoning_effort.map(|e| e.name().to_string());
     let mut config = LlmConfig::new(&llm.endpoint, llm.api_key.expose(), &llm.model);
     config.timeout_ms = llm.timeout_ms;
@@ -286,7 +295,7 @@ fn build_provider(llm: &crate::config::Llm) -> Result<LlmClient<LiveStack>, Stri
         rate,
         key_params: cache_key_params(llm),
         cache_dir: llm.cache_dir.as_ref().map(std::path::PathBuf::from),
-        metrics: None,
+        ledger: Some(ledger.clone()),
         log: Some(crate::log::llm_log_sink()),
     })
     .map_err(|e| e.to_string())
@@ -306,6 +315,7 @@ fn cache_key_params(llm: &crate::config::Llm) -> CacheKeyParams {
 fn pipeline_body(
     config: &Config,
     provider: &dyn NameProvider,
+    ledger: &CallLedger,
     profiler: &humanify_ag_core::profiling::Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<i32, Crash> {
@@ -608,6 +618,7 @@ fn pipeline_body(
                 RunLevelStats {
                     split_method,
                     failed_calls: &failed_calls,
+                    ledger,
                     config,
                     library: &library,
                 },
@@ -1598,6 +1609,9 @@ fn log_input_output(input: &str, output: &str) {
 struct RunLevelStats<'a> {
     split_method: Option<humanify_ag_model::stats::SplitMethodStats>,
     failed_calls: &'a crate::provider_failures::ProviderFailures,
+    /// Every LLM call's fate (exp206): the `llmCalls` block and the
+    /// coverage block's LLM fields.
+    ledger: &'a CallLedger,
     /// The run's configuration: the stats file's `config` block.
     config: &'a Config,
     /// What the library decision came to: the `libraryMatching` block.
@@ -1632,6 +1646,19 @@ fn write_stats_json(
     stats.toolchain = Some(crate::pipeline_config::toolchain_record(toolchain));
     stats.split_method = run.split_method;
     stats.provider_errors = Some(run.failed_calls.stats());
+    stats.llm_calls = Some(run.ledger.stats());
+    if let Some(cov) = stats.coverage.as_mut()
+        && let Some(llm) = cov.llm.as_mut()
+    {
+        // Were hard-coded 0 / None until exp206 (the MetricsTracker that
+        // should have filled them was never wired).
+        let l = run.ledger.coverage_llm();
+        llm.retries = l.retries as f64;
+        llm.avg_response_time_ms = l.avg_response_time_ms;
+        llm.total_tokens = l.total_tokens.map(|n| n as f64);
+        llm.input_tokens = l.input_tokens.map(|n| n as f64);
+        llm.output_tokens = l.output_tokens.map(|n| n as f64);
+    }
     stats.config = Some(
         humanify_ag_model::js::JsValue::parse(&run.config.record().to_string())
             .expect("serde_json writes JSON"),

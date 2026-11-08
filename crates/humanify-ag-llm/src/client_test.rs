@@ -23,6 +23,7 @@ fn make_request(identifiers: &[&str]) -> LlmCall {
         },
         system_prompt: "sys".to_string(),
         user_prompt: "user".to_string(),
+        site: humanify_ag_model::llm::CallSite::Naming,
     }
 }
 

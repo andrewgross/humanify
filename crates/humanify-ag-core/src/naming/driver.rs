@@ -845,6 +845,10 @@ fn reask_stats(
         sweep_reasked: 0.0,
         sweep_reask_applied: 0.0,
         sweep_reask_dropped: 0.0,
+        collision_handoffs: Some(processor.collision_handoffs as f64),
+        lane_end_handoffs: Some(processor.lane_end_handoffs as f64),
+        ladder_at_lane_end: Some(ladder_count(processor, "remaining")),
+        ladder_at_barrier: Some(ladder_count(processor, "wave")),
     };
     for sweep in [pre_sweep, deferred_sweep].into_iter().flatten() {
         reask.sweep_reasked += sweep.reasked as f64;
@@ -852,6 +856,16 @@ fn reask_stats(
         reask.sweep_reask_dropped += sweep.reask_dropped as f64;
     }
     reask
+}
+
+/// The processor's suffix-ladder repairs at one site (`remaining`: the
+/// lane tail, `wave`: the barrier).
+fn ladder_count(processor: &ProcessorReport, site: &str) -> f64 {
+    processor
+        .contention
+        .iter()
+        .filter(|e| e.site == site)
+        .count() as f64
 }
 
 /// The stats record's `promptGuard` block (2026-10-04): the waves'
@@ -951,6 +965,7 @@ impl NamingOutcome {
             // Set by the CLI from the run's Config (its record).
             config: None,
             library_matching: None,
+            llm_calls: None,
             prompt_guard: Some(prompt_guard_stats(
                 &self.processor,
                 self.pre_sweep.as_ref(),

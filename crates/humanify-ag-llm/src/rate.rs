@@ -24,8 +24,9 @@ use humanify_ag_model::llm::{
 use tokio::sync::Semaphore;
 use tokio::time::Instant;
 
-use crate::metrics::MetricsTracker;
-use crate::provider::AsyncProvider;
+use humanify_ag_model::call_ledger::CallLedger;
+
+use crate::provider::{AsyncProvider, CallTrace};
 
 const WINDOW: Duration = Duration::from_millis(60_000);
 
@@ -34,7 +35,7 @@ pub struct RateLimited<P> {
     config: RateLimitConfig,
     slots: Semaphore,
     timestamps: Mutex<VecDeque<Instant>>,
-    metrics: Option<Arc<MetricsTracker>>,
+    ledger: Option<Arc<CallLedger>>,
 }
 
 /// Whether a failed call is worth another attempt, decided by the most
@@ -78,13 +79,13 @@ fn names_a_transient_failure(message: &str) -> bool {
 }
 
 impl<P> RateLimited<P> {
-    pub fn new(inner: P, config: RateLimitConfig, metrics: Option<Arc<MetricsTracker>>) -> Self {
+    pub fn new(inner: P, config: RateLimitConfig, ledger: Option<Arc<CallLedger>>) -> Self {
         RateLimited {
             inner,
             slots: Semaphore::new(config.max_concurrent),
             config,
             timestamps: Mutex::new(VecDeque::new()),
-            metrics,
+            ledger,
         }
     }
 
@@ -124,45 +125,30 @@ impl<P> RateLimited<P> {
 impl<P: AsyncProvider> RateLimited<P> {
     /// Step 3 (`withRetry`): initial try + `retryAttempts` retries, sleeping
     /// `retryDelayMs * 2^attempt` between them; a non-retryable error stops
-    /// at once. Metrics: one start, then exactly one of done / failed.
-    async fn with_retry(&self, call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
-        let start = self.metrics.as_ref().map(|m| m.llm_call_start());
-        let mut last_error = None;
-        for attempt in 0..=self.config.retry_attempts {
-            match self.inner.suggest_all_names(call).await {
-                Ok(response) => {
-                    if let (Some(m), Some(start)) = (&self.metrics, start) {
-                        m.llm_call_done(start);
-                    }
-                    return Ok(response);
-                }
+    /// at once. Every HTTP attempt underneath (the client's own retries
+    /// too) lands in `trace`.
+    async fn with_retry(
+        &self,
+        call: &LlmCall,
+        trace: &CallTrace,
+    ) -> Result<BatchRenameResponse, LlmError> {
+        let mut attempt = 0;
+        loop {
+            match self.inner.suggest_traced(call, trace).await {
+                Ok(response) => return Ok(response),
                 Err(error) => {
-                    if attempt == self.config.retry_attempts {
-                        last_error = Some(error);
-                        break;
-                    }
-                    if !is_retryable(&error) {
-                        if let Some(m) = &self.metrics {
-                            m.llm_call_failed();
-                        }
+                    if attempt == self.config.retry_attempts || !is_retryable(&error) {
                         return Err(error);
-                    }
-                    if let Some(m) = &self.metrics {
-                        m.llm_retry();
                     }
                     let delay = self
                         .config
                         .retry_delay_ms
                         .saturating_mul(1 << attempt.min(62));
                     tokio::time::sleep(Duration::from_millis(delay)).await;
-                    last_error = Some(error);
+                    attempt += 1;
                 }
             }
         }
-        if let Some(m) = &self.metrics {
-            m.llm_call_failed();
-        }
-        Err(last_error.expect("the loop runs at least once"))
     }
 }
 
@@ -174,7 +160,16 @@ impl<P: AsyncProvider> AsyncProvider for RateLimited<P> {
             .await
             .expect("the semaphore is never closed");
         self.take_window_place().await;
-        self.with_retry(call).await
+        let trace = CallTrace::default();
+        let started = Instant::now();
+        let result = self.with_retry(call, &trace).await;
+        // The call ledger: one record per sent call (recording only —
+        // nothing reads it back).
+        if let Some(ledger) = &self.ledger {
+            let wall_ms = started.elapsed().as_millis() as u64;
+            ledger.sent(call.site, &trace.attempts(), &result, wall_ms);
+        }
+        result
     }
 
     fn cache_stats(&self) -> Option<crate::cache::CacheStats> {

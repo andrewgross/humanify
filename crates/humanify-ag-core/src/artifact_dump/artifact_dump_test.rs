@@ -39,6 +39,7 @@ fn cache_key_rows_carry_the_callee_snippet() {
         },
         system_prompt: String::new(),
         user_prompt: String::new(),
+        site: humanify_ag_model::llm::CallSite::Naming,
     };
     let (_, keys) = dispatch_rows(
         &[super::Dispatch::Plain {
@@ -131,6 +132,7 @@ fn ask_vendor_call() -> humanify_ag_model::llm::LlmCall {
         },
         system_prompt: String::new(),
         user_prompt: String::new(),
+        site: humanify_ag_model::llm::CallSite::Naming,
     }
 }
 

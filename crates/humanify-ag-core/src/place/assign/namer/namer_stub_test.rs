@@ -91,7 +91,7 @@ fn client(url: &str) -> LlmClient<humanify_ag_llm::provider::LiveStack> {
             reasoning_effort: None,
         },
         cache_dir: None,
-        metrics: None,
+        ledger: None,
         log: None,
     })
     .unwrap()

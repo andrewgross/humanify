@@ -59,3 +59,28 @@ fn the_surface_table_reads_the_flat_split_totals() {
     let row = out.iter().find(|l| l.starts_with("newName")).unwrap();
     assert!(row.contains(" 2 ") && !row.contains(" - "), "{row}");
 }
+
+/// exp206: a pair whose scored run left a call ledger gets a digest in
+/// `llmDiagnostics` and a row in the printed diagnostics; a pair without
+/// one prints `-` and gets no digest (never a zero).
+#[test]
+fn the_llm_diagnostics_come_from_each_pairs_stats_file() {
+    let dir = std::env::temp_dir().join(format!("dev-summarize-llm-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("b.stats.json"),
+        r#"{"llmCalls":{"outcomes":{"total":{"calls":12,"failed":1}},"transport":{"total":{"sent":9}},"timing":{}}}"#,
+    )
+    .unwrap();
+    std::fs::write(dir.join("c.stats.json"), r#"{"reask":{}}"#).unwrap();
+    let cards = [card("a->b", 1.0, false), card("b->c", 1.0, false)];
+    let (digests, lines) = llm_section(&dir, &cards);
+    assert_eq!(digests.len(), 1);
+    assert_eq!(number_at(&digests[0], "calls"), Some(12.0));
+    assert_eq!(number_at(&digests[0], "failed"), Some(1.0));
+    let text = lines.join("\n");
+    assert!(text.contains("LLM call diagnostics"), "{text}");
+    let bc = text.lines().find(|l| l.starts_with("b->c")).unwrap();
+    assert!(bc.split_whitespace().skip(1).all(|c| c == "-"), "{bc}");
+}

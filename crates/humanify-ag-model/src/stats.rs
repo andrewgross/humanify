@@ -366,6 +366,22 @@ js_record! {
         sweep_reasked: f64 = "sweepReasked",
         sweep_reask_applied: f64 = "sweepReaskApplied",
         sweep_reask_dropped: f64 = "sweepReaskDropped",
+        /// The BACKUPS the lanes took after a rejected answer (exp206,
+        /// 2026-11-08 — counted in the processor report since 2026-10-04
+        /// but never exported): colliding answers an all-failed window
+        /// cut off before their round-2, handed to the barrier's
+        /// disclosed re-ask. ABSENT on earlier scorecards (the `reask`
+        /// precedent).
+        collision_handoffs: Option<f64> = "collisionHandoffs",
+        /// Answers whose lane round-2 collided again, handed to the
+        /// barrier's disclosed re-ask.
+        lane_end_handoffs: Option<f64> = "laneEndHandoffs",
+        /// Collisions the lane tail repaired with the suffix ladder (the
+        /// processor's `remaining` contention events).
+        ladder_at_lane_end: Option<f64> = "ladderAtLaneEnd",
+        /// Collisions the barrier repaired with the suffix ladder once its
+        /// re-ask budget was spent (the `wave` contention events).
+        ladder_at_barrier: Option<f64> = "ladderAtBarrier",
     }
 }
 
@@ -532,6 +548,15 @@ js_record! {
         /// runs from this writer; ABSENT on every earlier recorded
         /// scorecard — the `reask` precedent, verbatim.
         library_matching: Option<JsValue> = "libraryMatching",
+        /// The `llmCalls` block (2026-11-08, exp206): every LLM call's
+        /// fate per namer — the call ledger's `outcomes` (answered /
+        /// failed / per-identifier answer verdicts; byte-identical with
+        /// the model held fixed), `transport` (served / sent / retries by
+        /// reason / failures by kind / tokens) and `timing` (latency
+        /// percentiles — wall clock). DIAGNOSTICS, never a KPI. ALWAYS
+        /// written on runs from this writer; ABSENT on every earlier
+        /// recorded scorecard — the `reask` precedent, verbatim.
+        llm_calls: Option<JsValue> = "llmCalls",
     }
 }
 

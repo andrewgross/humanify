@@ -14,7 +14,6 @@ use humanify_ag_model::llm::{
 };
 
 use crate::cache_test::tmp_dir;
-use crate::metrics::MetricsTracker;
 use crate::provider::{LiveOptions, LlmClient};
 use humanify_ag_testkit::answers::completion;
 use humanify_ag_testkit::stub_server::{StubResponse, StubServer};
@@ -28,6 +27,7 @@ fn call(i: usize) -> LlmCall {
         },
         system_prompt: "sys".to_string(),
         user_prompt: format!("user {i}"),
+        site: humanify_ag_model::llm::CallSite::Naming,
     }
 }
 
@@ -53,7 +53,7 @@ fn live(
         },
         key_params: params(),
         cache_dir: cache,
-        metrics: Some(Arc::new(MetricsTracker::default())),
+        ledger: None,
         log: None,
     })
     .unwrap()
