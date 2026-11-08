@@ -5,6 +5,7 @@
 //! WP0.3 lands the dump schemas here first so that `humanify-parity` can
 //! build against TS dumps before any pipeline Rust exists.
 
+pub mod call_ledger;
 pub mod detection;
 pub mod dump;
 pub mod hash_keys;
@@ -16,6 +17,8 @@ pub mod profiling;
 pub mod stats;
 pub use dump::*;
 
+#[cfg(test)]
+mod call_ledger_test;
 #[cfg(test)]
 mod js_test;
 #[cfg(test)]

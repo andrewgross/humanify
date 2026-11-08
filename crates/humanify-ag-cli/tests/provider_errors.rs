@@ -89,6 +89,7 @@ fn failing_endpoint() -> StubServer {
 /// `providerErrors` block, the endpoint's request count, the output.
 struct FailedRun {
     provider_errors: serde_json::Value,
+    llm_calls: serde_json::Value,
     requests: usize,
     text: String,
 }
@@ -141,6 +142,7 @@ fn run_failing(fixture: &str) -> FailedRun {
         serde_json::from_str(&std::fs::read_to_string(&stats).unwrap()).unwrap();
     FailedRun {
         provider_errors: json["providerErrors"].clone(),
+        llm_calls: json["llmCalls"].clone(),
         requests: stub.requests(),
         text,
     }
@@ -168,6 +170,38 @@ fn assert_counted(run: &FailedRun, namers: &[&str]) {
     assert_eq!(
         total as usize, run.requests,
         "every request the endpoint failed is one counted call: {p}"
+    );
+    // The call ledger (exp206) files the same failures under the same
+    // namers, by the final error's kind: every failed call here is a 503
+    // the client is told not to retry — one HTTP attempt, `status`.
+    let ledger = &run.llm_calls;
+    for namer in [
+        "naming",
+        "modules",
+        "vendor",
+        "split",
+        "treeReviser",
+        "total",
+    ] {
+        let key = if namer == "total" { "total" } else { namer };
+        let failed = ledger["outcomes"][namer]["failed"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("llmCalls.outcomes.{namer}.failed: {ledger}"));
+        assert_eq!(
+            failed,
+            n(key),
+            "ledger vs providerErrors for {namer}: {ledger}"
+        );
+        assert_eq!(
+            ledger["transport"][namer]["failed"]["status"].as_u64(),
+            Some(failed),
+            "{namer}: {ledger}"
+        );
+    }
+    assert_eq!(
+        ledger["transport"]["total"]["httpAttempts"].as_u64(),
+        Some(run.requests as u64),
+        "every request is one counted HTTP attempt: {ledger}"
     );
     let warnings: Vec<&str> = run
         .text

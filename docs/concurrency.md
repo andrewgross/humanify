@@ -365,7 +365,14 @@ the `--profile` spans) differ too; they are timing gauges by nature.
 
   That is 12 requests for one failing call (`rate_test.rs`
   `one_call_against_a_failing_server_sends_twelve_requests`), and about an
-  hour per call against a server that accepts and then hangs. Collapsing
+  hour per call against a server that accepts and then hangs.
+  Since exp206 (2026-11-08) every attempt of BOTH layers is recorded: the
+  client pushes each attempt into the call's `provider::CallTrace`, the
+  limiter files the call in the run's call ledger, and `--stats-json`
+  `llmCalls.transport.<namer>` counts sent calls answered first try / after
+  retry, retried attempts by reason (timeout, connection, 429, 5xx, other
+  status, malformed body) and failures by final kind, with attempt latency
+  percentiles in `llmCalls.timing` — the measurement the R1 decision needs. Collapsing
   the layers changes which calls succeed under failure, so it needs the
   fault-injection measurement in the audit before it can land.
 

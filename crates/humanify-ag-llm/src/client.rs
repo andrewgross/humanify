@@ -32,8 +32,10 @@ use humanify_ag_model::llm::{
     BatchRenameResponse, LlmCall, LlmConfig, LlmError, LlmErrorKind, Renames, Usage,
 };
 
+use humanify_ag_model::call_ledger::{Attempt, AttemptRecord};
+
 use crate::debug::{LlmLogEvent, LogSink, Roundtrip, emit};
-use crate::provider::AsyncProvider;
+use crate::provider::{AsyncProvider, CallTrace};
 
 pub struct OpenAiClient {
     http: reqwest::Client,
@@ -136,12 +138,23 @@ impl OpenAiClient {
     }
 
     /// The SDK's `makeRequest` loop: returns the 2xx response's body text.
-    async fn post_with_sdk_retries(&self, body: &str) -> Result<String, LlmError> {
+    /// Every attempt's result and duration land in `trace` (recording only).
+    async fn post_with_sdk_retries(
+        &self,
+        body: &str,
+        trace: &CallTrace,
+    ) -> Result<String, LlmError> {
         let max = self.config.sdk_max_retries;
         let mut remaining = max;
         loop {
             let retry_count = max - remaining;
-            match self.attempt(body).await {
+            let started = Instant::now();
+            let exchange = self.attempt(body).await;
+            trace.push(AttemptRecord {
+                result: attempt_result(&exchange),
+                ms: started.elapsed().as_millis() as u64,
+            });
+            match exchange {
                 Err(kind) => {
                     if remaining > 0 {
                         tokio::time::sleep(default_retry_delay(retry_count)).await;
@@ -188,6 +201,18 @@ impl OpenAiClient {
                 ok,
             }),
         );
+    }
+}
+
+/// What one attempt came to, for the call ledger (a 2xx whose body could
+/// not be read is the connection error the loop turns it into).
+fn attempt_result(exchange: &Result<Exchange, LlmErrorKind>) -> Attempt {
+    match exchange {
+        Err(LlmErrorKind::Timeout) => Attempt::Timeout,
+        Err(_) => Attempt::Connection,
+        Ok(e) if (200..300).contains(&e.status) && e.text.is_none() => Attempt::Connection,
+        Ok(e) if (200..300).contains(&e.status) => Attempt::Ok,
+        Ok(e) => Attempt::Status(e.status),
     }
 }
 
@@ -435,10 +460,20 @@ pub fn response_from_completion(
 
 impl AsyncProvider for OpenAiClient {
     async fn suggest_all_names(&self, call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
+        self.suggest_traced(call, &CallTrace::default()).await
+    }
+
+    async fn suggest_traced(
+        &self,
+        call: &LlmCall,
+        trace: &CallTrace,
+    ) -> Result<BatchRenameResponse, LlmError> {
         let started = Instant::now();
         let body = self.request_body(&call.system_prompt, &call.user_prompt);
-        let result = match self.post_with_sdk_retries(&body).await {
-            Ok(text) => response_from_completion(&text),
+        let result = match self.post_with_sdk_retries(&body, trace).await {
+            Ok(text) => response_from_completion(&text).inspect_err(|_| {
+                trace.amend_last(Attempt::Malformed);
+            }),
             Err(error) => Err(error),
         };
         match &result {

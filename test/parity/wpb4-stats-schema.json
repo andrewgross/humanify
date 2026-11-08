@@ -2092,6 +2092,38 @@
             "type": {
               "kind": "number"
             }
+          },
+          {
+            "name": "collisionHandoffs",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "laneEndHandoffs",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "ladderAtLaneEnd",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "ladderAtBarrier",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
           }
         ]
       }
@@ -2474,6 +2506,14 @@
     },
     {
       "name": "libraryMatching",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "any"
+      }
+    },
+    {
+      "name": "llmCalls",
       "optional": true,
       "nullable": false,
       "type": {

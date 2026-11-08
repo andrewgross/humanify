@@ -14,9 +14,9 @@ use humanify_ag_model::llm::{
 use humanify_ag_model::llm::LlmConfig;
 
 use crate::client::{OpenAiClient, status_error};
-use crate::metrics::MetricsTracker;
 use crate::provider::AsyncProvider;
 use crate::rate::{RateLimited, is_retryable};
+use humanify_ag_model::call_ledger::CallLedger;
 use humanify_ag_testkit::answers::completion;
 use humanify_ag_testkit::stub_server::{Handler, StubResponse, StubServer};
 
@@ -30,6 +30,7 @@ fn make_request(identifiers: &[&str]) -> LlmCall {
         },
         system_prompt: String::new(),
         user_prompt: String::new(),
+        site: humanify_ag_model::llm::CallSite::Naming,
     }
 }
 
@@ -321,62 +322,44 @@ fn a_context_length_400_is_not_retried() {
     assert_eq!(server.requests(), 1);
 }
 
-/// "tracks successful calls" (metrics integration)
+/// The limiter files every sent call in the call ledger (exp206; it fed
+/// the never-wired MetricsTracker before — "tracks successful calls").
 #[test]
 fn tracks_successful_calls() {
-    let metrics = Arc::new(MetricsTracker::default());
+    let ledger = Arc::new(CallLedger::new(|n| !n.is_empty()));
     let flaky = Flaky::new("", 1);
-    let limited = RateLimited::new(&flaky, RateLimitConfig::default(), Some(metrics.clone()));
+    let limited = RateLimited::new(&flaky, RateLimitConfig::default(), Some(ledger.clone()));
     one(&limited, &make_request(&["test1"])).unwrap();
     one(&limited, &make_request(&["test2"])).unwrap();
-    let stats = metrics.metrics();
-    assert_eq!(stats.llm.completed_calls, 2);
-    assert_eq!(stats.llm.failed_calls, 0);
-    assert_eq!(stats.llm.in_flight_calls, 0);
+    let stats = ledger.stats();
+    assert_eq!(number(&stats, &["transport", "naming", "sent"]), 2.0);
+    assert_eq!(number(&stats, &["transport", "naming", "okFirstTry"]), 2.0);
 }
 
-/// "tracks failed calls" (metrics integration, retryAttempts 0)
+/// "tracks failed calls" (retryAttempts 0): one sent call, failed.
 #[test]
 fn tracks_failed_calls() {
-    let metrics = Arc::new(MetricsTracker::default());
+    let ledger = Arc::new(CallLedger::new(|n| !n.is_empty()));
     let flaky = Flaky::new("API error", 0);
-    let limited = RateLimited::new(&flaky, config(50, 0, 1000), Some(metrics.clone()));
+    let limited = RateLimited::new(&flaky, config(50, 0, 1000), Some(ledger.clone()));
     assert!(one(&limited, &make_request(&["a"])).is_err());
-    let stats = metrics.metrics();
-    assert_eq!(stats.llm.failed_calls, 1);
-    assert_eq!(stats.llm.completed_calls, 0);
-}
-
-/// Captures the tracker's in-flight count from inside the call.
-struct InFlightProbe {
-    metrics: Arc<MetricsTracker>,
-    captured: AtomicUsize,
-}
-
-impl AsyncProvider for &InFlightProbe {
-    async fn suggest_all_names(&self, call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
-        let in_flight = self.metrics.metrics().llm.in_flight_calls;
-        self.captured
-            .store(in_flight.max(0) as usize, Ordering::SeqCst);
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        Ok(rename_all(call))
-    }
-}
-
-/// "tracks in-flight calls during execution" — 3 concurrent, cap 5.
-#[test]
-fn tracks_in_flight_calls_during_execution() {
-    let metrics = Arc::new(MetricsTracker::default());
-    let probe = InFlightProbe {
-        metrics: metrics.clone(),
-        captured: AtomicUsize::new(0),
-    };
-    let limited = RateLimited::new(&probe, config(5, 3, 1000), Some(metrics));
-    wave(&limited, 3);
-    assert!(
-        probe.captured.load(Ordering::SeqCst) >= 1,
-        "Should have captured in-flight calls"
+    let stats = ledger.stats();
+    assert_eq!(number(&stats, &["transport", "naming", "sent"]), 1.0);
+    assert_eq!(number(&stats, &["transport", "naming", "okFirstTry"]), 0.0);
+    assert_eq!(
+        number(&stats, &["transport", "naming", "failed", "other"]),
+        1.0
     );
+}
+
+fn number(v: &humanify_ag_model::js::JsValue, path: &[&str]) -> f64 {
+    let leaf = path.iter().fold(v, |v, k| {
+        v.as_object().and_then(|o| o.get(k)).expect("path")
+    });
+    match leaf {
+        humanify_ag_model::js::JsValue::Number(n) => *n,
+        _ => panic!("not a number"),
+    }
 }
 
 /// requestsPerMinute (no TS test): with a limit of 2, the third request

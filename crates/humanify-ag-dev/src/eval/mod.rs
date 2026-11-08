@@ -12,6 +12,7 @@ pub mod kpis;
 pub mod leaderboard;
 pub mod line_churn;
 pub mod line_tokens;
+pub mod llm_diag;
 pub mod real_ledger;
 pub mod report;
 pub mod rescore;

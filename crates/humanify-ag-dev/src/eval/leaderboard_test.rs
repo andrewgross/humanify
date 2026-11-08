@@ -146,3 +146,61 @@ fn bands_measured_over_other_pairs_say_so() {
     assert!(!text.contains("MEASURED OVER"), "{text}");
     assert!(!text.contains("records no pair set"), "{text}");
 }
+
+/// Give `name`'s summary an `llmDiagnostics` entry per pair (exp206) with
+/// `sent` calls and a `p90ms` of `p90` each.
+fn add_llm_diagnostics(root: &Path, name: &str, sent: f64, p90: f64) {
+    let path = root.join(name).join("summary.json");
+    let summary = JsValue::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let diags: Vec<JsValue> = match at(&summary, "pairs") {
+        Some(JsValue::Array(a)) => a
+            .iter()
+            .map(|c| {
+                let pair = card_pair(c).unwrap();
+                JsValue::parse(&format!(
+                    r#"{{"pair":"{pair}","sent":{sent},"p90ms":{p90},"failed":0}}"#
+                ))
+                .unwrap()
+            })
+            .collect(),
+        _ => panic!("summary.json pairs"),
+    };
+    let JsValue::Object(mut o) = summary else {
+        panic!("summary.json is an object")
+    };
+    o.insert("llmDiagnostics", JsValue::Array(diags));
+    std::fs::write(&path, crate::json::js_text(&JsValue::Object(o), true)).unwrap();
+}
+
+#[test]
+fn the_llm_diagnostics_print_side_by_side_and_dash_for_a_legacy_label() {
+    let root = std::env::temp_dir().join(format!("dev-leaderboard-llm-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    label(&root, "legacy", Some(2));
+    label(&root, "ledgered", Some(2));
+    label(&root, "slower", Some(2));
+    add_llm_diagnostics(&root, "ledgered", 100.0, 2000.0);
+    add_llm_diagnostics(&root, "slower", 100.0, 6800.0);
+    let names: Vec<String> = ["ledgered", "slower", "legacy"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let text = leaderboard(&root, &names, None, false).unwrap();
+    assert!(text.contains("LLM call diagnostics"), "{text}");
+    assert!(text.contains("DIAGNOSTICS, not KPIs"), "{text}");
+    // Four pairs: sent sums, p90 is the worst pair's.
+    let slower: Vec<&str> = text.lines().filter(|l| l.starts_with("slower")).collect();
+    assert!(
+        slower.iter().any(|l| l.contains("6800 (+4800)")),
+        "{slower:?}"
+    );
+    assert!(slower.iter().any(|l| l.contains("400")), "{slower:?}");
+    let legacy = text
+        .lines()
+        .filter(|l| l.starts_with("legacy") && l.split_whitespace().nth(1) == Some("-"))
+        .count();
+    assert!(
+        legacy >= 3,
+        "a legacy label prints '-' in every group: {text}"
+    );
+}

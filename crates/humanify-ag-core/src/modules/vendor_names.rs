@@ -1192,6 +1192,7 @@ impl VendorNamer for ProviderVendorNamer<'_> {
             system_prompt: VENDOR_NAMER_SYSTEM_PROMPT.to_string(),
             user_prompt: request.code.clone(),
             request,
+            site: humanify_ag_model::llm::CallSite::Vendor,
         };
         // The `vendor` site's row, recorded before the provider answers
         // (as `recordPromptDump` is) — streamed, never accumulated.

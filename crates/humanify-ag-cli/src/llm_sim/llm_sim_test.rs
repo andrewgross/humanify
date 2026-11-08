@@ -14,6 +14,7 @@ fn call(i: usize) -> LlmCall {
         request: BatchRenameRequest::default(),
         system_prompt: "You are a test".into(),
         user_prompt: format!("call {i}"),
+        site: humanify_ag_model::llm::CallSite::Naming,
     }
 }
 

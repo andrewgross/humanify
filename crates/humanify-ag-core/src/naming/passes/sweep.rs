@@ -41,7 +41,8 @@
 use std::collections::{HashMap, HashSet};
 
 use humanify_ag_model::llm::{
-    BatchRenameRequest, CacheKeyParams, LlmCall, LlmErrorKind, NameProvider, Renames, cache_key_of,
+    BatchRenameRequest, CacheKeyParams, CallSite, LlmCall, LlmErrorKind, NameProvider, Renames,
+    cache_key_of,
 };
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
@@ -987,6 +988,7 @@ fn sweep_call(
         request,
         system_prompt,
         user_prompt,
+        site: CallSite::Naming,
     }
 }
 

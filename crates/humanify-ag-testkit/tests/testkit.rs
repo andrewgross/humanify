@@ -147,6 +147,7 @@ fn call(id: &str) -> LlmCall {
         },
         system_prompt: String::new(),
         user_prompt: String::new(),
+        site: humanify_ag_model::llm::CallSite::Naming,
     }
 }
 

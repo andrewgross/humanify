@@ -800,6 +800,27 @@
       "construct": "sleep",
       "pattern": "test-support",
       "reason": "test-support crate (a dev-dependency only, never linked into a product binary): tokio::time::sleep: the handler's configured delay, so a test can hold requests in flight"
+    },
+    {
+      "file": "crates/humanify-ag-llm/src/provider.rs",
+      "scope": "<module>",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "a sent call's HTTP attempt trace (exp206): std Mutex taken for one push per attempt (or one read when the call is done) and released at once; never held across .await; recording only"
+    },
+    {
+      "file": "crates/humanify-ag-model/src/call_ledger.rs",
+      "scope": "struct CallLedger",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "the call ledger (exp206): std Mutex taken for one tally update per call event and released at once; never held across .await, IO or another lock; recording only, nothing decides on it"
+    },
+    {
+      "file": "crates/humanify-ag-model/src/call_ledger.rs",
+      "scope": "CallLedger::new",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "the call ledger (exp206): std Mutex taken for one tally update per call event and released at once; never held across .await, IO or another lock; recording only, nothing decides on it"
     }
   ]
 }

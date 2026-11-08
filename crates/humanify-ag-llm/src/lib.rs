@@ -35,6 +35,8 @@ mod cache_test;
 #[cfg(test)]
 mod client_test;
 #[cfg(test)]
+mod ledger_test;
+#[cfg(test)]
 mod metrics_test;
 #[cfg(test)]
 mod provider_test;

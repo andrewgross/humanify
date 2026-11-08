@@ -555,6 +555,49 @@ pub struct LlmCall {
     pub request: BatchRenameRequest,
     pub system_prompt: String,
     pub user_prompt: String,
+    /// Which namer asked. Recording only: the call ledger
+    /// ([`crate::call_ledger`]) files the call's fate under it. It is NOT
+    /// part of the request, so it never reaches the cache key, the prompt
+    /// or a decision.
+    pub site: CallSite,
+}
+
+/// The namer an LLM call belongs to — the `providerErrors` block's five
+/// namers, so the call ledger's failed counts reconcile with it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CallSite {
+    /// The function/identifier waves and the coverage sweeps.
+    Naming,
+    /// The module namer (`naming::module_names`).
+    Modules,
+    /// The vendor namer.
+    Vendor,
+    /// The split's file/folder namer.
+    Split,
+    /// The split's tree reviser.
+    TreeReviser,
+}
+
+impl CallSite {
+    /// Every site, in the stats block's order.
+    pub const ALL: [CallSite; 5] = [
+        CallSite::Naming,
+        CallSite::Modules,
+        CallSite::Vendor,
+        CallSite::Split,
+        CallSite::TreeReviser,
+    ];
+
+    /// The site's key — `providerErrors`' key for the same namer.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CallSite::Naming => "naming",
+            CallSite::Modules => "modules",
+            CallSite::Vendor => "vendor",
+            CallSite::Split => "split",
+            CallSite::TreeReviser => "treeReviser",
+        }
+    }
 }
 
 /// The completion callback of [`NameProvider::run_pipelined`]: handed each

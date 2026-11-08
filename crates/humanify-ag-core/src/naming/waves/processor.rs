@@ -24,8 +24,8 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use humanify_ag_model::llm::{
-    BatchRenameRequest, CacheKeyParams, CalleeSignature, LlmCall, LlmErrorKind, NameProvider,
-    PriorReject, PriorRejects, RenameFailures, Renames, StrMap, cache_key_of,
+    BatchRenameRequest, CacheKeyParams, CallSite, CalleeSignature, LlmCall, LlmErrorKind,
+    NameProvider, PriorReject, PriorRejects, RenameFailures, Renames, StrMap, cache_key_of,
 };
 use oxc_semantic::Semantic;
 use oxc_span::Span;
@@ -3011,6 +3011,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             request,
             system_prompt,
             user_prompt,
+            site: CallSite::Naming,
         };
         (prepared, call)
     }
@@ -3143,6 +3144,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                     request,
                     system_prompt,
                     user_prompt,
+                    site: CallSite::Naming,
                 },
             );
         }

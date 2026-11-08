@@ -11,11 +11,46 @@ use humanify_ag_model::llm::{
     RateLimitConfig,
 };
 
+use humanify_ag_model::call_ledger::{AttemptRecord, CallLedger};
+
 use crate::cache::{AnswerMemo, CacheStats, DiskCache, MemoStats};
 use crate::client::OpenAiClient;
 use crate::debug::{DebugProvider, LogSink};
-use crate::metrics::MetricsTracker;
 use crate::rate::RateLimited;
+
+/// One sent call's HTTP attempts, every retry layer's, in order — filled
+/// by the client, read by the limiter when the call is done, for the call
+/// ledger. Recording only.
+#[derive(Default)]
+pub struct CallTrace {
+    // concurrency: short-lock — one push per HTTP attempt, never held across an await
+    attempts: std::sync::Mutex<Vec<AttemptRecord>>,
+}
+
+impl CallTrace {
+    pub fn push(&self, record: AttemptRecord) {
+        self.attempts
+            .lock()
+            .expect("the call trace lock")
+            .push(record);
+    }
+
+    /// Mark the last attempt (a 2xx whose body was not a completion).
+    pub fn amend_last(&self, result: humanify_ag_model::call_ledger::Attempt) {
+        if let Some(last) = self
+            .attempts
+            .lock()
+            .expect("the call trace lock")
+            .last_mut()
+        {
+            last.result = result;
+        }
+    }
+
+    pub fn attempts(&self) -> Vec<AttemptRecord> {
+        self.attempts.lock().expect("the call trace lock").clone()
+    }
+}
 
 /// One layer of the provider stack (the TS `LLMProvider` interface).
 pub trait AsyncProvider: Send + Sync {
@@ -23,6 +58,18 @@ pub trait AsyncProvider: Send + Sync {
         &'a self,
         call: &'a LlmCall,
     ) -> impl Future<Output = Result<BatchRenameResponse, LlmError>> + Send + 'a;
+
+    /// The call with its HTTP attempts recorded into `trace` (the layers
+    /// that make attempts, and the ones between them and the limiter,
+    /// override this; everything else records nothing).
+    fn suggest_traced<'a>(
+        &'a self,
+        call: &'a LlmCall,
+        trace: &'a CallTrace,
+    ) -> impl Future<Output = Result<BatchRenameResponse, LlmError>> + Send + 'a {
+        let _ = trace;
+        self.suggest_all_names(call)
+    }
 
     /// The disk cache's counters when this stack has a cache.
     fn cache_stats(&self) -> Option<CacheStats> {
@@ -64,7 +111,9 @@ pub struct LiveOptions {
     pub key_params: CacheKeyParams,
     /// `--llm-cache <dir>`: the memo's optional disk backing store.
     pub cache_dir: Option<std::path::PathBuf>,
-    pub metrics: Option<Arc<MetricsTracker>>,
+    /// The run's call ledger: the memo, the limiter and the client each
+    /// record what they alone see. Recording only.
+    pub ledger: Option<Arc<CallLedger>>,
     pub log: Option<LogSink>,
 }
 
@@ -131,7 +180,7 @@ impl LlmClient<LiveStack> {
             Some(options.config.model.clone()),
             options.log.clone(),
         );
-        let limited = RateLimited::new(debug, options.rate, options.metrics);
+        let limited = RateLimited::new(debug, options.rate, options.ledger.clone());
         let provider = match options.cache_dir {
             Some(dir) => AnswerMemo::on_disk(
                 limited,
@@ -140,7 +189,8 @@ impl LlmClient<LiveStack> {
                 options.log,
             ),
             None => AnswerMemo::in_memory(limited, options.key_params),
-        };
+        }
+        .with_ledger(options.ledger);
         Ok(LlmClient::with_provider(provider))
     }
 }

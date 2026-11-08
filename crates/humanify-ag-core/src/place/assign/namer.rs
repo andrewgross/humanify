@@ -20,7 +20,7 @@
 
 use std::collections::HashSet;
 
-use humanify_ag_model::llm::{BatchRenameRequest, LlmCall, NameProvider};
+use humanify_ag_model::llm::{BatchRenameRequest, CallSite, LlmCall, NameProvider};
 
 use crate::artifact_dump::{Dispatch, DispatchLog};
 use crate::modules::vendor_names::unique_case_insensitive_name;
@@ -291,6 +291,11 @@ pub fn split_namer_call(requests: &[SplitNameRequest]) -> (LlmCall, Vec<String>)
         request,
         system_prompt: system.to_string(),
         user_prompt: prompt,
+        site: if module {
+            CallSite::Modules
+        } else {
+            CallSite::Split
+        },
     };
     (call, keys)
 }
@@ -330,6 +335,7 @@ pub fn tree_reviser_call(folders: &[FolderSummary]) -> LlmCall {
         },
         system_prompt: REVISER_SYSTEM_PROMPT.to_string(),
         user_prompt: prompt,
+        site: CallSite::TreeReviser,
     }
 }
 

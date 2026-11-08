@@ -865,6 +865,17 @@ fn the_stats_reask_block_maps_the_processor_and_sweep_counters() {
         late_rejections: 2,
         invalid_suggestion_finishes: 3,
         all_failed_windows: 4,
+        collision_handoffs: 7,
+        lane_end_handoffs: 8,
+        contention: ["remaining", "remaining", "wave"]
+            .iter()
+            .map(|site| crate::naming::report::ContentionEvent {
+                requested: "x".to_string(),
+                resolved_to: "x2".to_string(),
+                old_name: "a".to_string(),
+                site,
+            })
+            .collect(),
         ..crate::naming::report::ProcessorReport::default()
     };
     let pre = crate::naming::passes::sweep::SweepResult {
@@ -889,15 +900,29 @@ fn the_stats_reask_block_maps_the_processor_and_sweep_counters() {
             sweep_reasked: 6.0,
             sweep_reask_applied: 4.0,
             sweep_reask_dropped: 2.0,
+            collision_handoffs: Some(7.0),
+            lane_end_handoffs: Some(8.0),
+            ladder_at_lane_end: Some(2.0),
+            ladder_at_barrier: Some(1.0),
         }
     );
-    // An absent sweep is zero, not an error.
+    // An absent sweep is zero, not an error; the backup counters are
+    // written (zero), never absent, on runs from this writer.
     let empty = super::reask_stats(
         &crate::naming::report::ProcessorReport::default(),
         None,
         None,
     );
-    assert_eq!(empty, humanify_ag_model::stats::ReaskStats::default());
+    assert_eq!(
+        empty,
+        humanify_ag_model::stats::ReaskStats {
+            collision_handoffs: Some(0.0),
+            lane_end_handoffs: Some(0.0),
+            ladder_at_lane_end: Some(0.0),
+            ladder_at_barrier: Some(0.0),
+            ..humanify_ag_model::stats::ReaskStats::default()
+        }
+    );
 }
 
 /// Finding #80 (toolchain review R2, spec I10): which code is a bundled

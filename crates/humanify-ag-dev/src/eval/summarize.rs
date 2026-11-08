@@ -820,6 +820,7 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
     ];
     head.extend(banner_lines);
     let banner_lines = head;
+    let (llm_digests, llm_lines) = llm_section(dir, &cards);
     let summary = obj(vec![
         ("model", text(label)),
         ("provenance", prov),
@@ -827,6 +828,7 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
         ("totals", totals.clone()),
         ("runStatuses", JsValue::Array(statuses.clone())),
         ("verdicts", v),
+        ("llmDiagnostics", JsValue::Array(llm_digests)),
     ]);
     let path = dir.join("summary.json");
     std::fs::write(&path, crate::json::js_text(&summary, false))
@@ -875,6 +877,7 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
     out.extend(caveat_lines(&shown));
     print_layout(&cards, &totals, t.clean_cards, &mut out);
     print_surfaces(&cards, &totals, &mut out);
+    out.extend(llm_lines);
     out.push(format!("\nwrote {}", path.display()));
     if !banner_lines.is_empty() {
         out.push(String::new());
@@ -884,6 +887,26 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
         out.push("\nNOTE: no per-pair run status was recorded — this predates the check, so whether the pipeline accepted its own output is UNKNOWN, not clean.".into());
     }
     Ok(out.join("\n") + "\n")
+}
+
+/// The label's LLM call diagnostics (exp206, `eval::llm_diag`): one
+/// digest per pair whose scored run left a call ledger, and the per-pair
+/// tables (a pair without one prints `-`).
+fn llm_section(dir: &Path, cards: &[JsValue]) -> (Vec<JsValue>, Vec<String>) {
+    let digests = super::llm_diag::pair_digests(dir, cards);
+    let rows: Vec<(String, Option<JsValue>)> = cards
+        .iter()
+        .map(|c| {
+            let pair = str_at(c, "pair").unwrap_or("").to_string();
+            let d = digests
+                .iter()
+                .find(|d| str_at(d, "pair") == Some(pair.as_str()))
+                .cloned();
+            (pair, d)
+        })
+        .collect();
+    let lines = super::llm_diag::tables("LLM call diagnostics (per pair)", &rows, false);
+    (digests, lines)
 }
 
 fn print_layout(cards: &[JsValue], totals: &JsValue, clean_cards: usize, out: &mut Vec<String>) {

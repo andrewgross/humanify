@@ -390,8 +390,30 @@ pub fn leaderboard(
             ));
         }
     }
+    out.extend(llm_diagnostics(&labels, &common));
     out.extend(notes);
     Ok(out.join("\n") + "\n")
+}
+
+/// The labels' LLM call diagnostics over the compared pairs (exp206):
+/// `summary.json` `llmDiagnostics`, folded by `eval::llm_diag` — printed
+/// after every KPI line, as diagnostics.
+fn llm_diagnostics(labels: &[Label], common: &[String]) -> Vec<String> {
+    let rows: Vec<(String, Option<JsValue>)> = labels
+        .iter()
+        .map(|l| {
+            let digests = match at(&l.summary, "llmDiagnostics") {
+                Some(JsValue::Array(a)) => a.clone(),
+                _ => Vec::new(),
+            };
+            (l.name.clone(), super::llm_diag::fold(&digests, common))
+        })
+        .collect();
+    super::llm_diag::tables(
+        "LLM call diagnostics (totals across the compared pairs)",
+        &rows,
+        true,
+    )
 }
 
 #[cfg(test)]
