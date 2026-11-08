@@ -134,6 +134,9 @@ pub struct AnswerVerdicts {
     /// The identifier handed back as its own name.
     pub unchanged: u64,
     /// Not a legal rename target (a reserved word, a builtin, bad chars).
+    /// Identifier answers only (the `naming` site): the other namers
+    /// answer file, folder and package names, which their own namers
+    /// check, so they never land here.
     pub invalid: u64,
     /// The same name given to two or more identifiers of this answer.
     pub duplicate_in_answer: u64,
@@ -217,7 +220,7 @@ pub fn judge_answer(
             > 1;
         if name == id {
             v.unchanged += 1;
-        } else if !is_legal(name) {
+        } else if call.site == CallSite::Naming && !is_legal(name) {
             v.invalid += 1;
         } else if shared {
             v.duplicate_in_answer += 1;

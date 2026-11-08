@@ -215,3 +215,24 @@ fn the_outcomes_view_does_not_depend_on_completion_order_or_transport() {
     let text = |l: &CallLedger| crate::js::stringify(at(&l.stats(), "outcomes"));
     assert_eq!(text(&cold), text(&warm));
 }
+
+/// The identifier rules judge identifier answers only: the split, module,
+/// vendor and reviser namers answer FILE, FOLDER and PACKAGE names
+/// (`format-utils`, `lib/http`), which their own namers check — a cold
+/// bun-mixed run filed 6 of 7 split answers as `invalid` before this.
+#[test]
+fn file_and_folder_answers_are_not_judged_by_the_identifier_rules() {
+    for site in [
+        CallSite::Split,
+        CallSite::Modules,
+        CallSite::Vendor,
+        CallSite::TreeReviser,
+    ] {
+        let c = call(site, &["a"], &[]);
+        let v = judge_answer(&c, &answer(&[("a", Some("format-utils"))]), legal);
+        assert_eq!((v.proposed, v.invalid), (1, 0), "{site:?}");
+    }
+    let c = call(CallSite::Naming, &["a"], &[]);
+    let v = judge_answer(&c, &answer(&[("a", Some("format-utils"))]), legal);
+    assert_eq!((v.proposed, v.invalid), (0, 1));
+}
