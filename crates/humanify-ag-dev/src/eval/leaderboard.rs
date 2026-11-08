@@ -16,7 +16,9 @@ use humanify_ag_model::js::{JsValue, number_to_string};
 use super::card::at;
 use super::kpis::{Kpi, caveat_lines, named};
 use crate::committed::eval::NoiseBands;
-use crate::identity::{Identity, Purpose, backfill::eval_label, guard, label_cards};
+use crate::identity::{
+    Identity, LabelScope, Purpose, backfill::eval_label, guard_labels, label_cards, pairs_of,
+};
 
 const COLUMNS: &[&str] = &[
     "treeLn",
@@ -84,6 +86,9 @@ const SPLIT_TABLES: &[(&str, &[&str])] = &[
 struct Label {
     name: String,
     summary: JsValue,
+    /// The totals the tables print: the summary's, or re-folded over the
+    /// pairs every compared label scored.
+    totals: JsValue,
     ids: Vec<Identity>,
     commit: Option<String>,
 }
@@ -95,12 +100,18 @@ fn load(results: &Path, name: &str) -> Result<Label, String> {
     let summary = JsValue::parse(&text).map_err(|e| format!("{name}: {e}"))?;
     Ok(Label {
         name: name.to_string(),
+        totals: at(&summary, "totals").cloned().unwrap_or(JsValue::Null),
         summary,
         ids: eval_label(&dir)?,
         commit: std::fs::read_to_string(dir.join("commit.txt"))
             .ok()
             .and_then(|c| c.split_whitespace().next().map(str::to_string)),
     })
+}
+
+/// The pairs a label scored, in card order.
+fn pair_list(l: &Label) -> Vec<String> {
+    pairs_of(&l.ids)
 }
 
 fn known(f: &crate::identity::F<Option<String>>) -> String {
@@ -111,42 +122,84 @@ fn known(f: &crate::identity::F<Option<String>>) -> String {
     }
 }
 
-/// The guard over two labels: every pair the baseline scored against the
-/// same pair of the other label, plus a line when the pair sets differ.
-fn compare(base: &Label, other: &Label, force: bool) -> Result<Vec<String>, String> {
-    let mut lines = Vec::new();
-    let pairs =
-        |l: &Label| -> BTreeSet<String> { l.ids.iter().map(|i| i.corpus.entry.clone()).collect() };
-    let (bp, op) = (pairs(base), pairs(other));
-    if bp != op {
-        let msg = format!(
-            "{} and {} scored different pairs ({} vs {})",
-            base.name,
-            other.name,
-            bp.iter().cloned().collect::<Vec<_>>().join(","),
-            op.iter().cloned().collect::<Vec<_>>().join(",")
-        );
-        if !force {
-            return Err(format!(
-                "refusing: {msg}. Pass --force-mixed if mixing is deliberate."
-            ));
+/// The guard over two labels (`identity::guard_labels`): the pairs both
+/// scored, and every common pair's identity fields.
+fn compare(base: &Label, other: &Label, force: bool) -> Result<LabelScope, String> {
+    guard_labels(
+        Purpose::Leaderboard,
+        (&base.name, &base.ids),
+        (&other.name, &other.ids),
+        force,
+    )
+}
+
+/// The pair each card scored (`summary.json` `pairs[]`).
+fn card_pair(card: &JsValue) -> Option<&str> {
+    at(card, "pair").and_then(JsValue::as_str)
+}
+
+/// The label's totals re-folded over `pairs` only: the summary's own
+/// cards, filtered, through the summarizer's fold.
+fn totals_over(summary: &JsValue, pairs: &[String]) -> JsValue {
+    let cards: Vec<JsValue> = match at(summary, "pairs") {
+        Some(JsValue::Array(a)) => a
+            .iter()
+            .filter(|c| card_pair(c).is_some_and(|p| pairs.iter().any(|x| x == p)))
+            .cloned()
+            .collect(),
+        _ => Vec::new(),
+    };
+    JsValue::Object(super::summarize::summarize_cards(&cards).totals)
+}
+
+fn sorted(mut v: Vec<String>) -> Vec<String> {
+    v.sort();
+    v
+}
+
+/// Put every label through the guard against the baseline, and fix the
+/// pairs the comparison covers: those EVERY label scored. When any label
+/// scored more, every label's totals are re-folded over the common pairs.
+fn scope_labels(
+    labels: &mut [Label],
+    force: bool,
+    notes: &mut Vec<String>,
+) -> Result<Vec<String>, String> {
+    let mut common: Vec<String> = pair_list(&labels[0]);
+    for other in &labels[1..] {
+        let scope = compare(&labels[0], other, force)?;
+        common.retain(|p| scope.common.contains(p));
+        notes.extend(scope.lines);
+    }
+    if common.is_empty() {
+        return Err("refusing: the labels have no pair in common across all of them.".into());
+    }
+    let common_set = sorted(common.clone());
+    if labels.iter().any(|l| sorted(pair_list(l)) != common_set) {
+        for l in labels.iter_mut() {
+            l.totals = totals_over(&l.summary, &common);
         }
-        lines.push(format!("!! MIXED PAIRS (--force-mixed): {msg}"));
     }
-    for b in &base.ids {
-        let Some(o) = other.ids.iter().find(|o| o.corpus.entry == b.corpus.entry) else {
-            continue;
-        };
-        let a_name = format!("{}[{}]", base.name, b.corpus.entry);
-        let b_name = format!("{}[{}]", other.name, o.corpus.entry);
-        lines.extend(guard(
-            Purpose::Leaderboard,
-            (&a_name, b),
-            (&b_name, o),
-            force,
-        )?);
+    Ok(common)
+}
+
+/// The line saying a band slot was measured over other pairs than the
+/// ones compared (or records none).
+fn band_pairs_line(band_pairs: Option<&[String]>, common: &[String]) -> Option<String> {
+    match band_pairs {
+        Some(bp) if sorted(bp.to_vec()) != sorted(common.to_vec()) => Some(format!(
+            "  bands: MEASURED OVER {} PAIRS ({}), but these totals cover {} ({}) — a band is the spread of totals over ITS pairs; these ± figures are not this comparison's floor.",
+            bp.len(),
+            bp.join(","),
+            common.len(),
+            common.join(",")
+        )),
+        Some(_) => None,
+        None => Some(format!(
+            "  bands: the slot records no pair set (measured before exp201, over the four original pairs); these totals cover {} pairs.",
+            common.len()
+        )),
     }
-    Ok(lines)
 }
 
 fn cell(v: Option<f64>, base: Option<f64>, is_base: bool, band: Option<f64>) -> String {
@@ -189,20 +242,14 @@ fn table(
     );
     out.push(head.join(" "));
     out.push("-".repeat(20 + shown.len() * (w + 1)));
-    let totals = |l: &Label| at(&l.summary, "totals").cloned().unwrap_or(JsValue::Null);
-    let base = totals(&labels[0]);
+    let base = &labels[0].totals;
     for (i, l) in labels.iter().enumerate() {
-        let t = totals(l);
+        let t = &l.totals;
         let mut row = vec![format!("{:<20}", l.name)];
         for k in shown {
             row.push(format!(
                 "{:>w$}",
-                cell(
-                    k.from_totals(&t),
-                    k.from_totals(&base),
-                    i == 0,
-                    band(&k.key)
-                )
+                cell(k.from_totals(t), k.from_totals(base), i == 0, band(&k.key))
             ));
         }
         out.push(row.join(" "));
@@ -220,7 +267,7 @@ pub fn leaderboard(
     if names.is_empty() {
         return Err("usage: eval leaderboard <label> [label...] [--force-mixed]".into());
     }
-    let labels: Vec<Label> = names
+    let mut labels: Vec<Label> = names
         .iter()
         .map(|n| load(results, n))
         .collect::<Result<_, _>>()?;
@@ -236,9 +283,7 @@ pub fn leaderboard(
             notes.push(format!("!! MIXED LABEL (--force-mixed): {msg}"));
         }
     }
-    for other in &labels[1..] {
-        notes.extend(compare(&labels[0], other, force)?);
-    }
+    let common = scope_labels(&mut labels, force, &mut notes)?;
     let first = labels[0]
         .ids
         .first()
@@ -265,8 +310,8 @@ pub fn leaderboard(
     );
     let mut split_shown: Vec<&Kpi> = Vec::new();
     let any_split = labels.iter().any(|l| {
-        at(&l.summary, "totals")
-            .and_then(JsValue::as_object)
+        l.totals
+            .as_object()
             .is_some_and(|t| t.entries().iter().any(|(k, _)| k.starts_with("split.")))
     });
     if any_split {
@@ -306,6 +351,7 @@ pub fn leaderboard(
         )),
         Some((p, _)) => {
             out.push(format!("  bands: scorer v{scorer}, {mode} mode (noise-bands.json), measured at {}", p.commit));
+            out.extend(band_pairs_line(p.pairs.as_deref(), &common));
             if p.provisional {
                 out.push("  bands: PROVISIONAL — produce a measured slot with `eval bands <r1> <r2> [r3]` over same-commit cold repeats.".into());
             }

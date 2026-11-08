@@ -111,6 +111,11 @@ pub struct BandProvenance {
     pub sources: Vec<String>,
     pub commit: String,
     pub labels: Vec<String>,
+    /// The pairs the repeats scored (`eval bands` records them since
+    /// exp201); None for a slot measured before, over the four original
+    /// pairs.
+    #[serde(default)]
+    pub pairs: Option<Vec<String>>,
 }
 
 impl NoiseBands {

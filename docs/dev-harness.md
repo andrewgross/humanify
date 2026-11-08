@@ -391,6 +391,11 @@ requires to be equal:
 
 `--force-mixed` is the only override. It prints every mismatch by field name.
 
+Over two LABELS, `guard_labels` checks the pair sets first (exp201): the
+leaderboard compares different pair sets over the common pairs, with one
+`!! COMMON PAIRS` line and totals re-folded over those pairs; bands refuse
+them. `--force-mixed` does not override a pair-set mismatch.
+
 Legacy labels (every label scored before this lands) have no `identity.json`.
 A one-time backfill reads `commit.txt`, `pipeline.json` and the run
 manifests, using the same readers as today's `labelBaseModes` and

@@ -23,6 +23,11 @@
       "kind": "big-feature (+475KB, biggest clean drop)"
     },
     {
+      "from": "2.1.179",
+      "to": "2.1.181",
+      "kind": "bundler restyle (~130 vendor modules re-minified, source unchanged)"
+    },
+    {
       "from": "2.1.197",
       "to": "2.1.198",
       "kind": "feature on large base (+330KB)"

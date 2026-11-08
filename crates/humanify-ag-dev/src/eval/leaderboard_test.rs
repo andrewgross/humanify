@@ -50,3 +50,99 @@ fn cells_say_when_a_delta_is_inside_the_band() {
     assert_eq!(cell(Some(5.0), Some(10.0), false, None), "5 (-5±?)");
     assert_eq!(cell(None, Some(10.0), false, None), "-");
 }
+
+/// Give `name` a fifth pair: a copy of its 2.1.198 card filed as
+/// 2.1.179->2.1.181 (numbers doubled so the pair cannot vanish into a
+/// total by accident), its summary re-folded over all five cards.
+fn add_fifth_pair(root: &Path, name: &str) {
+    let dir = root.join(name);
+    for (from, to) in [
+        ("2.1.198.json", "2.1.181.json"),
+        ("2.1.198-run.json", "2.1.181-run.json"),
+        ("2.1.198-run-status.json", "2.1.181-run-status.json"),
+    ] {
+        let text = std::fs::read_to_string(dir.join(from))
+            .unwrap()
+            .replace("2.1.197->2.1.198", "2.1.179->2.1.181")
+            .replace("claude-code-2.1.198", "claude-code-2.1.181");
+        std::fs::write(dir.join(to), text).unwrap();
+    }
+    let summary_path = dir.join("summary.json");
+    let summary = JsValue::parse(&std::fs::read_to_string(&summary_path).unwrap()).unwrap();
+    let mut cards: Vec<JsValue> = match at(&summary, "pairs") {
+        Some(JsValue::Array(a)) => a.clone(),
+        _ => panic!("summary.json pairs"),
+    };
+    let fifth =
+        JsValue::parse(&std::fs::read_to_string(dir.join("2.1.181.json")).unwrap()).unwrap();
+    cards.insert(2, fifth);
+    let totals = crate::eval::summarize::summarize_cards(&cards).totals;
+    let JsValue::Object(mut o) = summary else {
+        panic!("summary.json is an object")
+    };
+    o.insert("pairs", JsValue::Array(cards));
+    o.insert("totals", JsValue::Object(totals));
+    std::fs::write(
+        &summary_path,
+        crate::json::js_text(&JsValue::Object(o), true),
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_five_pair_label_against_a_four_pair_baseline_compares_the_common_four_out_loud() {
+    let root = std::env::temp_dir().join(format!("dev-leaderboard-5-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    label(&root, "four", Some(2));
+    label(&root, "five", Some(2));
+    add_fifth_pair(&root, "five");
+    let names = |a: &str, b: &str| vec![a.to_string(), b.to_string()];
+    // Unforced: compared, over the four common pairs, said out loud.
+    let text = leaderboard(&root, &names("four", "five"), None, false).unwrap();
+    assert!(text.contains("!! COMMON PAIRS"), "{text}");
+    assert!(text.contains("only five: 2.1.179->2.1.181"), "{text}");
+    assert!(
+        text.contains("4188 (=)"),
+        "the fifth pair's statements must not reach the compared total: {text}"
+    );
+    // Either order: the baseline's extra pair is left out the same way.
+    let text = leaderboard(&root, &names("five", "four"), None, false).unwrap();
+    assert!(text.contains("4188 (=)"), "{text}");
+    // Two five-pair labels: no line, the five-pair totals.
+    label(&root, "five2", Some(2));
+    add_fifth_pair(&root, "five2");
+    let text = leaderboard(&root, &names("five", "five2"), None, false).unwrap();
+    assert!(!text.contains("COMMON PAIRS"), "{text}");
+}
+
+#[test]
+fn bands_measured_over_other_pairs_say_so() {
+    let root = std::env::temp_dir().join(format!("dev-leaderboard-bp-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    label(&root, "four", Some(2));
+    label(&root, "five", Some(2));
+    add_fifth_pair(&root, "five");
+    let slot = |pairs: &str| {
+        format!(
+            r#"{{"provenance":{{"provisional":false,"sources":[],"commit":"x","labels":[]{pairs}}},"bands":{{"novel":0}}}}"#
+        )
+    };
+    let file = |pairs: &str| -> NoiseBands {
+        serde_json::from_str(&format!(
+            r#"{{"provenance":{{"provisional":true,"sources":[],"commit":"","labels":[]}},"bands":{{}},"byMode":{{}},"byScorer":{{"2":{}}}}}"#,
+            slot(pairs)
+        ))
+        .unwrap()
+    };
+    let names = vec!["four".to_string(), "five".to_string()];
+    let five_pairs = r#","pairs":["2.1.85->2.1.86","2.1.118->2.1.119","2.1.179->2.1.181","2.1.197->2.1.198","2.1.215->2.1.216"]"#;
+    let text = leaderboard(&root, &names, Some(&file(five_pairs)), false).unwrap();
+    assert!(text.contains("bands: MEASURED OVER 5 PAIRS"), "{text}");
+    let text = leaderboard(&root, &names, Some(&file("")), false).unwrap();
+    assert!(text.contains("records no pair set"), "{text}");
+    let four_pairs =
+        r#","pairs":["2.1.85->2.1.86","2.1.118->2.1.119","2.1.197->2.1.198","2.1.215->2.1.216"]"#;
+    let text = leaderboard(&root, &names, Some(&file(four_pairs)), false).unwrap();
+    assert!(!text.contains("MEASURED OVER"), "{text}");
+    assert!(!text.contains("records no pair set"), "{text}");
+}

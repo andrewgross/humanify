@@ -448,6 +448,42 @@ fn parsed_record((argv, toml): &Launch) -> Value {
 
 const FIXTURE: &str = "crates/humanify-ag-cli/tests/fixtures/launch-parity.json";
 
+/// A record with every Claude Code version in its strings (`2.1.179`)
+/// spelled `<V>`. The captured launches are the TS era's four eval pairs;
+/// exp201 added a fifth pair (2.1.179->2.1.181) that no capture could have
+/// seen. What this half proves is the CONFIGURATION — which version a path
+/// names is pinned byte for byte by the dev crate's launch goldens.
+fn without_versions(v: &Value) -> Value {
+    match v {
+        Value::String(s) => Value::String(mask_versions(s)),
+        Value::Array(a) => Value::Array(a.iter().map(without_versions).collect()),
+        Value::Object(m) => Value::Object(
+            m.iter()
+                .map(|(k, x)| (k.clone(), without_versions(x)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+fn mask_versions(s: &str) -> String {
+    let mut out = String::new();
+    let mut rest = s;
+    while let Some(i) = rest.find("2.1.") {
+        out.push_str(&rest[..i]);
+        let after = &rest[i + 4..];
+        let digits = after.bytes().take_while(u8::is_ascii_digit).count();
+        if digits == 0 {
+            out.push_str("2.1.");
+        } else {
+            out.push_str("<V>");
+        }
+        rest = &after[digits..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// THE parity gate, half one: every captured launch, its `--api-key`
 /// removed and its renamed flags in today's spelling, resolves to the
 /// EFFECTIVE settings the commander port gave it.
@@ -473,7 +509,10 @@ fn every_captured_launch_resolves_to_its_captured_settings() {
 #[test]
 fn every_golden_launch_resolves_to_a_captured_launchs_settings() {
     let rows: Vec<Value> = serde_json::from_str(&repo_file(FIXTURE)).expect("the fixture is JSON");
-    let wanted: Vec<Value> = rows.iter().map(|r| effective(&r["record"])).collect();
+    let wanted: Vec<Value> = rows
+        .iter()
+        .map(|r| without_versions(&effective(&r["record"])))
+        .collect();
     let launches = golden_corpus();
     assert!(
         launches.len() >= 14,
@@ -501,6 +540,7 @@ fn every_golden_launch_resolves_to_a_captured_launchs_settings() {
             "every golden (default = names) launch is handed the eval's index: {launch:?}"
         );
         got["libraryIndex"] = Value::Null;
+        let got = without_versions(&got);
         assert!(
             wanted.contains(&got),
             "a golden launch whose settings no captured launch had:\n{launch:?}\n{got:#}"
