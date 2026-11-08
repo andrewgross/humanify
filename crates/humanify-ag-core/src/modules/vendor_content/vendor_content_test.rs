@@ -4,6 +4,8 @@
 
 use std::collections::HashSet;
 
+use crate::hash::forms::CARRY_CONTENT;
+
 use super::{
     NameSource, StaleEraEntry, UNJOINED, prior_file_content_key, rekey_prior_by_content,
     vendor_content_key,
@@ -14,9 +16,10 @@ use super::{
 const FRESH: &str =
     "(exports,module)=>{ var p=REQ(\"node:path\"); module.exports=qA(p.sep)+kC+hZ(process); }";
 
-/// A content key with no program-declared names.
+/// A carry content key with no program-declared names (the stale-era
+/// re-key's form: the prior side is `prior_file_content_key`'s).
 fn key(text: &str) -> Option<String> {
-    vendor_content_key(text, &HashSet::new())
+    vendor_content_key(text, &HashSet::new(), &CARRY_CONTENT)
 }
 
 fn fresh_key() -> String {
@@ -77,7 +80,7 @@ fn a_program_declared_name_that_spells_a_known_global_is_a_slot() {
     );
     let bundle_declared: HashSet<String> = ["gc".to_string()].into();
     assert_eq!(
-        vendor_content_key(fresh, &bundle_declared),
+        vendor_content_key(fresh, &bundle_declared, &CARRY_CONTENT),
         prior_file_content_key(prior)
     );
     // Undeclared, `gc` IS the host's global: content, verbatim.
@@ -91,6 +94,7 @@ fn entry(name: &str, ts: &str, ordinal: usize, key: Option<&str>) -> StaleEraEnt
         era_hash: ts.into(),
         ordinal,
         key: key.map(String::from),
+        identity: None,
     }
 }
 
@@ -228,4 +232,71 @@ fn a_bundled_module_keys_the_same_whatever_the_minifier_named_things() {
 #[test]
 fn a_bundle_without_modules_has_no_module_keys() {
     assert!(bundle_keys("function f(){return 1}module.exports=f;").is_empty());
+}
+
+/// exp200: a NAMES-mode prior tree holds its vendor bodies FORMATTED (the
+/// formatter turns `void 0` into `undefined`, `!0` into `true`, a comma
+/// sequence into statements, ...) while the fresh factory is the bundle's
+/// raw text. The 2.1.179 -> 2.1.181 rerun across the match-key era bump
+/// joined only 194 of 1,594 modules by content because of it. The carry
+/// key reads both sides through the formatter.
+#[test]
+fn a_formatted_names_mode_prior_keys_like_the_raw_fresh_body() {
+    let raw = "(e,m)=>{var a=void 0,b=!0;if(e)a=1,b=!1;m.exports=e?a:b;}";
+    let formatted = crate::format::format_file(
+        &crate::naming::vendor_bodies::join_bodies([raw]),
+        &Default::default(),
+        &[],
+    )
+    .unwrap()
+    .text;
+    assert!(formatted.contains("undefined"), "{formatted}");
+    let prior = formatted
+        .trim()
+        .trim_end_matches(';')
+        .replace("(e, m)", "(exportsObj, moduleObj)")
+        .replace("m.exports", "moduleObj.exports")
+        .replace("(e)", "(exportsObj)")
+        .replace("e ?", "exportsObj ?");
+    assert_eq!(prior_file_content_key(&prior), key(raw), "{prior}");
+}
+
+/// exp200: the stale-era re-key carries the prior entry's FILE and runtime
+/// IDENTIFIER with its name, exactly as the current-era carry does
+/// (exp194). Without them the first hop after a match-key era bump
+/// re-derived every vendor module's identifier from the new hash and moved
+/// every file it had kept from an older release (2.1.178 -> 2.1.179:
+/// 38,436 vendor noise lines against main's 1,176).
+#[test]
+fn the_rekey_carries_the_prior_file_and_identifier() {
+    use super::super::vendor_pairing::CarriedIdentity;
+    let identity = |file: &str, id: &str| {
+        Some(CarriedIdentity {
+            file_name: Some(file.into()),
+            runtime_identifier: Some(id.into()),
+        })
+    };
+    let prior = vec![
+        StaleEraEntry {
+            identity: identity("vendor/pkg/a.js", "lib_aaaaaaaa"),
+            ..entry("a", "old1", 0, Some("K1"))
+        },
+        StaleEraEntry {
+            identity: identity("vendor/pkg/b.js", "lib_bbbbbbbb"),
+            ..entry("b", "old2", 0, Some("K2"))
+        },
+    ];
+    let fresh = vec![
+        ("new2".to_string(), Some("K2".to_string())),
+        ("new1".to_string(), Some("K1".to_string())),
+    ];
+    let r = rekey_prior_by_content(&fresh, &prior);
+    assert_eq!(
+        r.names["new1"][0].identity,
+        identity("vendor/pkg/a.js", "lib_aaaaaaaa")
+    );
+    assert_eq!(
+        r.names["new2"][0].identity,
+        identity("vendor/pkg/b.js", "lib_bbbbbbbb")
+    );
 }

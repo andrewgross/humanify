@@ -71,7 +71,7 @@ use oxc_span::{GetSpan, Span};
 use serde_json::{Value, json};
 
 use crate::graph::{ModuleBindingNode, UnifiedGraph};
-use crate::hash::forms::{MATCH_KEY, MATCH_KEY_PRIVATES_BLINDED};
+use crate::hash::forms::{MATCH_KEY_PRIVATES_BLINDED, MATCH_KEY_PRIVATES_VERBATIM};
 use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use crate::matching::alternation::GraphSide;
 use crate::twins::SideInventory;
@@ -820,7 +820,8 @@ fn bridge_twin_slots(
 ) -> bool {
     let fresh_stmt = &fresh.statements[fresh_idx];
     let prior_stmt = &prior.statements[prior_idx];
-    // Property names and free identifiers are verbatim in this hash;
+    // Property names, free identifiers and (exp200: the match key slots
+    // them, this form does not) private names are verbatim in this hash;
     // equal hashes also guarantee the slot walks align (same
     // serialization). Privates stay VERBATIM in the canonical stream (the
     // serializer's per-class slot map is clobbered before any private
@@ -829,8 +830,8 @@ fn bridge_twin_slots(
     // comparison (statement-twin.ts :591-597) is the fallback that
     // reconciles it: privates blind to `P=#`, walks still align, and the
     // private ids themselves become transfers.
-    let mut fresh_out = canonical_serialize(fresh_stmt, fresh.tables, &MATCH_KEY);
-    let mut prior_out = canonical_serialize(prior_stmt, prior.tables, &MATCH_KEY);
+    let mut fresh_out = canonical_serialize(fresh_stmt, fresh.tables, &MATCH_KEY_PRIVATES_VERBATIM);
+    let mut prior_out = canonical_serialize(prior_stmt, prior.tables, &MATCH_KEY_PRIVATES_VERBATIM);
     if fresh_out.hash != prior_out.hash {
         let fresh_masked =
             canonical_serialize(fresh_stmt, fresh.tables, &MATCH_KEY_PRIVATES_BLINDED);

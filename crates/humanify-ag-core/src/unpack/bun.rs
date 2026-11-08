@@ -24,7 +24,7 @@ use oxc_span::GetSpan;
 use oxc_syntax::reference::ReferenceFlags;
 
 use crate::detect::js_text::{is_js_space, is_word_boundary, skip_js_space};
-use crate::hash::forms::MATCH_KEY;
+use crate::hash::forms::{CARRY_CONTENT, MATCH_KEY, VENDOR_CONTENT};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 use crate::modules::identity::{declare, name_from_declared_identity};
@@ -194,6 +194,13 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
                         .and_then(serde_json::Value::as_u64)
                         .map_or(usize::MAX, |v| v as usize),
                     key: None,
+                    // exp200: the entry's file and identifier ride with its
+                    // name through the re-key, as the exact carry's do.
+                    identity: crate::modules::vendor_pairing::prior_identity(
+                        r.get("fileName").and_then(|x| x.as_str()),
+                        r.get("runtimeIdentifier").and_then(|x| x.as_str()),
+                        VENDOR_DIR,
+                    ),
                 },
                 str_of(r, "fileName"),
             ))
@@ -553,7 +560,13 @@ pub fn unpack_bun(
             // names and order by CONTENT onto this run's structural hashes
             // (modules::vendor_content).
             let declared = scope::statement_level_names(&ingest, &c.container);
-            let keys = fresh_content_keys(code, &c.factories, require_var.as_deref(), &declared);
+            let keys = fresh_content_keys(
+                code,
+                &c.factories,
+                require_var.as_deref(),
+                &declared,
+                &CARRY_CONTENT,
+            );
             let fresh: Vec<(String, Option<String>)> = c
                 .factories
                 .iter()
@@ -1111,7 +1124,7 @@ fn place_factories_from_index(
     }
     // The whole-module keys the index holds this run's factories by.
     let declared = scope::statement_level_names(ingest, &c.container);
-    let keys = fresh_content_keys(code, &c.factories, require_var, &declared);
+    let keys = fresh_content_keys(code, &c.factories, require_var, &declared, &VENDOR_CONTENT);
     let wanted: std::collections::BTreeSet<String> = keys.iter().flatten().cloned().collect();
     let answers =
         crate::libindex::module_answers::read_module_answers(source.dir, source.slice, &wanted)?;

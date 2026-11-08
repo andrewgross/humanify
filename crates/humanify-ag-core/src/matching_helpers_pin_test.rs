@@ -370,7 +370,8 @@ fn match_stage_and_transfers_are_pinned() {
     assert_pinned("match", &out, PIN_MATCH_STAGE);
 }
 
-const PIN_CANONICAL_AND_CONTENT: &str = "105c08859ae699ba04218fc6";
-const PIN_FEATURES_AND_SHINGLES: &str = "5798b8c971df98fa2cebeccf";
+// exp200: match-key/5 moves the match-key digests these read.
+const PIN_CANONICAL_AND_CONTENT: &str = "4547ddfeba1da7b20233c278";
+const PIN_FEATURES_AND_SHINGLES: &str = "3746b94d76bb9556cd9461ac";
 const PIN_TEXT_EXTRACTORS: &str = "5aed2a4d97e46b22238b4ab4";
 const PIN_MATCH_STAGE: &str = "af413f7a8e6ddb94f7c1fccf";

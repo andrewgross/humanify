@@ -28,7 +28,10 @@ use std::fmt::Write as _;
 use oxc_allocator::Allocator;
 use serde_json::Value;
 
-use crate::hash::forms::{IDENTITY_KEY, MATCH_KEY, MATCH_KEY_PRIVATES_BLINDED, RENAME_SIGNATURE};
+use crate::hash::forms::{
+    CARRY_CONTENT, IDENTITY_KEY, MATCH_KEY, MATCH_KEY_PRIVATES_BLINDED, RENAME_SIGNATURE,
+    VENDOR_CONTENT,
+};
 use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use crate::ingest::Ingest;
 use crate::matching_helpers_pin_test::{FUNCTION_TYPES, digest, fixture_pairs, with_side};
@@ -233,8 +236,23 @@ fn modules_lines(text: &str, out: &mut String) {
         let _ = writeln!(
             out,
             "V {:?} {:?}",
-            crate::modules::vendor_content::vendor_content_key(src, &HashSet::new()),
-            crate::modules::vendor_content::vendor_content_key(src, &declared)
+            crate::modules::vendor_content::vendor_content_key(
+                src,
+                &HashSet::new(),
+                &VENDOR_CONTENT
+            ),
+            crate::modules::vendor_content::vendor_content_key(src, &declared, &VENDOR_CONTENT)
+        );
+        // exp200: the carry's re-key form (the match key's era).
+        let _ = writeln!(
+            out,
+            "C {:?} {:?}",
+            crate::modules::vendor_content::vendor_content_key(
+                src,
+                &HashSet::new(),
+                &CARRY_CONTENT
+            ),
+            crate::modules::vendor_content::vendor_content_key(src, &declared, &CARRY_CONTENT)
         );
     }
 }
@@ -372,14 +390,17 @@ fn version_stamps_are_pinned() {
     );
     assert_eq!(
         got,
-        "statement=3 factory=4 module=vendor-content-key/4 literals=literals/1 units=units/3"
+        "statement=3 factory=5 module=vendor-content-key/4 literals=literals/1 units=units/3"
     );
 }
 
-const PIN_CANONICAL: &str = "566ce95126e5a96647cdf27d";
+const PIN_CANONICAL: &str = "eb3b4328878a8ae37ff639e4";
 const PIN_STATEMENT: &str = "9878f404f494a0ce3f235686";
 const PIN_ALIGN: &str = "35a3c368cd4e0592e48f47b6";
-const PIN_GRAPH: &str = "34ec479a0bce66b4d9d66e8a";
-const PIN_MODULES: &str = "9bfa3cd3c7787d97a3f76f25";
+// exp200 (match-key/5): canonical, graph and modules moved in their match-key
+// columns ONLY — the identity, rename-signature and every slot-mapping column,
+// the module bindings and the index keys (V) are line-for-line unchanged.
+const PIN_GRAPH: &str = "cc3f6981627edd8ff87c62a3";
+const PIN_MODULES: &str = "05eabee4e36d9dc8ab0e8d38";
 const PIN_UNITS: &str = "6d469263bd7c2f510f37c083";
 const PIN_FILES: &str = "911b9df2a0edf0f9b5fbb73a";

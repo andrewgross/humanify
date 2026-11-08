@@ -9,12 +9,15 @@
 //! split/statement-hash.ts, analysis/enclosing-statement.ts.
 
 pub mod forms;
+pub mod identity_transforms;
 pub mod serialize;
 pub mod statement_hash;
 pub mod wrapper_spelling;
 
 #[cfg(test)]
 mod forms_test;
+#[cfg(test)]
+mod identity_transforms_test;
 #[cfg(test)]
 mod serialize_test;
 #[cfg(test)]
