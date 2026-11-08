@@ -12,5 +12,5 @@ Options:
       --minifier <MINIFIER>            Force the minifier type (as the pipeline's flag)
       --work-dir <WORK_DIR>            Where the unpack adapter writes its tree; default a temp dir that is removed afterwards
       --keep-work-dir                  Keep the work dir even when it was a default temp dir
-      --webcrack-shim <WEBCRACK_SHIM>  The webcrack shim script (scripts/webcrack-shim.ts), required to unpack webpack/browserify bundles
+      --webcrack-shim <WEBCRACK_SHIM>  The webcrack shim script (tools/webcrack-shim.ts), required to unpack webpack/browserify bundles
   -h, --help                           Print help

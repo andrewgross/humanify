@@ -88,7 +88,7 @@ Prerequisites:
 - Rust, via [rustup](https://rustup.rs). The toolchain is pinned in
   `rust-toolchain.toml`; the first `cargo` call inside the repo installs it.
 - Node.js >= 20 and npm — only for webpack/browserify inputs (the unpacker
-  shells out to `scripts/webcrack-shim.ts`) and for the measurement harness.
+  shells out to `tools/webcrack-shim.ts`) and for the measurement harness.
   Bun-compiled and plain bundles need no Node.
 
 ```shell
