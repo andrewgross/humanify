@@ -357,6 +357,21 @@ NAMING MODE** (`pipeline.json` `namingMode`; labels before exp171 read as
 exactly as it does for base modes. Neutrality across the flip must run in off
 mode.
 
+**Minifier style is not a change (exp200, 2026-11-08).** The match key
+(`match-key/5`, the vendor manifest's `hashVersion 5`) treats a concise arrow
+body as its braced `return`, ignores parentheses and matches class-private
+names per class. These rules are entries in the identity-transform registry
+(`crates/humanify-ag-core/src/hash/identity_transforms.rs`); adding one means
+a registry entry, its tests, and a version bump for each form that uses it.
+The library index's forms keep the settings they were built with until the
+index is rebuilt (exp204). The first run of a new match-key version on a tree
+written by an older binary re-matches vendor modules by content (both sides
+formatted; each module's file and `lib_<hash>` identifier carried), so that
+hop costs about 1,000 extra vendor noise lines, not about 38,000. On
+2.1.179→181, vendor noise is about 6,200, against about 53,300 before
+(`exp200-e75f9e25`; its mints read 260 against the band's ±14, accepted by
+Andrew as draw-to-draw noise).
+
 **Which reference to use, and why it is not the one this file used to
 name.** Check a reference's `*-run-status.json` before citing it: absent is
 UNKNOWN, not passing. Labels live under `dev/eval/results/<label>/`; the
