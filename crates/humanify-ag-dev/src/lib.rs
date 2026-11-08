@@ -15,10 +15,12 @@ pub mod eval;
 pub mod gate;
 pub mod identity;
 pub mod json;
+pub mod launch;
 pub mod library;
 pub mod match_truth;
 pub mod paths;
 pub mod proc;
+pub mod runners;
 pub mod settings;
 
 /// The host environment a verb receives from main (read once, in `env`).

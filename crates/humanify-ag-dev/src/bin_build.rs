@@ -137,14 +137,20 @@ pub fn pipeline_crate_at_commit(repo: &Path, commit: &str) -> Result<PipelineCra
 /// `child_path` is the PATH cargo runs with (`env::HostEnv::child_path`:
 /// the user-level cargo first).
 pub fn build(root: &Path, child_path: &str) -> Result<BinRecord, String> {
+    build_with_env(root, &[("PATH".to_string(), child_path.to_string())])
+}
+
+/// [`build`], cargo running with `env` set (PATH and anything a caller
+/// plants for its children).
+pub fn build_with_env(root: &Path, env: &[(String, String)]) -> Result<BinRecord, String> {
     let krate = pipeline_crate_at(root)?;
-    let spawn = Spawn::new(
+    let mut spawn = Spawn::new(
         "cargo",
         &["build", "--release", "--locked", "-p", &krate.package],
         BUILD_DEADLINE,
     )
-    .cwd(root)
-    .env("PATH", child_path);
+    .cwd(root);
+    spawn.env.extend(env.iter().cloned());
     run_ok(&spawn).map_err(|e| format!("cargo build failed in {}: {e}", root.display()))?;
     describe(root, &root.join("target/release").join(&krate.binary))
 }
@@ -166,17 +172,24 @@ pub fn describe(root: &Path, bin: &Path) -> Result<BinRecord, String> {
     })
 }
 
-/// Whether the binary is a LEGACY leg: its `--help` has no `--config`
-/// (a baseline from before config sweep step 5 takes flags only).
+/// Whether a binary's `--help` text is a LEGACY leg's: no `--config`
+/// option (a baseline from before config sweep step 5 takes flags only).
+pub fn is_legacy_help(help: &str) -> bool {
+    !help.contains("--config")
+}
+
+/// Whether the binary is a LEGACY leg (probes its `--help`).
 pub fn is_legacy_leg(bin: &Path) -> Result<bool, String> {
     let done = run(&Spawn::new(
         &bin.display().to_string(),
         &["--help"],
         HELP_DEADLINE,
     ))?;
-    let help = String::from_utf8_lossy(&done.stdout);
-    Ok(!help.contains("--config"))
+    Ok(is_legacy_help(&String::from_utf8_lossy(&done.stdout)))
 }
+
+/// `--help` answers at once.
+pub const HELP_PROBE_DEADLINE: Duration = HELP_DEADLINE;
 
 /// Two commit spellings name the same commit (one is a prefix of the
 /// other; an empty one is unknown and matches nothing).

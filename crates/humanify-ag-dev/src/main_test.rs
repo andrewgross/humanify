@@ -89,11 +89,17 @@ fn no_arguments_prints_the_table() {
 
 #[test]
 fn a_verb_not_yet_ported_says_so_and_fails() {
-    let (code, out, err) = dispatch(&args(&["eval", "score", "x"]));
+    let Some(v) = VERBS.iter().find(|v| v.lane.is_some()) else {
+        return; // every verb is ported
+    };
+    let mut a: Vec<String> = v.words.iter().map(|w| w.to_string()).collect();
+    a.push("x".into());
+    let (code, out, err) = dispatch(&a);
     assert_ne!(code, 0);
     assert!(out.is_empty());
     assert!(
-        err.contains("not yet ported (lane L3)") && err.contains("npm run eval -- score"),
+        err.contains(&format!("not yet ported (lane {})", v.lane.unwrap()))
+            && err.contains(v.today),
         "{err}"
     );
 }
@@ -110,7 +116,7 @@ fn an_implemented_verb_refuses_an_unknown_flag_before_running() {
     let (code, _, err) = dispatch(&args(&["build-bin", "--workdr", "x"]));
     assert_eq!(code, 2);
     assert!(err.contains("did you mean --workdir"), "{err}");
-    let (code, _, err) = dispatch(&args(&["build-bin", "--workdir", "x"]));
+    let (code, _, err) = dispatch(&args(&["build-bin", "--pairs", "x"]));
     assert_eq!(code, 2);
     assert!(err.contains("not a setting of `build-bin`"), "{err}");
 }

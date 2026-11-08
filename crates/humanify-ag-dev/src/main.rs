@@ -8,7 +8,7 @@
 
 use std::process::ExitCode;
 
-use humanify_ag_dev::{bin_build, census, e2e, env, eval, gate, match_truth, settings};
+use humanify_ag_dev::{bin_build, census, e2e, env, eval, gate, match_truth, runners, settings};
 
 /// One verb.
 struct Verb {
@@ -38,6 +38,20 @@ const LIBRARY_SETTINGS: &[&str] = &["run.force_mixed", "run.pipeline_set", "libs
 const FORCE: &[&str] = &["run.force_mixed"];
 const DETERMINISM_SETTINGS: &[&str] = &["libscore.corpus", "libscore.data_root"];
 const RESCORE_SETTINGS: &[&str] = &["libscore.corpus", "libscore.data_root", "run.out"];
+const WALK_SETTINGS: &[&str] = &[
+    "run.bin",
+    "run.force_mixed",
+    "run.pipeline_set",
+    "eval.library_index",
+    "eval.inputs_base",
+    "eval.boot_prompt",
+    "llm.endpoint",
+    "walk.dir",
+    "walk.resume",
+    "walk.reboot",
+    "walk.report",
+    "boot",
+];
 const INDEX_SECTION: &str = "index";
 const INDEX_SETTINGS: &[&str] = &[INDEX_SECTION];
 const NONE: &[&str] = &[];
@@ -57,11 +71,11 @@ const VERBS: &[Verb] = &[
     },
     Verb {
         words: &["eval", "score"],
-        usage: "eval score <label> [--pairs a->b,...] [--base-mode scratch|seeded|archive] [--llm-cache D] [--force-mixed] [--bin PATH] [--pipeline-set section.key=value]...",
+        usage: "eval score <label> [--pairs a->b,...] [--base-mode scratch|seeded|archive] [--llm-cache D] [--force-mixed] [--bin PATH] [--workdir D] [--library-index D] [--no-boot-prompt] [--no-self-hop] [--pipeline-set section.key=value]...",
         proves: "how the CURRENT TREE's cross-version diff decomposes (KPIs), pipeline exit, boot",
         cannot_prove: "any delta inside the measured noise-bands.json floor — it will still print a sign",
-        lane: Some("L3"),
-        today: "npm run eval -- score",
+        lane: None,
+        today: "",
         settings: SCORE_SETTINGS,
     },
     Verb {
@@ -114,8 +128,8 @@ const VERBS: &[Verb] = &[
         usage: "eval neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D] [--inputs-base D] [--endpoint URL] [--library-index D] [--pipeline-set section.key=value]...",
         proves: "a refactor changed NOTHING: 0 differing files/lines, baseline leg wrote 0 cache entries",
         cannot_prove: "anything from a COLD run (baseline leg wrote entries) — cold verdicts are void, null-control proven 2026-08-11",
-        lane: Some("L3"),
-        today: "npm run eval -- neutrality",
+        lane: None,
+        today: "",
         settings: NEUTRALITY_SETTINGS,
     },
     Verb {
@@ -138,29 +152,38 @@ const VERBS: &[Verb] = &[
     },
     Verb {
         words: &["eval", "walk"],
-        usage: "eval walk <from> <to>",
-        proves: "how the diff behaves hop after hop on the pipeline's OWN previous output",
-        cannot_prove: "the eval's KPIs: a walk diff is not a scored card",
-        lane: Some("L3"),
-        today: "experiments/walk/walk.sh",
-        settings: SCORE_SETTINGS,
+        usage: "eval walk <from>..<to>|<v>,<v>,... --walk-dir D [--resume] [--reboot] [--bin PATH] [--library-index D] [--no-boot-prompt] [--no-report] [--force-mixed] [--pipeline-set section.key=value]...",
+        proves: "how the diff behaves hop after hop on the pipeline's OWN previous output, every hop booted and scored",
+        cannot_prove: "an A/B between pipelines: each walk's hop N inherits its own hop N-1, and the eval's noise bands are for 4-pair TOTALS, not walk hops",
+        lane: None,
+        today: "",
+        settings: WALK_SETTINGS,
+    },
+    Verb {
+        words: &["eval", "walk-report"],
+        usage: "eval walk-report <name>=<walk-dir> [<name>=<walk-dir>...] [--report-dir D]",
+        proves: "the per-hop tables of finished walks side by side, and the hops whose noise or vendor hash turnover is far above the median",
+        cannot_prove: "why a flagged hop is noisy: the flag says where to read, not what happened",
+        lane: None,
+        today: "",
+        settings: &["walk.report_dir"],
     },
     Verb {
         words: &["run", "stub"],
-        usage: "run stub <bin> <bundle> <out> [--pipeline-set section.key=value]...",
+        usage: "run stub <bin> <bundle> <out> [<prior.js>] [--library-index D] [--pipeline-set library.matching=off]",
         proves: "what the binary does on a bundle with every name answered by the one stub (no LLM)",
         cannot_prove: "anything about LLM naming quality",
-        lane: Some("L3"),
-        today: "npx tsx experiments/166-restore-or-ask/stub-run.mts",
-        settings: &["run.pipeline_set"],
+        lane: None,
+        today: "",
+        settings: &["run.pipeline_set", "eval.library_index"],
     },
     Verb {
         words: &["library", "score"],
         usage: "library score <label> --index <dir> --rule agreement|structural [--commit REF] [--jobs N] [--cpus LIST] [--corpus NAME] [--sets a,b] [--force-mixed] [--pipeline-set library.<key>=value]...",
         proves: "precision / recall / F0.5 of library naming on a frozen corpus, and that no app code was claimed",
         cannot_prove: "anything about a bundle outside the corpus",
-        lane: Some("L3"),
-        today: "npm run eval -- library",
+        lane: None,
+        today: "",
         settings: LIBRARY_SETTINGS,
     },
     Verb {
@@ -219,11 +242,11 @@ const VERBS: &[Verb] = &[
     },
     Verb {
         words: &["index", "build"],
-        usage: "index build <spec>",
+        usage: "index build <spec> --registry D --store D --index-work D --index-out D [--chunks N] [--index-jobs N] [--merge-jobs N]",
         proves: "a library index built from a committed spec, chunked, with one merge",
         cannot_prove: "that the index's packages are the right ones",
-        lane: Some("L3"),
-        today: "scripts/build-index.sh (branch exp184-index-spec)",
+        lane: None,
+        today: "",
         settings: INDEX_SETTINGS,
     },
     Verb {
@@ -231,18 +254,18 @@ const VERBS: &[Verb] = &[
         usage: "boot-gate <tree> <version>",
         proves: "a humanified Claude Code tree boots (--version) and answers a live prompt",
         cannot_prove: "behaviour beyond the boot and one prompt",
-        lane: Some("L3"),
-        today: "experiments/lib/boot-gate.sh",
+        lane: None,
+        today: "",
         settings: &["boot"],
     },
     Verb {
         words: &["build-bin"],
-        usage: "build-bin [<checkout-dir>]",
-        proves: "which binary a checkout builds: its path, sha256, build commit and dirt (the package and binary name read from THAT checkout)",
+        usage: "build-bin [<checkout-dir> | <ref>] [--workdir D]",
+        proves: "which binary a checkout or a commit builds: its path, sha256, build commit and dirt (the package and binary name read from THAT commit; a ref is built in a detached worktree under <workdir>/build-bin, refused before the cutover)",
         cannot_prove: "anything about what the binary does",
         lane: None,
         today: "",
-        settings: NONE,
+        settings: &["run.workdir"],
     },
     Verb {
         words: &["e2e"],
@@ -442,10 +465,20 @@ fn dispatch(args: &[String]) -> (u8, String, String) {
     }
 }
 
+/// The runners' live context: this binary's checkout and the host.
+fn live() -> runners::Ctx {
+    let cwd = env::current_dir().unwrap_or_default();
+    let repo = humanify_ag_dev::paths::repo_root();
+    let repo = repo.canonicalize().unwrap_or(repo);
+    runners::Ctx::new(repo, env::host(), cwd)
+}
+
 fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
+    use runners::verbs;
+    let done = |code: u8| (code, String::new(), String::new());
     let host = env::host();
     match verb.words {
-        ["build-bin"] => build_bin(&parsed.positionals),
+        ["build-bin"] => build_bin(parsed),
         ["check"] => gate::check::run(parsed, &host),
         ["env-check"] => gate::env_check::run(parsed, &host),
         ["precommit"] => gate::precommit::run(parsed, &host),
@@ -473,6 +506,14 @@ fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
         ["eval", "cjs-placement"] => cjs_placement(&parsed.positionals),
         ["library", "leaderboard"] => library_leaderboard(parsed),
         ["library", "determinism"] => library_determinism(parsed),
+        ["eval", "score"] => done(verbs::score(&live(), parsed, verb.settings)),
+        ["eval", "neutrality"] => done(verbs::neutrality(&live(), parsed, verb.settings)),
+        ["eval", "walk"] => done(verbs::walk(&live(), parsed)),
+        ["eval", "walk-report"] => done(verbs::walk_report(&live(), parsed)),
+        ["run", "stub"] => done(verbs::stub(&live(), parsed)),
+        ["index", "build"] => done(verbs::index_build(&live(), parsed)),
+        ["boot-gate"] => done(verbs::boot_gate(&live(), parsed)),
+        ["library", "score"] => done(verbs::library_score(&live(), parsed)),
         _ => unreachable!("every implemented verb has a runner"),
     }
 }
@@ -756,15 +797,21 @@ fn library_layers(parsed: &settings::Parsed) -> (u8, String, String) {
     (if ok { 0 } else { 1 }, text, String::new())
 }
 
-fn build_bin(positionals: &[String]) -> (u8, String, String) {
-    let root = match positionals {
+fn build_bin(parsed: &settings::Parsed) -> (u8, String, String) {
+    let positionals = &parsed.positionals;
+    if let [arg] = positionals.as_slice()
+        && !std::path::Path::new(arg).is_dir()
+    {
+        return runners::verbs::build_bin_ref(&live(), parsed, arg);
+    }
+    let root = match positionals.as_slice() {
         [] => humanify_ag_dev::paths::repo_root(),
         [dir] => std::path::PathBuf::from(dir),
         _ => {
             return (
                 2,
                 String::new(),
-                "usage: humanify-ag-dev build-bin [<checkout-dir>]\n".into(),
+                "usage: humanify-ag-dev build-bin [<checkout-dir> | <ref>]\n".into(),
             );
         }
     };

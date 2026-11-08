@@ -669,6 +669,83 @@
       "reason": "the harness's ONE Command::new: every child it starts goes through humanify_ag_core::subprocess::run (all pipes drained at once, one deadline over the whole run, the process group killed on expiry, every failure returned), or run_inherited for a gate stage whose output streams (nothing piped, the same one deadline and group kill); callers pick the deadline (git 60 s, a release build 1 h)"
     },
     {
+      "file": "crates/humanify-ag-dev/src/proc.rs",
+      "scope": "run_to_file",
+      "construct": "subprocess",
+      "pattern": "subprocess",
+      "reason": "the harness's file-logged child (a pipeline launch's -vv output can be gigabytes): stdout and stderr go to a FILE, so there is no pipe to drain; its own process group, one deadline over the whole run, the group killed on expiry, every failure returned (lane L3)"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/proc.rs",
+      "scope": "run_to_file",
+      "construct": "thread-spawn",
+      "pattern": "subprocess",
+      "reason": "the one waiter of a file-logged child: it blocks in child.wait() and reports the exit on a bounded channel, then ends with the child"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/proc.rs",
+      "scope": "run_to_file",
+      "construct": "channel",
+      "pattern": "subprocess",
+      "reason": "the waiter's bounded (1) channel: the caller waits on it with recv_timeout until the deadline, never a sleep-and-poll"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/proc.rs",
+      "scope": "run_to_file",
+      "construct": "timeout",
+      "pattern": "observer",
+      "reason": "recv_timeout bounded by both the deadline and the observer tick: on each tick the caller samples the child's process tree from /proc (peak RSS, only readable while it lives); the sample never feeds a decision"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/proc.rs",
+      "scope": "kill_group",
+      "construct": "subprocess",
+      "pattern": "subprocess",
+      "reason": "the file-logged child's group kill on deadline expiry (`kill -KILL -- -<pgid>`), itself through humanify_ag_core::subprocess::run with a 10 s deadline"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/index.rs",
+      "scope": "backoff",
+      "construct": "channel",
+      "pattern": "retry-envelope",
+      "reason": "the index build's dry-run retry backoff (npm rate-limits a bulk view sweep): a bounded wait on a channel nothing sends to, 5 min between at most 24 attempts"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/index.rs",
+      "scope": "backoff",
+      "construct": "timeout",
+      "pattern": "retry-envelope",
+      "reason": "recv_timeout as the dry-run retry's backoff: bounded per attempt and by the attempt cap"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/mod.rs",
+      "scope": "struct Ctx",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "a runner's transcript: a std Mutex held for one push or one join of its lines, never across IO or another lock"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/mod.rs",
+      "scope": "Ctx::new",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "constructs the transcript's Mutex (see struct Ctx)"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/mod.rs",
+      "scope": "each",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "the subprocess fan-out's next-item index and result slots: each held for one read-increment or one store, never across the child it runs"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/mod.rs",
+      "scope": "each",
+      "construct": "thread-scope",
+      "pattern": "subprocess",
+      "reason": "the harness's ONE subprocess fan-out (a discover run per bundle, an index chunk, a walk hop's scoring): `jobs` scoped workers, each running one child at a time through the one subprocess owner; joined before return; results in INPUT order, so completion order reaches nothing (rule 6)"
+    },
+    {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
       "scope": "<module>",
       "construct": "atomic",

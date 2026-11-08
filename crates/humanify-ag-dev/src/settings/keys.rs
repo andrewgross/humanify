@@ -124,8 +124,8 @@ pub static HARNESS_KEYS: &[Key] = &[
         name: "workdir",
         kind: Kind::Text,
         flag: Some("--workdir"),
-        default: || text("/work"),
-        unset: "",
+        default: none,
+        unset: "per verb: /work for eval neutrality; /work/eval-work for eval score",
         doc: "Where a run writes its trees, logs and run config. For neutrality it is also \
               the default prior root and cache root: pass --priors and --cache to move only \
               the workdir (a fresh cache is a COLD run, and a cold verdict is void).",
@@ -195,20 +195,6 @@ pub static HARNESS_KEYS: &[Key] = &[
         "no cache: every prompt reaches the model (rule 10)",
         "An LLM cache directory. Iteration only: a cached run is never a verdict about \
          LLM-dependent behaviour.",
-    ),
-    switch(
-        "eval",
-        "layout",
-        "--layout",
-        on,
-        "Score the tree layout block.",
-    ),
-    switch(
-        "eval",
-        "vendor_score",
-        "--vendor-score",
-        on,
-        "Score vendor/ (rule 8: it went unscored for thirteen experiments).",
     ),
     switch(
         "eval",
@@ -422,46 +408,101 @@ pub static HARNESS_KEYS: &[Key] = &[
         "index",
         "spec",
         None,
-        "required",
+        "required (the positional of `index build`)",
         "The committed index spec file.",
     ),
     path_key(
         "index",
         "registry",
-        None,
+        Some("--registry"),
         "required",
-        "The npm registry mirror.",
+        "The npm registry snapshot directory (fetched once, by the dry run).",
     ),
-    path_key("index", "store", None, "required", "The shard store."),
+    path_key(
+        "index",
+        "store",
+        Some("--store"),
+        "required",
+        "The shard store.",
+    ),
     path_key(
         "index",
         "work",
-        None,
+        Some("--index-work"),
         "required",
-        "The build work directory.",
+        "The build work directory (each version installs into its own).",
     ),
     path_key(
         "index",
         "out",
-        None,
+        Some("--index-out"),
         "required",
         "Where the merged index is written.",
     ),
-    count_key(
-        "index",
-        "chunks",
-        None,
-        "8",
-        "How many chunks the build is split into.",
+    Key {
+        section: "index",
+        name: "chunks",
+        kind: Kind::Int { min: 1, max: ANY },
+        flag: Some("--chunks"),
+        default: || Some(Val::Int(8)),
+        unset: "",
+        doc: "How many chunks the build is split into; all run at once.",
+    },
+    Key {
+        section: "index",
+        name: "jobs",
+        kind: Kind::Int { min: 1, max: ANY },
+        flag: Some("--index-jobs"),
+        default: || Some(Val::Int(4)),
+        unset: "",
+        doc: "Concurrent package builds per chunk (each an npm install + bundle, ~2 GB).",
+    },
+    Key {
+        section: "index",
+        name: "merge_jobs",
+        kind: Kind::Int { min: 1, max: ANY },
+        flag: Some("--merge-jobs"),
+        default: || Some(Val::Int(1)),
+        unset: "",
+        doc: "Concurrent shard merges in the final --merge-only.",
+    },
+    // [walk]
+    path_key(
+        "walk",
+        "dir",
+        Some("--walk-dir"),
+        "required",
+        "Where a walk keeps its manifest, frozen binary, trees, runs and cards.",
     ),
-    count_key(
-        "index",
-        "jobs",
-        None,
-        "4",
-        "Concurrent package builds per chunk.",
+    switch(
+        "walk",
+        "resume",
+        "--resume",
+        off,
+        "Continue the walk in --walk-dir: finished hops are skipped; another binary, model, \
+         inputs, naming mode or index is refused.",
     ),
-    count_key("index", "merge_jobs", None, "1", "Concurrent shard merges."),
+    switch(
+        "walk",
+        "reboot",
+        "--reboot",
+        off,
+        "With --resume: re-run the boot gate on finished hops whose boot FAILED (re-recorded, marked).",
+    ),
+    switch(
+        "walk",
+        "report",
+        "--report",
+        on,
+        "Score every hop and write <walk-dir>/report/ when the walk ends.",
+    ),
+    path_key(
+        "walk",
+        "report_dir",
+        Some("--report-dir"),
+        "<first walk>/report",
+        "Where `eval walk-report` writes report.md and report.json.",
+    ),
     // [dev] — the gate, the censuses and the dev tools (lane L4).
     Key {
         section: "dev",
@@ -557,7 +598,18 @@ pub static HARNESS_KEYS: &[Key] = &[
 /// `RETIRED_FLAGS`, run.sh, and the base-mode flags this registry folded
 /// into one key).
 pub const RETIRED_FLAGS: &[(&str, &str)] = &[
-    ("--no-vendor", "renamed: use --no-vendor-score"),
+    (
+        "--no-vendor",
+        "removed: scorer v2 always scores vendor/ when both trees have one (rule 8)",
+    ),
+    (
+        "--no-vendor-score",
+        "removed: scorer v2 always scores vendor/ when both trees have one (rule 8)",
+    ),
+    (
+        "--no-layout",
+        "removed: scorer v2 always scores the layout block when both trees have src/",
+    ),
     (
         "--pipeline-arg",
         "retired: the pipeline's settings are --config keys now (config sweep step 5) — use \
@@ -585,6 +637,7 @@ const SECTION_TITLES: &[(&str, &str)] = &[
     ("scorer", "Eval scorer"),
     ("index", "Index build"),
     ("dev", "Gate and dev tools"),
+    ("walk", "Version walk"),
 ];
 
 /// The harness's registry.
