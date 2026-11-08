@@ -116,16 +116,47 @@ fn keyed(
 /// [`CARRY_CONTENT`] for the stale-era carry's re-key (both sides in one
 /// run) — the same walk, under the index's stamped settings or the current
 /// match key's (exp200).
+///
+/// Under [`CARRY_CONTENT`] the text is read through the pipeline's
+/// formatter first ([`formatted_factory`]): a names-mode prior tree holds
+/// its vendor bodies formatted (`void 0` printed `undefined`, `!0` `true`,
+/// comma sequences split into statements, ...) while the fresh factory is
+/// the bundle's raw text, so keyed as written the two sides of one module
+/// almost never met (exp200: 194 of 1,594 joined across the match-key era
+/// bump on 2.1.179 -> 2.1.181). Formatting both sides is the exp173
+/// precedent (`vendor_pairing::blind_text`). The index key is never
+/// formatted: the builder keys raw bundles, and so does the run's lookup.
 pub fn vendor_content_key(
     factory: &str,
     program_declared: &HashSet<String>,
     form: &CanonicalForm,
 ) -> Option<String> {
+    let formatted;
+    let factory = if *form == CARRY_CONTENT {
+        formatted = formatted_factory(factory);
+        formatted.as_str()
+    } else {
+        factory
+    };
     let (hash, free) = keyed(factory, &[], program_declared, form)?;
     if free.is_empty() {
         return Some(hash);
     }
     keyed(factory, &free, program_declared, form).map(|(hash, _)| hash)
+}
+
+/// One factory function's text as the pipeline's formatter prints it (the
+/// way `naming::vendor_bodies` formats a vendored body), or the text as
+/// given when the formatter refuses it. Formatting an already formatted
+/// body prints it again unchanged, so both sides of the carry agree
+/// whichever was formatted before.
+fn formatted_factory(text: &str) -> String {
+    use crate::naming::vendor_bodies::{join_bodies, split_bodies};
+    crate::format::format_file(&join_bodies([text]), &Default::default(), &[])
+        .ok()
+        .and_then(|f| split_bodies(&f.text, 1).ok())
+        .and_then(|mut bodies| bodies.pop())
+        .unwrap_or_else(|| text.to_string())
 }
 
 /// The fresh side: every classified factory's content key under `form`

@@ -232,3 +232,30 @@ fn a_bundled_module_keys_the_same_whatever_the_minifier_named_things() {
 fn a_bundle_without_modules_has_no_module_keys() {
     assert!(bundle_keys("function f(){return 1}module.exports=f;").is_empty());
 }
+
+/// exp200: a NAMES-mode prior tree holds its vendor bodies FORMATTED (the
+/// formatter turns `void 0` into `undefined`, `!0` into `true`, a comma
+/// sequence into statements, ...) while the fresh factory is the bundle's
+/// raw text. The 2.1.179 -> 2.1.181 rerun across the match-key era bump
+/// joined only 194 of 1,594 modules by content because of it. The carry
+/// key reads both sides through the formatter.
+#[test]
+fn a_formatted_names_mode_prior_keys_like_the_raw_fresh_body() {
+    let raw = "(e,m)=>{var a=void 0,b=!0;if(e)a=1,b=!1;m.exports=e?a:b;}";
+    let formatted = crate::format::format_file(
+        &crate::naming::vendor_bodies::join_bodies([raw]),
+        &Default::default(),
+        &[],
+    )
+    .unwrap()
+    .text;
+    assert!(formatted.contains("undefined"), "{formatted}");
+    let prior = formatted
+        .trim()
+        .trim_end_matches(';')
+        .replace("(e, m)", "(exportsObj, moduleObj)")
+        .replace("m.exports", "moduleObj.exports")
+        .replace("(e)", "(exportsObj)")
+        .replace("e ?", "exportsObj ?");
+    assert_eq!(prior_file_content_key(&prior), key(raw), "{prior}");
+}
