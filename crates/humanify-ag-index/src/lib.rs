@@ -11,6 +11,7 @@ pub mod recipe;
 pub mod registry;
 #[cfg(test)]
 mod registry_test;
+pub mod replay;
 pub mod shard;
 pub mod slim;
 pub mod sourcemap;
@@ -35,6 +36,8 @@ mod planner_test;
 mod ranges_test;
 #[cfg(test)]
 mod recipe_test;
+#[cfg(test)]
+mod replay_test;
 #[cfg(test)]
 mod shard_test;
 #[cfg(test)]

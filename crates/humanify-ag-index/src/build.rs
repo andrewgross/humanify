@@ -70,6 +70,16 @@ pub enum SpongeRegions {
 }
 
 impl SpongeRegions {
+    /// The mode a spec's `build.sponge_regions` or `--sponge-regions`
+    /// spells (`drop`, `origin`).
+    pub fn parse(text: &str) -> Option<SpongeRegions> {
+        match text {
+            "drop" => Some(SpongeRegions::Drop),
+            "origin" => Some(SpongeRegions::Origin),
+            _ => None,
+        }
+    }
+
     /// The unit-rows version this mode's module shards are keyed by.
     fn unit_rows_version(self) -> String {
         match self {

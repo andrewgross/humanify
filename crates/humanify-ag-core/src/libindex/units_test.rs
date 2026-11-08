@@ -128,6 +128,19 @@ fn private_names_are_minified_names_not_content() {
     );
 }
 
+#[test]
+fn a_restyled_statement_prints_alike_and_a_real_change_does_not() {
+    // exp204 (units/4): the unit prints apply the match key's identity
+    // transforms — a concise arrow body is its braced `return`, and
+    // parentheses a printer adds by position are transparent.
+    let braced = prints("var f = (s) => { return ({ k: s.trim() })[0]; };\n");
+    let concise = prints("var g = (t) => ({ k: t.trim() })[0];\n");
+    let changed = prints("var g = (t) => ({ k: t.trimEnd() })[0];\n");
+    assert_eq!(braced[0].whole.hash, concise[0].whole.hash);
+    assert_eq!(braced[0].functions[0].hash, concise[0].functions[0].hash);
+    assert_ne!(concise[0].whole.hash, changed[0].whole.hash);
+}
+
 /// The unit model's pins: (`LIBRARY_UNITS.version`, digest of every unit print of
 /// [`PIN_FIXTURES`]). A change to WHAT a unit is or how it hashes — the
 /// unit cut, the container rules, the serializer — moves the digest, and
@@ -148,6 +161,12 @@ const UNIT_MODEL_PINS: &[(u64, &str)] = &[
     (
         3,
         "3e6f96ad7285928182214b208ff61b84aa50c679b7951585c4d14772524978f7",
+    ),
+    // exp204: the serializer applies the match key's v5 identity transforms
+    // (the unit cut is unchanged; only the prints move)
+    (
+        4,
+        "e5da5870f251587ed6b394cdf81a57edc22df781a35c1d19718e4661513ce6f2",
     ),
 ];
 
@@ -414,10 +433,17 @@ fn a_rollup_bundle_s_guarded_require_functions_are_lazy_modules() {
 /// Kept apart so adding the two grammars moved no Bun or esbuild pin.
 /// (The row was re-pinned once on the exp105 branch, before any index
 /// held a webpack or rollup slice: webpack's module ids blurred.)
-const BUNDLER_UNIT_MODEL_PINS: &[(u64, &str)] = &[(
-    3,
-    "6f6762668259fc470ac77ca8cab7940ca4bac8e0452875347ac2b7a6178072ff",
-)];
+const BUNDLER_UNIT_MODEL_PINS: &[(u64, &str)] = &[
+    (
+        3,
+        "6f6762668259fc470ac77ca8cab7940ca4bac8e0452875347ac2b7a6178072ff",
+    ),
+    // exp204: the match key's v5 identity transforms reach the prints
+    (
+        4,
+        "32b35e171470024cae936280bb2d434d46eb32c03467d705bf3e546d9cc2e831",
+    ),
+];
 
 #[test]
 fn the_webpack_and_rollup_unit_models_cannot_change_under_a_constant_version() {

@@ -498,15 +498,12 @@ impl IndexSpec {
         if recipes.is_empty() {
             return Err("spec: build.recipes is empty".into());
         }
-        let sponge_regions = match raw.build.sponge_regions.as_str() {
-            "drop" => SpongeRegions::Drop,
-            "origin" => SpongeRegions::Origin,
-            other => {
-                return Err(format!(
-                    "spec: build.sponge_regions {other:?} (drop, origin)"
-                ));
-            }
-        };
+        let sponge_regions = SpongeRegions::parse(&raw.build.sponge_regions).ok_or_else(|| {
+            format!(
+                "spec: build.sponge_regions {:?} (drop, origin)",
+                raw.build.sponge_regions
+            )
+        })?;
         let mut tools = BTreeMap::new();
         for (name, version) in &raw.tools {
             let bundler = RecipeBundler::parse(name)

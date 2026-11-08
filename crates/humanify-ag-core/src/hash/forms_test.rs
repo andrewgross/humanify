@@ -21,8 +21,8 @@ fn the_persisted_stamps_keep_their_values() {
 
     assert_eq!(STATEMENT.version, 3);
     assert_eq!(KPI_STATEMENT.stamp(), "kpi-statement/2"); // the eval scorerVersion
-    assert_eq!(LIBRARY_UNITS.stamp(), "units/3"); // the unit model moved (exp097)
-    assert_eq!(VENDOR_CONTENT.stamp(), "vendor-content-key/4");
+    assert_eq!(LIBRARY_UNITS.stamp(), "units/4"); // exp204: the match key's v5 transforms
+    assert_eq!(VENDOR_CONTENT.stamp(), "vendor-content-key/5"); // exp204: likewise
     assert_eq!(LIBRARY_LITERALS_VERSION, 1);
     let stamped: Vec<&str> = FORMS
         .iter()
@@ -54,39 +54,42 @@ fn derived_forms_move_with_their_base() {
 }
 
 #[test]
-fn the_index_forms_keep_the_settings_they_were_stamped_with() {
-    // exp200 split the library index's forms from the match key: every
-    // built index carries `units/3` and `vendor-content-key/4`, computed
-    // under the v4 match key (wrapper spelling only, privates verbatim
-    // before the units blind them). A match-key era must not re-key them;
-    // re-fingerprinting the index is its own version bump and rebuild.
-    let wrapper_only = TransformSet::of(&[Transform::WrapperSpelling]);
-    for form in [&LIBRARY_UNITS, &VENDOR_CONTENT] {
-        assert_eq!(form.transforms, wrapper_only, "{}", form.name);
-        assert_eq!(form.locals, Locals::Slots, "{}", form.name);
-        assert_eq!(form.strings, Strings::Blurred, "{}", form.name);
-        assert_eq!(form.numbers, Numbers::Exact, "{}", form.name);
-    }
-    assert_eq!(LIBRARY_UNITS.privates, Privates::Blinded);
-    assert_eq!(VENDOR_CONTENT.privates, Privates::Verbatim);
-    assert_eq!(VENDOR_CONTENT.free_names, FreeNames::SlottedUnlessGlobal);
-    // The library units differ from the twin gate's masked stream only in
-    // name, stamp and the match key's exp200 transform.
+fn the_index_forms_carry_the_match_key_v5_settings() {
+    // exp204 re-fingerprinted the library index under the match key's v5
+    // settings (exp200's identity transforms: concise arrow body,
+    // parentheses, wrapper spelling; private names slotted): `units/4`,
+    // `vendor-content-key/5`. The index forms still derive from a FROZEN
+    // copy of those settings, never from MATCH_KEY itself — a later
+    // match-key era must not silently re-key an index built offline. When
+    // the match key moves past v5 this test fails: decide then whether the
+    // index follows (a new units / module version and a rebuild) or keeps
+    // v5 (rewrite this test to say so).
+    assert_eq!(MATCH_KEY.version, 5);
+    let settings = |f: &CanonicalForm| CanonicalForm {
+        name: "",
+        version: 0,
+        stamped_in: None,
+        ..*f
+    };
+    // units = the twin gate's masked stream: the match key, privates blinded
     assert_eq!(
-        CanonicalForm {
-            name: "",
-            version: 0,
-            stamped_in: None,
-            ..LIBRARY_UNITS
-        },
-        CanonicalForm {
-            name: "",
-            version: 0,
-            stamped_in: None,
-            transforms: wrapper_only,
-            ..MATCH_KEY_PRIVATES_BLINDED
-        }
+        settings(&LIBRARY_UNITS),
+        settings(&MATCH_KEY_PRIVATES_BLINDED)
     );
+    // the whole-module print = the carry's content key: the match key,
+    // free names slotted unless a real global
+    assert_eq!(settings(&VENDOR_CONTENT), settings(&CARRY_CONTENT));
+    for form in [&LIBRARY_UNITS, &VENDOR_CONTENT] {
+        assert_eq!(form.transforms, MATCH_KEY.transforms, "{}", form.name);
+        assert_ne!(
+            form.transforms,
+            TransformSet::of(&[Transform::WrapperSpelling]),
+            "{}: still the v4 set",
+            form.name
+        );
+    }
+    assert_eq!(VENDOR_CONTENT.privates, Privates::Slots);
+    assert_eq!(VENDOR_CONTENT.free_names, FreeNames::SlottedUnlessGlobal);
 }
 
 #[test]

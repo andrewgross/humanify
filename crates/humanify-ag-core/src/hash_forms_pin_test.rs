@@ -390,7 +390,7 @@ fn version_stamps_are_pinned() {
     );
     assert_eq!(
         got,
-        "statement=3 factory=5 module=vendor-content-key/4 literals=literals/1 units=units/3"
+        "statement=3 factory=5 module=vendor-content-key/5 literals=literals/1 units=units/4"
     );
 }
 
@@ -400,7 +400,10 @@ const PIN_ALIGN: &str = "35a3c368cd4e0592e48f47b6";
 // exp200 (match-key/5): canonical, graph and modules moved in their match-key
 // columns ONLY — the identity, rename-signature and every slot-mapping column,
 // the module bindings and the index keys (V) are line-for-line unchanged.
+// exp204 (units/4, vendor-content-key/5): modules moved in its index-key
+// lines ONLY (K 34 of 496, V 2,640 of 4,604; every R and C line unchanged);
+// units moved 1,798 of 5,166 print lines.
 const PIN_GRAPH: &str = "cc3f6981627edd8ff87c62a3";
-const PIN_MODULES: &str = "05eabee4e36d9dc8ab0e8d38";
-const PIN_UNITS: &str = "6d469263bd7c2f510f37c083";
+const PIN_MODULES: &str = "2328195b1c45a8b048c8437f";
+const PIN_UNITS: &str = "25c5107ff50516cfb8a494af";
 const PIN_FILES: &str = "911b9df2a0edf0f9b5fbb73a";

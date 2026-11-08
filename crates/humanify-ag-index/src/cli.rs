@@ -21,7 +21,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use crate::build::{BuildConfig, run};
+use crate::build::{BuildConfig, SpongeRegions, run};
 use crate::cache::{BUILD_SIDECAR_SCHEMA, BuildSidecar, SpecSidecar};
 use crate::planner::{self, ResolvedSpec};
 use crate::spec::{IndexSpec, SPEC_SCHEMA};
@@ -41,8 +41,21 @@ pub enum IndexCommand {
         /// versions + the dependency closure of their chosen versions),
         /// the version rules and overrides, the recipes, the pinned
         /// tools, the refusals.
-        #[arg(long)]
-        spec: PathBuf,
+        #[arg(long, required_unless_present = "replay", conflicts_with = "replay")]
+        spec: Option<PathBuf>,
+        /// Instead of a spec: rebuild an EXISTING index's plan — its
+        /// manifest's package@versions, as-of, recipes and bundler pins —
+        /// under this binary's fingerprint forms (exp204: a form era
+        /// re-keys every module shard while the stored installs and
+        /// bundles stay valid, so only the fingerprinting and the merge
+        /// rerun). Not a way to choose packages: that is the spec's.
+        #[arg(long, requires = "sponge_regions")]
+        replay: Option<PathBuf>,
+        /// With --replay: what a pre-bundled file's foreign regions become
+        /// (`drop`, `origin`) — the source index's setting, which its
+        /// manifest does not record.
+        #[arg(long, requires = "replay")]
+        sponge_regions: Option<String>,
         /// The registry snapshot directory (packuments, enriched with
         /// per-version dependency metadata; fetched once).
         #[arg(long)]
@@ -259,6 +272,60 @@ fn spec_sidecar(spec: &IndexSpec, resolved: &ResolvedSpec, spec_sha: &str) -> Sp
     }
 }
 
+/// What made an index, for its sidecar.
+struct Made {
+    built_from: String,
+    as_of: String,
+    packages: usize,
+}
+
+/// The finished index's `build.json` sidecar: the outcome's counts, what
+/// made it, and (a spec build) the resolved plan.
+fn write_sidecar(
+    out: &std::path::Path,
+    outcome: &crate::build::BuildOutcome,
+    made: Made,
+    spec: Option<SpecSidecar>,
+) -> Result<(), String> {
+    let side = BuildSidecar {
+        schema: BUILD_SIDECAR_SCHEMA.into(),
+        index_id: outcome.index_id.clone(),
+        built_from: made.built_from,
+        as_of: made.as_of,
+        format: humanify_ag_core::libindex::format::INDEX_FORMAT.into(),
+        slices: outcome
+            .slices
+            .iter()
+            .map(|s| crate::cache::SidecarSlice {
+                slice: s.slice.clone(),
+                recipe: s.recipe.clone(),
+                bundler: s.bundler.clone(),
+                bundler_version: s.version.clone(),
+            })
+            .collect(),
+        seeds: Vec::new(),
+        dropped: Vec::new(),
+        failed: outcome
+            .errors
+            .iter()
+            .map(|(label, why)| crate::cache::DroppedSeed {
+                name: label.clone(),
+                reason: why.clone(),
+                evidence: String::new(),
+            })
+            .collect(),
+        versions_in_index: outcome.tasks - outcome.errors.len(),
+        packages: made.packages,
+        refused: outcome.refused.len(),
+        built: outcome.built,
+        reused: outcome.reused,
+        stage_ms: BTreeMap::new(),
+        completed: crate::cache::now_iso(),
+        spec,
+    };
+    crate::cache::write_build_sidecar(out, &side)
+}
+
 fn build(spec_path: &std::path::Path, args: &BuildArgs) -> Result<String, String> {
     let (spec, resolved, spec_sha) = resolve_spec(
         spec_path,
@@ -306,43 +373,79 @@ fn build(spec_path: &std::path::Path, args: &BuildArgs) -> Result<String, String
     };
     let outcome = run(&cfg, false)?;
     if let (Some(out), false) = (&args.out, chunk.is_some()) {
-        let side = BuildSidecar {
-            schema: BUILD_SIDECAR_SCHEMA.into(),
-            index_id: outcome.index_id.clone(),
+        let packages = side_spec.selections.len();
+        let made = Made {
             built_from: "index spec".into(),
             as_of: spec.as_of.clone(),
-            format: humanify_ag_core::libindex::format::INDEX_FORMAT.into(),
-            slices: outcome
-                .slices
-                .iter()
-                .map(|s| crate::cache::SidecarSlice {
-                    slice: s.slice.clone(),
-                    recipe: s.recipe.clone(),
-                    bundler: s.bundler.clone(),
-                    bundler_version: s.version.clone(),
-                })
-                .collect(),
-            seeds: Vec::new(),
-            dropped: Vec::new(),
-            failed: outcome
-                .errors
-                .iter()
-                .map(|(label, why)| crate::cache::DroppedSeed {
-                    name: label.clone(),
-                    reason: why.clone(),
-                    evidence: String::new(),
-                })
-                .collect(),
-            versions_in_index: outcome.tasks - outcome.errors.len(),
-            packages: side_spec.selections.len(),
-            refused: outcome.refused.len(),
-            built: outcome.built,
-            reused: outcome.reused,
-            stage_ms: BTreeMap::new(),
-            completed: crate::cache::now_iso(),
-            spec: Some(side_spec),
+            packages,
         };
-        crate::cache::write_build_sidecar(out, &side)?;
+        write_sidecar(out, &outcome, made, Some(side_spec))?;
+    }
+    Ok(outcome.index_id)
+}
+
+/// `--replay <index-dir>` (exp204, `crate::replay`): the source index's
+/// exact plan, built under this binary's fingerprint forms. The pins go
+/// through the pinned-plan path the run-time build uses (`BuildConfig::pinned`,
+/// policy `PinsOnly`), so a version is re-planned against the same registry
+/// snapshot and indexed iff it still resolves — its stored install and
+/// bundles are reused when their stamps match.
+fn build_replay(
+    index: &std::path::Path,
+    sponge_regions: SpongeRegions,
+    args: &BuildArgs,
+) -> Result<String, String> {
+    let manifest = index.join("manifest.json");
+    let text =
+        std::fs::read_to_string(&manifest).map_err(|e| format!("{}: {e}", manifest.display()))?;
+    let replay = crate::replay::replay_plan(&text)?;
+    let chunk = args.chunk.as_deref().map(parse_chunk).transpose()?;
+    let mut builds: Vec<crate::recipe::RecipeBuild> = Vec::new();
+    for (recipe, version) in &replay.recipes {
+        let tool = tools::tool_at(&args.store, recipe.bundler, version)?;
+        builds.push(crate::recipe::RecipeBuild {
+            recipe: *recipe,
+            bin: tool.bin.clone(),
+        });
+    }
+    let cfg = BuildConfig {
+        packages: Vec::new(),
+        spec: None,
+        as_of: replay.as_of.clone(),
+        registry: args.registry.clone(),
+        store: args.store.clone(),
+        work: args.work.clone(),
+        out: args.out.clone(),
+        recipes: builds,
+        jobs: args.jobs,
+        merge_jobs: args.merge_jobs,
+        offline: args.offline,
+        merge_only: args.merge_only,
+        refuse: Vec::new(),
+        quiet: false,
+        names: replay.names,
+        sponge_regions,
+        pinned: replay.pinned.clone(),
+        policy: crate::asof::VersionPolicy::PinsOnly,
+        chunk,
+    };
+    if args.dry_run {
+        run(&cfg, true)?;
+        return Ok(String::new());
+    }
+    let outcome = run(&cfg, false)?;
+    if let (Some(out), false) = (&args.out, chunk.is_some()) {
+        let packages: std::collections::BTreeSet<&str> = replay
+            .pinned
+            .iter()
+            .map(|p| p.rsplit_once('@').map_or(p.as_str(), |(n, _)| n))
+            .collect();
+        let made = Made {
+            built_from: format!("replay of index {}", index.display()),
+            as_of: replay.as_of.clone(),
+            packages: packages.len(),
+        };
+        write_sidecar(out, &outcome, made, None)?;
     }
     Ok(outcome.index_id)
 }
@@ -359,6 +462,8 @@ pub fn run_index(command: IndexCommand) -> i32 {
     }
     let IndexCommand::Build {
         spec,
+        replay,
+        sponge_regions,
         registry,
         store,
         work,
@@ -393,7 +498,16 @@ pub fn run_index(command: IndexCommand) -> i32 {
             chunk,
             dry_run,
         };
-        build(&spec, &args)
+        match (spec, replay) {
+            (Some(spec), None) => build(&spec, &args),
+            (None, Some(index)) => {
+                let regions = sponge_regions.as_deref().unwrap_or_default();
+                let regions = SpongeRegions::parse(regions)
+                    .ok_or_else(|| format!("--sponge-regions {regions:?} (drop, origin)"))?;
+                build_replay(&abs(index)?, regions, &args)
+            }
+            _ => Err("exactly one of --spec and --replay".into()),
+        }
     })();
     match result {
         Ok(id) if !id.is_empty() => {

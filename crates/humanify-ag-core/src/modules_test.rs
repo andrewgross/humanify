@@ -770,11 +770,12 @@ fn a_real_change_in_a_restyled_factory_changes_its_hash() {
 
 /// The stale-era carry re-keys a prior by content under the CARRY form
 /// (the match key's transforms), so a restyled module carries across an
-/// era bump too; the library index's whole-module print (`VENDOR_CONTENT`,
-/// stamped `vendor-content-key/4` in every built index) is untouched —
-/// the restyle still splits it, until the index is re-fingerprinted.
+/// era bump; since exp204 the library index's whole-module print
+/// (`VENDOR_CONTENT`, `vendor-content-key/5`) applies the same transforms,
+/// so the index answers a restyled copy of a module it holds — and still
+/// refuses a real change.
 #[test]
-fn the_carry_content_key_ignores_the_restyle_and_the_index_key_does_not() {
+fn the_carry_and_index_content_keys_ignore_the_restyle_but_not_a_real_change() {
     use crate::hash::forms::{CARRY_CONTENT, VENDOR_CONTENT};
     use crate::modules::vendor_content::vendor_content_key;
     let body = |src: &str| {
@@ -783,10 +784,19 @@ fn the_carry_content_key_ignores_the_restyle_and_the_index_key_does_not() {
     };
     let none = std::collections::HashSet::new();
     let key = |src: &str, form| vendor_content_key(&body(src), &none, form).unwrap();
-    assert_eq!(key(STYLE_A, &CARRY_CONTENT), key(STYLE_B, &CARRY_CONTENT));
-    assert_ne!(
-        key(STYLE_A, &CARRY_CONTENT),
-        key(STYLE_B_CHANGED, &CARRY_CONTENT)
-    );
-    assert_ne!(key(STYLE_A, &VENDOR_CONTENT), key(STYLE_B, &VENDOR_CONTENT));
+    for form in [&CARRY_CONTENT, &VENDOR_CONTENT] {
+        assert_eq!(key(STYLE_A, form), key(STYLE_B, form), "{}", form.name);
+        assert_ne!(
+            key(STYLE_A, form),
+            key(STYLE_B_CHANGED, form),
+            "{}",
+            form.name
+        );
+        assert_ne!(
+            key(STYLE_B, form),
+            key(STYLE_B_CHANGED, form),
+            "{}",
+            form.name
+        );
+    }
 }
