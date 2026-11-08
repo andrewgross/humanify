@@ -140,7 +140,7 @@ ingest under one deadline (span `library.index.wait`). What a user sees:
 
 ```
 # Bun bundle, an index for Bun bundles in the store: used
-Library index: using 0242134fb663 for bun bundles from <store> (found; nothing to build)
+Library index: using bfe447b7d066 for bun bundles from <store> (found; nothing to build)
 
 # esbuild bundle, no esbuild index in the store (the default): ONE line, the
 # run goes on with library name matching skipped — off's output bytes
