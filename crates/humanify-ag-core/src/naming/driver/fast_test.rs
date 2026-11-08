@@ -286,20 +286,15 @@ fn run_tier(fresh: &str, tier: &str, provider: &dyn NameProvider) -> NamingOutco
     run_cfg(fresh, &config_tier(tier_of(tier)), provider)
 }
 
-/// Answers like [`LifoProvider`] but runs every pipelined round
-/// GENERATIONALLY (the trait default): the other extreme of completion
-/// order.
-struct Generational;
-
-impl NameProvider for Generational {
-    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-        calls.iter().map(answer).collect()
-    }
+/// Answers like [`LifoProvider`] but completes every pipelined round in
+/// a SEEDED SHUFFLED order (the testkit's one fake): any other order the
+/// real provider may produce. (Before lane L4 this was a generational
+/// provider — the trait's in-order default, the other extreme from LIFO;
+/// three shuffled orders now stand in for it.)
+fn shuffled(seed: u64) -> humanify_ag_testkit::fake::ShuffledFake {
+    humanify_ag_testkit::fake::ShuffledFake::answering(seed, answer)
 }
 
-/// Every relaxed lever, alone and together: deterministic (twice -> same),
-/// independent of completion order (LIFO vs generational -> same) and a
-/// valid output.
 #[test]
 fn relaxed_levers_are_deterministic_and_order_independent() {
     let fresh = fixture();
@@ -307,12 +302,14 @@ fn relaxed_levers_are_deterministic_and_order_independent() {
         let a = run_tier(&fresh, tier, &LifoProvider::default());
         let b = run_tier(&fresh, tier, &LifoProvider::default());
         assert_eq!(fingerprint(&a), fingerprint(&b), "{tier}: twice");
-        let g = run_tier(&fresh, tier, &Generational);
-        assert_eq!(
-            fingerprint(&a),
-            fingerprint(&g),
-            "{tier}: LIFO vs generational"
-        );
+        for seed in 1..=3 {
+            let g = run_tier(&fresh, tier, &shuffled(seed));
+            assert_eq!(
+                fingerprint(&a),
+                fingerprint(&g),
+                "{tier}: LIFO vs shuffled (seed {seed})"
+            );
+        }
         assert!(a.output_valid, "{tier}: {:?}", a.verdict);
     }
 }

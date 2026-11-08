@@ -221,6 +221,15 @@ The offline index builder (`crates/humanify-ag-index`, not the pipeline) runs
 (30 min) and `VERSION_DEADLINE` (1 min); a failure fails that package's
 task, which is reported and indexes nothing.
 
+The measurement harness (`crates/humanify-ag-dev`) starts every child
+through its own `proc` module, whose one `Command::new` hands the command
+to this owner. A gate stage whose output the person watches as it runs
+(`cargo dev check`: `cargo test`, `cargo build`, the in-crate stages) goes
+through `subprocess::run_inherited` instead: stdout and stderr are
+inherited, not piped, so there is nothing to drain; the same one deadline
+from spawn over the whole run, and the same group kill on expiry. Each
+stage's deadline is its entry in the gate's `STAGES` (`gate/check.rs`).
+
 Up to one `diff` per core still runs at once on the rayon pool (R4, the
 unsized pool). Resource exhaustion on the shared box can still fail one,
 but it can no longer change the tree without a WARNING.

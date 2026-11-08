@@ -11,10 +11,10 @@
 //!   `run_pipelined` completes calls in a seeded random order the way the
 //!   real provider completes them out of order.
 //!
-//! Porting the seven hand-written stub servers and the 27 in-order fake
-//! providers onto this crate is lane L4. It depends on humanify-ag-model
-//! alone, never on core, so core can dev-depend on it without a second
-//! copy of core's types.
+//! Lane L4 ported the product crates' seven hand-written stub servers and
+//! their in-order fake providers onto this crate. It depends on
+//! humanify-ag-model alone, never on core, so core can dev-depend on it
+//! without a second copy of core's types.
 
 pub mod answers;
 pub mod fake;

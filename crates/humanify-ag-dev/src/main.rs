@@ -8,7 +8,7 @@
 
 use std::process::ExitCode;
 
-use humanify_ag_dev::{bin_build, env, eval, settings};
+use humanify_ag_dev::{bin_build, census, e2e, env, eval, gate, match_truth, settings};
 
 /// One verb.
 struct Verb {
@@ -37,7 +37,7 @@ const NEUTRALITY_SETTINGS: &[&str] = &[
 const LIBRARY_SETTINGS: &[&str] = &["run.force_mixed", "run.pipeline_set", "libscore"];
 const FORCE: &[&str] = &["run.force_mixed"];
 const DETERMINISM_SETTINGS: &[&str] = &["libscore.corpus", "libscore.data_root"];
-const RESCORE_SETTINGS: &[&str] = &["libscore.corpus", "libscore.data_root", "libscore.out"];
+const RESCORE_SETTINGS: &[&str] = &["libscore.corpus", "libscore.data_root", "run.out"];
 const INDEX_SECTION: &str = "index";
 const INDEX_SETTINGS: &[&str] = &[INDEX_SECTION];
 const NONE: &[&str] = &[];
@@ -51,9 +51,9 @@ const VERBS: &[Verb] = &[
         usage: "check [--only a,b]",
         proves: "every gate stage passed on this tree (PARTIAL when --only)",
         cannot_prove: "anything about LLM-dependent output: the gate runs the pipeline against a stub",
-        lane: Some("L4"),
-        today: "npm run check",
-        settings: NONE,
+        lane: None,
+        today: "",
+        settings: &["dev.only"],
     },
     Verb {
         words: &["eval", "score"],
@@ -179,7 +179,7 @@ const VERBS: &[Verb] = &[
         cannot_prove: "anything about a label whose raw reports or index are gone from this host",
         lane: None,
         today: "",
-        settings: &["libscore.out"],
+        settings: &["run.out"],
     },
     Verb {
         words: &["library", "leaderboard"],
@@ -215,7 +215,7 @@ const VERBS: &[Verb] = &[
         cannot_prove: "that a layer's rule is the right rule",
         lane: None,
         today: "experiments/150-bun-testbed/scripts/layers.sh",
-        settings: &["libscore.data_root", "libscore.out"],
+        settings: &["libscore.data_root", "run.out"],
     },
     Verb {
         words: &["index", "build"],
@@ -246,92 +246,98 @@ const VERBS: &[Verb] = &[
     },
     Verb {
         words: &["e2e"],
-        usage: "e2e",
+        usage: "e2e [--out D]",
         proves: "the release binary on every committed fixture: fresh, prior, deterministic twice, and the exact export surface",
         cannot_prove: "LLM naming quality: the names come from a stub",
-        lane: Some("L4"),
-        today: "npm run test:e2e",
-        settings: NONE,
+        lane: None,
+        today: "",
+        settings: &["run.out"],
     },
     Verb {
         words: &["format-golden"],
         usage: "format-golden",
         proves: "the formatter's bytes equal the frozen goldens, and a planted perturbation is caught",
         cannot_prove: "formatting of inputs outside the goldens",
-        lane: Some("L4"),
-        today: "scripts/format-golden.sh",
+        lane: None,
+        today: "",
         settings: NONE,
     },
     Verb {
         words: &["census", "clones"],
-        usage: "census clones [--loose]",
+        usage: "census clones [--loose] [--root D]",
         proves: "where twin functions sit across crates (ADVISORY)",
         cannot_prove: "that two twins answer the same question the same way",
-        lane: Some("L4"),
-        today: "npm run census:clones",
-        settings: NONE,
+        lane: None,
+        today: "",
+        settings: &["dev.loose", "dev.root"],
     },
     Verb {
         words: &["census", "concurrency"],
-        usage: "census concurrency [--files a.rs,...]",
+        usage: "census concurrency [--files a.rs,...] [--root D] [--allowlist F]",
         proves: "every concurrency site in non-test crates/ is confirmed on the allowlist with its pattern",
         cannot_prove: "that a confirmed site actually follows its pattern's rules",
-        lane: Some("L4"),
-        today: "npm run census:concurrency",
-        settings: NONE,
+        lane: None,
+        today: "",
+        settings: &["dev.files", "dev.root", "dev.allowlist"],
     },
     Verb {
         words: &["census", "slop"],
-        usage: "census slop",
+        usage: "census slop [--base REF] [--root D]",
         proves: "per-crate complexity mass, erosion and clone share against main (ADVISORY)",
         cannot_prove: "correctness: a measure of style",
-        lane: Some("L4"),
-        today: "(new)",
-        settings: NONE,
+        lane: None,
+        today: "",
+        settings: &["dev.base", "dev.root"],
     },
     Verb {
         words: &["ask-trace"],
-        usage: "ask-trace [--prior] [--sequential] [--collide NAME] [--set section.key=value]...",
+        usage: "ask-trace <input.js> [--out D] [--prior P] [--collide NAME] [--sequential] [--pipeline-set section.key=value]... [-- <pipeline flags>]",
         proves: "every ask the binary makes on a fixture, against the stub",
         cannot_prove: "what a real model would answer",
-        lane: Some("L4"),
-        today: "npm run ask-trace",
-        settings: NONE,
+        lane: None,
+        today: "",
+        settings: &[
+            "run.out",
+            "dev.prior",
+            "dev.collide",
+            "dev.sequential",
+            "run.pipeline_set",
+        ],
     },
     Verb {
         words: &["diff-asks"],
         usage: "diff-asks <a> <b>",
         proves: "how two ask dumps differ",
         cannot_prove: "why they differ",
-        lane: Some("L4"),
-        today: "npm run diff-asks",
+        lane: None,
+        today: "",
         settings: NONE,
     },
     Verb {
         words: &["match-truth"],
-        usage: "match-truth",
+        usage: "match-truth [--corpus-dir D] [--bin PATH] [--out D] [--only a,b]",
         proves: "the matcher's agreement with ground truth on a pinned npm corpus",
         cannot_prove: "matching on bundles outside the corpus",
-        lane: Some("L4"),
-        today: "npm run match-truth",
-        settings: NONE,
+        lane: None,
+        today: "",
+        settings: &["dev.corpus_dir", "run.bin", "run.out", "dev.only"],
     },
     Verb {
         words: &["env-check"],
-        usage: "env-check",
+        usage: "env-check [--endpoint URL]",
         proves: "the toolchain pin, clippy and rustfmt are present and the MSRV equals the pin",
         cannot_prove: "anything about the code",
-        lane: Some("L4"),
-        today: "scripts/rust-env-check.sh",
-        settings: NONE,
+        lane: None,
+        today: "",
+        settings: &["llm.endpoint"],
     },
     Verb {
         words: &["precommit"],
         usage: "precommit",
         proves: "staged files are formatted and pass the staged-file censuses",
         cannot_prove: "that the gate passes: the hook is not the gate",
-        lane: Some("L4"),
-        today: ".husky/pre-commit (lint-staged)",
+        lane: None,
+        today: "",
         settings: NONE,
     },
     Verb {
@@ -339,8 +345,26 @@ const VERBS: &[Verb] = &[
         usage: "stub-llm serve [--port N]",
         proves: "nothing: it serves the one deterministic stub LLM for by-hand runs",
         cannot_prove: "anything about a real model",
-        lane: Some("L4"),
-        today: "scripts/lib/stub-llm.ts",
+        lane: None,
+        today: "",
+        settings: &["dev.port"],
+    },
+    Verb {
+        words: &["no-private-addresses"],
+        usage: "no-private-addresses",
+        proves: "no tracked file holds a private (RFC 1918 / link-local) network address — the repo is public",
+        cannot_prove: "anything about untracked files, or a private host NAME",
+        lane: None,
+        today: "",
+        settings: NONE,
+    },
+    Verb {
+        words: &["shims"],
+        usage: "shims",
+        proves: "the remaining JS shims (the webcrack shim the pipeline runs) parse",
+        cannot_prove: "that a shim behaves: the e2e stage runs it",
+        lane: None,
+        today: "",
         settings: NONE,
     },
 ];
@@ -419,8 +443,23 @@ fn dispatch(args: &[String]) -> (u8, String, String) {
 }
 
 fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
+    let host = env::host();
     match verb.words {
         ["build-bin"] => build_bin(&parsed.positionals),
+        ["check"] => gate::check::run(parsed, &host),
+        ["env-check"] => gate::env_check::run(parsed, &host),
+        ["precommit"] => gate::precommit::run(parsed, &host),
+        ["format-golden"] => gate::format_golden::run(parsed, &host),
+        ["no-private-addresses"] => gate::private_addresses::run(parsed, &host),
+        ["shims"] => gate::shims::run(parsed, &host),
+        ["census", "concurrency"] => census::concurrency::run(parsed, &host),
+        ["census", "clones"] => census::clones::run(parsed, &host),
+        ["census", "slop"] => census::slop::run(parsed, &host),
+        ["e2e"] => e2e::run::run(parsed, &host),
+        ["ask-trace"] => e2e::ask_trace::run(parsed, &host),
+        ["diff-asks"] => e2e::diff_asks::run(parsed, &host),
+        ["stub-llm", "serve"] => e2e::stub_llm::run(parsed, &host),
+        ["match-truth"] => match_truth::run(parsed, &host),
         ["eval", "rescore"] => eval::verbs::rescore(parsed),
         ["eval", "summarize"] => eval::verbs::summarize(parsed),
         ["eval", "leaderboard"] => eval::verbs::leaderboard(parsed),
@@ -446,7 +485,7 @@ fn library_rescore(parsed: &settings::Parsed) -> (u8, String, String) {
     let s = &parsed.settings;
     let corpus = s.text("libscore.corpus").unwrap_or_else(|| "dev".into());
     let out = s
-        .text("libscore.out")
+        .text("run.out")
         .map_or(Out::Committed, |d| Out::Dir(d.into()));
     match rescore(
         &humanify_ag_dev::paths::repo_root(),
@@ -565,7 +604,7 @@ fn cjs_placement(positionals: &[String]) -> (u8, String, String) {
 }
 
 fn library_proof(parsed: &settings::Parsed) -> (u8, String, String) {
-    let Some(out) = parsed.settings.text("libscore.out") else {
+    let Some(out) = parsed.settings.text("run.out") else {
         return (
             2,
             String::new(),
@@ -654,7 +693,7 @@ fn library_layers(parsed: &settings::Parsed) -> (u8, String, String) {
     let usage = "usage: humanify-ag-dev library layers <corpus> --out DIR [--data-root DIR]\n";
     let ([name], Some(out)) = (
         parsed.positionals.as_slice(),
-        parsed.settings.text("libscore.out"),
+        parsed.settings.text("run.out"),
     ) else {
         return (2, String::new(), usage.into());
     };

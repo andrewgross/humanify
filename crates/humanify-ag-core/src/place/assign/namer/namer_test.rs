@@ -6,37 +6,19 @@ use super::{
     FolderSummary, NameKind, NameLevel, ProviderSplitNamer, ProviderTreeReviser, SplitNameRequest,
     SplitNamer, SplitNamerBudget, TreeReviser, split_namer_batches,
 };
-use humanify_ag_model::llm::{
-    BatchRenameResponse, CacheKeyParams, LlmCall, LlmError, LlmErrorKind, NameProvider, Renames,
-    cache_key_of,
-};
+use humanify_ag_model::llm::{CacheKeyParams, LlmCall, LlmError, LlmErrorKind, cache_key_of};
+use humanify_ag_testkit::fake::{ShuffledFake, names, reply};
 use serde_json::Value;
-use std::cell::RefCell;
 
 const VECTORS: &str = include_str!("../../../../../../test/parity/wp51-namer.json");
 
-/// A provider answering from a fixed map, recording each call.
-struct MapProvider {
-    answer: Option<Vec<(String, String)>>,
-    calls: RefCell<Vec<LlmCall>>,
-}
-
-impl NameProvider for MapProvider {
-    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-        self.calls.borrow_mut().extend(calls.iter().cloned());
-        calls
-            .iter()
-            .map(|_| match &self.answer {
-                Some(entries) => Ok(BatchRenameResponse {
-                    renames: Renames::from_entries(
-                        entries.iter().map(|(k, v)| (k.clone(), Some(v.clone()))),
-                    ),
-                    ..BatchRenameResponse::default()
-                }),
-                None => Err(LlmError::new(LlmErrorKind::CacheMiss, "down")),
-            })
-            .collect()
-    }
+/// A fake answering every call from a fixed map (`None`: every call
+/// fails); the fake records each call.
+fn map_provider(answer: Option<Vec<(String, String)>>) -> ShuffledFake {
+    ShuffledFake::answering(1, move |_| match &answer {
+        Some(entries) => reply(entries.iter().map(|(k, v)| (k.clone(), Some(v.clone())))),
+        None => Err(LlmError::new(LlmErrorKind::CacheMiss, "down")),
+    })
 }
 
 fn strs(v: &Value) -> Vec<String> {
@@ -116,14 +98,11 @@ fn every_ts_namer_request_and_answer_mapping_agrees() {
             .iter()
             .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string()))
             .collect();
-        let provider = MapProvider {
-            answer: Some(answers),
-            calls: RefCell::new(Vec::new()),
-        };
+        let provider = map_provider(Some(answers));
         let mut log = split_log();
         let mut namer = ProviderSplitNamer::new(&provider, &mut log);
         let result = namer.name(&requests);
-        let calls = provider.calls.borrow();
+        let calls = provider.calls();
         assert_eq!(calls.len(), 1, "one batch = one provider call");
         check_request(&calls[0], row, row["cacheKey"].as_str().unwrap(), &params);
         let want: Vec<Option<String>> = row["result"]
@@ -157,18 +136,15 @@ fn the_ts_reviser_request_and_map_agree() {
             members: strs(&f["members"]),
         })
         .collect();
-    let provider = MapProvider {
-        answer: Some(vec![
-            ("auth".into(), "authFlow".into()),
-            ("conn".into(), "conn".into()),
-            ("same".into(), String::new()),
-        ]),
-        calls: RefCell::new(Vec::new()),
-    };
+    let provider = map_provider(Some(vec![
+        ("auth".into(), "authFlow".into()),
+        ("conn".into(), "conn".into()),
+        ("same".into(), String::new()),
+    ]));
     let mut reviser = ProviderTreeReviser::retaining(&provider);
     let out = reviser.revise(&folders);
     check_request(
-        &provider.calls.borrow()[0],
+        &provider.calls()[0],
         row,
         row["cacheKey"].as_str().unwrap(),
         &params,
@@ -178,10 +154,7 @@ fn the_ts_reviser_request_and_map_agree() {
 
 #[test]
 fn a_provider_failure_is_all_none_and_an_empty_batch_calls_nothing() {
-    let provider = MapProvider {
-        answer: None,
-        calls: RefCell::new(Vec::new()),
-    };
+    let provider = map_provider(None);
     let mut log = split_log();
     let mut namer = ProviderSplitNamer::new(&provider, &mut log);
     let req = SplitNameRequest {
@@ -196,7 +169,7 @@ fn a_provider_failure_is_all_none_and_an_empty_batch_calls_nothing() {
     assert_eq!(namer.name(&[req.clone(), req]), vec![None, None]);
     assert_eq!(namer.failed_batches, 1);
     assert!(namer.name(&[]).is_empty());
-    assert_eq!(provider.calls.borrow().len(), 1);
+    assert_eq!(provider.calls().len(), 1);
     let mut reviser = ProviderTreeReviser::retaining(&provider);
     assert!(reviser.revise(&[]).is_empty());
     assert!(
@@ -229,28 +202,8 @@ fn mint(i: usize) -> SplitNameRequest {
 }
 
 /// Answers every key of every prompt with `named-<key>`.
-struct EchoProvider {
-    calls: RefCell<Vec<LlmCall>>,
-}
-
-impl NameProvider for EchoProvider {
-    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-        self.calls.borrow_mut().extend(calls.iter().cloned());
-        calls
-            .iter()
-            .map(|c| {
-                Ok(BatchRenameResponse {
-                    renames: Renames::from_entries(
-                        c.request
-                            .identifiers
-                            .iter()
-                            .map(|k| (k.clone(), Some(format!("named-{k}")))),
-                    ),
-                    ..BatchRenameResponse::default()
-                })
-            })
-            .collect()
-    }
+fn echo_provider() -> ShuffledFake {
+    ShuffledFake::answering(1, |c| names(c, |k| format!("named-{k}")))
 }
 
 #[test]
@@ -281,15 +234,12 @@ fn a_large_mint_set_is_many_bounded_requests_with_deterministic_boundaries() {
     let requests: Vec<SplitNameRequest> = (0..4_000).map(mint).collect();
     let budget = SplitNamerBudget::for_model(32_768, 6_000);
     let run = || {
-        let provider = EchoProvider {
-            calls: RefCell::new(Vec::new()),
-        };
+        let provider = echo_provider();
         let mut log = split_log();
         let mut namer = ProviderSplitNamer::with_budget(&provider, &mut log, budget);
         let names = namer.name(&requests);
         let prompts: Vec<String> = provider
-            .calls
-            .borrow()
+            .calls()
             .iter()
             .map(|c| c.user_prompt.clone())
             .collect();
@@ -332,30 +282,16 @@ fn a_scope_that_fits_is_still_exactly_one_call() {
     );
 }
 
-/// Fails the SECOND call of each wave only.
-struct SecondFails;
-
-impl NameProvider for SecondFails {
-    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-        calls
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                if i == 1 {
-                    return Err(LlmError::new(LlmErrorKind::CacheMiss, "down"));
-                }
-                Ok(BatchRenameResponse {
-                    renames: Renames::from_entries(
-                        c.request
-                            .identifiers
-                            .iter()
-                            .map(|k| (k.clone(), Some(format!("n-{k}")))),
-                    ),
-                    ..BatchRenameResponse::default()
-                })
-            })
-            .collect()
-    }
+/// Fails the SECOND batch of [`one_failed_batch_falls_back_alone`] only
+/// (mints 10..20 — by its content, so the completion order cannot move
+/// the failure to another batch).
+fn second_fails() -> ShuffledFake {
+    ShuffledFake::answering(1, |c| {
+        if c.user_prompt.contains("declaredBinding10x") {
+            return Err(LlmError::new(LlmErrorKind::CacheMiss, "down"));
+        }
+        names(c, |k| format!("n-{k}"))
+    })
 }
 
 #[test]
@@ -366,7 +302,8 @@ fn one_failed_batch_falls_back_alone() {
         max_entries: 10,
     };
     let mut log = split_log();
-    let mut namer = ProviderSplitNamer::with_budget(&SecondFails, &mut log, budget);
+    let provider = second_fails();
+    let mut namer = ProviderSplitNamer::with_budget(&provider, &mut log, budget);
     let names = namer.name(&requests);
     assert_eq!(namer.failed_batches, 1);
     assert!(names[..10].iter().all(Option::is_some));
@@ -397,13 +334,11 @@ fn module_request(i: usize, taken: &[&str]) -> SplitNameRequest {
 #[test]
 fn a_module_batch_has_neutral_keys_its_own_prompt_and_at_most_eight_entries() {
     let requests: Vec<SplitNameRequest> = (0..10).map(|i| module_request(i, &[])).collect();
-    let provider = EchoProvider {
-        calls: RefCell::new(Vec::new()),
-    };
+    let provider = echo_provider();
     let mut log = split_log();
     let mut namer = ProviderSplitNamer::new(&provider, &mut log);
     let names = namer.name(&requests);
-    let calls = provider.calls.borrow();
+    let calls = provider.calls();
     assert_eq!(calls.len(), 2, "10 modules = 8 + 2");
     assert_eq!(calls[0].request.identifiers.len(), 8);
     assert_eq!(calls[1].request.identifiers, vec!["m1", "m2"]);
@@ -418,34 +353,18 @@ fn a_module_batch_has_neutral_keys_its_own_prompt_and_at_most_eight_entries() {
 }
 
 /// Answers `m1` with the first module's mechanical stem.
-struct StemAnswer(RefCell<Vec<LlmCall>>);
-
-impl NameProvider for StemAnswer {
-    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-        self.0.borrow_mut().extend(calls.iter().cloned());
-        calls
-            .iter()
-            .map(|_| {
-                Ok(BatchRenameResponse {
-                    renames: Renames::from_entries([(
-                        "m1".to_string(),
-                        Some("first-function-0".to_string()),
-                    )]),
-                    ..BatchRenameResponse::default()
-                })
-            })
-            .collect()
-    }
+fn stem_answer() -> ShuffledFake {
+    ShuffledFake::answering(1, |_| reply([("m1", Some("first-function-0".to_string()))]))
 }
 
 #[test]
 fn a_module_retry_lists_the_taken_names_and_an_answer_equal_to_the_stem_counts() {
-    let provider = StemAnswer(RefCell::new(Vec::new()));
+    let provider = stem_answer();
     let mut log = split_log();
     let mut namer = ProviderSplitNamer::new(&provider, &mut log);
     let names = namer.name(&[module_request(0, &["color-utils"])]);
     assert_eq!(names, vec![Some("first-function-0".to_string())]);
-    let calls = provider.0.borrow();
+    let calls = provider.calls();
     assert!(
         calls[0]
             .user_prompt

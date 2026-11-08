@@ -116,3 +116,23 @@ fn gone_within(pid: &str, limit: Duration) -> bool {
     }
     false
 }
+
+#[test]
+fn an_inherited_child_reports_its_status_inside_the_deadline() {
+    let status = super::run_inherited(&mut sh("exit 3"), Duration::from_secs(30)).unwrap();
+    assert_eq!(status.code(), Some(3));
+}
+
+#[test]
+fn an_inherited_child_past_its_deadline_is_killed_and_reported() {
+    let started = Instant::now();
+    let err = super::run_inherited(&mut sh("sleep 60"), Duration::from_millis(300)).unwrap_err();
+    assert_eq!(
+        err,
+        SubprocessError::TimedOut {
+            after: Duration::from_millis(300),
+            killed: true
+        }
+    );
+    assert!(started.elapsed() < Duration::from_secs(10));
+}

@@ -503,6 +503,7 @@ dependencies = [
  "humanify-ag-index",
  "humanify-ag-llm",
  "humanify-ag-model",
+ "humanify-ag-testkit",
  "mimalloc",
  "oxc_allocator",
  "oxc_ast",
@@ -521,6 +522,7 @@ version = "0.0.0"
 dependencies = [
  "humanify-ag-llm",
  "humanify-ag-model",
+ "humanify-ag-testkit",
  "oxc_allocator",
  "oxc_ast",
  "oxc_estree",
@@ -545,14 +547,18 @@ dependencies = [
  "humanify-ag-cli",
  "humanify-ag-core",
  "humanify-ag-model",
+ "humanify-ag-testkit",
  "memchr",
  "oxc_allocator",
  "oxc_ast",
  "oxc_estree",
  "oxc_span",
+ "proc-macro2",
+ "quote",
  "serde",
  "serde_json",
  "sha2",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -578,6 +584,7 @@ version = "0.0.0"
 dependencies = [
  "futures-util",
  "humanify-ag-model",
+ "humanify-ag-testkit",
  "reqwest",
  "serde",
  "serde_json",

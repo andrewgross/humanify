@@ -261,6 +261,27 @@
       "reason": "recv_timeout until ONE deadline from before spawn: it covers stdin, both outputs and the exit together (rule 3); on expiry the process group is SIGKILLed and the caller gets TimedOut"
     },
     {
+      "file": "crates/humanify-ag-core/src/subprocess.rs",
+      "scope": "run_inherited",
+      "construct": "channel",
+      "pattern": "subprocess",
+      "reason": "one bounded sync_channel (capacity 1, one sender) carries the exit waiter's status; a disconnect (the waiter panicked) kills the group and is an error"
+    },
+    {
+      "file": "crates/humanify-ag-core/src/subprocess.rs",
+      "scope": "run_inherited",
+      "construct": "thread-spawn",
+      "pattern": "subprocess",
+      "reason": "the exit waiter: one plain thread that sends exactly one event; stdout and stderr are inherited, not piped, so there is nothing to drain and nothing can block on a full pipe"
+    },
+    {
+      "file": "crates/humanify-ag-core/src/subprocess.rs",
+      "scope": "run_inherited",
+      "construct": "timeout",
+      "pattern": "subprocess",
+      "reason": "recv_timeout until ONE deadline from just after spawn over the whole run (rule 3); on expiry the process group is SIGKILLed and the caller gets TimedOut"
+    },
+    {
       "file": "crates/humanify-ag-core/src/unpack/webcrack.rs",
       "scope": "unpack_webcrack",
       "construct": "subprocess",
@@ -642,10 +663,10 @@
     },
     {
       "file": "crates/humanify-ag-dev/src/proc.rs",
-      "scope": "run",
+      "scope": "command",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "the harness's ONE Command::new: every child it starts goes through humanify_ag_core::subprocess::run (all pipes drained at once, one deadline over the whole run, the process group killed on expiry, every failure returned); callers pick the deadline (git 60 s, a release build 1 h)"
+      "reason": "the harness's ONE Command::new: every child it starts goes through humanify_ag_core::subprocess::run (all pipes drained at once, one deadline over the whole run, the process group killed on expiry, every failure returned), or run_inherited for a gate stage whose output streams (nothing piped, the same one deadline and group kill); callers pick the deadline (git 60 s, a release build 1 h)"
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
@@ -663,35 +684,35 @@
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
-      "scope": "StubServer::start",
+      "scope": "StubServer::serve",
       "construct": "channel",
       "pattern": "test-support",
       "reason": "test-support crate (a dev-dependency only, never linked into a product binary): a bounded (1) channel that hands the bound address back to the starting test, once"
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
-      "scope": "StubServer::start",
+      "scope": "StubServer::serve",
       "construct": "thread-spawn",
       "pattern": "test-support",
       "reason": "test-support crate (a dev-dependency only, never linked into a product binary): the stub server's own thread, apart from the code under test; it lives until the test process ends"
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
-      "scope": "StubServer::start",
+      "scope": "StubServer::serve",
       "construct": "runtime-builder",
       "pattern": "test-support",
       "reason": "test-support crate (a dev-dependency only, never linked into a product binary): the stub server's own current_thread runtime on its own thread \u2014 never the code under test's runtime, never nested"
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
-      "scope": "StubServer::start",
+      "scope": "StubServer::serve",
       "construct": "block-on",
       "pattern": "test-support",
       "reason": "test-support crate (a dev-dependency only, never linked into a product binary): drives the stub's accept loop on its own runtime, on its own thread"
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
-      "scope": "StubServer::start",
+      "scope": "StubServer::serve",
       "construct": "tokio-spawn",
       "pattern": "test-support",
       "reason": "test-support crate (a dev-dependency only, never linked into a product binary): one task per accepted connection, so concurrent requests overlap and the peak in flight can be measured; they end with their connection"

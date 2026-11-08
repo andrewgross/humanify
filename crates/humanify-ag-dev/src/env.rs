@@ -22,6 +22,11 @@ pub struct HostEnv {
     /// long verb must not take it again (ONE lock layer: a nested flock on
     /// the same file deadlocks every lane — exp155, exp176).
     pub held_lock: bool,
+    /// This binary's own path: the gate re-invokes it for its in-crate
+    /// stages (`census concurrency`, `e2e`, ...).
+    pub current_exe: Option<PathBuf>,
+    /// The working directory, for resolving a relative path the user typed.
+    pub cwd: Option<PathBuf>,
 }
 
 /// Read the host environment. The allow is the point: this function is
@@ -33,6 +38,8 @@ pub fn host() -> HostEnv {
         home: std::env::var_os("HOME").map(PathBuf::from),
         path: std::env::var("PATH").ok(),
         held_lock: std::env::var_os("HELD_LOCK").is_some_and(|v| !v.is_empty()),
+        current_exe: std::env::current_exe().ok(),
+        cwd: std::env::current_dir().ok(),
     }
 }
 
@@ -71,7 +78,7 @@ mod tests {
         let env = HostEnv {
             home: Some(PathBuf::from("/h")),
             path: Some("/usr/bin:/bin".into()),
-            held_lock: false,
+            ..HostEnv::default()
         };
         assert_eq!(env.child_path(), "/h/.cargo/bin:/h/.bun/bin:/usr/bin:/bin");
         assert_eq!(HostEnv::default().child_path(), "");

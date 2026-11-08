@@ -32,8 +32,9 @@ pub fn asked_identifiers(request_body: &str) -> Vec<String> {
     Vec::new()
 }
 
-/// The user prompt of a request (the last message's content).
-fn user_prompt(request_body: &str) -> String {
+/// The user prompt of a request (the last message's content; empty when
+/// the body is not a chat request).
+pub fn user_prompt(request_body: &str) -> String {
     serde_json::from_str::<serde_json::Value>(request_body)
         .ok()
         .and_then(|v| {

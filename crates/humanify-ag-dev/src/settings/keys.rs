@@ -146,6 +146,15 @@ pub static HARNESS_KEYS: &[Key] = &[
         "The pipeline binary to run (in some cargo workspace's target/, so its build \
          commit is known).",
     ),
+    path_key(
+        "run",
+        "out",
+        Some("--out"),
+        "the verb's own default: a rescore writes beside the committed results, a dev tool \
+         into a fresh directory it prints",
+        "Where a verb writes its output (a rescore's cards, summary.json and timing.json; \
+         e2e's kept trees; ask-trace's dumps; match-truth's scorecard).",
+    ),
     Key {
         section: "run",
         name: "pipeline_set",
@@ -333,13 +342,6 @@ pub static HARNESS_KEYS: &[Key] = &[
     ),
     path_key(
         "libscore",
-        "out",
-        Some("--out"),
-        "the committed results dir (a private corpus's cards beside its reports)",
-        "Where a rescore writes its cards, summary.json and timing.json (one directory).",
-    ),
-    path_key(
-        "libscore",
         "truth",
         Some("--truth"),
         "required by `eval vendor-precision check`",
@@ -460,6 +462,95 @@ pub static HARNESS_KEYS: &[Key] = &[
         "Concurrent package builds per chunk.",
     ),
     count_key("index", "merge_jobs", None, "1", "Concurrent shard merges."),
+    // [dev] — the gate, the censuses and the dev tools (lane L4).
+    Key {
+        section: "dev",
+        name: "only",
+        kind: Kind::List(None),
+        flag: Some("--only"),
+        default: empty,
+        unset: "",
+        doc: "Run only these named parts: `check`'s stage names (the run is then labelled \
+              PARTIAL and is never a green gate), or `match-truth`'s package names.",
+    },
+    Key {
+        section: "dev",
+        name: "files",
+        kind: Kind::List(None),
+        flag: Some("--files"),
+        default: empty,
+        unset: "",
+        doc: "Census only these files (the pre-commit hook's staged files): only their \
+              unlisted sites, their stale entries and their allow comments are reported; a \
+              list with no `.rs` path is a full run.",
+    },
+    switch(
+        "dev",
+        "loose",
+        "--loose",
+        off,
+        "The clone census's review sweep: a lower cutoff plus literal-blurred matching; \
+         always exits 0.",
+    ),
+    path_key(
+        "dev",
+        "root",
+        Some("--root"),
+        "this repository",
+        "The tree a census scans (a planted test tree; default: this repository).",
+    ),
+    path_key(
+        "dev",
+        "allowlist",
+        Some("--allowlist"),
+        "scripts/concurrency-allowlist.json",
+        "The concurrency census's allowlist file.",
+    ),
+    Key {
+        section: "dev",
+        name: "base",
+        kind: Kind::Text,
+        flag: Some("--base"),
+        default: || text("main"),
+        unset: "",
+        doc: "The git ref the slop census measures its deltas against (at its merge-base \
+              with HEAD).",
+    },
+    path_key(
+        "dev",
+        "prior",
+        Some("--prior"),
+        "a cold run",
+        "ask-trace: run with --prior-version <path>.",
+    ),
+    path_key(
+        "dev",
+        "collide",
+        Some("--collide"),
+        "every identifier is answered <id>Renamed",
+        "ask-trace: the stub names EVERY identifier this one name, forcing collisions.",
+    ),
+    switch(
+        "dev",
+        "sequential",
+        "--sequential",
+        off,
+        "ask-trace: the conservative naming schedule.",
+    ),
+    count_key(
+        "dev",
+        "port",
+        Some("--port"),
+        "a free port, printed",
+        "The port `stub-llm serve` listens on (127.0.0.1).",
+    ),
+    path_key(
+        "dev",
+        "corpus_dir",
+        Some("--corpus-dir"),
+        "/work/match-truth-corpus",
+        "match-truth: where the pinned npm corpus is cached.",
+    ),
 ];
 
 /// Retired spellings, refused naming what replaced them (eval.ts
@@ -493,6 +584,7 @@ const SECTION_TITLES: &[(&str, &str)] = &[
     ("boot", "Boot gate"),
     ("scorer", "Eval scorer"),
     ("index", "Index build"),
+    ("dev", "Gate and dev tools"),
 ];
 
 /// The harness's registry.

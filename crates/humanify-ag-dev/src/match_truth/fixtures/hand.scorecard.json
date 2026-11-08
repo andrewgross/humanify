@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "path": "index.js",
+  "functions": {
+    "priorCount": 6,
+    "freshCount": 6,
+    "priorNames": [
+      "alpha",
+      "renamed",
+      "near",
+      "far",
+      "dupe",
+      "dupe"
+    ],
+    "mustMatch": 2,
+    "matchedOfMust": 2,
+    "recall": 1,
+    "duplicateClass": 4,
+    "shouldMatch": 1,
+    "matchedOfShould": 1,
+    "shouldRecall": 1,
+    "reported": 5,
+    "reportedClasses": {
+      "identical": 3,
+      "near": 1,
+      "far": 1
+    },
+    "tierCounts": {
+      "identity": 2
+    },
+    "missedMust": [],
+    "missedShould": [],
+    "farPairs": [
+      {
+        "priorName": "far",
+        "freshName": "dupe",
+        "tier": "interchangeable",
+        "priorSlice": "function y(n) {\n  var s = 0;\n  while (n > 0) {\n    s += n % 10;\n    n = Math.floor(n / 10);\n  }\n  s = s * s;\n  s += 1000;\n  if (s > 5) {\n    s = 0;\n  }\n  return s;\n}",
+        "freshSlice": "function dupe() {\n  return 1;\n}"
+      }
+    ]
+  },
+  "statements": {
+    "priorCount": 2,
+    "freshCount": 2,
+    "mustMatch": 1,
+    "proposedOfMust": 1,
+    "bridgedOfMust": 1,
+    "recall": 1,
+    "duplicateClass": 0
+  }
+}

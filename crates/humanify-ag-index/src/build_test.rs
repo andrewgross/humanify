@@ -1021,6 +1021,32 @@ fn merge_jobs_partitions_merge_into_the_same_index_dir() {
     assert_eq!(h[1], 6, "one callee list per owner, shared across ranges");
 }
 
+/// How the hand-run anchor is launched.
+const EXP162_USAGE: &str =
+    "usage: EXP162_ANCHOR_DIR=<dir> cargo test -p humanify-ag-index -- --ignored exp162_anchor";
+
+/// The anchor's output dir. A hand run without it must FAIL with the
+/// usage line — it used to return green having checked nothing, which is
+/// exactly the hand-run case the anchor exists for.
+fn exp162_anchor_dir(var: Option<String>) -> std::path::PathBuf {
+    match var {
+        Some(d) if !d.is_empty() => std::path::PathBuf::from(d),
+        _ => panic!("EXP162_ANCHOR_DIR is not set — {EXP162_USAGE}"),
+    }
+}
+
+#[test]
+#[should_panic(expected = "usage: EXP162_ANCHOR_DIR=<dir> cargo test")]
+fn exp162_anchor_without_its_dir_panics_with_the_usage_line() {
+    exp162_anchor_dir(None);
+}
+
+#[test]
+#[should_panic(expected = "usage: EXP162_ANCHOR_DIR=<dir> cargo test")]
+fn exp162_anchor_with_an_empty_dir_panics_with_the_usage_line() {
+    exp162_anchor_dir(Some(String::new()));
+}
+
 /// exp162's byte-identity anchor, run by hand (`cargo test -p
 /// humanify-ag-index -- --ignored exp162_anchor`): writes the fixture store
 /// under `EXP162_ANCHOR_DIR` and merges it with THIS build at
@@ -1033,10 +1059,7 @@ fn merge_jobs_partitions_merge_into_the_same_index_dir() {
 // fixture generator, never a pipeline switch; WP1.1 reads env once)
 #[allow(clippy::disallowed_methods)]
 fn exp162_anchor() {
-    let dir = match std::env::var("EXP162_ANCHOR_DIR") {
-        Ok(d) if !d.is_empty() => std::path::PathBuf::from(d),
-        _ => return,
-    };
+    let dir = exp162_anchor_dir(std::env::var("EXP162_ANCHOR_DIR").ok());
     std::fs::create_dir_all(&dir).expect("mkdir");
     exp162_fixture(&dir);
     let mut dirs = vec![index_bytes(&{

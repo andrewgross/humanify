@@ -7,9 +7,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use humanify_ag_model::llm::{BatchRenameRequest, LlmCall, NameProvider};
-use humanify_ag_testkit::answers::{asked_identifiers, collide, renamed};
-use humanify_ag_testkit::fake::ShuffledFake;
-use humanify_ag_testkit::stub_server::{StubResponse, StubServer};
+use humanify_ag_testkit::answers::{asked_identifiers, collide, renamed, user_prompt};
+use humanify_ag_testkit::fake::{ShuffledFake, names, reply};
+use humanify_ag_testkit::stub_server::{StubResponse, StubServer, dead_endpoint};
 
 fn chat(ids: &str) -> String {
     serde_json::json!({
@@ -200,5 +200,143 @@ fn the_fakes_wave_keeps_call_order() {
     assert_eq!(
         names,
         [Some("aRenamed".to_string()), Some("bRenamed".to_string())]
+    );
+}
+
+/// A per-response delay (added after the handler answers): a later
+/// request can finish first — completion order is not arrival order.
+#[test]
+fn a_response_can_carry_its_own_delay() {
+    let stub = Arc::new(StubServer::start(
+        Duration::ZERO,
+        Arc::new(|i, _| {
+            let wait = if i == 0 { 400 } else { 0 };
+            StubResponse::ok(format!("{i}")).after(Duration::from_millis(wait))
+        }),
+    ));
+    let (tx, rx) = std::sync::mpsc::channel();
+    let first = {
+        let (url, tx) = (stub.base_url.clone(), tx.clone());
+        std::thread::spawn(move || tx.send(post(&url, "{}")).unwrap())
+    };
+    // Let the first request arrive (index 0) before the second.
+    while stub.requests() == 0 {
+        std::thread::yield_now();
+    }
+    let second = {
+        let url = stub.base_url.clone();
+        std::thread::spawn(move || tx.send(post(&url, "{}")).unwrap())
+    };
+    first.join().unwrap();
+    second.join().unwrap();
+    let order: Vec<String> = rx
+        .iter()
+        .map(|raw| raw.split_once("\r\n\r\n").unwrap().1.to_string())
+        .collect();
+    assert_eq!(order, ["1", "0"], "the delayed first request finished last");
+}
+
+/// A response that sends its head and part of its body, then stalls
+/// with the connection open (a half-open link, a wedged proxy).
+#[test]
+fn a_response_can_stall_after_its_head() {
+    let stub = StubServer::start(
+        Duration::ZERO,
+        Arc::new(|_, _| StubResponse::stalled(1000, "{\"choi")),
+    );
+    let addr = stub
+        .base_url
+        .trim_start_matches("http://")
+        .trim_end_matches("/v1");
+    let mut s = TcpStream::connect(addr).unwrap();
+    s.set_read_timeout(Some(Duration::from_millis(500)))
+        .unwrap();
+    write!(
+        s,
+        "POST /v1/chat/completions HTTP/1.1\r\nhost: x\r\ncontent-length: 2\r\n\r\n{{}}"
+    )
+    .unwrap();
+    let mut got = String::new();
+    let mut buf = [0u8; 4096];
+    let timed_out = loop {
+        match s.read(&mut buf) {
+            Ok(0) => break false,
+            Ok(n) => got.push_str(&String::from_utf8_lossy(&buf[..n])),
+            Err(_) => break true,
+        }
+    };
+    assert!(timed_out, "the connection stays open: {got}");
+    assert!(
+        got.starts_with("HTTP/1.1 200") && got.contains("content-length: 1000"),
+        "{got}"
+    );
+    assert!(got.ends_with("\r\n\r\n{\"choi"), "{got}");
+}
+
+/// An endpoint nothing listens on: a connection to it is refused.
+#[test]
+fn a_dead_endpoint_refuses_connections() {
+    let url = dead_endpoint();
+    let addr = url.trim_start_matches("http://").trim_end_matches("/v1");
+    assert!(TcpStream::connect(addr).is_err(), "{url}");
+}
+
+#[test]
+fn the_user_prompt_is_the_last_message() {
+    assert_eq!(
+        user_prompt(&chat("a")),
+        "code\nIdentifiers to rename: a\nmore"
+    );
+    assert_eq!(user_prompt("not json"), "");
+}
+
+/// `answering` takes a plain closure; `calls` records every call the fake
+/// answered, in answer order (waves and pipelined alike); `reply` and
+/// `names` build responses.
+#[test]
+fn the_fake_records_its_calls_and_builds_replies() {
+    let fake = ShuffledFake::answering(3, |c| {
+        if c.request.identifiers == ["skip"] {
+            return reply([("skip", None)]);
+        }
+        names(c, |id| format!("{id}X"))
+    });
+    let out = fake.run_wave(vec![call("a"), call("skip")]);
+    assert_eq!(out[0].as_ref().unwrap().renames.get("a"), Some("aX"));
+    assert_eq!(out[1].as_ref().unwrap().renames.get("skip"), None);
+    let mut done = Vec::new();
+    fake.run_pipelined(
+        (0..4).map(|i| (i, call(&format!("p{i}")))).collect(),
+        &mut |id, _| {
+            done.push(id);
+            vec![]
+        },
+    );
+    let asked: Vec<String> = fake
+        .calls()
+        .iter()
+        .map(|c| c.request.identifiers[0].clone())
+        .collect();
+    let mut expect = vec!["a".to_string(), "skip".to_string()];
+    expect.extend(done.iter().map(|i| format!("p{i}")));
+    assert_eq!(asked, expect, "answer order, the shuffled half included");
+}
+
+#[test]
+fn the_stub_serves_on_a_given_port_and_refuses_a_taken_one() {
+    let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = free.local_addr().unwrap().port();
+    drop(free);
+    let handler: humanify_ag_testkit::stub_server::Handler =
+        Arc::new(|_, body| StubResponse::ok(renamed(body)));
+    let s = StubServer::serve(port, Duration::ZERO, handler.clone()).unwrap();
+    assert_eq!(s.base_url, format!("http://127.0.0.1:{port}/v1"));
+    assert!(post(&s.base_url, &chat("a")).contains("aRenamed"));
+    let taken = StubServer::serve(port, Duration::ZERO, handler)
+        .err()
+        .unwrap();
+    assert!(
+        taken.contains(&format!("cannot bind 127.0.0.1:{port}")),
+        "{taken}"
     );
 }

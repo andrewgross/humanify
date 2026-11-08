@@ -21,8 +21,12 @@ humanify-ag-cli = { path = "../humanify-ag-cli" }
 humanify-ag-core = { path = "../humanify-ag-core" }
 # JSON the way JavaScript writes it (the JS spelling of a card).
 humanify-ag-model = { path = "../humanify-ag-model" }
+# The ONE stub LLM (e2e, ask-trace, `stub-llm serve`) — the harness is
+# not a product binary, so it links the test support directly.
+humanify-ag-testkit = { path = "../humanify-ag-testkit" }
 # The eval scorer parses emitted trees with the pipeline's own parse
-# (`humanify_ag_core::ingest`) and walks its AST.
+# (`humanify_ag_core::ingest`) and walks its AST; match-truth's
+# canonicalizer parses a slice into the same arena.
 oxc_allocator.workspace = true
 oxc_ast.workspace = true
 oxc_estree.workspace = true
@@ -31,6 +35,10 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 clap.workspace = true
+# The censuses parse crates/ (clones, slop).
+syn.workspace = true
+quote.workspace = true
+proc-macro2.workspace = true
 flate2.workspace = true
 memchr.workspace = true
 

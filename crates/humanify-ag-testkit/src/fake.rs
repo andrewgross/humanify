@@ -6,6 +6,14 @@
 //! in-flight calls in a seeded random order — same seed, same order — so
 //! a test can run one input under several seeds and require the same
 //! output.
+//!
+//! Test-specific behaviour (counting asks, failing the Nth call, answering
+//! retries differently) lives in the per-test answer closure; the calls
+//! the fake answered are recorded for the test to read back
+//! ([`ShuffledFake::calls`]). An answer that depends on a counter rather
+//! than on the call itself is order-dependent by construction — under
+//! the shuffled order it can only be trusted for calls the pipeline
+//! serialises (a re-ask after its ask).
 
 use std::cell::{Cell, RefCell};
 
@@ -23,6 +31,32 @@ pub struct ShuffledFake {
     state: Cell<u64>,
     /// The ids of completed calls, in completion order.
     completed: RefCell<Vec<usize>>,
+    /// Every call answered, in answer order.
+    calls: RefCell<Vec<LlmCall>>,
+}
+
+/// A response carrying exactly `entries` (`None`: that id declined).
+pub fn reply<K: Into<String>>(
+    entries: impl IntoIterator<Item = (K, Option<String>)>,
+) -> Result<BatchRenameResponse, LlmError> {
+    Ok(BatchRenameResponse {
+        renames: Renames::from_entries(entries.into_iter().map(|(k, v)| (k.into(), v))),
+        finish_reason: None,
+        usage: None,
+    })
+}
+
+/// A response naming every identifier of `call` `name(id)`.
+pub fn names(
+    call: &LlmCall,
+    name: impl Fn(&str) -> String,
+) -> Result<BatchRenameResponse, LlmError> {
+    reply(
+        call.request
+            .identifiers
+            .iter()
+            .map(|id| (id.clone(), Some(name(id)))),
+    )
 }
 
 /// Every identifier of the request renamed to `<id>Renamed` (the stub
@@ -47,7 +81,27 @@ impl ShuffledFake {
             // xorshift has one fixed point, zero.
             state: Cell::new(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1),
             completed: RefCell::new(Vec::new()),
+            calls: RefCell::new(Vec::new()),
         }
+    }
+
+    /// [`ShuffledFake::new`] over a plain closure.
+    pub fn answering(
+        seed: u64,
+        answer: impl Fn(&LlmCall) -> Result<BatchRenameResponse, LlmError> + 'static,
+    ) -> ShuffledFake {
+        ShuffledFake::new(seed, Box::new(answer))
+    }
+
+    /// Every call answered so far, in answer order (a wave's in call
+    /// order, a pipelined round's in its shuffled completion order).
+    pub fn calls(&self) -> Vec<LlmCall> {
+        self.calls.borrow().clone()
+    }
+
+    fn answer(&self, call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
+        self.calls.borrow_mut().push(call.clone());
+        (self.answer)(call)
     }
 
     /// The `<id>Renamed` fake.
@@ -74,7 +128,7 @@ impl ShuffledFake {
 impl NameProvider for ShuffledFake {
     /// One result per call, in call order (the trait's contract).
     fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
-        calls.iter().map(|c| (self.answer)(c)).collect()
+        calls.iter().map(|c| self.answer(c)).collect()
     }
 
     /// Every in-flight call may finish next: one is drawn, answered and
@@ -84,7 +138,7 @@ impl NameProvider for ShuffledFake {
         while !in_flight.is_empty() {
             let pick = (self.next() % in_flight.len() as u64) as usize;
             let (id, call) = in_flight.swap_remove(pick);
-            let result = (self.answer)(&call);
+            let result = self.answer(&call);
             self.completed.borrow_mut().push(id);
             in_flight.extend(on_done(id, result));
         }

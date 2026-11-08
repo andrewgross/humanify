@@ -15,6 +15,8 @@ reqwest.workspace = true
 futures-util.workspace = true
 
 [dev-dependencies]
+# the ONE stub LLM server (docs/dev-harness.md §6)
+humanify-ag-testkit = { path = "../humanify-ag-testkit" }
 tokio = { workspace = true, features = ["rt", "time", "sync", "macros", "net", "io-util", "test-util"] }
 
 [lints]

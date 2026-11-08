@@ -6,7 +6,9 @@
 //! The ask-trace pins (the `--dump-asks` record): every re-ask records its
 //! reask class, and the record is bounded — exactly one retry per scope.
 
-use std::cell::RefCell;
+use std::cell::Cell;
+
+use humanify_ag_testkit::fake::{ShuffledFake, names, reply};
 
 use super::{build_retry_used_names, extract_retry_snippet};
 use crate::naming::ask_trace::RetryCause;
@@ -49,18 +51,32 @@ fn retain_log() -> crate::artifact_dump::DispatchLog {
     crate::artifact_dump::DispatchLog::retain_for_tests(plain_config().params)
 }
 
-/// A provider answering every requested identifier through `name_of`
-/// (defaults to `<id>Named`).
-struct MapProvider {
-    a_asks: RefCell<usize>,
+/// A fake answering every requested identifier through `name_of`
+/// (defaults to `<id>Named`); a RE-ASK of `a` after its first ask is
+/// offered a fresh name.
+fn map_provider() -> ShuffledFake {
+    let a_asks = Cell::new(0usize);
+    ShuffledFake::answering(1, move |c| {
+        let out = reply(c.request.identifiers.iter().map(|id| {
+            let mut s = name_of(id);
+            if id == "a" && c.request.is_retry == Some(true) && a_asks.get() >= 1 {
+                s = "eventNameKey".to_string();
+            }
+            (id.clone(), Some(s))
+        }));
+        if c.request.identifiers.iter().any(|i| i == "a") {
+            a_asks.set(a_asks.get() + 1);
+        }
+        out
+    })
 }
 
-impl MapProvider {
-    fn new() -> MapProvider {
-        MapProvider {
-            a_asks: RefCell::new(0),
-        }
-    }
+/// How many calls `fake` answered that asked for `id`.
+fn asks_for(fake: &ShuffledFake, id: &str) -> usize {
+    fake.calls()
+        .iter()
+        .filter(|c| c.request.identifiers.iter().any(|i| i == id))
+        .count()
 }
 
 fn name_of(id: &str) -> String {
@@ -94,44 +110,6 @@ fn plain_name(id: &str) -> String {
     }
 }
 
-impl humanify_ag_model::llm::NameProvider for MapProvider {
-    fn run_wave(
-        &self,
-        calls: Vec<humanify_ag_model::llm::LlmCall>,
-    ) -> Vec<Result<humanify_ag_model::llm::BatchRenameResponse, humanify_ag_model::llm::LlmError>>
-    {
-        calls
-            .into_iter()
-            .map(|c| {
-                let entries: Vec<(String, Option<String>)> = c
-                    .request
-                    .identifiers
-                    .iter()
-                    .map(|id| {
-                        let mut s = name_of(id);
-                        // On any RE-ASK of `a`, offer a fresh name.
-                        if id == "a"
-                            && c.request.is_retry == Some(true)
-                            && *self.a_asks.borrow() >= 1
-                        {
-                            s = "eventNameKey".to_string();
-                        }
-                        (id.clone(), Some(s))
-                    })
-                    .collect();
-                if c.request.identifiers.iter().any(|i| i == "a") {
-                    *self.a_asks.borrow_mut() += 1;
-                }
-                Ok(humanify_ag_model::llm::BatchRenameResponse {
-                    renames: humanify_ag_model::llm::Renames::from_entries(entries),
-                    finish_reason: None,
-                    usage: None,
-                })
-            })
-            .collect()
-    }
-}
-
 /// Fix 1, function path: a function asked in a LATER wave must be told, in
 /// its "Names already in use" avoid-list, the names earlier waves' renames
 /// left in its scope chain. `eventHooks` and `qBase` look eligible (they
@@ -154,7 +132,7 @@ fn a_later_waves_prompt_lists_the_names_earlier_waves_applied() {
             statement_holds: &[],
         },
         &plain_config(),
-        &MapProvider::new(),
+        &map_provider(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -203,7 +181,7 @@ fn a_module_collision_retry_discloses_and_lists_the_names_the_run_applied() {
             statement_holds: &[],
         },
         &plain_config(),
-        &MapProvider::new(),
+        &map_provider(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -286,7 +264,7 @@ fn a_cross_lane_collision_gets_exactly_one_disclosed_reask() {
     let fresh = format!(
         "function hooks({params}) {{\n{vars}  return a + e + v00;\n}}\nconsole.log(hooks(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1));\n"
     );
-    let provider = MapProvider::new();
+    let provider = map_provider();
     let out = crate::naming::driver::run_naming(
         &crate::naming::driver::NamingInput {
             fresh: &fresh,
@@ -302,7 +280,7 @@ fn a_cross_lane_collision_gets_exactly_one_disclosed_reask() {
         &mut retain_log(),
     )
     .expect("the stage runs");
-    let a_asks = *provider.a_asks.borrow();
+    let a_asks = asks_for(&provider, "a");
     assert_eq!(a_asks, 2, "`a` is asked exactly twice (ask + one re-ask)");
     let retry = out
         .waves
@@ -354,7 +332,7 @@ fn the_collision_reask_records_its_cause_and_is_bounded_in_the_ask_log() {
             statement_holds: &[],
         },
         &plain_config(),
-        &MapProvider::new(),
+        &map_provider(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -412,7 +390,7 @@ fn the_late_contexts_share_one_taken_snapshot() {
             statement_holds: &[],
         },
         &plain_config(),
-        &MapProvider::new(),
+        &map_provider(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -455,7 +433,7 @@ fn the_strategy_split_pins_the_taken_sets_on_a_same_wave_pair() {
             statement_holds: &[],
         },
         &plain_config(),
-        &MapProvider::new(),
+        &map_provider(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -628,56 +606,22 @@ fn a_js_set_moves_a_renamed_member_to_the_end() {
 /// `p` suggests `taken` on the first ask — a name that shadows the child
 /// function's own binding, a class the lane's used-set check cannot see, so
 /// only the scope-safety check rejects it at claim time.
-struct LateProvider {
-    p_asks: RefCell<u32>,
-}
-
-impl LateProvider {
-    fn new() -> LateProvider {
-        LateProvider {
-            p_asks: RefCell::new(0),
-        }
-    }
-}
-
-impl humanify_ag_model::llm::NameProvider for LateProvider {
-    fn run_wave(
-        &self,
-        calls: Vec<humanify_ag_model::llm::LlmCall>,
-    ) -> Vec<Result<humanify_ag_model::llm::BatchRenameResponse, humanify_ag_model::llm::LlmError>>
-    {
-        calls
-            .into_iter()
-            .map(|c| {
-                let entries: Vec<(String, Option<String>)> = c
-                    .request
-                    .identifiers
-                    .iter()
-                    .map(|id| {
-                        let s = match id.as_str() {
-                            "e0" => "outerFn".to_string(),
-                            "p" => {
-                                let mut n = self.p_asks.borrow_mut();
-                                *n += 1;
-                                if *n == 1 {
-                                    "taken".to_string()
-                                } else {
-                                    "paramValue".to_string()
-                                }
-                            }
-                            other => format!("{other}Named"),
-                        };
-                        (id.clone(), Some(s))
-                    })
-                    .collect();
-                Ok(humanify_ag_model::llm::BatchRenameResponse {
-                    renames: humanify_ag_model::llm::Renames::from_entries(entries),
-                    finish_reason: None,
-                    usage: None,
-                })
-            })
-            .collect()
-    }
+fn late_provider() -> ShuffledFake {
+    let p_asks = Cell::new(0u32);
+    ShuffledFake::answering(1, move |c| {
+        names(c, |id| match id {
+            "e0" => "outerFn".to_string(),
+            "p" => {
+                p_asks.set(p_asks.get() + 1);
+                if p_asks.get() == 1 {
+                    "taken".to_string()
+                } else {
+                    "paramValue".to_string()
+                }
+            }
+            other => format!("{other}Named"),
+        })
+    })
 }
 
 /// The lane round-2 ask trace (2026-09-29): a suggestion the scope-safety
@@ -692,7 +636,7 @@ fn a_late_rejected_suggestions_round2_records_the_rejections_cause_and_code() {
                  return function inner(taken) {\n  return taken + p;\n};\n\
                  }\n\
                  console.log(e0(1));\n";
-    let provider = LateProvider::new();
+    let provider = late_provider();
     let out = crate::naming::driver::run_naming(
         &crate::naming::driver::NamingInput {
             fresh,
@@ -723,7 +667,7 @@ fn a_late_rejected_suggestions_round2_records_the_rejections_cause_and_code() {
     );
     assert_eq!(retry.ask.cause, Some(RetryCause::NameTaken));
     assert_eq!(retry.ask.detail.as_deref(), Some("shadows-child"));
-    assert_eq!(*provider.p_asks.borrow(), 2, "ask + one round-2, bounded");
+    assert_eq!(asks_for(&provider, "p"), 2, "ask + one round-2, bounded");
     let code = out.code.expect("shipped");
     assert!(code.contains("paramValue"), "{code}");
 }
@@ -733,57 +677,35 @@ fn a_late_rejected_suggestions_round2_records_the_rejections_cause_and_code() {
 /// re-ask discloses EVERY prior suggestion and why it was rejected — both
 /// failed names, each with its own conflict line, in the do-not-suggest
 /// block. After the budget exhausts, the deterministic decoration applies.
-struct RoundProvider {
-    /// Retry dispatches served so far (the answers differ per round).
-    retries: RefCell<usize>,
-}
-
-impl RoundProvider {
-    fn new() -> RoundProvider {
-        RoundProvider {
-            retries: RefCell::new(0),
+fn round_provider() -> ShuffledFake {
+    // Retry dispatches served so far (the answers differ per round).
+    let retries = Cell::new(0usize);
+    ShuffledFake::answering(1, move |c| {
+        // First round: the q1/e0 collision. Re-ask 1 offers the sibling's
+        // applied name (taken); re-ask 2 offers the winner's name again.
+        let retry = c.request.is_retry == Some(true);
+        let out = names(c, |id| {
+            if !retry {
+                name_of(id)
+            } else if retries.get() == 0 {
+                "q2Named".to_string()
+            } else {
+                "eventHooks".to_string()
+            }
+        });
+        if retry {
+            retries.set(retries.get() + 1);
         }
-    }
+        out
+    })
 }
 
-impl humanify_ag_model::llm::NameProvider for RoundProvider {
-    fn run_wave(
-        &self,
-        calls: Vec<humanify_ag_model::llm::LlmCall>,
-    ) -> Vec<Result<humanify_ag_model::llm::BatchRenameResponse, humanify_ag_model::llm::LlmError>>
-    {
-        calls
-            .into_iter()
-            .map(|c| {
-                let entries: Vec<(String, Option<String>)> = c
-                    .request
-                    .identifiers
-                    .iter()
-                    .map(|id| {
-                        // First round: the q1/e0 collision. Re-ask 1
-                        // offers the sibling's applied name (taken);
-                        // re-ask 2 offers the winner's name again.
-                        let s = if c.request.is_retry != Some(true) {
-                            name_of(id)
-                        } else if *self.retries.borrow() == 0 {
-                            "q2Named".to_string()
-                        } else {
-                            "eventHooks".to_string()
-                        };
-                        (id.clone(), Some(s))
-                    })
-                    .collect();
-                if c.request.is_retry == Some(true) {
-                    *self.retries.borrow_mut() += 1;
-                }
-                Ok(humanify_ag_model::llm::BatchRenameResponse {
-                    renames: humanify_ag_model::llm::Renames::from_entries(entries),
-                    finish_reason: None,
-                    usage: None,
-                })
-            })
-            .collect()
-    }
+/// How many re-ask calls `fake` answered.
+fn retries_of(fake: &ShuffledFake) -> usize {
+    fake.calls()
+        .iter()
+        .filter(|c| c.request.is_retry == Some(true))
+        .count()
 }
 
 #[test]
@@ -792,7 +714,7 @@ fn the_second_reask_discloses_every_prior_suggestion_and_is_bounded() {
                  var q2 = 2;\n\
                  function e0(p) {\n  return p + q1;\n}\n\
                  console.log(e0(q2), q1, q2);\n";
-    let provider = RoundProvider::new();
+    let provider = round_provider();
     let out = crate::naming::driver::run_naming(
         &crate::naming::driver::NamingInput {
             fresh,
@@ -815,7 +737,7 @@ fn the_second_reask_discloses_every_prior_suggestion_and_is_bounded() {
         .filter(|d| d.request.is_retry == Some(true))
         .collect();
     assert_eq!(retry.len(), 2, "exactly the two re-asks of the budget");
-    assert_eq!(*provider.retries.borrow(), 2, "bounded: no third re-ask");
+    assert_eq!(retries_of(&provider), 2, "bounded: no third re-ask");
     let second = retry[1];
     let id = &second.request.identifiers[0];
     // Every prior suggestion, oldest first, each with its reason — and,
@@ -878,7 +800,7 @@ fn a_single_reask_budget_restores_the_old_bounded_behavior() {
             statement_holds: &[],
         },
         &config,
-        &MapProvider::new(),
+        &map_provider(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -915,7 +837,7 @@ fn a_zero_reask_budget_gives_up_on_the_ladder_and_stays_counted() {
             statement_holds: &[],
         },
         &config,
-        &MapProvider::new(),
+        &map_provider(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -952,43 +874,21 @@ fn a_zero_reask_budget_gives_up_on_the_ladder_and_stays_counted() {
     );
 }
 
-/// A provider answering through a closure over (identifier, the request):
-/// the borrowed-stem and do-not-list pins script their answers per round.
-struct ScriptProvider<F: Fn(&str, &humanify_ag_model::llm::BatchRenameRequest) -> String> {
-    answer: F,
+/// A fake answering through a closure over (identifier, the request).
+fn scripted(
+    answer: impl Fn(&str, &humanify_ag_model::llm::BatchRenameRequest) -> String + 'static,
+) -> ShuffledFake {
+    ShuffledFake::answering(1, move |c| names(c, |id| answer(id, &c.request)))
 }
 
-impl<F: Fn(&str, &humanify_ag_model::llm::BatchRenameRequest) -> String>
-    humanify_ag_model::llm::NameProvider for ScriptProvider<F>
-{
-    fn run_wave(
-        &self,
-        calls: Vec<humanify_ag_model::llm::LlmCall>,
-    ) -> Vec<Result<humanify_ag_model::llm::BatchRenameResponse, humanify_ag_model::llm::LlmError>>
-    {
-        calls
-            .into_iter()
-            .map(|c| {
-                let entries: Vec<(String, Option<String>)> = c
-                    .request
-                    .identifiers
-                    .iter()
-                    .map(|id| (id.clone(), Some((self.answer)(id, &c.request))))
-                    .collect();
-                Ok(humanify_ag_model::llm::BatchRenameResponse {
-                    renames: humanify_ag_model::llm::Renames::from_entries(entries),
-                    finish_reason: None,
-                    usage: None,
-                })
-            })
-            .collect()
-    }
-}
-
+/// A run against a fake answering through a closure over (identifier, the
+/// request): the borrowed-stem and do-not-list pins script their answers
+/// per round.
 fn run_scripted(
     fresh: &str,
-    answer: impl Fn(&str, &humanify_ag_model::llm::BatchRenameRequest) -> String,
+    answer: impl Fn(&str, &humanify_ag_model::llm::BatchRenameRequest) -> String + 'static,
 ) -> crate::naming::driver::NamingOutcome {
+    let fake = scripted(answer);
     crate::naming::driver::run_naming(
         &crate::naming::driver::NamingInput {
             fresh,
@@ -1000,7 +900,7 @@ fn run_scripted(
             statement_holds: &[],
         },
         &plain_config(),
-        &ScriptProvider { answer },
+        &fake,
         &mut retain_log(),
     )
     .expect("the stage runs")
@@ -1119,12 +1019,12 @@ fn a_stubborn_echo_exhausts_and_stays_a_sweep_target() {
             statement_holds: &[],
         },
         &config,
-        &ScriptProvider {
-            answer: |id: &str, _: &humanify_ag_model::llm::BatchRenameRequest| match id {
+        &scripted(
+            |id: &str, _: &humanify_ag_model::llm::BatchRenameRequest| match id {
                 "yl" | "i" => id.to_string(),
                 other => format!("{other}Named"),
             },
-        },
+        ),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1278,7 +1178,7 @@ console.log(r({ type: "plugin" }, true));
             statement_holds: &[],
         },
         &plain_config(),
-        &MapProvider::new(),
+        &map_provider(),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1491,12 +1391,12 @@ fn a_zero_reask_budget_ladders_a_lone_collision_as_before() {
             statement_holds: &[],
         },
         &config,
-        &ScriptProvider {
-            answer: |id: &str, _: &humanify_ag_model::llm::BatchRenameRequest| match id {
+        &scripted(
+            |id: &str, _: &humanify_ag_model::llm::BatchRenameRequest| match id {
                 "w" | "error" => "error".to_string(),
                 other => plain_name(other),
             },
-        },
+        ),
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1597,9 +1497,7 @@ fn a_zero_reask_budget_still_ladders_the_lane_end_collision() {
             statement_holds: &[],
         },
         &config,
-        &ScriptProvider {
-            answer: lane_end_answer,
-        },
+        &scripted(lane_end_answer),
         &mut retain_log(),
     )
     .expect("the stage runs");
