@@ -357,10 +357,25 @@ fn function_index_matches_the_ts_probe() {
             assert_eq!(rust_external, external, "{what}: externalCallees as a set");
         }
 
-        // BUCKETS: the partition must match.
+        // BUCKETS: the partition must match — up to ONE declared
+        // departure: since match-key/5 (exp200) a concise arrow body is its
+        // braced return, so `getCount: function () { return leaf(); }`
+        // (78:12) and `assigned = () => other()` (89:11) — the same code
+        // modulo local names — share a bucket the frozen TS probe kept
+        // apart.
+        let mut expected = ts_partition(&probe["functionBuckets"]);
+        let merged: BTreeSet<String> = expected
+            .iter()
+            .filter(|g| g.contains("input.js:78:12") || g.contains("input.js:89:11"))
+            .flatten()
+            .cloned()
+            .collect();
+        expected.retain(|g| g.is_disjoint(&merged));
+        expected.push(merged);
+        expected.sort();
         assert_eq!(
             rust_partition(&index),
-            ts_partition(&probe["functionBuckets"]),
+            expected,
             "function bucket partition"
         );
         // The twins share a bucket (the probe's only multi-member function

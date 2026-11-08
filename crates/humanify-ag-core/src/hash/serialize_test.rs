@@ -252,11 +252,18 @@ mod wrapper_spelling {
             matchkey("var b = () => { return b; };"),
             "named id must never unify"
         );
-        // A concise arrow body is not re-spellable without restructuring.
-        assert_ne!(
+        // exp200 superseded exp094's refusal here: a concise body IS its
+        // braced return (the concise-arrow-body transform, match-key/5), so
+        // a safe concise arrow reaches the function spelling through it.
+        assert_eq!(
             matchkey("var a = function (x) { return x; };"),
             matchkey("var b = x => x;"),
-            "concise arrow body must never unify with a block body"
+            "a safe concise arrow unifies through its braced return (exp200)"
+        );
+        assert_ne!(
+            matchkey("var a = function () { return this; };"),
+            matchkey("var b = () => this;"),
+            "a this-loaded concise arrow still never unifies"
         );
     }
 
@@ -342,9 +349,15 @@ mod wrapper_spelling {
             parts_of("var b = () => { return this; };").contains("ArrowFunctionExpression{"),
             "a this-loaded arrow keeps its own token"
         );
+        // exp200: a concise body walks as its braced return, so a safe
+        // concise arrow takes the unified token too; a loaded one does not.
         assert!(
-            parts_of("var b = x => x;").contains("ArrowFunctionExpression{"),
-            "a concise-bodied arrow keeps its own token"
+            parts_of("var b = x => x;").contains("FunctionExpression{"),
+            "a safe concise arrow emits the unified token (exp200)"
+        );
+        assert!(
+            parts_of("var b = () => this;").contains("ArrowFunctionExpression{"),
+            "a this-loaded concise arrow keeps its own token"
         );
     }
 }
@@ -472,6 +485,127 @@ fn canonical_tokens_cut_the_same_stream_at_token_boundaries() {
         assert!(
             tokens.iter().any(|x| x == t),
             "missing token {t}: {tokens:?}"
+        );
+    }
+}
+
+/// exp200 — the minifier-STYLE transforms of the match key. On 2.1.179 ->
+/// 2.1.181 about 130 vendor modules changed their factory hash although
+/// their source did not: the packaging tool spelled `x => { return y; }`
+/// as `x => y` and re-lettered class-private names
+/// (experiments/200-identity-transforms, census). The match key — the
+/// cross-version join of functions, statements and factories — hashes
+/// both spellings as one; a real change still differs.
+mod minifier_style {
+    use super::*;
+
+    #[test]
+    fn a_concise_arrow_body_is_its_braced_return() {
+        assert_eq!(
+            matchkey("var f = (a) => a.b(1);"),
+            matchkey("var f = (a) => { return a.b(1); };"),
+        );
+        // The parentheses the concise position forces (an object literal,
+        // a sequence) are grouping only.
+        assert_eq!(
+            matchkey("var f = (a) => ({ k: a });"),
+            matchkey("var f = (a) => { return { k: a }; };"),
+        );
+        assert_eq!(
+            matchkey("var f = (a) => (a.x(), a.y());"),
+            matchkey("var f = (a) => { return a.x(), a.y(); };"),
+        );
+        // Nested, and under the wrapper-spelling flip of the outer arrow.
+        assert_eq!(
+            matchkey("var f = function () { return (a) => (b) => a + b; };"),
+            matchkey("var f = () => { return (a) => { return (b) => { return a + b; }; }; };"),
+        );
+    }
+
+    /// The census's one leftover on 2.1.179 -> 2.1.181: parentheses INSIDE
+    /// the concise body, which only that position forces.
+    #[test]
+    fn parentheses_are_grouping_only() {
+        assert_eq!(
+            matchkey("var f = (a) => ({ ...a.p, ...a.q })[a.k];"),
+            matchkey("var f = (a) => { return { ...a.p, ...a.q }[a.k]; };"),
+        );
+        assert_eq!(matchkey("var x = (a.b)(c);"), matchkey("var x = a.b(c);"));
+        // The tree keeps what the parentheses decided: `(a + b) * c` is not
+        // `a + b * c`, and an optional chain cut by parentheses stays cut.
+        assert_ne!(
+            matchkey("var x = (a + b) * c;"),
+            matchkey("var x = a + b * c;")
+        );
+        assert_ne!(matchkey("var x = (a?.b).c;"), matchkey("var x = a?.b.c;"));
+    }
+
+    #[test]
+    fn a_real_change_under_the_restyle_still_differs() {
+        assert_ne!(
+            matchkey("var f = (a) => a + 1;"),
+            matchkey("var f = (a) => { return a + 2; };"),
+        );
+        // A braced body that does more than return is not the concise one.
+        assert_ne!(
+            matchkey("var f = (a) => a.b();"),
+            matchkey("var f = (a) => { a.b(); };"),
+        );
+        // `this` keeps an arrow an arrow: the concise arrow is still not a
+        // function expression (the wrapper-spelling condition).
+        assert_ne!(
+            matchkey("var f = () => this.x;"),
+            matchkey("var f = function () { return this.x; };"),
+        );
+        assert_eq!(
+            matchkey("var f = () => this.x;"),
+            matchkey("var f = () => { return this.x; };"),
+        );
+    }
+
+    #[test]
+    fn the_identity_key_keeps_both_spellings() {
+        assert_ne!(
+            verbatim("var f = (a) => a;"),
+            verbatim("var f = (a) => { return a; };"),
+        );
+    }
+
+    #[test]
+    fn class_private_names_are_slots_of_their_class() {
+        // A consistent re-lettering of the private names is the same code.
+        assert_eq!(
+            matchkey("class A { #a = 1; #b() { return this.#a; } c(o) { return #a in o; } }"),
+            matchkey("class A { #e = 1; #t() { return this.#e; } c(o) { return #e in o; } }"),
+        );
+        // Two classes re-lettered independently (`#a` in both became `#e`
+        // and `#t`): each name is a slot of ITS class.
+        assert_eq!(
+            matchkey(
+                "class A { #a; f() { return this.#a; } } class B { #a; g() { return this.#a; } }"
+            ),
+            matchkey(
+                "class A { #e; f() { return this.#e; } } class B { #t; g() { return this.#t; } }"
+            ),
+        );
+    }
+
+    #[test]
+    fn private_names_that_mean_different_fields_stay_apart() {
+        // Two fields collapsed into one is a real change.
+        assert_ne!(
+            matchkey("class A { #a; #b; f() { return this.#a + this.#b; } }"),
+            matchkey("class A { #a; #b; f() { return this.#a + this.#a; } }"),
+        );
+        // An inner class's own `#a` shadows the outer one.
+        assert_ne!(
+            matchkey("class A { #a; f() { return class { #a; g(o) { return o.#a; } }; } }"),
+            matchkey("class A { #a; f() { return class { #b; g(o) { return o.#a; } }; } }"),
+        );
+        // The identity key keeps the spelling.
+        assert_ne!(
+            verbatim("class A { #a; f() { return this.#a; } }"),
+            verbatim("class A { #e; f() { return this.#e; } }"),
         );
     }
 }

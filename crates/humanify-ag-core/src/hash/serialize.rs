@@ -169,7 +169,10 @@ fn walk(
         mapping: Vec::new(),
         counter: 0,
         keep_strings: form.strings == Strings::Exact,
-        blind_privates: form.privates == Privates::Blinded,
+        privates: form.privates,
+        private_scopes: Vec::new(),
+        private_slots: HashMap::new(),
+        classes: 0,
         transforms: form.transforms,
         parts: String::with_capacity(4096),
     };
@@ -194,7 +197,15 @@ struct State<'a> {
     mapping: Vec<(String, Option<SymbolId>, String)>,
     counter: u32,
     keep_strings: bool,
-    blind_privates: bool,
+    privates: Privates,
+    /// [`Privates::Slots`]: the enclosing class bodies, innermost last —
+    /// each one's ordinal and the private names it declares.
+    private_scopes: Vec<(u32, Vec<String>)>,
+    /// [`Privates::Slots`]: (declaring class ordinal, or None for a name no
+    /// walked class declares; name) -> slot ordinal, by first occurrence.
+    private_slots: HashMap<(Option<u32>, String), usize>,
+    /// Class bodies entered so far (the ordinals in `private_scopes`).
+    classes: u32,
     transforms: TransformSet,
     parts: String,
 }
@@ -312,8 +323,21 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
             serialize_node(&replacement, parent, key, state);
             return;
         }
+        Rewrite::Inner(child) => {
+            serialize_node(child, parent, key, state);
+            return;
+        }
         Rewrite::TypeToken(token) => state.parts.push_str(token),
         Rewrite::Keep => state.parts.push_str(&node_type),
+    }
+    // A class body opens a private-name scope (`Privates::Slots`).
+    let class_scope = node_type == "ClassBody" && state.privates == Privates::Slots;
+    if class_scope {
+        let ordinal = state.classes;
+        state.classes += 1;
+        state
+            .private_scopes
+            .push((ordinal, declared_private_names(map)));
     }
     state.parts.push('{');
     state.cut();
@@ -335,6 +359,24 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
     }
     state.parts.push('}');
     state.cut();
+    if class_scope {
+        state.private_scopes.pop();
+    }
+}
+
+/// The private names a class body declares: its fields', methods' and
+/// accessors' `#name` keys.
+fn declared_private_names(class_body: &serde_json::Map<String, Value>) -> Vec<String> {
+    let Some(elements) = class_body.get("body").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    elements
+        .iter()
+        .filter_map(|e| e.get("key"))
+        .filter(|k| k.get("type").and_then(Value::as_str) == Some("PrivateIdentifier"))
+        .filter_map(|k| k.get("name").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect()
 }
 
 /// Which spelling of an object member a walk's parents carry — the ONE
@@ -670,12 +712,30 @@ pub(crate) fn unwrappable_block<'a>(
 /// (the twin gate's masked stream, the library units, the rename
 /// signature) every private token reads `P=#` — at token emission, never
 /// as a substring pass over the stream, where a string literal could carry
-/// the same text.
-fn private_name_token(name: &str, state: &State<'_>) -> String {
-    if state.blind_privates {
-        return "P=#".to_string();
+/// the same text. Under `Privates::Slots` (the match key since exp200) a
+/// private name reads `P=#$<n>`: the slot of the innermost walked class
+/// body that declares it (an inner class's own `#x` shadows the outer's),
+/// numbered by first occurrence; a name no walked class declares is keyed
+/// by name alone.
+fn private_name_token(name: &str, state: &mut State<'_>) -> String {
+    match state.privates {
+        Privates::Blinded => "P=#".to_string(),
+        Privates::Slots => {
+            let class = state
+                .private_scopes
+                .iter()
+                .rev()
+                .find(|(_, names)| names.iter().any(|n| n == name))
+                .map(|(ordinal, _)| *ordinal);
+            let next = state.private_slots.len();
+            let slot = *state
+                .private_slots
+                .entry((class, name.to_string()))
+                .or_insert(next);
+            format!("P=#${slot}")
+        }
+        Privates::Verbatim | Privates::Masked => format!("P=#{name}"),
     }
-    format!("P=#{name}")
 }
 
 /// The stream's string escaping: JSON-safe, matching Node's `JSON.stringify`

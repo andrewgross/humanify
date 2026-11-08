@@ -732,3 +732,61 @@ fn bun_bundles_never_pick_up_the_esbuild_helper_name() {
     assert_eq!(factories.len(), 1);
     assert_eq!(factories[0].factory_var, "tO8");
 }
+
+// ── exp200: the factory hash ignores the packaging tool's STYLE ─────
+
+/// A commander-like module as one release's minifier spelled it: braced
+/// arrow bodies that only return, class-private names lettered `#H`/`#_`.
+const STYLE_A: &str = "var C1=x((q,m)=>{var p=(s)=>{return s.trim()};class K{#H=[];#_=null;option(f){return this.#H.push(p(f)),this}get opts(){return this.#H.map((o)=>{return o.name})}parent(){return this.#_}};m.exports=K;});";
+/// The SAME source as the next release's minifier spelled it: concise
+/// arrow bodies, private names re-lettered `#e`/`#t`, other local names.
+const STYLE_B: &str = "var Zq=x((A,B)=>{var r=(n)=>n.trim();class W{#e=[];#t=null;option(i){return this.#e.push(r(i)),this}get opts(){return this.#e.map((u)=>u.name)}parent(){return this.#t}};B.exports=W;});";
+/// A REAL change in the restyled release: `opts` maps a different field.
+const STYLE_B_CHANGED: &str = "var Zq=x((A,B)=>{var r=(n)=>n.trim();class W{#e=[];#t=null;option(i){return this.#e.push(r(i)),this}get opts(){return this.#e.map((u)=>u.long)}parent(){return this.#t}};B.exports=W;});";
+
+fn only_factory_hash(body: &str) -> String {
+    let factories = classify_of(&format!("{HELPER} {body}"));
+    assert_eq!(factories.len(), 1, "one factory in {body}");
+    factories[0].structural_hash.clone()
+}
+
+#[test]
+fn a_restyled_factory_keeps_its_structural_hash() {
+    // The exact carry's key (the vendor manifest's `structuralHash`).
+    assert_eq!(only_factory_hash(STYLE_A), only_factory_hash(STYLE_B));
+}
+
+#[test]
+fn a_real_change_in_a_restyled_factory_changes_its_hash() {
+    assert_ne!(
+        only_factory_hash(STYLE_A),
+        only_factory_hash(STYLE_B_CHANGED)
+    );
+    assert_ne!(
+        only_factory_hash(STYLE_B),
+        only_factory_hash(STYLE_B_CHANGED)
+    );
+}
+
+/// The stale-era carry re-keys a prior by content under the CARRY form
+/// (the match key's transforms), so a restyled module carries across an
+/// era bump too; the library index's whole-module print (`VENDOR_CONTENT`,
+/// stamped `vendor-content-key/4` in every built index) is untouched —
+/// the restyle still splits it, until the index is re-fingerprinted.
+#[test]
+fn the_carry_content_key_ignores_the_restyle_and_the_index_key_does_not() {
+    use crate::hash::forms::{CARRY_CONTENT, VENDOR_CONTENT};
+    use crate::modules::vendor_content::vendor_content_key;
+    let body = |src: &str| {
+        let start = src.find("x(").unwrap() + 2;
+        src[start..src.len() - 2].to_string()
+    };
+    let none = std::collections::HashSet::new();
+    let key = |src: &str, form| vendor_content_key(&body(src), &none, form).unwrap();
+    assert_eq!(key(STYLE_A, &CARRY_CONTENT), key(STYLE_B, &CARRY_CONTENT));
+    assert_ne!(
+        key(STYLE_A, &CARRY_CONTENT),
+        key(STYLE_B_CHANGED, &CARRY_CONTENT)
+    );
+    assert_ne!(key(STYLE_A, &VENDOR_CONTENT), key(STYLE_B, &VENDOR_CONTENT));
+}

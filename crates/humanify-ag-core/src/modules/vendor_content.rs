@@ -49,7 +49,7 @@ use super::known_globals::is_known_global;
 use super::vendor_names::PriorManifestEntry;
 use super::{CarriedName, FactoryRecord, NameSource, factory_structural_hash};
 use crate::babel_view::unparen;
-use crate::hash::forms::VENDOR_CONTENT;
+use crate::hash::forms::{CARRY_CONTENT, CanonicalForm, VENDOR_CONTENT};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 use crate::unpack::bun::rewrite_require_calls;
@@ -63,6 +63,7 @@ fn keyed(
     factory: &str,
     declared: &[String],
     program_declared: &HashSet<String>,
+    form: &CanonicalForm,
 ) -> Option<(String, Vec<String>)> {
     let mut src = String::with_capacity(factory.len() + 16 + declared.len() * 8);
     if !declared.is_empty() {
@@ -92,7 +93,7 @@ fn keyed(
     free.sort_unstable();
     let tables = SymbolTables::build(ingest.semantic());
     Some((
-        factory_structural_hash(unparen(&stmt.expression), &tables, &VENDOR_CONTENT)?,
+        factory_structural_hash(unparen(&stmt.expression), &tables, form)?,
         free,
     ))
 }
@@ -109,29 +110,43 @@ fn keyed(
 /// as `gc()` by nine others) is still a reference to the bundle — keyed
 /// verbatim, it split those nine from their prior files' `lib_<hash8>`.
 /// None when the text does not parse as one function.
-pub fn vendor_content_key(factory: &str, program_declared: &HashSet<String>) -> Option<String> {
-    let (hash, free) = keyed(factory, &[], program_declared)?;
+///
+/// `form` is [`VENDOR_CONTENT`] for the library index's whole-module print
+/// (both ends: the offline builder and the run's lookup) and
+/// [`CARRY_CONTENT`] for the stale-era carry's re-key (both sides in one
+/// run) — the same walk, under the index's stamped settings or the current
+/// match key's (exp200).
+pub fn vendor_content_key(
+    factory: &str,
+    program_declared: &HashSet<String>,
+    form: &CanonicalForm,
+) -> Option<String> {
+    let (hash, free) = keyed(factory, &[], program_declared, form)?;
     if free.is_empty() {
         return Some(hash);
     }
-    keyed(factory, &free, program_declared).map(|(hash, _)| hash)
+    keyed(factory, &free, program_declared, form).map(|(hash, _)| hash)
 }
 
-/// The fresh side: every classified factory's content key, in record
-/// order — its raw body with the unpack's `REQ(` → `require(` rewrite.
-/// `bundle_declared` is the bundle's statement-level names
-/// (`unpack::bun::scope::statement_level_names` over the container).
+/// The fresh side: every classified factory's content key under `form`
+/// ([`vendor_content_key`]), in record order — its raw body with the
+/// unpack's `REQ(` → `require(` rewrite. `bundle_declared` is the bundle's
+/// statement-level names (`unpack::bun::scope::statement_level_names` over
+/// the container).
 pub fn fresh_content_keys(
     code: &str,
     factories: &[FactoryRecord],
     require_var: Option<&str>,
     bundle_declared: &HashSet<String>,
+    form: &CanonicalForm,
 ) -> Vec<Option<String>> {
     crate::par::map_ordered(factories, |f| {
         let raw = &code[f.body_span.start as usize..f.body_span.end as usize];
         match require_var {
-            Some(req) => vendor_content_key(&rewrite_require_calls(raw, req), bundle_declared),
-            None => vendor_content_key(raw, bundle_declared),
+            Some(req) => {
+                vendor_content_key(&rewrite_require_calls(raw, req), bundle_declared, form)
+            }
+            None => vendor_content_key(raw, bundle_declared, form),
         }
     })
 }
@@ -171,7 +186,13 @@ pub fn bundle_content_keys(
         return Vec::new();
     };
     let declared = statement_level_names(&ingest, &c.container);
-    let keys = fresh_content_keys(code, &c.factories, require_var.as_deref(), &declared);
+    let keys = fresh_content_keys(
+        code,
+        &c.factories,
+        require_var.as_deref(),
+        &declared,
+        &VENDOR_CONTENT,
+    );
     c.factories
         .iter()
         .zip(keys)
@@ -310,12 +331,12 @@ fn prior_factory(file_text: &str) -> Option<(String, HashSet<String>)> {
     }
 }
 
-/// The prior side: one vendor file's content key — [`vendor_content_key`]
-/// over [`prior_factory_text`], the file's own declarations as the
-/// program's.
+/// The prior side of the stale-era re-key: one vendor file's content key —
+/// [`vendor_content_key`] under [`CARRY_CONTENT`] over
+/// [`prior_factory_text`], the file's own declarations as the program's.
 pub fn prior_file_content_key(file_text: &str) -> Option<String> {
     let (text, declared) = prior_factory(file_text)?;
-    vendor_content_key(&text, &declared)
+    vendor_content_key(&text, &declared, &CARRY_CONTENT)
 }
 
 /// One stale-era prior manifest entry, as the re-key reads it.

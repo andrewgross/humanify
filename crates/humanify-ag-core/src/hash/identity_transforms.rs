@@ -30,11 +30,12 @@
 //! Adding a transform = one [`Transform`] variant, one [`TRANSFORMS`] entry
 //! (name, version, condition, the walks that implement it), its rule in
 //! [`Transform::rewrite`], its tests, and the version bump of each form that
-//! lists it. A transform rewrites one node in one of two ways ([`Rewrite`]):
-//! it renames the node's TYPE token (no copy — the wrapper spelling, which
-//! fires on module-sized wrappers), or it hands the walk a small REPLACEMENT
-//! node that the walk serializes in the original's place (the concise arrow
-//! body). Both walks that carry transforms — the canonical serializer and
+//! lists it. A transform rewrites one node in one of three ways
+//! ([`Rewrite`]): it renames the node's TYPE token (no copy — the wrapper
+//! spelling, which fires on module-sized wrappers), it hands the walk one of
+//! the node's own CHILDREN to walk in its place (no copy — the parentheses),
+//! or it hands the walk a small REPLACEMENT node that the walk serializes in
+//! the original's place (the concise arrow body). Both walks that carry transforms — the canonical serializer and
 //! the statement hash — apply the same [`Rewrite`].
 //!
 //! NAME equivalences are not transforms: which names a form ignores
@@ -52,6 +53,8 @@ pub enum Transform {
     WrapperSpelling,
     /// exp200: a concise arrow body `x => E` walks as `x => { return E; }`.
     ConciseArrowBody,
+    /// exp200: a parenthesized expression walks as the expression.
+    Parentheses,
 }
 
 /// A registry entry: what a transform is, the condition it fires under,
@@ -71,7 +74,15 @@ pub struct TransformSpec {
 }
 
 /// Every identity transform, in the order a walk tries them.
-pub const TRANSFORMS: [TransformSpec; 2] = [
+pub const TRANSFORMS: [TransformSpec; 3] = [
+    TransformSpec {
+        transform: Transform::Parentheses,
+        name: "parentheses",
+        version: 1,
+        condition: "always: the tree already encodes the grouping parentheses force; \
+                    a printer adds or drops them by position (`x => ({}).k` vs `return {}.k`)",
+        walks: &[Walk::Canonical, Walk::Statement],
+    },
     TransformSpec {
         transform: Transform::ConciseArrowBody,
         name: "concise-arrow-body",
@@ -103,12 +114,17 @@ impl Transform {
         match self {
             Transform::WrapperSpelling => 1,
             Transform::ConciseArrowBody => 2,
+            Transform::Parentheses => 4,
         }
     }
 
     /// What this transform does to one node (`node_type` is its `type`).
-    pub(crate) fn rewrite(self, node_type: &str, map: &Map<String, Value>) -> Rewrite {
+    pub(crate) fn rewrite<'a>(self, node_type: &str, map: &'a Map<String, Value>) -> Rewrite<'a> {
         match self {
+            Transform::Parentheses => match (node_type, map.get("expression")) {
+                ("ParenthesizedExpression", Some(inner)) => Rewrite::Inner(inner),
+                _ => Rewrite::Keep,
+            },
             Transform::WrapperSpelling => {
                 if node_type == "ArrowFunctionExpression"
                     && super::wrapper_spelling::arrow_serializes_as_function(map)
@@ -131,9 +147,12 @@ impl Transform {
 
 /// What a transform does to one node.
 #[derive(Debug, PartialEq)]
-pub(crate) enum Rewrite {
+pub(crate) enum Rewrite<'a> {
     /// Nothing: the node walks as written.
     Keep,
+    /// The walk serializes this CHILD of the node in the node's place (no
+    /// copy — the parentheses, which may wrap a whole module).
+    Inner(&'a Value),
     /// The node walks under this TYPE token (its fields untouched).
     TypeToken(&'static str),
     /// The walk serializes this node in the original's place (and tries
@@ -175,9 +194,9 @@ impl TransformSet {
     }
 
     /// Run the set's transforms on one node, in registry order: the first
-    /// REPLACEMENT wins (the walk re-enters with it, so the rest run on the
+    /// REPLACEMENT (a child or a new node) wins (the walk re-enters with it, so the rest run on the
     /// replacement), else the first type-token rename, else keep.
-    pub(crate) fn rewrite(self, node_type: &str, map: &Map<String, Value>) -> Rewrite {
+    pub(crate) fn rewrite<'a>(self, node_type: &str, map: &'a Map<String, Value>) -> Rewrite<'a> {
         if self.is_empty() {
             return Rewrite::Keep;
         }
@@ -186,6 +205,7 @@ impl TransformSet {
             match t.rewrite(node_type, map) {
                 Rewrite::Keep => {}
                 Rewrite::Node(v) => return Rewrite::Node(v),
+                Rewrite::Inner(v) => return Rewrite::Inner(v),
                 Rewrite::TypeToken(name) => {
                     token.get_or_insert(name);
                 }

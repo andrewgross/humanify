@@ -94,6 +94,14 @@ pub enum Privates {
     Verbatim,
     /// Every private token reads `P=#` (blinded at token emission).
     Blinded,
+    /// A numbered slot per (declaring class, name), `P=#$0, P=#$1, …` by
+    /// first occurrence (exp200): a consistent re-lettering of a class's
+    /// private names — alpha-renaming, unobservable — hashes equal, while
+    /// two fields collapsed into one, or an inner class's own `#x`
+    /// shadowing the outer one, stays apart. A private name no class in the
+    /// walked subtree declares (a method hashed without its class) is a
+    /// slot of the enclosing program, keyed by name.
+    Slots,
     /// Masked with every other name (the statement walk).
     Masked,
 }
@@ -153,13 +161,14 @@ pub struct CanonicalForm {
 
 /// The cross-version match key: function fingerprints (`graph`), factory
 /// structural hashes (`modules::factory_structural_hash`), the enclosing-
-/// statement contexts (`matching::statement_context`), the twin gates'
+/// statement contexts (`matching::statement_context`), and — with private
+/// names verbatim ([`MATCH_KEY_PRIVATES_VERBATIM`]) — the twin gates'
 /// first comparison (`twins::gates`). Version = the factory records' era,
 /// the vendor manifest's `hashVersion` (`unpack::bun`): a manifest stamped
 /// with ANY other version — the TS (no stamp; bytes are
 /// `bun-module-classification.ts`'s) or an older Rust era — never joins
 /// this run's hashes; the carry-over re-keys it by CONTENT
-/// (`modules::vendor_content`, [`VENDOR_CONTENT`]).
+/// (`modules::vendor_content`, [`CARRY_CONTENT`]).
 ///
 /// 2 = `factory_structural_hash` at WP5.6e (2026-09-25).
 /// 3 = exp093 (2026-09-29): numbers EXACT — old buckets' hashes are a
@@ -173,18 +182,32 @@ pub struct CanonicalForm {
 ///     function expression keeps its bytes ACROSS the era — the same
 ///     half-carried-prior shape exp093's gate exists for — so the version
 ///     gate alone again stands between a stale manifest and a silent join.
+/// 5 = exp200 (2026-11-08): the packaging tool's STYLE — a concise arrow
+///     body walks as its braced `return`, parentheses are transparent
+///     (`hash::identity_transforms`), and
+///     class-private names are slots of their class
+///     ([`Privates::Slots`]). 2.1.179 -> 2.1.181 moved ~130 vendor
+///     factories' hashes by exactly these two spellings. A factory with
+///     neither keeps its bytes across the era: the version gate again.
+///     From this era on the match key runs AHEAD of the library index's
+///     forms, which keep the settings they were stamped with
+///     ([`MATCH_KEY_V4_SETTINGS`]).
 pub const MATCH_KEY: CanonicalForm = CanonicalForm {
     name: "match-key",
-    version: 4,
+    version: 5,
     stamped_in: Some("vendor manifest hashVersion (factory structuralHash)"),
     walk: Walk::Canonical,
     locals: Locals::Slots,
     strings: Strings::Blurred,
     numbers: Numbers::Exact,
     property_names: PropertyNames::Verbatim,
-    privates: Privates::Verbatim,
+    privates: Privates::Slots,
     free_names: FreeNames::Verbatim,
-    transforms: WRAPPER_SPELLING_ONLY,
+    transforms: TransformSet::of(&[
+        Transform::Parentheses,
+        Transform::ConciseArrowBody,
+        Transform::WrapperSpelling,
+    ]),
     parent_names: ParentNames::Oxc,
 };
 
@@ -198,11 +221,42 @@ pub const MATCH_KEY_PRIVATES_BLINDED: CanonicalForm = CanonicalForm {
     ..MATCH_KEY
 };
 
+/// The match key with private names VERBATIM: the twin gates' first
+/// comparison (`twins::gates`). The twins TRANSFER private spellings
+/// (a prior `#registryCache` onto a fresh `#a`), so they must see a
+/// re-lettering as a difference and take the masked branch
+/// ([`MATCH_KEY_PRIVATES_BLINDED`]) that collects the private pairs; under
+/// the match key's own [`Privates::Slots`] (exp200) the re-lettered
+/// statements would hash equal and the transfer would never run. Moves
+/// with [`MATCH_KEY`] (its concise-arrow transform included).
+pub const MATCH_KEY_PRIVATES_VERBATIM: CanonicalForm = CanonicalForm {
+    name: "match-key-privates-verbatim",
+    stamped_in: None,
+    privates: Privates::Verbatim,
+    ..MATCH_KEY
+};
+
+/// The match key's settings at version 4 — what every built library index
+/// was fingerprinted with. Not a form of its own (no caller hashes under
+/// it): the base the INDEX forms ([`LIBRARY_UNITS`], [`VENDOR_CONTENT`])
+/// keep since exp200 split them from the match key, so a match-key era
+/// never silently re-keys an index built offline. Re-fingerprinting the
+/// index under the match key's transforms is a new `units` / `module`
+/// version and a rebuild (experiments/200-identity-transforms, phase 2).
+const MATCH_KEY_V4_SETTINGS: CanonicalForm = CanonicalForm {
+    name: "match-key",
+    version: 4,
+    stamped_in: None,
+    privates: Privates::Verbatim,
+    transforms: WRAPPER_SPELLING_ONLY,
+    ..MATCH_KEY
+};
+
 /// The library index's statement-unit prints (`libindex::units`): the
-/// match key with private names blinded (a minifier's `#e` is renamed per
-/// build). Its own stamp — the index manifest's `units` — because an index
-/// is built offline and read by a later binary. The version also covers
-/// the UNIT MODEL (what a unit is: `graph::references::container_units`),
+/// v4 match key with private names blinded (a minifier's `#e` is renamed
+/// per build). Its own stamp — the index manifest's `units` — because an
+/// index is built offline and read by a later binary. The version also
+/// covers the UNIT MODEL (what a unit is: `graph::references::container_units`),
 /// pinned by `libindex::units_test`'s `UNIT_MODEL_PINS`: 3 = esbuild 0.28's
 /// guarded `__esm` is a lazy module (main's 68b090e3; exp097).
 pub const LIBRARY_UNITS: CanonicalForm = CanonicalForm {
@@ -210,16 +264,32 @@ pub const LIBRARY_UNITS: CanonicalForm = CanonicalForm {
     version: 3,
     stamped_in: Some("library index manifest `units`"),
     privates: Privates::Blinded,
-    ..MATCH_KEY
+    ..MATCH_KEY_V4_SETTINGS
 };
 
-/// The vendor content key (`modules::vendor_content`): a factory's match
-/// key with every free name that is not a real global slotted — the
-/// cross-release module key, and the library index's whole-module print.
-/// Moves with [`MATCH_KEY`] (its walk IS the match key's).
+/// The vendor content key (`modules::vendor_content`) — the library
+/// index's whole-module print: a factory's v4 match key with every free
+/// name that is not a real global slotted. Until exp200 it was also the
+/// stale-era carry's re-key and moved with the match key; the carry now
+/// has its own form ([`CARRY_CONTENT`]) and this one keeps the settings
+/// every built index was stamped with.
 pub const VENDOR_CONTENT: CanonicalForm = CanonicalForm {
     name: "vendor-content-key",
+    version: 4,
     stamped_in: Some("library index manifest `module`"),
+    free_names: FreeNames::SlottedUnlessGlobal,
+    ..MATCH_KEY_V4_SETTINGS
+};
+
+/// The carry's content key (`modules::vendor_content`, exp200): the
+/// vendor content key's walk under the CURRENT match key — what a
+/// stale-era prior's vendor files and this run's factories are re-keyed
+/// by when the prior manifest's `hashVersion` is not this run's. Both
+/// sides are hashed in the same run, so it is stamped nowhere; it moves
+/// with [`MATCH_KEY`], whose era change is exactly when it is used.
+pub const CARRY_CONTENT: CanonicalForm = CanonicalForm {
+    name: "carry-content-key",
+    stamped_in: None,
     free_names: FreeNames::SlottedUnlessGlobal,
     ..MATCH_KEY
 };
@@ -362,11 +432,13 @@ pub const ALIGN_CONTENT: CanonicalForm = CanonicalForm {
 // ---------------------------------------------------------------------------
 
 /// Every form, in this file's order.
-pub const FORMS: [&CanonicalForm; 12] = [
+pub const FORMS: [&CanonicalForm; 14] = [
     &MATCH_KEY,
     &MATCH_KEY_PRIVATES_BLINDED,
+    &MATCH_KEY_PRIVATES_VERBATIM,
     &LIBRARY_UNITS,
     &VENDOR_CONTENT,
+    &CARRY_CONTENT,
     &IDENTITY_KEY,
     &RENAME_SIGNATURE,
     &STATEMENT,

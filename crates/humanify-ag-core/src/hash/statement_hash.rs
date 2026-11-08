@@ -274,6 +274,10 @@ fn hash_into(form: &CanonicalForm, root: &Value, hasher: &mut Sha256) {
                         hash_into(form, &replacement, hasher);
                         continue;
                     }
+                    Rewrite::Inner(child) => {
+                        stack.push(Item::Node(child));
+                        continue;
+                    }
                     Rewrite::TypeToken(token) => token,
                     Rewrite::Keep => t,
                 };

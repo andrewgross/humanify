@@ -4,6 +4,8 @@
 
 use std::collections::HashSet;
 
+use crate::hash::forms::CARRY_CONTENT;
+
 use super::{
     NameSource, StaleEraEntry, UNJOINED, prior_file_content_key, rekey_prior_by_content,
     vendor_content_key,
@@ -14,9 +16,10 @@ use super::{
 const FRESH: &str =
     "(exports,module)=>{ var p=REQ(\"node:path\"); module.exports=qA(p.sep)+kC+hZ(process); }";
 
-/// A content key with no program-declared names.
+/// A carry content key with no program-declared names (the stale-era
+/// re-key's form: the prior side is `prior_file_content_key`'s).
 fn key(text: &str) -> Option<String> {
-    vendor_content_key(text, &HashSet::new())
+    vendor_content_key(text, &HashSet::new(), &CARRY_CONTENT)
 }
 
 fn fresh_key() -> String {
@@ -77,7 +80,7 @@ fn a_program_declared_name_that_spells_a_known_global_is_a_slot() {
     );
     let bundle_declared: HashSet<String> = ["gc".to_string()].into();
     assert_eq!(
-        vendor_content_key(fresh, &bundle_declared),
+        vendor_content_key(fresh, &bundle_declared, &CARRY_CONTENT),
         prior_file_content_key(prior)
     );
     // Undeclared, `gc` IS the host's global: content, verbatim.

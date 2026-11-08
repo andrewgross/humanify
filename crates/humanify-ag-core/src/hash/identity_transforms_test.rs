@@ -25,7 +25,11 @@ fn every_transform_is_registered_once_under_a_unique_name() {
 
 #[test]
 fn a_set_holds_exactly_what_it_was_given() {
-    let both = TransformSet::of(&[Transform::WrapperSpelling, Transform::ConciseArrowBody]);
+    let both = TransformSet::of(&[
+        Transform::WrapperSpelling,
+        Transform::Parentheses,
+        Transform::ConciseArrowBody,
+    ]);
     assert!(both.contains(Transform::WrapperSpelling));
     assert!(both.contains(Transform::ConciseArrowBody));
     let one = TransformSet::of(&[Transform::WrapperSpelling]);
@@ -48,5 +52,73 @@ fn the_empty_set_keeps_every_node() {
     assert_eq!(
         TransformSet::NONE.rewrite("ArrowFunctionExpression", map(&arrow)),
         Rewrite::Keep
+    );
+}
+
+#[test]
+fn the_concise_arrow_rewrite_is_the_braced_return() {
+    let concise = json!({"type": "ArrowFunctionExpression", "expression": true, "async": false,
+        "params": [], "body": {"type": "ParenthesizedExpression",
+            "expression": {"type": "ObjectExpression", "properties": []}}});
+    let Rewrite::Node(braced) =
+        Transform::ConciseArrowBody.rewrite("ArrowFunctionExpression", map(&concise))
+    else {
+        panic!("a concise arrow is rewritten");
+    };
+    assert_eq!(
+        braced,
+        json!({"type": "ArrowFunctionExpression", "expression": false, "async": false,
+            "params": [], "body": {"type": "BlockStatement", "body": [
+                {"type": "ReturnStatement",
+                 "argument": {"type": "ObjectExpression", "properties": []}}]}})
+    );
+    // A braced arrow, or any other node, is kept.
+    assert_eq!(
+        Transform::ConciseArrowBody.rewrite("ArrowFunctionExpression", map(&braced)),
+        Rewrite::Keep
+    );
+}
+
+/// The statement walk applies a transform set through the same `Rewrite`
+/// (no form lists the concise arrow there yet: `statement/3` stays, since
+/// the eval scorer reads it for its advisory spelling column — a later
+/// version is one set entry away).
+#[test]
+fn the_statement_walk_applies_a_set_it_is_given() {
+    use crate::hash::forms::STATEMENT;
+    use crate::hash::statement_hash::statement_hash_in;
+    use crate::ingest::{Ingest, program_estree_json};
+    let stmt = |code: &str| {
+        let allocator = oxc_allocator::Allocator::default();
+        let ingest = Ingest::parse_unambiguous(&allocator, code);
+        program_estree_json(ingest.program)["body"][0].clone()
+    };
+    let with_concise = crate::hash::forms::CanonicalForm {
+        transforms: TransformSet::of(&[Transform::ConciseArrowBody, Transform::WrapperSpelling]),
+        ..STATEMENT
+    };
+    let (a, b) = (
+        stmt("var f = (a) => a.b;"),
+        stmt("var f = (a) => { return a.b; };"),
+    );
+    assert_eq!(
+        statement_hash_in(&with_concise, &a),
+        statement_hash_in(&with_concise, &b)
+    );
+    assert_ne!(
+        statement_hash_in(&STATEMENT, &a),
+        statement_hash_in(&STATEMENT, &b)
+    );
+    let c = stmt("var f = (a) => { return a.c; };");
+    // Masked names: `.b` vs `.c` is a property NAME, masked by this walk;
+    // a real structural change still differs.
+    let d = stmt("var f = (a) => { a.b; };");
+    assert_eq!(
+        statement_hash_in(&with_concise, &b),
+        statement_hash_in(&with_concise, &c)
+    );
+    assert_ne!(
+        statement_hash_in(&with_concise, &a),
+        statement_hash_in(&with_concise, &d)
     );
 }

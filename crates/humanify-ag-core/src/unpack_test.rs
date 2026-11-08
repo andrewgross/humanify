@@ -1162,7 +1162,9 @@ fn a_ts_era_prior_carries_its_names_by_content() {
     // ARROW-factory hashes are a new era's bytes (function-expression
     // factories keep theirs across the era; the gate, not the bytes,
     // carries the refusal)}.
-    assert_eq!(read_manifest(&fresh.0)["hashVersion"], 4);
+    // fixed:{was: 4, why: exp200 bumped it again — a concise arrow body
+    // walks as its braced return and class-private names are slots}.
+    assert_eq!(read_manifest(&fresh.0)["hashVersion"], 5);
 }
 
 /// The next release, where Bun's minifier happened to spell the shared

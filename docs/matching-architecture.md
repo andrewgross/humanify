@@ -188,6 +188,19 @@ function declaration vs expression; +6.3 points on Claude Code) is one more
 setting, OFF in every existing preset. Turning it on makes a new preset
 version (e.g. `units/3`); it never changes an existing one.
 
+**As built (exp200, 2026-11-08):** the normaliser is the identity-transform
+registry, `hash/identity_transforms.rs`. Each transform is one entry (name,
+version, its semantics-preservation condition, the walks that apply it) and
+a form declares the SET it applies instead of a wrapper-spelling bool;
+exp094's wrapper spelling is the first entry (byte-identical), the concise
+arrow body (`x => E` as `x => { return E; }`) the second. `match-key/5` turns
+the concise arrow body on and makes class-private names slots of their class
+(`Privates::Slots`, a name setting, not a transform); the library index's
+forms keep the v4 match-key settings they were stamped with, and the
+stale-era carry re-keys under its own form, `carry-content-key` (the vendor
+content walk under the current match key). The statement hash keeps
+`statement/3`: the eval scorer reads it for its advisory spelling column.
+
 ### 3.3 One evidence layer
 
 - **one literal extractor** (from the syntax tree; the length floor and
