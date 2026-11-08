@@ -259,3 +259,28 @@ fn a_baseline_leg_that_writes_cache_entries_voids_the_verdict() {
     );
     assert!(said.contains("NOT NEUTRAL"), "{said}");
 }
+
+/// Two neutrality runs on one cache void each other (the baseline leg's
+/// zero-write count would include the other run's writes), and on one
+/// workdir they share leg folders: a run on a cache another live run holds
+/// is refused at once, launching nothing.
+#[test]
+fn a_cache_another_live_run_holds_is_refused() {
+    let rec = Rec::new("neutrality-claimed");
+    corpus(&rec);
+    let repo = sandbox(&rec, Baseline::New);
+    let ctx = rec.ctx(&repo);
+    let parsed = crate::settings::parse("eval neutrality", ACCEPTS, &[], &args(&rec, &[])).unwrap();
+    let pairs = crate::committed::eval::pairs(&repo).unwrap().value;
+    let cfg = config_from(&parsed, &pairs).unwrap();
+    let _other = crate::runners::claim::claim_folder(&cfg.cache, "eval neutrality other").unwrap();
+    let status = run(&ctx, &cfg, &pairs, &JsValue::Null);
+    let said = ctx.transcript();
+    assert_eq!(status, 2, "{said}");
+    assert!(said.contains("eval neutrality other"), "{said}");
+    assert!(
+        !rec.calls().contains("cargo ::"),
+        "nothing built: {}",
+        rec.calls()
+    );
+}

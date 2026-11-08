@@ -21,9 +21,10 @@
 //! Rules it obeys: cold — no LLM cache, ever (rule 10); the model comes
 //! from the eval's pairs.json and the endpoint from the same resolver the
 //! eval asks; names mode reads the eval's prebuilt index (never a run-time
-//! build); the boot gate pins its model. Each hop's PIPELINE run holds
-//! `/work/heavy.lock` (the boot gate and the scoring do not) — unless the
-//! caller holds it (`HELD_LOCK`). A boot failure is recorded, never fatal;
+//! build); the boot gate pins its model. No host-wide lock (exp205): the
+//! walk CLAIMS its walk dir (`super::claim`), so a second walk — or a
+//! `--resume` — into a dir a live walk is writing is refused at once; what
+//! runs beside it is the coordinator's call. A boot failure is recorded, never fatal;
 //! a hop that exits non-zero but wrote its tree is recorded and the walk
 //! continues on that tree; only a hop that leaves NO tree aborts (the next
 //! hop has no prior).
@@ -68,7 +69,6 @@ pub struct WalkConfig {
     pub force_mixed: bool,
     pub report: bool,
     pub boot_model: String,
-    pub heavy_lock: PathBuf,
 }
 
 /// The PIPELINE keys a walk hop's file carries itself.
@@ -126,7 +126,6 @@ pub fn config_from(parsed: &Parsed, pairs: &Pairs, repo: &Path) -> Result<WalkCo
         boot_model: s
             .text("boot.model")
             .unwrap_or_else(|| "claude-opus-4-1".into()),
-        heavy_lock: PathBuf::from(super::HEAVY_LOCK),
     })
 }
 
@@ -261,11 +260,6 @@ fn label_bin(frozen: &Path, record: &JsValue) -> LabelBin {
 
 fn new_manifest(w: &Walk, record: &JsValue, versions: &[String]) -> JsValue {
     let cfg = w.cfg;
-    let lock = if w.ctx.host.held_lock {
-        "held by the caller (HELD_LOCK)".to_string()
-    } else {
-        format!("flock:{}", text(&cfg.heavy_lock))
-    };
     obj(vec![
         ("pipeline", JsValue::str("rust")),
         (
@@ -292,7 +286,6 @@ fn new_manifest(w: &Walk, record: &JsValue, versions: &[String]) -> JsValue {
                 ("cache", JsValue::str("OFF (cold, rule 10)")),
             ]),
         ),
-        ("heavyLock", JsValue::str(lock)),
         (
             "bootGate",
             obj(vec![
@@ -394,6 +387,8 @@ pub fn run(ctx: &Ctx, cfg: &WalkConfig, pairs: &Pairs) -> u8 {
 
 fn run_inner(ctx: &Ctx, cfg: &WalkConfig, pairs: &Pairs) -> Result<(), (u8, String)> {
     let refuse = |e: String| (2u8, e);
+    let _claim = super::claim::claim_folder(&cfg.dir, &format!("eval walk {}", cfg.versions_arg))
+        .map_err(refuse)?;
     super::boot::require_bun(ctx).map_err(|e| (1, e))?;
     let endpoint =
         crate::committed::local::resolve_endpoint(cfg.endpoint_flag.as_deref(), &ctx.repo)
@@ -587,17 +582,12 @@ fn hop(w: &Walk, v: &str, prior: Option<&str>) -> Result<(), String> {
     };
     leg::write_spec(&spec, &runs.join(format!("{v}.runcfg.json")))?;
     remove(&runs.join(format!("{v}-run.json")));
-    let t_lock = std::time::Instant::now();
-    let outcome = {
-        let _lock = super::heavy_lock(ctx, &cfg.heavy_lock)?;
-        leg::run_leg_with_prior_kind(
-            ctx,
-            &spec,
-            &w.pairs.llm.api_key,
-            prior.map(|_| WALK_PRIOR_KIND),
-        )
-    };
-    let elapsed = t_lock.elapsed().as_secs_f64().round();
+    let outcome = leg::run_leg_with_prior_kind(
+        ctx,
+        &spec,
+        &w.pairs.llm.api_key,
+        prior.map(|_| WALK_PRIOR_KIND),
+    );
     let rc = outcome.as_ref().map_or(-1, |o| o.exit_code);
     let tree_ok = tree.join(".humanify/humanified.js").is_file()
         && tree.join(".humanify/split-ledger.json").is_file();
@@ -620,7 +610,7 @@ fn hop(w: &Walk, v: &str, prior: Option<&str>) -> Result<(), String> {
     }
     let boot = boot_record(w, &tree, v, &runs.join(format!("{v}-boot.json")));
     let manifest = outcome.ok().map(|o| o.manifest);
-    write_hop(&hop_path, v, prior, rc, elapsed, manifest.as_ref(), boot)
+    write_hop(&hop_path, v, prior, rc, manifest.as_ref(), boot)
 }
 
 fn write_hop(
@@ -628,7 +618,6 @@ fn write_hop(
     v: &str,
     prior: Option<&str>,
     rc: i32,
-    elapsed: f64,
     run: Option<&JsValue>,
     boot: JsValue,
 ) -> Result<(), String> {
@@ -638,10 +627,6 @@ fn write_hop(
             .unwrap_or(JsValue::Null)
     };
     let wall = field(&["wallSeconds"]);
-    let lock_wait = match &wall {
-        JsValue::Number(w) => num(elapsed - w),
-        _ => JsValue::Null,
-    };
     let errors = run
         .and_then(|m| get(m, &["outcome", "errors"]).cloned())
         .unwrap_or_else(|| JsValue::str_array(&["the run wrote no manifest"]));
@@ -651,7 +636,6 @@ fn write_hop(
         ("cold", JsValue::Bool(prior.is_none())),
         ("exitCode", num(rc)),
         ("wallSeconds", wall),
-        ("lockWaitSeconds", lock_wait),
         ("peakRssMb", field(&["outcome", "peakRssMb"])),
         ("cacheWritten", field(&["config", "cache", "written"])),
         ("errors", errors),

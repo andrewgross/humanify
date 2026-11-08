@@ -363,6 +363,13 @@ pub fn run(ctx: &Ctx, cfg: &ScoreConfig, run_config: &JsValue) -> u8 {
 
 fn run_inner(ctx: &Ctx, cfg: &ScoreConfig, run_config: &JsValue) -> Result<u8, (u8, String)> {
     let results = ctx.repo.join(EVAL_RESULTS).join(&cfg.label);
+    // Two live runs of one label would write one work folder (and one
+    // results folder): the second is refused at once, never queued.
+    let _claim = super::claim::claim_folder(
+        &cfg.workdir.join(&cfg.label),
+        &format!("eval score {}", cfg.label),
+    )
+    .map_err(|e| (2, e))?;
     guard_label(ctx, &results, cfg).map_err(|e| (2, e))?;
     announce(ctx, cfg);
     let pairs = load_pairs(&ctx.repo).map_err(|e| (2, e))?.value;

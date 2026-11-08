@@ -131,33 +131,82 @@ fn a_verbs_help_is_its_usage() {
     );
 }
 
-/// Every heavy verb takes `/work/heavy.lock` itself (ONE lock owner): a
-/// caller never wraps a `cargo dev` verb in flock, and never has to know
-/// which verbs need wrapping. The table says when each one takes it.
+/// No host-wide lock (exp205): the coordinating agent decides what runs
+/// together, from each verb's declared footprint. Every verb that runs the
+/// pipeline, an LLM, a build or an index/corpus build declares one in full
+/// (memory, LLM, time, what it writes), and `cargo dev` prints it.
 #[test]
-fn every_heavy_verb_takes_the_heavy_lock_itself() {
+fn every_heavy_verb_declares_its_footprint() {
     let heavy = [
+        "check",
         "eval score",
         "eval neutrality",
         "eval walk",
         "eval vendor-precision",
         "eval cjs-placement",
+        "run stub",
         "library score",
+        "library npm",
         "library corpus",
         "index build",
+        "boot-gate",
+        "build-bin",
+        "e2e",
+        "ask-trace",
+        "match-truth",
     ];
     for v in VERBS {
         let n = name(v);
+        let f = &v.footprint;
         assert_eq!(
-            !v.lock.is_empty(),
+            *f != LIGHT,
             heavy.contains(&n.as_str()),
-            "{n}: lock = {:?}",
-            v.lock
+            "{n}: footprint = {f:?}"
         );
+        for (field, value) in [
+            ("memory", f.memory),
+            ("llm", f.llm),
+            ("time", f.time),
+            ("writes", f.writes),
+        ] {
+            assert!(!value.trim().is_empty(), "{n}: footprint {field} is empty");
+        }
     }
     let t = table();
+    assert!(t.contains("footprint:"), "the table prints each footprint");
     assert!(
-        t.contains("lock:         takes /work/heavy.lock itself"),
-        "the table prints each verb's lock policy"
+        t.contains("17.4 GB"),
+        "eval score's footprint carries the measured peak"
     );
+}
+
+/// The host-wide heavy lock and its held-by-the-caller escape hatch (env var) are gone:
+/// nothing in the harness names either any more (a stale one in a
+/// caller's environment silently matters nowhere).
+#[test]
+fn the_host_wide_lock_is_gone() {
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let retired = [
+        ["/work/", "heavy.lock"].concat(),
+        ["HELD", "_LOCK"].concat(),
+        ["/work/", "index-build.lock"].concat(),
+    ];
+    let mut stack = vec![src];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                let text = std::fs::read_to_string(&p).unwrap();
+                for r in &retired {
+                    assert!(
+                        !text.contains(r.as_str()),
+                        "{} still names {r}",
+                        p.display()
+                    );
+                }
+            }
+        }
+    }
 }

@@ -892,7 +892,7 @@ fn definitions() -> Vec<String> {
         "- **treeLn** — `layout.churnLines`, total src tree churn, real INCLUDED; **realExBuild** — src real change minus the build-constant inlining lines.",
         "- **vendorLn / vendorReal** — vendor/ reducible noise vs genuine dependency change.",
         "- **noise / noiseLn / novel / realLn / relocSt / reloc / mints** — the eval KPIs (`kpis.ts`) on the BUNDLE; noise/novel in statements.",
-        "- **cache+** — LLM cache entries written; must be 0 (no cache, rule 10). **wall s / RSS MB** — from run-pipeline.ts (wall excludes the heavy-lock wait; RSS = peak of the whole process tree).",
+        "- **cache+** — LLM cache entries written; must be 0 (no cache, rule 10). **wall s / RSS MB** — from the hop's run manifest (RSS = peak of the whole process tree).",
         "",
         "Caveats (from `kpis.ts`):",
         "",

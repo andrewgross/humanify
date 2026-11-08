@@ -344,6 +344,17 @@ fn run_inner(
     run_config: &JsValue,
 ) -> Result<u8, (u8, String)> {
     let fail = |e: String| (1u8, e);
+    let what = format!("eval neutrality {} {}:{}", cfg.baseline, cfg.from, cfg.to);
+    // Two runs on one cache void each other's verdict (the baseline leg's
+    // zero-write count would hold the other run's writes), and two runs in
+    // one workdir share every leg folder: claim both, refuse at once.
+    let _cache = super::claim::claim_folder(&cfg.cache, &what).map_err(|e| (2, e))?;
+    let _legs = super::claim::claim(
+        &cfg.workdir.join("neutrality.live-run"),
+        &cfg.workdir.join("neutrality-*"),
+        &what,
+    )
+    .map_err(|e| (2, e))?;
     std::fs::create_dir_all(&cfg.workdir).map_err(|e| fail(e.to_string()))?;
     let cfg_path = cfg.workdir.join("neutrality-run-config.json");
     write(&cfg_path, &crate::json::js_text(run_config, true)).map_err(fail)?;

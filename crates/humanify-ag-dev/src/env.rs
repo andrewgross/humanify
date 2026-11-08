@@ -1,6 +1,6 @@
 //! The harness's ONE read of the process environment (docs/dev-harness.md
 //! §2.1), the twin of `humanify-ag-cli::env` for the pipeline: argv, the
-//! three variables the harness legitimately needs from the host, and the
+//! two variables the harness legitimately needs from the host, and the
 //! working directory. Everything else a run depends on is a setting
 //! (`crate::settings`, flags parsed upfront) or a committed file
 //! (`crate::committed`) — the ambient env-var configuration of the TS
@@ -18,10 +18,6 @@ pub struct HostEnv {
     pub home: Option<PathBuf>,
     /// `$PATH`, which a child process inherits with those two prepended.
     pub path: Option<String>,
-    /// `$HELD_LOCK` set: the caller already holds `/work/heavy.lock`, so a
-    /// long verb must not take it again (ONE lock layer: a nested flock on
-    /// the same file deadlocks every lane — exp155, exp176).
-    pub held_lock: bool,
     /// This binary's own path: the gate re-invokes it for its in-crate
     /// stages (`census concurrency`, `e2e`, ...).
     pub current_exe: Option<PathBuf>,
@@ -37,7 +33,6 @@ pub fn host() -> HostEnv {
     HostEnv {
         home: std::env::var_os("HOME").map(PathBuf::from),
         path: std::env::var("PATH").ok(),
-        held_lock: std::env::var_os("HELD_LOCK").is_some_and(|v| !v.is_empty()),
         current_exe: std::env::current_exe().ok(),
         cwd: std::env::current_dir().ok(),
     }

@@ -23,16 +23,37 @@ struct Verb {
     today: &'static str,
     /// The settings it reads: harness keys or whole sections.
     settings: &'static [&'static str],
-    /// When it takes `/work/heavy.lock` itself ("" = never: a light verb).
-    /// ONE lock owner: never wrap a `cargo dev` verb in flock (a nested
-    /// flock on the same file deadlocks every lane — exp155, exp176,
-    /// exp192); `HELD_LOCK` tells a verb its caller already holds it.
-    lock: &'static str,
+    /// What it consumes, so the coordinating agent can decide what runs
+    /// together (exp205: there is no host-wide lock). `LIGHT` for a verb
+    /// that only reads and writes a few files.
+    footprint: Footprint,
 }
 
-const NO_LOCK: &str = "";
-const WHOLE_RUN: &str =
-    "takes /work/heavy.lock itself, for the whole run, after its arguments are checked";
+/// A verb's footprint: measured numbers where a run recorded them,
+/// "unmeasured" otherwise.
+#[derive(Debug, PartialEq, Eq)]
+struct Footprint {
+    /// Peak memory class.
+    memory: &'static str,
+    /// Whether it asks the LLM server (pairs.json's endpoint) or another model.
+    llm: &'static str,
+    /// Rough duration.
+    time: &'static str,
+    /// The folders it writes; a shared one is named.
+    writes: &'static str,
+}
+
+const LIGHT: Footprint = Footprint {
+    memory: "small",
+    llm: "none",
+    time: "seconds to minutes",
+    writes: "only the output it names",
+};
+
+/// One pipeline run on a Claude Code bundle, names mode: the scored legs of
+/// ref-names-111401fe-r1/r2/r3 (15 runs) peaked at 9.7-17.4 GB RSS
+/// (largest: 2.1.216) and took 189-500 s each.
+const PIPELINE_RUN_MEMORY: &str = "one pipeline run at a time: 9.7-17.4 GB peak RSS each on a Claude Code bundle (ref-names-111401fe, names mode)";
 
 const SCORE_SETTINGS: &[&str] = &["run", "eval", "llm", "boot"];
 const NEUTRALITY_SETTINGS: &[&str] = &[
@@ -77,7 +98,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.only"],
-        lock: NO_LOCK,
+        footprint: Footprint {
+            memory: "cargo test + release build, then the e2e fixtures (small); unmeasured",
+            llm: "none (the stub)",
+            time: "~10-13 min on a loaded host (exp205: unit 330-341 s, release build 166-180 s, e2e 92-179 s)",
+            writes: "this checkout's target/; e2e into a fresh temp dir",
+        },
     },
     Verb {
         words: &["eval", "score"],
@@ -87,7 +113,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: SCORE_SETTINGS,
-        lock: WHOLE_RUN,
+        footprint: Footprint {
+            memory: PIPELINE_RUN_MEMORY,
+            llm: "yes: every rebase, scored leg and cold self-hop asks the LLM server, cold (the warm self-hop replays); the boot gate asks the Claude API (boot.model)",
+            time: "~2.4 h for the five pairs (ref-names-111401fe r1 -> r2 -> r3); a scored leg 189-500 s",
+            writes: "<workdir>/<label>/ (default /work/eval-work/<label>; claimed while it runs), dev/eval/results/<label>/, this checkout's target/release",
+        },
     },
     Verb {
         words: &["eval", "rescore"],
@@ -97,7 +128,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: SCORER,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["eval", "summarize"],
@@ -107,7 +138,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: RESULTS,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["eval", "leaderboard"],
@@ -117,7 +148,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: FORCE_RESULTS,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["eval", "bands"],
@@ -127,7 +158,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: RESULTS,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["eval", "diff"],
@@ -137,7 +168,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["eval", "neutrality"],
@@ -147,7 +178,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NEUTRALITY_SETTINGS,
-        lock: WHOLE_RUN,
+        footprint: Footprint {
+            memory: "two pipeline runs one after the other (the same class: ~10-17 GB on a Claude Code bundle) and two release builds",
+            llm: "replays the warm cache; a miss asks the LLM server (a valid verdict has the baseline leg asking nothing)",
+            time: "~25 min per pair, both legs (warm)",
+            writes: "<workdir>/neutrality-* and the baseline worktree there (default /work), and the cache (default <workdir>/neutrality-cache): both claimed while it runs, so a second run on the same cache or workdir is refused",
+        },
     },
     Verb {
         words: &["eval", "vendor-precision"],
@@ -162,7 +198,12 @@ const VERBS: &[Verb] = &[
             "run.out",
             "eval.library_index",
         ],
-        lock: "takes /work/heavy.lock itself for the bun-dev batch (`--bundev`)",
+        footprint: Footprint {
+            memory: "bun-dev: --jobs N (default 4) names-mode stub runs at once; per-run peak unmeasured",
+            llm: "none (the stub)",
+            time: "bun-dev: unmeasured",
+            writes: "bun-dev: --out (default /work/exp166-data/bundev/<label>; claimed while it runs)",
+        },
     },
     Verb {
         words: &["eval", "cjs-placement"],
@@ -172,7 +213,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["libscore.jobs", "run.out", "eval.library_index"],
-        lock: "takes /work/heavy.lock itself for the bun-dev batch runs",
+        footprint: Footprint {
+            memory: "runs: --jobs N (default 4) stub runs at once; per-run peak unmeasured",
+            llm: "none (the stub)",
+            time: "runs: unmeasured",
+            writes: "runs: --out (default /work/exp172-data/bundev/<label>; claimed while it runs)",
+        },
     },
     Verb {
         words: &["eval", "walk"],
@@ -182,7 +228,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: WALK_SETTINGS,
-        lock: "takes /work/heavy.lock itself for each hop's pipeline run, releasing it between hops (the boot gate and scoring run outside it)",
+        footprint: Footprint {
+            memory: "one pipeline run at a time: 17.3 GB peak RSS (walk 9ce9dee2, 124 hops)",
+            llm: "yes: every hop asks the LLM server, cold; each hop's boot gate asks the Claude API (boot.model)",
+            time: "89-490 s per hop (median 188 s, walk 9ce9dee2), plus each hop's boot gate and scoring",
+            writes: "--walk-dir (claimed while it runs; a --resume of a live walk is refused)",
+        },
     },
     Verb {
         words: &["eval", "walk-report"],
@@ -192,7 +243,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["walk.report_dir"],
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["run", "stub"],
@@ -202,7 +253,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["run.pipeline_set", "eval.library_index"],
-        lock: NO_LOCK,
+        footprint: Footprint {
+            memory: "one pipeline run (on a Claude Code bundle the scored-leg class, ~10-17 GB; a fixture far less)",
+            llm: "none (the stub)",
+            time: "unmeasured (one pipeline run)",
+            writes: "<out>",
+        },
     },
     Verb {
         words: &["library", "score"],
@@ -212,7 +268,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: LIBRARY_SETTINGS,
-        lock: WHOLE_RUN,
+        footprint: Footprint {
+            memory: "--jobs N (default 4) discover runs at once, each loading the index lookup (~2 GB dev, ~4 GB test: docs/design/library-index.md); unmeasured on the full index",
+            llm: "none",
+            time: "unmeasured",
+            writes: "<corpus data>/results/<label>/ and dev/library/results/<label>/",
+        },
     },
     Verb {
         words: &["library", "rescore"],
@@ -222,7 +283,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: RESCORE_SETTINGS,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["library", "proof"],
@@ -232,7 +293,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["run.out"],
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["library", "leaderboard"],
@@ -242,7 +303,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: FORCE,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["library", "npm"],
@@ -259,7 +320,12 @@ const VERBS: &[Verb] = &[
             "libscore.registry",
             "run.out",
         ],
-        lock: NO_LOCK,
+        footprint: Footprint {
+            memory: "small",
+            llm: "none; fetches from the npm registry over the network (it rate-limits bulk sweeps, as does an index build's dry run)",
+            time: "unmeasured (resumable)",
+            writes: "the npm caches (default /work/exp112-data/registry and /work/exp112-data/bundled; shared, never re-fetched)",
+        },
     },
     Verb {
         words: &["library", "tokens14"],
@@ -269,7 +335,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &[],
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["library", "determinism"],
@@ -279,7 +345,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: DETERMINISM_SETTINGS,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["library", "corpus"],
@@ -294,7 +360,12 @@ const VERBS: &[Verb] = &[
             "libscore.jobs",
             "run.out",
         ],
-        lock: "`corpus build` takes /work/heavy.lock itself for the whole build; `corpus freeze` is light",
+        footprint: Footprint {
+            memory: "build: --jobs N (default 4) bundler builds at once; unmeasured. verify / freeze: small",
+            llm: "none",
+            time: "build: unmeasured. verify / freeze: minutes",
+            writes: "build: the corpus's data root (--out; default /work/exp150-data/bun or /work/exp181-data). freeze: --out",
+        },
     },
     Verb {
         words: &["library", "layers"],
@@ -311,7 +382,7 @@ const VERBS: &[Verb] = &[
             "libscore.units",
             "run.out",
         ],
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["index", "build"],
@@ -321,7 +392,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: INDEX_SETTINGS,
-        lock: "takes /work/heavy.lock itself for the whole build",
+        footprint: Footprint {
+            memory: "--chunks (default 8) chunks at once, each --index-jobs package builds: one huge package spiked a chunk to 55-65 GB (pinyin, exp152); the merge peaked 117 GB serial (exp152, full Bun index) and 103.6 GB at --merge-jobs 30 (exp177)",
+            llm: "none; the dry run and the installs reach the npm registry",
+            time: "6.9 h for the full Bun index (exp152: 5.6 min registry, 6.08 h shards, 50 min merge)",
+            writes: "--store and --index-work (both claimed while it runs), --registry (shared on purpose), --index-out",
+        },
     },
     Verb {
         words: &["boot-gate"],
@@ -331,7 +407,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["boot"],
-        lock: NO_LOCK,
+        footprint: Footprint {
+            memory: "one Claude Code process; unmeasured",
+            llm: "one live prompt to the Claude API (boot.model), not the LLM server",
+            time: "unmeasured (seconds to a minute)",
+            writes: "nothing but its report line",
+        },
     },
     Verb {
         words: &["build-bin"],
@@ -341,7 +422,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["run.workdir"],
-        lock: NO_LOCK,
+        footprint: Footprint {
+            memory: "one cargo release build; unmeasured",
+            llm: "none",
+            time: "unmeasured (a release build)",
+            writes: "<workdir>/build-bin/<sha>/ (default /work/build-bin; one worktree per commit) and its target/",
+        },
     },
     Verb {
         words: &["e2e"],
@@ -351,7 +437,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["run.out"],
-        lock: NO_LOCK,
+        footprint: Footprint {
+            memory: "the release binary on the committed fixtures (small); unmeasured",
+            llm: "none (the stub)",
+            time: "unmeasured (minutes)",
+            writes: "--out, else a fresh temp dir",
+        },
     },
     Verb {
         words: &["format-golden"],
@@ -361,7 +452,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["census", "clones"],
@@ -371,7 +462,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.loose", "dev.root"],
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["census", "concurrency"],
@@ -381,7 +472,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.files", "dev.root", "dev.allowlist"],
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["census", "slop"],
@@ -391,7 +482,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.base", "dev.root"],
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["ask-trace"],
@@ -407,7 +498,12 @@ const VERBS: &[Verb] = &[
             "dev.sequential",
             "run.pipeline_set",
         ],
-        lock: NO_LOCK,
+        footprint: Footprint {
+            memory: "one pipeline run on a fixture (small)",
+            llm: "none (the stub)",
+            time: "seconds",
+            writes: "--out",
+        },
     },
     Verb {
         words: &["diff-asks"],
@@ -417,7 +513,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["match-truth"],
@@ -427,7 +523,12 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.corpus_dir", "run.bin", "run.out", "dev.only"],
-        lock: NO_LOCK,
+        footprint: Footprint {
+            memory: "one match run per corpus package; unmeasured",
+            llm: "none; fetches the pinned npm corpus once",
+            time: "unmeasured",
+            writes: "the corpus dir (default /work/match-truth-corpus, shared download cache) and --out, else a fresh /work/match-truth-runs/run-NNNN",
+        },
     },
     Verb {
         words: &["env-check"],
@@ -437,7 +538,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["llm.endpoint"],
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["precommit"],
@@ -447,7 +548,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["stub-llm", "serve"],
@@ -457,7 +558,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: &["dev.port"],
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["no-private-addresses"],
@@ -467,7 +568,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
     Verb {
         words: &["shims"],
@@ -477,7 +578,7 @@ const VERBS: &[Verb] = &[
         lane: None,
         today: "",
         settings: NONE,
-        lock: NO_LOCK,
+        footprint: LIGHT,
     },
 ];
 
@@ -510,8 +611,16 @@ fn table() -> String {
             v.proves,
             v.cannot_prove
         ));
-        if !v.lock.is_empty() {
-            out.push_str(&format!("      lock:         {}\n", v.lock));
+        let f = &v.footprint;
+        if *f == LIGHT {
+            out.push_str(
+                "      footprint:    light (small, no LLM, writes only its named output)\n",
+            );
+        } else {
+            out.push_str(&format!(
+                "      footprint:    memory: {}\n                    llm:    {}\n                    time:   {}\n                    writes: {}\n",
+                f.memory, f.llm, f.time, f.writes
+            ));
         }
     }
     out
@@ -987,11 +1096,6 @@ fn library_corpus_build(parsed: &settings::Parsed, name: &str) -> (u8, String, S
             freeze::BUN_APPS.to_string()
         }
     });
-    let ctx = live();
-    let _lock = match runners::heavy_lock(&ctx, std::path::Path::new(runners::HEAVY_LOCK)) {
-        Ok(l) => l,
-        Err(e) => return (2, String::new(), format!("{e}\n")),
-    };
     let jobs = parsed.settings.int("libscore.jobs").unwrap_or(4) as usize;
     let apps = parsed.settings.list("libscore.apps");
     match corpus_build::build(name, std::path::Path::new(&root), jobs, apps.as_deref()) {

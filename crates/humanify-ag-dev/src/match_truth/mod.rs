@@ -147,13 +147,20 @@ fn select(only: &[String]) -> Result<Vec<CorpusEntry>, String> {
         .collect())
 }
 
-/// A fresh directory under the default runs root: the first free number.
-fn fresh_out_dir() -> PathBuf {
-    let root = Path::new(DEFAULT_RUNS_DIR);
-    (1..)
-        .map(|n| root.join(format!("run-{n:04}")))
-        .find(|p| !p.exists())
-        .expect("a free run number")
+/// A fresh directory under `root`: the first free number, CREATED here
+/// (`create_dir` is atomic), so two runs started together never pick the
+/// same one (exp205: no lock serializes them any more).
+fn fresh_out_dir(root: &Path) -> Result<PathBuf, String> {
+    std::fs::create_dir_all(root).map_err(|e| format!("{}: {e}", root.display()))?;
+    for n in 1.. {
+        let p = root.join(format!("run-{n:04}"));
+        match std::fs::create_dir(&p) {
+            Ok(()) => return Ok(p),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("{}: {e}", p.display())),
+        }
+    }
+    Err(format!("{}: no free run number", root.display()))
 }
 
 fn config(p: &Parsed, host: &HostEnv) -> Result<Config, String> {
@@ -169,7 +176,7 @@ fn config(p: &Parsed, host: &HostEnv) -> Result<Config, String> {
     };
     let out = match s.text("run.out") {
         Some(o) => resolve(host, &o),
-        None => fresh_out_dir(),
+        None => fresh_out_dir(Path::new(DEFAULT_RUNS_DIR))?,
     };
     let entries = select(&s.list("dev.only").unwrap_or_default())?;
     Ok(Config {
@@ -398,3 +405,6 @@ fn execute(cfg: &Config, ch: &Children) -> Result<(), String> {
 #[cfg(test)]
 #[path = "launch_test.rs"]
 mod launch_test;
+
+#[cfg(test)]
+mod runs_dir_test;

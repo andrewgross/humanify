@@ -12,9 +12,10 @@
 //! - `eval cjs-placement trees <before> <after> <substring>...` — the port
 //!   of experiments/172 `trees.py`: the two runs' tree summaries side by side.
 //!
-//! Locks: ONE owner. A batch takes `/work/heavy.lock` once (unless the
-//! caller holds it: `HELD_LOCK`) and runs `jobs` bundles at a time inside.
-//! A bundle whose output is already there is skipped (the scripts' resume).
+//! No host-wide lock (exp205): a batch runs `jobs` bundles at a time and
+//! CLAIMS its out dir (`super::claim`), so a second batch into the same dir
+//! is refused at once. A bundle whose output is already there is skipped
+//! (the scripts' resume).
 
 use std::path::{Path, PathBuf};
 
@@ -70,7 +71,7 @@ pub fn vendor_precision_bundev(
     let list = bundev_list(&ctx.repo)?;
     let fam = Families::shipped();
     let lines = {
-        let _lock = super::heavy_lock(ctx, Path::new(super::HEAVY_LOCK))?;
+        let _claim = super::claim::claim_folder(out, "eval vendor-precision bun-dev")?;
         super::each(&list, jobs, |(id, bundle)| -> String {
             let card = out.join(format!("{id}.precision.json"));
             if nonempty(&card) {
@@ -157,7 +158,7 @@ pub fn cjs_runs(
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let list = bundev_list(&ctx.repo)?;
     let lines = {
-        let _lock = super::heavy_lock(ctx, Path::new(super::HEAVY_LOCK))?;
+        let _claim = super::claim::claim_folder(out, "eval cjs-placement runs")?;
         super::each(&list, jobs, |(id, bundle)| -> String {
             let dir = out.join(id);
             if nonempty(&dir.join("tree.tsv")) {

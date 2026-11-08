@@ -60,7 +60,6 @@ fn cfg(rec: &Rec, naming: &str, resume: bool) -> WalkConfig {
         force_mixed: true,
         report: true,
         boot_model: "claude-opus-4-1".into(),
-        heavy_lock: rec.root.join("heavy.lock"),
     }
 }
 
@@ -181,5 +180,23 @@ fn resume_skips_finished_hops_and_refuses_another_naming_mode() {
             .contains("--resume refused: .namingMode differs"),
         "{}",
         ctx.transcript()
+    );
+}
+
+/// Two walks must not write one walk dir: a walk into a dir another live
+/// walk holds is refused at once, launching nothing.
+#[test]
+fn a_walk_dir_another_live_walk_writes_is_refused() {
+    let (rec, repo) = setup();
+    let ctx = rec.ctx(&repo);
+    let pairs = crate::committed::eval::pairs(&repo).unwrap().value;
+    let c = cfg(&rec, "names", false);
+    let _other = crate::runners::claim::claim_folder(&c.dir, "eval walk 2.1.1..2.1.9").unwrap();
+    assert_eq!(run(&ctx, &c, &pairs), 2);
+    let said = ctx.transcript();
+    assert!(said.contains("eval walk 2.1.1..2.1.9"), "{said}");
+    assert!(
+        !rec.calls().contains("/inputs/claude-code-"),
+        "nothing launched"
     );
 }

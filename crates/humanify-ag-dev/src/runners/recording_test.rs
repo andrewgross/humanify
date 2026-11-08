@@ -66,7 +66,6 @@ impl Rec {
         let host = HostEnv {
             home: Some(self.home.clone()),
             path: Some(format!("{}:/usr/bin:/bin", self.shims.display())),
-            held_lock: true,
             ..Default::default()
         };
         let mut ctx = Ctx::new(repo.to_path_buf(), host, self.root.clone());
