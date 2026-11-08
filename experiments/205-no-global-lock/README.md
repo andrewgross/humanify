@@ -1,7 +1,7 @@
 # exp205 — no host-wide lock: the coordinator schedules, folders are claimed
 
-STATUS (2026-11-08): code done on branch `exp205-no-global-lock`; gate
-results and the merge sha are in the lane report (and below once merged).
+STATUS (2026-11-08): DONE. Gated on the branch (worktree + clean checkout)
+and merged to main --no-ff, with the merge commit gated from a clean checkout.
 
 Andrew, 2026-11-08: "i dont know if we want to do explicit locks since we
 have a master agent coordinating all of this work, i think we just need to
@@ -92,4 +92,20 @@ check`." with:
 
 ## Gate
 
-See the lane report.
+`cargo dev check`, bare, on ea90b9ca5 (with an eval and an index build running):
+
+| stage | worktree | clean checkout |
+|---|---|---|
+| shims | PASS | PASS |
+| no-private-addresses | PASS | PASS |
+| rust:fmt | PASS | PASS |
+| rust:clippy | PASS | PASS |
+| census:clones | REVIEW (51 findings, the same count as main) | REVIEW |
+| census:concurrency | PASS | PASS |
+| census:slop | PASS | PASS |
+| rust:unit | PASS (330 s) | PASS (341 s) |
+| rust:build | PASS (166 s) | PASS (180 s) |
+| format-golden | PASS | PASS |
+| e2e | PASS (92 s) | PASS (179 s) |
+
+The merge commit was gated again from a clean checkout before the push.

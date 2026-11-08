@@ -101,7 +101,7 @@ const VERBS: &[Verb] = &[
         footprint: Footprint {
             memory: "cargo test + release build, then the e2e fixtures (small); unmeasured",
             llm: "none (the stub)",
-            time: "unmeasured (the release build dominates)",
+            time: "~10-13 min on a loaded host (exp205: unit 330-341 s, release build 166-180 s, e2e 92-179 s)",
             writes: "this checkout's target/; e2e into a fresh temp dir",
         },
     },
