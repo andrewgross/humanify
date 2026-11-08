@@ -87,12 +87,13 @@ non-spec flags, no living caller; retire with their experiments):
 
 ## 3. Gate
 
-| Check                                                      | Result                         |
-| ---------------------------------------------------------- | ------------------------------ |
-| `cargo test -p humanify-ag-dev`                            | 296 + 8 + 1 + 2 passed         |
-| concurrency census (TS and `cargo dev census concurrency`) | GREEN, 114 sites / 114 entries |
-| `npm run check` in the worktree                            | PENDING                        |
-| `npm run check` on a clean checkout of the merge           | PENDING                        |
+| Check                                                                                    | Result                                                                                                                                                      |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cargo test -p humanify-ag-dev`                                                          | 296 + 8 + 1 + 2 passed                                                                                                                                      |
+| concurrency census (TS and `cargo dev census concurrency`)                               | GREEN, 114 sites / 114 entries                                                                                                                              |
+| `npm run check` in the worktree (`4afa1696f`)                                            | 13/13 PASS (unit 113.7 s, rust:unit 306.5 s, rust:build 126.6 s, e2e 77.3 s)                                                                                |
+| `npm run check` on a clean checkout of the merge (`6a31828c3`, README-only change since) | 13/13 PASS (unit 114.2 s, rust:unit 300.9 s, rust:build 136.9 s, e2e 77.1 s)                                                                                |
+| `cargo dev check` (L4's gate) on the same clean checkout                                 | 11/11 PASS; census:clones REVIEW (advisory): `provider_error_refusal` / `library_refusal` twins, `build_bin_ref` vs main.rs `build_bin` output — follow-ups |
 
 ## 4. What changed from the design, and why
 
