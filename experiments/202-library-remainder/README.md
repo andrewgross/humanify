@@ -95,7 +95,18 @@ on the final binary (see §8 for its sha): every cell is entries whose
 re-frozen sha equals the committed manifest's / entries, and the manifest's
 canonical identity.
 
-FINAL_LAYERS_TABLE
+| Corpus       | chained | origins | origins7 | chained9 | origins10 | chained11 | origins12 | copies2 | misattr13 | mapdefect14 | time  |
+| ------------ | ------- | ------- | -------- | -------- | --------- | --------- | --------- | ------- | --------- | ----------- | ----- |
+| bun-dev      | 90/90   | 90/90   | 90/90    | 90/90    | 90/90     | 90/90     | 90/90     | 90/90   | 90/90     | 90/90       | 213 s |
+| bun-held     | 30/30   | 30/30   | 30/30    | 30/30    | 30/30     | 30/30     | 30/30     | 30/30   | 30/30     | 30/30       | 103 s |
+| kind-esbuild | 37/37   | 37/37   | 37/37    | 37/37    | 37/37     | 37/37     | 37/37     | 37/37   | 37/37     | 37/37       | 63 s  |
+| kind-webpack | 34/34   | 34/34   | 34/34    | 34/34    | 34/34     | 34/34     | 34/34     | 34/34   | 34/34     | 34/34       | 36 s  |
+| kind-rollup  | 34/34   | 34/34   | 34/34    | 34/34    | 34/34     | 34/34     | 34/34     | 34/34   | 34/34     | 34/34       | 24 s  |
+| cc           | 0/0     | 0/0     | 0/0      | 0/0      | 0/0       | 0/0       | 0/0       | 0/0     | 0/0       | 0/0         | 1 s   |
+
+Every manifest identical (60 / 60), gzip bytes included. Each new builder
+also reproduced on the first binary that had it (before the rebase), so the
+three were checked twice.
 
 Corpora not checked: dev, test, test2, bundlers, apps, pop, remin, remin2,
 remin3, remin4 — their frozen bundles and truths are gone from this host
@@ -104,10 +115,23 @@ re-freeze them.
 
 ## 4. Freezers and builds
 
-FINAL_FREEZE_TABLE
+`cargo dev library corpus freeze <corpus> --out /work/exp202-proof/final/freeze/<corpus>`:
+
+| Corpus       | entries | manifest vs committed      | origin layer from the new data |
+| ------------ | ------- | -------------------------- | ------------------------------ |
+| bun-dev      | 90      | IDENTICAL (`20424b85e5c2`) | 90/90, manifest identical      |
+| bun-held     | 30      | IDENTICAL (`db5f016057b9`) | 30/30, manifest identical      |
+| kind-esbuild | 37      | IDENTICAL (`b41462dd52d7`) | 37/37, manifest identical      |
+| kind-webpack | 34      | IDENTICAL (`2a0c31dd454d`) | 34/34, manifest identical      |
+| kind-rollup  | 34      | IDENTICAL (`163ad2253b66`) | 34/34, manifest identical      |
+| cc           | 1       | IDENTICAL (`cd753f375938`) | 0/0, manifest identical        |
 
 `library corpus build` (one app, `cli_cross-var-efce52`, into a scratch root
-at the same directory depth as the originals): FINAL_BUILD_LINE An earlier
+at the same directory depth as the originals): esbuild, webpack and rollup: `entry.js`, `entry.js.map` and
+`build.json` byte-identical to `/work/exp181-data/build`; Bun (node and bun
+targets): `entry.js` and `build.json` identical, the map's `sources` resolve
+to the same files (Bun's original build dir is one level deeper, so each
+relative path carries one more `../`). An earlier
 build into a deeper scratch dir gave identical `entry.js` for all 10 builds
 (2 apps x esbuild, webpack, rollup, bun-node, bun-bun) and maps differing only
 in the relative `sources` depth.
@@ -124,7 +148,15 @@ No full refill was run (the brief forbids it in a proof).
 
 ## 6. Stub-run batches
 
-FINAL_VP_LINE
+`cargo dev eval vendor-precision bun-dev <c121e56e0's binary> rs-c121`
+(names mode, pairs.json's index, 4 at a time, under one heavy lock) against
+the recorded exp192-vp-cand batch, which bundev-precision.sh + stub-run.mts +
+vendor_precision.py made with that commit's binary (identified by a one-bundle
+probe, then confirmed by the whole batch): **80 / 80 `.precision.json` cards
+byte-identical (`cmp`), `aggregate.json` identical**, and the same 10 bundles
+end RUN FAIL (the binary exits 1 on them in both runs). `eval cjs-placement
+runs` / `trees` share the runner and are held by unit tests (`tree.tsv`
+spelling, the trees table).
 
 ## 7. Gate
 
