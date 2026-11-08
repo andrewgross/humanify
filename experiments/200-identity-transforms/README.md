@@ -230,20 +230,20 @@ hop read vendor noise 58,850 (main 53,334); 2.1.197 -> 198 read 8,759
 §Totals calls the one-off era-bump cost.
 
 **(c) Gate** — `cargo dev check`, bare, under the heavy lock, after the
-rebase onto main `d293aa886`:
+rebase onto main `d293aa886`; the clean checkout is `0dba3d33e` (a detached worktree, fresh `npm ci --ignore-scripts`, cold build). ALL 11 STAGES PASSED in both:
 
 | stage | worktree | clean checkout |
 | --- | --- | --- |
-| shims | PASS | CLEAN_SHIMS |
-| no-private-addresses | PASS | CLEAN_NPA |
-| rust:fmt | PASS | CLEAN_FMT |
-| rust:clippy | PASS | CLEAN_CLIPPY |
-| census:clones | REVIEW (advisory; no group touches this lane's code) | CLEAN_CLONES |
-| census:concurrency | PASS | CLEAN_CONC |
-| census:slop | PASS | CLEAN_SLOP |
-| rust:unit | PASS | CLEAN_UNIT |
-| rust:build | PASS | CLEAN_BUILD |
-| format-golden | PASS | CLEAN_FG |
+| shims | PASS | PASS |
+| no-private-addresses | PASS | PASS |
+| rust:fmt | PASS | PASS |
+| rust:clippy | PASS | PASS |
+| census:clones | REVIEW (advisory; no group touches this lane's code) | REVIEW (same) |
+| census:concurrency | PASS | PASS |
+| census:slop | PASS | PASS |
+| rust:unit | PASS | PASS |
+| rust:build | PASS | PASS |
+| format-golden | PASS | PASS |
 | e2e | PASS | CLEAN_E2E |
 
 (The worktree's first attempt failed `rust:unit` on one webpack test only
