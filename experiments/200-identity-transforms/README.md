@@ -1,9 +1,9 @@
 # exp200 — identity transforms: the code-identity hash ignores the minifier's STYLE
 
-STATUS: PHASE 1 BUILT, HOP-PROVEN AND EVAL-SCORED, NOT MERGED (2026-11-08):
-the 5-pair names eval `exp200-e75f9e25` passes every hold column and
-cuts 179->181 vendor noise 53,310 -> 6,202, but total mints read 260
-against the reference's 243 (band ±14) — held for a decision (§7).
+STATUS: MERGED (2026-11-08, Andrew's decision): the 5-pair names eval
+`exp200-e75f9e25` passes every hold column and cuts 179->181 vendor noise
+53,310 -> 6,202. Total mints read 260 against the reference's 243 (band
+±14); Andrew ruled it draw-to-draw noise (§7, "Decision").
 Earlier status line:, branch
 `exp200-identity-transforms`, rebased on main `d293aa886` (exp201 landed).
 Steady state on 2.1.179 -> 2.1.181: vendor noise 53,338 -> 6,254 lines
@@ -363,3 +363,11 @@ cold run against a band of three, and rule 11 says the gate cannot tell.
 Resolving it means two more cold repeats of this label (`-r2`, `-r3`) and
 comparing the mints spread, or accepting it as inside a band re-measured
 with this binary.
+
+**Decision (Andrew, 2026-11-08): merge; the mints +17 is treated as
+draw-to-draw noise.** The attribution behind it is the paragraph above: the
+excess is on 2.1.216 and 2.1.119, where the change matched exactly the
+same functions deterministically as the reference and sent the model fewer
+close-match asks, while that run's model drew more rejections. Not proven
+by repeats; the next names reference re-measured at or after this merge
+settles it.
