@@ -39,6 +39,9 @@ const KEEP: [&str; 11] = [
 
 type Pv = (String, Option<String>);
 
+/// (every name, every [name, version]): fetch_metadata.py's universe.
+pub type Universe = (Vec<String>, Vec<(String, String)>);
+
 fn sources_of(corpus: &Corpus) -> Result<Vec<super::layers::Loaded>, String> {
     corpus
         .entries()
@@ -50,7 +53,7 @@ fn sources_of(corpus: &Corpus) -> Result<Vec<super::layers::Loaded>, String> {
 
 /// origins7.py `needs`: (names, [name, version]) of every package the
 /// truths' sources and marker regions name.
-pub fn needs(corpus: &Corpus) -> Result<(Vec<String>, Vec<(String, String)>), String> {
+pub fn needs(corpus: &Corpus) -> Result<Universe, String> {
     let mut got: BTreeSet<Pv> = BTreeSet::new();
     for l in sources_of(corpus)? {
         for (si, p) in l.paths.iter().enumerate() {
