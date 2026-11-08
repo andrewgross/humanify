@@ -239,7 +239,7 @@ matcher's replacement is an open follow-up in `docs/rust-port/19-cutover.md`.
 There is no heap flag: the binary is not a Node process (`--heap-mb`, which
 was inert, is refused). `--no-vendor-score` / `--no-vendor` and `--no-layout`
 are refused too: scorer v2 always scores `vendor/` and the layout block when
-both trees have them (rule 8). Run an eval ALONE — a parallel heavy job (a gate batch, another
+both trees have them (rule 8). Every heavy verb (`eval score|neutrality|walk`, `library score`, `index build`, the batch runners) takes `/work/heavy.lock` itself — `cargo dev` prints when — so never wrap a `cargo dev` verb in `flock` (a nested flock deadlocks); wrap only non-verb heavy jobs, such as a bare `cargo dev check`. Run an eval ALONE — a parallel heavy job (a gate batch, another
 eval) has OOM-killed a rebase before and silently degraded a label to the
 archive prior (`ts-control-fec64e5` r1; check eval logs for "rebase FAILED").
 
