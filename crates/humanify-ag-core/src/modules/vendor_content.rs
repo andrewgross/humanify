@@ -383,6 +383,11 @@ pub struct StaleEraEntry {
     pub ordinal: usize,
     /// The vendor file's content key (None: unreadable / unrecognized).
     pub key: Option<String>,
+    /// The entry's file and runtime identifier (exp194's carried identity;
+    /// None when the entry recorded neither) — carried with the name when
+    /// the entry's content group joins (exp200: re-deriving them cost the
+    /// first hop after an era bump every kept file and identifier).
+    pub identity: Option<super::vendor_pairing::CarriedIdentity>,
 }
 
 /// What the re-key did.
@@ -452,9 +457,9 @@ pub fn rekey_prior_by_content(
                 .map(|(_, e)| CarriedName {
                     name: e.name.clone(),
                     origin: e.origin,
-                    // A stale-era entry is re-keyed by content; its file
-                    // and identifier are re-derived (exp194 is current-era).
-                    identity: None,
+                    // The file and identifier carry as the exact carry's
+                    // do (exp194): only the hash bytes are of another era.
+                    identity: e.identity.clone(),
                 })
                 .collect(),
         );

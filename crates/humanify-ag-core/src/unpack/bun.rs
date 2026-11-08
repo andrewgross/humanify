@@ -194,6 +194,13 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
                         .and_then(serde_json::Value::as_u64)
                         .map_or(usize::MAX, |v| v as usize),
                     key: None,
+                    // exp200: the entry's file and identifier ride with its
+                    // name through the re-key, as the exact carry's do.
+                    identity: crate::modules::vendor_pairing::prior_identity(
+                        r.get("fileName").and_then(|x| x.as_str()),
+                        r.get("runtimeIdentifier").and_then(|x| x.as_str()),
+                        VENDOR_DIR,
+                    ),
                 },
                 str_of(r, "fileName"),
             ))

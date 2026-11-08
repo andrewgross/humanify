@@ -94,6 +94,7 @@ fn entry(name: &str, ts: &str, ordinal: usize, key: Option<&str>) -> StaleEraEnt
         era_hash: ts.into(),
         ordinal,
         key: key.map(String::from),
+        identity: None,
     }
 }
 
@@ -258,4 +259,44 @@ fn a_formatted_names_mode_prior_keys_like_the_raw_fresh_body() {
         .replace("(e)", "(exportsObj)")
         .replace("e ?", "exportsObj ?");
     assert_eq!(prior_file_content_key(&prior), key(raw), "{prior}");
+}
+
+/// exp200: the stale-era re-key carries the prior entry's FILE and runtime
+/// IDENTIFIER with its name, exactly as the current-era carry does
+/// (exp194). Without them the first hop after a match-key era bump
+/// re-derived every vendor module's identifier from the new hash and moved
+/// every file it had kept from an older release (2.1.178 -> 2.1.179:
+/// 38,436 vendor noise lines against main's 1,176).
+#[test]
+fn the_rekey_carries_the_prior_file_and_identifier() {
+    use super::super::vendor_pairing::CarriedIdentity;
+    let identity = |file: &str, id: &str| {
+        Some(CarriedIdentity {
+            file_name: Some(file.into()),
+            runtime_identifier: Some(id.into()),
+        })
+    };
+    let prior = vec![
+        StaleEraEntry {
+            identity: identity("vendor/pkg/a.js", "lib_aaaaaaaa"),
+            ..entry("a", "old1", 0, Some("K1"))
+        },
+        StaleEraEntry {
+            identity: identity("vendor/pkg/b.js", "lib_bbbbbbbb"),
+            ..entry("b", "old2", 0, Some("K2"))
+        },
+    ];
+    let fresh = vec![
+        ("new2".to_string(), Some("K2".to_string())),
+        ("new1".to_string(), Some("K1".to_string())),
+    ];
+    let r = rekey_prior_by_content(&fresh, &prior);
+    assert_eq!(
+        r.names["new1"][0].identity,
+        identity("vendor/pkg/a.js", "lib_aaaaaaaa")
+    );
+    assert_eq!(
+        r.names["new2"][0].identity,
+        identity("vendor/pkg/b.js", "lib_bbbbbbbb")
+    );
 }
