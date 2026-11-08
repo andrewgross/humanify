@@ -177,8 +177,8 @@ ref-names-0357696e-r1-s2's 65,530 (its high mode).
 | --- | --- |
 | `cargo dev check`, branch worktree (48fca5ae4) | 11/11 PASS (clones REVIEW, 51 groups, none in this change) |
 | `cargo dev check`, clean checkout of merge 111401fe4 | 11/11 PASS |
-| `cargo dev check`, bands branch worktree | see the merge report |
-| `cargo dev check`, clean checkout of the bands merge | see the merge report |
+| `cargo dev check`, bands branch worktree (34807c697) | 11/11 PASS (clones REVIEW) |
+| `cargo dev check`, clean checkout of bands merge 40654ebcd | 11/11 PASS |
 
 ## Proposed CLAUDE.md text (for Andrew to edit in; not edited here)
 
