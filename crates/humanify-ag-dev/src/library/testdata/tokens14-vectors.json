@@ -1,0 +1,406 @@
+{
+ "about": "tokens14.mjs (acorn 8.19.0, node 24) on hand-written inputs: per input its fileTokens (files mode, every token in order) and unitEvidence (the whole input as one span); recorded 2026-11-08 by exp202 to pin library::acorn / library::tokens14",
+ "cases": [
+  {
+   "input": "var a = 1 / 2 / 3; var re = /ab+c/gi.test('xyz1');",
+   "fileTokens": [
+    "var",
+    "a",
+    "re",
+    "test",
+    "xyz1"
+   ],
+   "unitEvidence": [
+    "test",
+    "xyz1"
+   ]
+  },
+  {
+   "input": "if (x) /foo/.exec(y); else z = a / b / c;",
+   "fileTokens": [
+    "if",
+    "x",
+    "exec",
+    "y",
+    "else",
+    "z",
+    "a",
+    "b",
+    "c"
+   ],
+   "unitEvidence": [
+    "exec"
+   ]
+  },
+  {
+   "input": "x = y\n/re/g.exec('abcd')",
+   "fileTokens": [
+    "x",
+    "y",
+    "re",
+    "g",
+    "exec",
+    "abcd"
+   ],
+   "unitEvidence": [
+    "exec",
+    "abcd"
+   ]
+  },
+  {
+   "input": "return\n/abc/.test(q)",
+   "fileTokens": [
+    "return",
+    "test",
+    "q"
+   ],
+   "unitEvidence": [
+    "test"
+   ]
+  },
+  {
+   "input": "a = b ? /c/ : d / e / f;",
+   "fileTokens": [
+    "a",
+    "b",
+    "d",
+    "e",
+    "f"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "`plain ${ `nested ${deep} chunk` } tail` + `bad \\unicode` + `ok`",
+   "fileTokens": [
+    "plain ",
+    "nested ",
+    "deep",
+    " chunk",
+    " tail",
+    "ok"
+   ],
+   "unitEvidence": [
+    "plain ",
+    "nested ",
+    " chunk",
+    " tail",
+    "ok"
+   ]
+  },
+  {
+   "input": "'use strict'; var s = '\\101octal';",
+   "fileTokens": [
+    "use strict",
+    "var",
+    "s",
+    "octal"
+   ],
+   "unitEvidence": [
+    "use strict"
+   ]
+  },
+  {
+   "input": "'use strict'\nvar n = 010;",
+   "fileTokens": [
+    "use strict",
+    "var",
+    "n"
+   ],
+   "unitEvidence": [
+    "use strict"
+   ]
+  },
+  {
+   "input": "var o = { longKey: 1, 'quoted key': 2, other: { innerKey: 3 } }; o.property.another?.optional;",
+   "fileTokens": [
+    "var",
+    "o",
+    "longKey",
+    "quoted key",
+    "other",
+    "innerKey",
+    "property",
+    "another",
+    "optional"
+   ],
+   "unitEvidence": [
+    "longKey",
+    "quoted key",
+    "other",
+    "innerKey",
+    "property",
+    "another",
+    "optional"
+   ]
+  },
+  {
+   "input": "\\u0069f (x) {}",
+   "fileTokens": [
+    "if",
+    "u0069f"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "var \\u0061bcd = 1; abcd.efgh = 2;",
+   "fileTokens": [
+    "var",
+    "abcd",
+    "efgh"
+   ],
+   "unitEvidence": [
+    "efgh"
+   ]
+  },
+  {
+   "input": "#!/usr/bin/env node\nconsole.log('hello world')",
+   "fileTokens": [
+    "console",
+    "log",
+    "hello world"
+   ],
+   "unitEvidence": [
+    "hello world"
+   ]
+  },
+  {
+   "input": "class K { #secret = 1; method() { return this.#secret } }",
+   "fileTokens": [
+    "class",
+    "K",
+    "method",
+    "return",
+    "this"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "let x: number = 5; interface Foo { bar: string } const s = 'after error';",
+   "fileTokens": [
+    "let",
+    "x",
+    "number",
+    "interface",
+    "Foo",
+    "bar",
+    "string",
+    "const",
+    "s",
+    "after error"
+   ],
+   "unitEvidence": [
+    "after error"
+   ]
+  },
+  {
+   "input": "x = 1_000_000 + 0x1F_FF + .5e10 + 1n + 0b1010 + 0o17;",
+   "fileTokens": [
+    "x"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "x = 1__0; var after = 'zzz';",
+   "fileTokens": [
+    "x",
+    "after",
+    "zzz"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "a\n-->comment here\nb = 'still'",
+   "fileTokens": [
+    "a",
+    "b",
+    "still"
+   ],
+   "unitEvidence": [
+    "still"
+   ]
+  },
+  {
+   "input": "a = 1 <!-- html comment\nb = 'yes'",
+   "fileTokens": [
+    "a",
+    "b",
+    "yes"
+   ],
+   "unitEvidence": [
+    "yes"
+   ]
+  },
+  {
+   "input": "var s = 'unterminated\nvar t = 'next';",
+   "fileTokens": [
+    "var",
+    "s",
+    "unterminated",
+    "next"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "var \ud835\udcb3yz = '\\u{1F600}' + '\\uD800' + 'ok';",
+   "fileTokens": [
+    "var",
+    "\ud835\udcb3yz",
+    "\ud83d\ude00",
+    "\ud800",
+    "ok"
+   ],
+   "unitEvidence": [
+    "\ud83d\ude00",
+    "\ud800",
+    "ok"
+   ]
+  },
+  {
+   "input": "function* g() { yield /re/g; } var q = a ++ / 2;",
+   "fileTokens": [
+    "function",
+    "g",
+    "yield",
+    "var",
+    "q",
+    "a"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "x = a.function + b.if; y = {class: 1, return: 2}",
+   "fileTokens": [
+    "x",
+    "a",
+    "function",
+    "b",
+    "if",
+    "y",
+    "class",
+    "return"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "var r = /[/]/.test(s) + /\\//.source;",
+   "fileTokens": [
+    "var",
+    "r",
+    "test",
+    "s",
+    "source"
+   ],
+   "unitEvidence": [
+    "test",
+    "source"
+   ]
+  },
+  {
+   "input": "var bad = /(?<n>a)\\k<m>/; var after = 'tokens';",
+   "fileTokens": [
+    "var",
+    "bad",
+    "after",
+    "tokens"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "var bad2 = /a/gg; var after2 = 'more';",
+   "fileTokens": [
+    "var",
+    "bad2",
+    "after2",
+    "more"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "x = `line1\r\nline2` + 'abc\\\r\ndef';",
+   "fileTokens": [
+    "x",
+    "line1\nline2",
+    "abcdef"
+   ],
+   "unitEvidence": [
+    "line1\nline2",
+    "abcdef"
+   ]
+  },
+  {
+   "input": "label: { break label; } do /re/.test(x); while(0)",
+   "fileTokens": [
+    "label",
+    "break",
+    "do",
+    "test",
+    "x",
+    "while"
+   ],
+   "unitEvidence": [
+    "test"
+   ]
+  },
+  {
+   "input": "var big = 'a' + \"double \\\"quoted\\\" string\" + 'single \\'q\\'';",
+   "fileTokens": [
+    "var",
+    "big",
+    "a",
+    "double \"quoted\" string",
+    "single 'q'"
+   ],
+   "unitEvidence": [
+    "a",
+    "double \"quoted\" string",
+    "single 'q'"
+   ]
+  },
+  {
+   "input": "obj = {get prop() {}, set prop(v) {}, async method() {}, *gen() {}}",
+   "fileTokens": [
+    "obj",
+    "get",
+    "prop",
+    "set",
+    "v",
+    "async",
+    "method",
+    "gen"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "a = b\n++c\nd = e / f / g",
+   "fileTokens": [
+    "a",
+    "b",
+    "c",
+    "d",
+    "e",
+    "f",
+    "g"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "x = y => /re/g; z = (a) / 2 / 3; w = [] / 2 / 3; v = {} / 2 / 1",
+   "fileTokens": [
+    "x",
+    "y",
+    "z",
+    "a",
+    "w",
+    "v"
+   ],
+   "unitEvidence": []
+  },
+  {
+   "input": "}{ ) ( ] [ /stray/ unbalanced",
+   "fileTokens": [
+    "unbalanced"
+   ],
+   "unitEvidence": []
+  }
+ ]
+}

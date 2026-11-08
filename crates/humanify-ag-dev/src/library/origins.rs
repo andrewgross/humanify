@@ -35,7 +35,7 @@ pub struct Rules {
 }
 
 /// One marker region: (first line, origin, marker path, kind).
-type Region = (usize, Option<String>, Option<String>, Option<&'static str>);
+pub(crate) type Region = (usize, Option<String>, Option<String>, Option<&'static str>);
 
 /// origins.py `marker_regions`: (first line, origin) per module marker.
 fn marker_regions(content: &str) -> Vec<(usize, Option<String>)> {
@@ -53,7 +53,7 @@ fn marker_regions(content: &str) -> Vec<(usize, Option<String>)> {
 }
 
 /// origins.py `marker_regions7`.
-fn marker_regions7(content: &str, lazybody: bool, patched: bool) -> Vec<Region> {
+pub(crate) fn marker_regions7(content: &str, lazybody: bool, patched: bool) -> Vec<Region> {
     let lines: Vec<&str> = content.split('\n').collect();
     let mut out: Vec<Region> = Vec::new();
     let mut last: Option<(Option<String>, String)> = None;
@@ -87,7 +87,7 @@ fn marker_regions7(content: &str, lazybody: bool, patched: bool) -> Vec<Region> 
 }
 
 /// origins.py `path_version`.
-fn path_version(path: &str, pkg: &str) -> Option<String> {
+pub(crate) fn path_version(path: &str, pkg: &str) -> Option<String> {
     pyre::pnpm_pkgs(path)
         .into_iter()
         .find(|(name, _)| name.replace('+', "/") == pkg)

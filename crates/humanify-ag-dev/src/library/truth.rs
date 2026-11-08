@@ -381,8 +381,36 @@ pub fn carried_verdict(
     (unit.intersection(source).count() as f64) < CARRIED_SHARE * unit.len() as f64
 }
 
+/// Which frozen layers an `Audit` reads (truth_audit `RULES13`, `RULES14`
+/// and `ranges=[]`): the scorer reads all three; a layer's own builder
+/// labels units without the layers built after it.
+#[derive(Clone, Copy, Debug)]
+pub struct AuditLayers {
+    pub copies: bool,
+    pub misattr13: bool,
+    pub mapdefect14: bool,
+}
+
+impl AuditLayers {
+    pub const ALL: AuditLayers = AuditLayers {
+        copies: true,
+        misattr13: true,
+        mapdefect14: true,
+    };
+}
+
 impl Audit {
     pub fn new(corpus: &Corpus, entry: &CorpusEntry, truth: &Truth) -> Result<Audit, String> {
+        Audit::with(corpus, entry, truth, AuditLayers::ALL)
+    }
+
+    /// An `Audit` reading only the layers `layers` names.
+    pub fn with(
+        corpus: &Corpus,
+        entry: &CorpusEntry,
+        truth: &Truth,
+        layers: AuditLayers,
+    ) -> Result<Audit, String> {
         let bpath = corpus.corpus_path(entry, Role::Bundle)?;
         let text = std::fs::read(&bpath).map_err(|e| format!("{}: {e}", bpath.display()))?;
         let contents = read_map(&corpus.source_map_path(entry)?)?
@@ -399,9 +427,13 @@ impl Audit {
             all.extend(set.iter().cloned());
             tok.insert(si as i64, set);
         }
-        let copies_doc: CopiesLayer =
-            corpus.layer_file(entry, LayerKind::Copies2, ".copies2.json.gz")?;
-        let mut ranges = copies_doc.ranges;
+        let mut ranges = if layers.copies {
+            let doc: CopiesLayer =
+                corpus.layer_file(entry, LayerKind::Copies2, ".copies2.json.gz")?;
+            doc.ranges
+        } else {
+            Vec::new()
+        };
         ranges.sort_by(|x, y| py_cmp(&Value::Array(x.clone()), &Value::Array(y.clone())));
         let copies: Vec<CopyRange> = ranges
             .iter()
@@ -415,10 +447,19 @@ impl Audit {
                 })
             })
             .collect::<Result<_, String>>()?;
-        let mis13: RowsLayer =
-            corpus.layer_file(entry, LayerKind::Misattr13, ".misattr13.json.gz")?;
-        let md14: RowsLayer =
-            corpus.layer_file(entry, LayerKind::Mapdefect14, ".mapdefect14.json.gz")?;
+        let rows = |on: bool, kind: LayerKind, suffix: &str| -> Result<Vec<Vec<Value>>, String> {
+            if !on {
+                return Ok(Vec::new());
+            }
+            let doc: RowsLayer = corpus.layer_file(entry, kind, suffix)?;
+            Ok(doc.rows)
+        };
+        let mis13 = rows(layers.misattr13, LayerKind::Misattr13, ".misattr13.json.gz")?;
+        let md14 = rows(
+            layers.mapdefect14,
+            LayerKind::Mapdefect14,
+            ".mapdefect14.json.gz",
+        )?;
         Ok(Audit {
             offs: truth.segments.iter().map(|s| s.0).collect(),
             seg_src: truth.segments.iter().map(|s| s.1).collect(),
@@ -427,8 +468,8 @@ impl Audit {
             all,
             copy_at: copies.iter().map(|c| c.a).collect(),
             copies,
-            mis13: span_rows(mis13.rows),
-            md14: span_rows(md14.rows),
+            mis13: span_rows(mis13),
+            md14: span_rows(md14),
         })
     }
 
@@ -522,6 +563,8 @@ pub struct Label {
     pub has_origin: bool,
     pub origin: Option<String>,
     pub via: Option<String>,
+    /// Python's `"misattributedFrom" in row`: scorer 13 relabelled it.
+    pub misattributed: bool,
 }
 
 impl Label {
@@ -598,6 +641,7 @@ fn misattributed_label(
         pkg: Some(pkg.clone()),
         version: opt_str(row.get(4))?,
         file: opt_str(row.get(5))?,
+        misattributed: true,
         ..Label::default()
     };
     if let Some((origin, _)) = audit.copy_origin(s, e, &pkg) {

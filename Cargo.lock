@@ -552,6 +552,7 @@ dependencies = [
  "oxc_allocator",
  "oxc_ast",
  "oxc_estree",
+ "oxc_regular_expression",
  "oxc_span",
  "proc-macro2",
  "quote",
