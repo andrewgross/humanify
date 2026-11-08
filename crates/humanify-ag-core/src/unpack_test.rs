@@ -1454,7 +1454,7 @@ fn node(file: &Path) -> Result<String, String> {
     let out = std::process::Command::new("node")
         .arg(file)
         .output()
-        .expect("node is on PATH (npm run check runs under it)");
+        .expect("node is on PATH (the gate, cargo dev check, needs it)");
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {

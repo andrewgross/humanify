@@ -132,8 +132,8 @@ humanify-ag index build --spec <file> --registry <dir> \
 
 The default index is described by `crates/humanify-ag-index/specs/default.toml`
 (schema `humanify-index-spec/1`), and nothing else: a new user runs
-`scripts/build-index.sh crates/humanify-ag-index/specs/default.toml <registry>
-<store> <work> <out>` against the public npm registry and gets an index of
+`cargo dev index build crates/humanify-ag-index/specs/default.toml --registry D
+--store D --index-work D --index-out D` against the public npm registry and gets an index of
 the same shape and coverage. Every package and version in the plan is
 there because a RULE chose it; the resolved plan (every `pkg@version` and
 its rule attribution) is written into the index's `build.json` sidecar.
@@ -524,7 +524,7 @@ keys are deferred.
 An index is data, not code: it is never committed, and nothing in a run
 picks one unless `--library-index` names it. The recommendation below is
 what `library.matching = "report"` should be pointed at today, and what the
-eval's library score (`npm run eval -- library`) is judged on.
+eval's library score (`cargo dev library score`) is judged on.
 
 **Where to find it (2026-10-25).** The recommended index lives in one standard store, `/work/library-index/<index
 id>/`, and `/work/library-index/current` links to the recommended one. Point a run at the link
@@ -534,7 +534,7 @@ detects, Bun included. To adopt a new index, add its directory under its id and 
 
 **Everything else was deleted 2026-10-25** (Andrew: keep the index only). That covers every `/work/expNNN-data`
 path in this section and in the experiment READMEs: the older indexes, the build stores and work dirs, and the
-library-score corpora (dev, test, test2, apps, pop, bundlers, remin, remin2-4). So `npm run eval -- library` has
+library-score corpora (dev, test, test2, apps, pop, bundlers, remin, remin2-4). So the library score has
 nothing to score until a corpus is rebuilt (each corpus's README gives its recipe and seed). The next index is a
 full build, about 12 h on 30 cores (§10, "How to build one"), not a delta.
 

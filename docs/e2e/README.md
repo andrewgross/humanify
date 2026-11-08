@@ -1,5 +1,11 @@
 # E2E Fingerprint Validation Harness
 
+> **HISTORICAL (noted 2026-11-08, harness lane L5).** This describes the
+> pre-cutover TypeScript fingerprint-validation harness (`npm run e2e -- ...`).
+> That harness and its npm script are gone; the gate's end-to-end stage is
+> `cargo dev e2e` (CLAUDE.md, "Checks"), and matcher ground truth is
+> `cargo dev match-truth`. The text is kept as the design record.
+
 The E2E validation harness tests whether humanify's fingerprinting system correctly identifies functions across different versions of minified code.
 
 ## Purpose

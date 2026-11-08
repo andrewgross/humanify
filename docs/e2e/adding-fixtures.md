@@ -1,5 +1,11 @@
 # Adding New Test Fixtures
 
+> **HISTORICAL (noted 2026-11-08, harness lane L5).** This describes the
+> pre-cutover TypeScript fingerprint-validation harness (`npm run e2e -- ...`).
+> That harness and its npm script are gone; the gate's end-to-end stage is
+> `cargo dev e2e` (CLAUDE.md, "Checks"), and matcher ground truth is
+> `cargo dev match-truth`. The text is kept as the design record.
+
 This guide explains how to add new packages to the E2E validation harness.
 
 ## Choosing a Good Test Package

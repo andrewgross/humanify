@@ -324,7 +324,7 @@ fn the_shim_interop_helpers_behave_as_buns() {
         .arg(dir.join("probe.js"))
         .arg(dir.join("shim.js"))
         .output()
-        .expect("node is on PATH (npm run check runs under it)");
+        .expect("node is on PATH (the gate, cargo dev check, needs it)");
     std::fs::remove_dir_all(&dir).ok();
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),

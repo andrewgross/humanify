@@ -234,7 +234,7 @@ fn emit_and_run(code: &str, order: &[&str]) -> (bool, String, String, Vec<(Strin
     let out = std::process::Command::new("node")
         .arg(dir.join("index.js"))
         .output()
-        .expect("node is on PATH (npm run check runs under it)");
+        .expect("node is on PATH (the gate, cargo dev check, needs it)");
     std::fs::remove_dir_all(&dir).ok();
     (
         out.status.success(),

@@ -156,7 +156,8 @@ lines (200 across four hops) while every usage site of a re-aliased import is
 charged to `naming`. A ranking that reads that column at face value puts the
 lever last when it is first.
 
-Both are now encoded as data in `experiments/034-eval-harness/kpis.ts`, where
+Both are now encoded as data in the eval scorer's KPI table
+(`crates/humanify-ag-dev/src/eval/kpis.rs`; TS `034/kpis.ts` before harness lane L2a), where
 each KPI carries its direction (`↓` drive to zero, `=` real change that must not
 move, `~` a move means nothing on its own) and its caveat prints under the table.
 
@@ -255,8 +256,8 @@ LLM, and 85->86 reached exactly 0 under both conditions.
 **Use the cache for iteration; never for a verdict.** A gate has to reproduce
 what a real user sees. And when a candidate goes cold, the CONTROL has to go cold
 with it — a cold candidate against a cached control measures the cache, not the
-change. `run.sh` now defaults to no cache and prints which mode it is in;
-`EVAL_LLM_CACHE=<dir>` opts back in and announces itself as not gate-valid.
+change. `cargo dev eval score` defaults to no cache and prints which mode it is
+in; `--llm-cache <dir>` opts back in and announces itself as not gate-valid.
 
 Corollary, and the reason this rule is not just about one flag: **anything that
 suppresses variance also suppresses the evidence that the variance matters.**
@@ -281,7 +282,7 @@ one of them is checkable:
 > demonstrably made zero live LLM calls. Read the call count out of the run
 > output before you interpret any diff.**
 
-`neutrality.sh` already enforces this — its verdict fails when the baseline leg
+`cargo dev eval neutrality` already enforces this — its verdict fails when the baseline leg
 writes cache entries, which is exactly this check. Ad-hoc probe scripts are
 where it goes missing, and an ad-hoc probe is precisely where a dramatic number
 is most likely to be believed.
@@ -300,8 +301,9 @@ signal confirmed the result, but the gate had been decorative.
 > and need two different checks.**
 
 The second check is cheap: name the quantity your gate reads, and confirm some
-existing tool fails on that same quantity. Here `neutrality.sh` and
-`run-pipeline.ts` both gate on cache writes, and neither looks at the `LLM:`
+existing tool fails on that same quantity. Here neutrality and the eval's
+pipeline leg (then `neutrality.sh` and `run-pipeline.ts`, now
+`runners::neutrality` and `runners::leg`) both gate on cache writes, and neither looks at the `LLM:`
 line — which was the available evidence that the gate was reading the wrong
 number.
 

@@ -5,23 +5,41 @@
 **One command. Run it before every commit:**
 
 ```bash
-npm run check
+cargo dev check
 ```
 
-It runs all thirteen stages — typecheck, lint (prettier + biome), rust:fmt,
-rust:clippy, knip, knip:prod, clone census, concurrency census, unit,
-rust:unit, rust:build, rust:format-golden, e2e — and prints a summary saying
-which ran. (An earlier thirteenth, rust:parity — the dump differ's selftest —
-was retired 2026-09-28 with the rest of the TS-parity scaffolding: the differ
-compared TS-side artifact dumps and, post-cutover, had no living caller. The
-concurrency census joined 2026-10-12.)
-The `census:clones` stage is ADVISORY: unreviewed potential-duplication prints
-`REVIEW` (never FAIL) — an automated mini code-review for Claude/agents to act
-on by unifying the code or allowlisting with a justification. The
-`census:concurrency` stage is pass/fail: an unlisted concurrency site in the
-pipeline's Rust FAILS until it is confirmed (see Code style, "Concurrency").
-All other stages are pass/fail. `check:all` and `test` are aliases of it. Nothing is
-outside it.
+It runs eleven stages, cheapest first — shims, no-private-addresses,
+rust:fmt, rust:clippy, census:clones (ADVISORY), census:concurrency,
+census:slop (ADVISORY), rust:unit, rust:build, format-golden, e2e — and prints
+a summary saying which ran, which failed and which it never reached
+(fail-fast). The two ADVISORY stages print `REVIEW` (never FAIL): an automated
+mini code-review for Claude/agents to act on — `census:clones` by unifying the
+code or allowlisting the finding with a justification
+(`dev/census/clone-allowlist.json`), `census:slop` by reading why a crate's
+erosion or clone share rose against the merge-base. `census:concurrency` is
+pass/fail: an unlisted concurrency site in `crates/` FAILS until it is
+confirmed (see Code style, "Concurrency"). All other stages are pass/fail.
+Nothing is outside it.
+
+`cargo dev` is the measurement harness: the `humanify-ag-dev` crate
+(`crates/humanify-ag-dev`, `publish = false`, never part of the release
+artifact), run through the alias in `.cargo/config.toml`. It replaced the
+TypeScript / Python / bash harness (`npm run check`, `scripts/check.ts`,
+`experiments/lib/`, the 034 TS scorer, the 096 Python scorer) in harness
+lanes L1-L5 (exp195-exp199, exp203); tag `experiments-code-final` is the last
+tree that has the old harness and the old experiments' code. The old gate's
+13 stages map onto these 11 in `SUCCESSORS` (`gate/check.rs`).
+
+**Setup, once per clone:**
+
+```bash
+git config core.hooksPath .githooks   # the pre-commit hook: cargo dev precommit
+npm ci --ignore-scripts               # webcrack + tsx, for the webcrack shim only
+```
+
+The hook rustfmts staged `.rs` files, runs the concurrency census over them
+and refuses a staged private network address. It is not the gate: it never
+runs the tests.
 
 **The pipeline is the Rust binary** (`crates/`, built as
 `target/release/humanify-ag` — the one product command since exp186, with
@@ -29,25 +47,35 @@ the offline index builder as its `index` subcommand: `humanify-ag index
 build --spec …`). The TypeScript pipeline (`src/`) was deleted at the
 cutover, 2026-09-26 — `docs/rust-port/19-cutover.md` is the ledger of what was
 deleted, moved or retired and why; tag `m4` is the last tree that has it. The
-TS that remains is the measurement harness (`scripts/`, `experiments/lib/`,
-the 034 eval harness, `test/`), and the TS stages cover exactly that.
+only JavaScript left is `tools/webcrack-shim.ts`, which the binary runs (with
+`npx tsx`) to unpack webpack / browserify bundles, and node itself, which e2e
+uses to import every output. `package.json` holds exactly the shim's runtime.
+(Until exp202 lands, a short list of library-truth builders it is porting
+stays in their experiment folders: `experiments/203-harness-l5/README.md`
+lists them.)
 
-What the Rust-specific stages prove:
+What the stages prove:
 
+- `shims` — the remaining JavaScript (the webcrack shim) parses.
+- `no-private-addresses` — no RFC 1918 address in a tracked file (the repo is
+  public).
+- `rust:clippy` — the house rules as lints, over every crate including the
+  harness: complexity ceiling, hash-iteration ban in decision code, env reads
+  confined to their owners, the concurrency bans.
+- `rust:unit` — `cargo test --workspace`: the pipeline's tests, the replays of
+  the frozen `test/parity/` specs, and the harness's own tests (every old
+  `*.test.ts` rule is ported there or recorded as moot).
 - `rust:build` — the RELEASE binary, `--locked`, the build the eval runs.
-- `rust:format-golden` — that binary's formatter against
+- `format-golden` — that binary's formatter against
   `test/parity/format-goldens.json` (the TS beautifier's captured bytes, now
   the formatter's frozen spec), plus a planted perturbation that must be caught.
-- `e2e` — `scripts/e2e.ts`: the release binary on the committed e2e fixtures
-  (fresh, then with `--prior-version`) against a stub LLM that names every
-  identifier, run twice for byte-determinism, and every output imported by
-  Node and required to export the input's surface EXACTLY — an export name
-  is the module's API (finding #55, fixed; the `esm-exports` fixture holds
-  every ESM export form).
-
-`unit` finds **every** `*.test.ts` in `test/` and `experiments/` (the harness's
-own tests). `rust:unit` is `cargo test --workspace`, including the replays of
-the frozen `test/parity/` specs.
+- `e2e` — the release binary on the committed e2e fixtures
+  (fresh, then with `--prior-version`) against the one stub LLM
+  (`humanify-ag-testkit`) that names every identifier, run twice for
+  byte-determinism, every launch held equal to `dev/eval/goldens/e2e.golden.txt`,
+  and every output imported by Node and required to export the input's surface
+  EXACTLY — an export name is the module's API (finding #55, fixed; the
+  `esm-exports` fixture holds every ESM export form).
 
 There used to be three commands and none of them ran everything: `test:e2e` sat
 outside the documented gate entirely, and `knip` sat outside the one people
@@ -58,66 +86,78 @@ A subset is available for iteration and is **labelled PARTIAL** so it cannot be
 mistaken for a green gate:
 
 ```bash
-npm run check -- --only typecheck,lint
+cargo dev check --only rust:fmt,rust:clippy
 ```
 
-Adding a check is one entry in `STAGES` in `scripts/check.ts`. If it is not in
-that list it does not run, and that list is the only place to look to find out
-what the gate covers.
+Adding a check is one entry in `STAGES` in
+`crates/humanify-ag-dev/src/gate/check.rs`. If it is not in that list it does
+not run, and that list is the only place to look to find out what the gate
+covers.
 
 Individual stages, if you need to run one directly:
 
 ```bash
-npm run typecheck          # tsc --noEmit (the harness TS)
-npm run lint               # prettier --check + biome check (test/, scripts/, experiments/lib/)
-npm run test:unit          # EVERY *.test.ts: test/, experiments/
-npm run knip               # dead code / unused exports (knip.json)
-npm run knip:prod          # production-only dead code audit
-npm run census:clones      # cross-file twin functions vs allowlist (--loose = review sweep)
-npm run census:concurrency # concurrency sites in crates/ vs scripts/concurrency-allowlist.json
-cargo test --workspace     # rust:unit
+cargo dev shims
+cargo dev no-private-addresses
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo dev census clones [--loose]  # cross-function twins in crates/ vs dev/census/clone-allowlist.json
+cargo dev census concurrency       # concurrency sites in crates/ vs dev/census/concurrency-allowlist.json
+cargo dev census slop [--base REF] # per-crate erosion / clone share vs the merge-base
+cargo test --workspace             # rust:unit
 cargo build --release --locked -p humanify-ag-cli   # rust:build
-scripts/format-golden.sh   # rust:format-golden (needs rust:build)
-npm run test:e2e           # e2e (needs rust:build)
+cargo dev format-golden            # needs rust:build
+cargo dev e2e                      # needs rust:build
 ```
+
+Dev tools beside the gate (each a `cargo dev` verb; `cargo dev` with no
+arguments prints every verb with what it proves and what it CANNOT prove):
+`ask-trace`, `diff-asks`, `match-truth`, `env-check [--endpoint URL]`,
+`stub-llm serve [--port N]`, `build-bin <ref>`, `run stub`.
 
 ## Validating cross-version changes
 
-**One dispatcher. Every supported instrument is a verb on it:**
+**One harness. Every supported instrument is a verb on it:**
 
 ```bash
-npm run eval                     # lists the verbs, what each proves and CANNOT prove
-npm run eval -- score <label>    # cold scored run of the binary (wraps 034/run.sh)
-npm run eval -- neutrality <ref> # byte-identity gate for should-change-nothing edits
-npm run eval -- leaderboard ...  # compare labels
+cargo dev                               # lists the verbs, what each proves and CANNOT prove
+cargo dev eval score <label>            # cold scored run of the binary
+cargo dev eval neutrality <ref>         # byte-identity gate for should-change-nothing edits
+cargo dev eval leaderboard <label>...   # compare labels
+cargo dev eval walk <from>..<to> --walk-dir D   # a real version walk; its report flags the hops to read
+cargo dev library score <label> --index D --rule agreement|structural   # library naming P/R on a frozen corpus
 ```
 
-The registry in `scripts/eval.ts` is the only place to look — an instrument
-not listed there is not supported. The dispatcher owns the env folklore (bun
-on PATH, without which boot gates silently skip) and refuses to `score` into
-a label whose cards came from a different commit (`--force-mixed` overrides).
-`test/measurement-owners.test.ts` guards the stack: verdict files must be
-consumed by the summary, no living instrument may launch the deleted TS
-pipeline, statement extraction must route through the throwing owner, and a
-new changed-line counter in the living instrument set fails CI.
+The verb table in `crates/humanify-ag-dev/src/main.rs` is the only place to
+look — an instrument not listed there is not supported. Every setting is a
+harness key (`crates/humanify-ag-dev/src/settings/keys.rs`, one parse point):
+an unknown flag or a retired one fails upfront, naming why, and no instrument
+reads an ambient environment variable (`env_guard`). The harness puts the
+user tools (`~/.cargo/bin`, `~/.bun/bin`, without which boot gates silently
+skip) on its children's PATH, and `eval score` refuses to score into a label
+whose cards came from a different commit, pipeline, base mode, naming mode or
+library index (`--force-mixed` overrides). One comparison guard
+(`identity::guard`) decides every "may these two be compared" question.
+`crates/humanify-ag-dev/tests/measurement_owners.rs` and the dev crate's
+tests guard the stack: verdict files must be consumed by the summary, binary
+cards never join a TS label, statement extraction errors rather than falling
+back, and changed lines are counted in one module.
 
 For any change that could affect deobfuscation output (naming, matching,
-splitting), the final gate on top of `npm run check` is the eval harness — it
+splitting), the final gate on top of `cargo dev check` is the eval harness — it
 scores the pipeline on a fixed set of version transitions and grades the
 cross-version diff as real change vs reducible noise.
 
 **For a change that is supposed to alter NOTHING — a refactor, a counter, a
-type-level fix — the eval is the wrong instrument, and
-`experiments/lib/neutrality.sh` is the right one:**
+type-level fix — the eval is the wrong instrument, and `eval neutrality` is
+the right one:**
 
 ```bash
-npm run eval -- neutrality <baseline-ref> [from:to] --cache /work/neutrality-cache   # ~25min/pair, both legs
+cargo dev eval neutrality <baseline-ref> [from:to] --cache /work/neutrality-cache   # ~25min/pair, both legs
 ```
 
-(`run.sh` and `neutrality.sh` parse no flags since config sweep step 7: the
-`eval` dispatcher validates them once and hands each script ONE run config
-file, `<workdir>/<label>.run-config.json` / `<workdir>/neutrality-run-config.json`.
-Launch them through `npm run eval`.)
+(Its settings are harness keys, parsed once; it writes the ONE run config it
+used, `<workdir>/neutrality-run-config.json`, with a `resolved` block.)
 
 It runs the candidate and the baseline over one pair with a shared warm cache
 and proves BYTE IDENTITY: 0 differing files, 0 differing lines, zero cache
@@ -134,7 +174,8 @@ Three things it will tell you that are easy to misread:
 - a leg that exits non-zero having WRITTEN a tree is recorded and compared, not
   treated as a crash. The pipeline exits 1 on a rename-invariant failure.
 - the baseline leg runs in a detached worktree, and each leg BUILDS its
-  own binary from its own commit (`experiments/lib/build-bin.sh`) — so
+  own binary from its own commit (`cargo dev build-bin <ref>`, which resolves
+  the package and binary name from that commit) — so
   **`crates/` must not be edited while a candidate leg is building**. A
   baseline ref from before the cutover has no binary that is the pipeline.
 
@@ -188,39 +229,52 @@ What to do with a NOT NEUTRAL:
    manufacture a false FAILURE, never a false pass, so no merge gated on a
    NEUTRAL result is in doubt.
 
-The matcher preflight (`matcher-preflight.sh`, the TS fingerprint matcher
-against real npm packages) is RETIRED with the TS matcher it tested; the Rust
+The matcher preflight (the TS fingerprint matcher against real npm packages)
+is RETIRED with the TS matcher it tested; the Rust
 matcher's replacement is an open follow-up in `docs/rust-port/19-cutover.md`.
-`--skip-preflight` is refused as an unknown flag.
+`--skip-preflight` is refused, naming why.
 
 There is no heap flag: the binary is not a Node process (`--heap-mb`, which
-was inert, was deleted in the 2026-10-13 config sweep and is refused, as is
-the renamed `--no-vendor` → `--no-vendor-score`). Run an eval ALONE — a parallel heavy job (a gate batch, another
+was inert, is refused). `--no-vendor-score` / `--no-vendor` and `--no-layout`
+are refused too: scorer v2 always scores `vendor/` and the layout block when
+both trees have them (rule 8). Run an eval ALONE — a parallel heavy job (a gate batch, another
 eval) has OOM-killed a rebase before and silently degraded a label to the
 archive prior (`ts-control-fec64e5` r1; check eval logs for "rebase FAILED").
 
-**What the eval scores: the Rust binary, always.** `npm run eval -- score
+**What the eval scores: the Rust binary, always.** `cargo dev eval score
 <label>` BUILDS `target/release/humanify-ag` (`cargo build --release --locked`)
 and runs it at all three launch sites: the rebase, the scored leg and the
 self-hop. `--bin <path>` names a different binary (in some cargo workspace's
 `target/`). There is no TS mode — the cutover removed it, and a run config
-without a binary is refused. run.sh refuses a binary whose build commit is not
-the label's, is unknown, or came from a dirty tree; `--force-mixed` overrides
-that, and the dispatcher refuses to add binary cards to a pre-cutover TS
-label. The label's `pipeline.json` and every run manifest record the binary's
-sha256 and build commit, and `run-launch.test.ts` holds the launch lines
-byte-identical to the ones the binary-scored references ran with. The KPI
-scorer is unchanged by the cutover: `statementHash` moved byte-for-byte to
-`experiments/lib/js/`, proven by re-scoring three labels to byte-identical
-cards. A TS-era prior is brought across (ledger re-derived, vendor names
-carried by content) or refused with a WARNING line. Details:
+without a binary is refused. `eval score` refuses a binary whose build commit
+is not the label's, is unknown, or came from a dirty tree; `--force-mixed`
+overrides that, and binary cards never join a pre-cutover TS label. The
+label's `pipeline.json` and every run manifest record the binary's sha256 and
+build commit, and the dev crate's recorder tests (`runners::score_test`) hold
+the launch lines byte-identical to `dev/eval/goldens/run-launch.golden.txt`
+(and `run-launch.seeded-base.golden.txt`), the ones the binary-scored
+references ran with. Its default work dir is `/work/eval-work`. A TS-era
+prior is brought across (ledger re-derived, vendor names carried by content)
+or refused with a WARNING line. Details:
 `experiments/034-eval-harness/README.md`, "Scoring a Rust binary".
+
+**The KPI scorer is scorer version 2** (`cargo dev eval
+rescore|summarize|leaderboard|bands|diff`, `crates/humanify-ag-dev/src/eval/`,
+exp196): a NEW scorer version that re-scores the frozen reference trees, not a
+byte-identical port of the TS scorer. Cards carry `scorerVersion`; a card
+without it is the TS scorer's (v1). v2 differs from v1 in exactly 3 statements
+per reference label (a function that became `async`, which v1's hash could not
+see) and one vendor file in three off-mode cards; every other card field is
+byte-equal. The leaderboard REFUSES labels of different scorer versions unless
+`--force-mixed`; re-score a v1 label's trees with `cargo dev eval rescore
+<label>` to compare it. Bands are per scorer version: `noise-bands.json`
+`byScorer.2` (equal to the v1 bands for every KPI).
 
 **The self-hop gate has two halves (00-control §3, 2026-09-25).** The COLD
 self-hop rarely reads 0, because the LLM re-rolls: on the scratch-base
 protocol the three same-commit reference runs read 2, 32 and 184 bundle lines
 (the seeded-era range was 92–180). That count must fall inside the range in
-`experiments/034-eval-harness/self-hop-reference.json` (2.1.216 only). The
+`dev/eval/self-hop-reference.json` (2.1.216 only). The
 WARM self-hop (always run) replays a scratch copy
 of the cache the cold leg filled, and it must be byte-identical with 0 cache
 writes. This is determinism with the model held fixed, the cache use rule 10
@@ -228,17 +282,18 @@ permits. The summary judges both, and says "not judged" when a leg ran on a
 cache or on another version.
 
 ```bash
-npm run eval -- score <label>   # score current tree on 4 pairs (~1hr)
-npx tsx experiments/034-eval-harness/leaderboard.ts ref-scratch-0f338ffa-r1 <label>
-#   ^ the current reference (scratch bases, the default). Comparing against a
-#     SEEDED-base label (everything before 2026-10-03) needs --seeded-base on
-#     <label>, or the leaderboard refuses the mix (--force-mixed to show it anyway)
+cargo dev eval score <label>    # score current tree on 4 pairs (~1hr)
+cargo dev eval leaderboard ref-names-0357696e-r1-s2 <label>
+#   ^ the current reference (names mode, scratch bases, scorer v2; the off-mode
+#     one is ref-scratch-0f338ffa-r1-s2). Comparing against a SEEDED-base label
+#     (everything before 2026-10-03) needs --base-mode seeded on <label>, or the
+#     leaderboard refuses the mix (--force-mixed to show it anyway)
 ```
 
 Confirm the **reducible** KPIs (`noise`, `reloc`, `mints`) went **down** and that
 `novel` / `realLn` (real code change) did **not** move — a change that "reduces
 noise" by dropping real change is a regression. Judge every delta against the
-MEASURED bands in `experiments/034-eval-harness/noise-bands.json` (three
+MEASURED bands in `dev/eval/noise-bands.json` (three
 same-commit cold repeats; the leaderboard prints `~0 (±band)` for deltas inside
 them). `novel`/`realLn` have a measured band of ZERO — byte-equal across all
 three repeats — so any movement in either is real; the ±2,800/hop figure that
@@ -261,7 +316,7 @@ split three ways, and the three add back up exactly to the old column:
 new code into `vendor/` (exp166: 4 statements, 71 lines). The TOTAL
 `novel`/`realLn` decide whether real change moved. Labels scored before
 2026-10-31 print `-` for the split; re-score their trees with
-`experiments/170-app-vendor-split/rescore.ts`.
+`cargo dev eval rescore <label>`.
 
 **Names mode is the DEFAULT since exp171 (2026-10-31).** Library code the index
 recognises goes under `vendor/<package>/` with its names restored, and the rest
@@ -272,16 +327,25 @@ opt-out. Which index a names run needs is the bundle's KIND, its detected packin
 `no library index for <kind> bundles … — skipping library name matching` line and
 writes off mode's bytes (recorded as `libraryMatching` `outcome: skipped`, which
 the eval refuses to score). An explicit `--library-index` that does not fit the
-kind fails. `npm run eval` always hands names launches the prebuilt full index
+kind fails. `cargo dev eval score` always hands names launches the prebuilt full index
 (pairs.json `libraryIndex`) and never a run-time build. **Every label has a
 NAMING MODE** (`pipeline.json` `namingMode`; labels before exp171 read as
 `off`). The leaderboard REFUSES mixed naming modes unless `--force-mixed`,
 exactly as it does for base modes. Neutrality across the flip must run in off
 mode.
 
-**Which committed reference to use, and why it is not the one this file used to
+**Which reference to use, and why it is not the one this file used to
 name.** Check a reference's `*-run-status.json` before citing it: absent is
-UNKNOWN, not passing.
+UNKNOWN, not passing. Labels live under `dev/eval/results/<label>/`; the
+current references are NOT committed (their report pages quote bundle code)
+and live on this host only.
+
+- **Scorer v2 references: `ref-names-0357696e-r1/r2/r3-s2` (names mode) and
+  `ref-scratch-0f338ffa-r1/r2/r3-s2` (off mode)** — the two references below,
+  re-scored by scorer v2 from their frozen trees (`/work/dev-harness-proof`):
+  novel **4,191** / realLn **416,386** in every names and every off label
+  (v1: 4,188 / 416,377 — the 3 `async` statements). Compare new labels
+  against these; everything said below about the runs themselves holds.
 
 - **`ref-names-0357696e-r1/r2/r3` — the current valid NAMES-mode cold
   reference** (2026-10-31, scratch bases, full prebuilt index `cb64c1f5…`). All
@@ -333,10 +397,9 @@ UNKNOWN, not passing.
   RE-RECORDED after the run:** the harness's own boot check failed on all
   four trees with `claude_code_version_too_old` — since 2026-09-18 the API
   refuses the account-default model to any CLI older than 2.1.251, which is
-  every version walked here. The gate now pins `BOOT_GATE_MODEL`
-  (a setting of `experiments/lib/boot-gate.sh`, recorded in each label's
-  `pipeline.json` and `*-boot.json` — no longer an env override since config
-  sweep step 7; haiku-4-5 at the time, re-pinned to
+  every version walked here. The gate now pins its model
+  (harness key `boot.model`, recorded in each label's
+  `pipeline.json` and `*-boot.json`; haiku-4-5 at the time, re-pinned to
   `claude-opus-4-1` on 2026-09-28 when the API began refusing haiku-4-5,
   sonnet-4-5 and sonnet-5 on the walked CLIs — `ae80cf71`) and all four
   trees pass both halves with it; each `*-boot.json` carries a `rerecorded`
@@ -369,16 +432,17 @@ The eval diffs a freshly-humanified `v` against a base `v-1`, and **how that
 base is built is the run's BASE MODE** (recorded in `pipeline.json` and every
 run manifest; `summarize` prints it first):
 
-- **scratch — the DEFAULT since 2026-10-03.** `npm run eval -- score <label>`
+- **scratch — the DEFAULT since 2026-10-03.** `cargo dev eval score <label>`
   rebuilds each `v-1` with the current pipeline and **no prior**, so both
   sides of every comparison are pure current-pipeline output. A full cold run
   per base, heavier than the old rebuild.
-- **seeded — `--seeded-base`.** Rebuilds `v-1` with the ARCHIVE (July-era TS
+- **seeded — `--base-mode seeded`.** Rebuilds `v-1` with the ARCHIVE (July-era TS
   output) as `--prior-version`, so the base INHERITS the archive's names by
   exact match — junk half-renames, raw minifier letters. This was the old
   default, and it was called a "fresh base" when it was not one. Kept,
-  byte-for-byte (`run-launch.seeded-base.golden.txt`), for comparability.
-- **archive — `--archive-prior`.** No rebuild; reads ~3.7x worse, warns per pair.
+  byte-for-byte (`dev/eval/goldens/run-launch.seeded-base.golden.txt`), for
+  comparability.
+- **archive — `--base-mode archive`.** No rebuild; reads ~3.7x worse, warns per pair.
 
 **Every recorded reference was scored on a SEEDED base** — `main-2026-09-18`,
 `rust-relaxed-default-843826be`, `control-843826be-8gpu`,
@@ -387,9 +451,9 @@ so each is comparable ONLY to seeded runs. The leaderboard prints each label's
 base and REFUSES labels on different modes unless `--force-mixed` (then a loud
 `MIXED BASE MODES` line); `eval score` refuses to add one mode's cards to a
 label holding another. To compare against those references, score with
-`--seeded-base`, or score a scratch control at the base commit. All harness
-configuration is flags parsed upfront (see `npm run eval` with no args);
-ambient env vars are gone and a guard test keeps them gone.
+`--base-mode seeded`, or score a scratch control at the base commit. All harness
+configuration is flags parsed upfront (see `cargo dev` with no args);
+ambient env vars are gone and a guard test (`env_guard`) keeps them gone.
 
 **Before sizing a lever or believing a decomposition, read
 `docs/measurement-pitfalls.md`.** Eleven numbered rules. Seven were each learned by
@@ -411,7 +475,7 @@ through `--llm-cache` — all 24,079 entries pre-dated it, not one new entry was
 written, so **not one prompt reached the model** across eight runs. Every KPI
 agreed with control because both legs replayed the same answers. Re-running cold,
 with a cold control, overturned three settled conclusions. Use the cache for
-iteration, never for a verdict; `run.sh` now defaults to no cache. And when the
+iteration, never for a verdict; `eval score` defaults to no cache. And when the
 candidate goes cold, the CONTROL must go cold with it.
 
 Rule 11 is what rule 10 uncovers once the variance is free to move: **a gate
@@ -457,18 +521,19 @@ Never skip the red step. If the test passes before implementation, the test is n
   `humanify.example.toml` are all generated from it, and a flag and a config
   value that disagree fail.
 - **Concurrency: [`docs/concurrency.md`](./docs/concurrency.md) is the approach** —
-  ten sanctioned patterns (CPU work through `crate::par` only, the ONE tokio
+  twelve sanctioned patterns (CPU work through `crate::par` only, the ONE tokio
   runtime the LLM provider owns, a deadline over every whole wait, drained
   pipes, short locks, completion order never reaching output, one retry
-  layer). Clippy bans what it can (`await_holding_*`, and
+  layer, test-support servers only in the testkit). Clippy bans what it can (`await_holding_*`, and
   `disallowed_methods` for blocking sleeps, extra runtimes, detached tasks,
   bare HTTP clients, `wait_with_output`); each allowed exception carries a
   `// concurrency: <reason>` comment. Every other concurrency construct in
-  non-test `crates/` code must be on `scripts/concurrency-allowlist.json`
+  non-test `crates/` code must be on `dev/census/concurrency-allowlist.json`
   with its pattern and reason — the `census:concurrency` stage and the
   pre-commit hook FAIL an unlisted one. That failure is a question, not a
   verdict: confirm the site really is one of the patterns (add the entry)
   or switch to the sanctioned primitive.
-- Clippy enforces the complexity ceiling in the Rust pipeline; Biome enforces cognitive complexity <= 15 in the harness TS. Extract helpers to keep functions focused.
-- Rust unit tests sit beside their module as `<module>_test.rs` (or a crate's `tests/`); harness TS tests are colocated `*.test.ts`.
-- The e2e fixtures live in `test/e2e/fixtures/` (committed builds); `scripts/e2e.ts` runs the binary on them.
+- Clippy enforces the complexity ceiling in every crate, the harness included. Extract helpers to keep functions focused.
+- Unit tests sit beside their module as `<module>_test.rs` (or a crate's `tests/`). There are no TS tests: the harness is the `humanify-ag-dev` crate, and its tests run in `rust:unit`.
+- The harness's committed data lives in `dev/` and is read only through its typed loaders (`crates/humanify-ag-dev/src/committed/`, paths in `paths.rs`): `dev/eval/` (pairs.json, noise-bands.json, self-hop-reference.json, `goldens/` — every launch golden, `results/` — the labels), `dev/library/` (bands.json, data-roots.json, `corpora/` — every corpus and truth-layer manifest, `results/`), `dev/census/` (both census allowlists). A test fails a file under `dev/` that no loader reads.
+- The e2e fixtures live in `test/e2e/fixtures/` (committed builds); `cargo dev e2e` runs the binary on them.

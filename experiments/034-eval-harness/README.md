@@ -1,5 +1,29 @@
 # 034 — cross-version eval harness
 
+STATUS (2026-11-08, harness lane L5 / exp203): **the code that this README
+describes is gone from this folder.** The eval is `cargo dev eval ...`
+(`crates/humanify-ag-dev`), its committed data is under `dev/eval/`, and its
+KPI scorer is scorer version 2 (exp196: a new scorer version that re-scores the
+frozen trees; cards carry `scorerVersion`, a card without it is v1). What each
+file named below became:
+
+| Here (deleted; tag `experiments-code-final` has it)                       | Now                                                                  |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `run.sh`, `scripts/eval.ts score`                                         | `cargo dev eval score <label>`                                       |
+| `analyze.ts`, `statements.ts`, `kpis.ts`, `surfaces.ts`, the churn files  | `crates/humanify-ag-dev/src/eval/` (`cargo dev eval rescore <label>`) |
+| `summarize.ts`, `leaderboard.ts`, `noise-bands.ts`                        | `cargo dev eval summarize`, `eval leaderboard`, `eval bands`         |
+| `trail-report.ts`, `diff-ledger.ts`                                       | the report page `eval rescore` writes                                |
+| `pairs.json`, `noise-bands.json`, `self-hop-reference.json`               | `dev/eval/` (moved byte for byte)                                    |
+| `run-launch*.golden.txt`, `launch-goldens/`                               | `dev/eval/goldens/`                                                  |
+| `results/<label>/`                                                        | `dev/eval/results/<label>/`                                          |
+| `--seeded-base`, `--archive-prior`                                        | `--base-mode seeded`, `--base-mode archive`                          |
+| `--no-layout`, `--no-vendor-score`                                        | refused: scorer v2 always scores both when both trees have them      |
+
+The measurement content below (what each KPI means, the base modes, the
+self-hop halves, the refusals) still holds; file names in it are the old
+homes. CLAUDE.md "Validating cross-version changes" is the current entry
+point.
+
 Jargon: see [VOCABULARY.md](VOCABULARY.md).
 
 A repeatable scorecard for the deobfuscation pipeline on a fixed set of version
@@ -284,24 +308,24 @@ anything LLM-shaped.
 | 2.1.197→198 | feature on a large base (+330 KB)       |
 | 2.1.215→216 | ongoing work, largest base (+284 KB)    |
 
-Edit `pairs.json` to change the set or the LLM config (endpoint/model/effort).
+Edit `dev/eval/pairs.json` to change the set or the LLM config (endpoint/model/effort).
 
 ## Usage
 
 ```bash
 # Score the current tree under a MODEL label (a branch, commit, or idea name):
-npm run eval -- score main-4117212
+cargo dev eval score main-4117212
 
 # ...make a change, then score it:
-npm run eval -- score fix-close-match
+cargo dev eval score fix-close-match
 
-# Compare every model side by side (deltas vs the first-listed baseline):
-npx tsx experiments/034-eval-harness/leaderboard.ts main-4117212 fix-close-match
+# Compare models side by side (deltas vs the first-listed baseline):
+cargo dev eval leaderboard main-4117212 fix-close-match
 ```
 
 Each run is one pipeline invocation per pair (~10–15 min each; ~1 hr for four).
 A failed pair is logged and skipped, never aborts the sweep. Results land in
-`results/<model>/`:
+`dev/eval/results/<model>/`:
 
 - `<v>.json` — per-pair scorecard (determinism + churn)
 - `<v>.stats.json` — the raw `--stats-json` breakdown
@@ -309,8 +333,8 @@ A failed pair is logged and skipped, never aborts the sweep. Results land in
 - `summary.json` — aggregated totals (what the leaderboard reads)
 - `commit.txt` — the pipeline commit that produced this model
 
-Commit the baseline models you want to keep as references. `leaderboard.ts` with
-no args lists every model that has a `summary.json`.
+Commit the baseline models you want to keep as references (force-add: the
+results directory is gitignored), unless their report pages quote bundle code.
 
 ### Committed references are DATED — two ways they mislead
 
@@ -432,8 +456,8 @@ Verdict in `results/<model>/<v>-self-hop.json`. It records `diffLines` (cold),
 ## Scoring a Rust binary (the only pipeline since the cutover)
 
 ```bash
-npm run eval -- score <label>                      # builds target/release/humanify
-npm run eval -- score <label> --bin <workspace>/target/release/humanify
+cargo dev eval score <label>                       # builds target/release/humanify-ag
+cargo dev eval score <label> --bin <workspace>/target/release/humanify-ag
 ```
 
 - **The binary is the pipeline.** The TS program the harness launched until
