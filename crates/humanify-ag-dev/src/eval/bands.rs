@@ -120,9 +120,134 @@ pub fn write_slot(file: &mut JsObject, scorer: u64, mode: &str, slot: JsValue) {
     }
 }
 
+/// Each repeat's COLD self-hop diff-line count: the label's one
+/// `*-self-hop.json` whose cold leg ran on a fresh cache. None (with why)
+/// when any repeat has none, or they self-hopped different versions.
+fn cold_self_hops(results: &Path, labels: &[String]) -> Result<(String, Vec<u64>), String> {
+    let mut version: Option<String> = None;
+    let mut lines = Vec::new();
+    for l in labels {
+        let dir = results.join(l);
+        let files: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
+            .map_err(|e| format!("{}: {e}", dir.display()))?
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.ends_with("-self-hop.json"))
+            })
+            .collect();
+        let [file] = files.as_slice() else {
+            return Err(format!("{l} has {} self-hop records, not one", files.len()));
+        };
+        let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+        let j = JsValue::parse(&text).map_err(|e| format!("{}: {e}", file.display()))?;
+        let at = |p: &str| super::card::at(&j, p);
+        if at("selfHop.coldCache").and_then(JsValue::as_str) != Some("fresh") {
+            return Err(format!("{l}'s self-hop did not run cold"));
+        }
+        let v = at("selfHop.version")
+            .and_then(JsValue::as_str)
+            .ok_or_else(|| format!("{l}: self-hop without a version"))?;
+        let n = super::card::number_at(&j, "selfHop.diffLines")
+            .ok_or_else(|| format!("{l}: self-hop without diffLines"))?;
+        match &version {
+            Some(seen) if seen != v => {
+                return Err(format!("the repeats self-hopped {seen} and {v}"));
+            }
+            _ => version = Some(v.to_string()),
+        }
+        lines.push(n as u64);
+    }
+    Ok((version.unwrap_or_default(), lines))
+}
+
+/// Write one naming mode's cold self-hop reference (off = the top level)
+/// into `self-hop-reference.json`'s value, every other mode kept.
+pub fn write_self_hop(
+    file: &mut JsObject,
+    mode: &str,
+    version: &str,
+    labels: &[String],
+    lines: &[u64],
+    commit: &str,
+) {
+    let mut cold = JsObject::new();
+    let mut commits = JsObject::new();
+    let short: String = commit.chars().take(8).collect();
+    for (l, n) in labels.iter().zip(lines) {
+        cold.insert(l.clone(), JsValue::Number(*n as f64));
+        commits.insert(l.clone(), text(&short));
+    }
+    let comment = format!(
+        "The {mode}-mode COLD self-hop range: {} same-commit cold repeats of {short} on scratch bases, the same runs that set noise-bands.json's {mode} slot (written by `cargo dev eval bands`, never by hand). A cold leg replays nothing and the LLM re-rolls, so the count is a range; the WARM leg must be byte-identical with 0 writes.",
+        labels.len()
+    );
+    let entries = [
+        ("_comment", text(&comment)),
+        ("version", text(version)),
+        ("coldDiffLines", JsValue::Object(cold)),
+        ("commits", JsValue::Object(commits)),
+    ];
+    let target: &mut JsObject = if mode == "off" {
+        file
+    } else {
+        let by = get_obj(file, "byMode");
+        get_obj(by, mode)
+    };
+    for (k, v) in entries {
+        target.insert(k, v);
+    }
+}
+
+fn read_object(path: &Path) -> Result<JsObject, String> {
+    match std::fs::read_to_string(path) {
+        Ok(t) => match JsValue::parse(&t).map_err(|e| format!("{}: {e}", path.display()))? {
+            JsValue::Object(o) => Ok(o),
+            _ => Err(format!("{}: not an object", path.display())),
+        },
+        Err(_) => Ok(JsObject::new()),
+    }
+}
+
+fn write_object(path: &Path, o: JsObject) -> Result<(), String> {
+    std::fs::write(path, crate::json::js_text(&JsValue::Object(o), true))
+        .map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// The repeats' cold self-hops into `self_hop_file`, or why not.
+fn self_hop_line(
+    results: &Path,
+    labels: &[String],
+    mode: &str,
+    commit: &str,
+    self_hop_file: &Path,
+) -> Result<String, String> {
+    Ok(match cold_self_hops(results, labels) {
+        Err(why) => format!("self-hop reference NOT written: {why}\n"),
+        Ok((version, lines)) => {
+            let mut file = read_object(self_hop_file)?;
+            write_self_hop(&mut file, mode, &version, labels, &lines, commit);
+            write_object(self_hop_file, file)?;
+            format!(
+                "wrote the {mode}-mode cold self-hop range for {version} ({}-{} ln): {}\n",
+                lines.iter().min().unwrap_or(&0),
+                lines.iter().max().unwrap_or(&0),
+                self_hop_file.display()
+            )
+        }
+    })
+}
+
 /// Measure bands from `labels` (under `results`) and write them into
-/// `bands_file`. Returns the line to print.
-pub fn bands(results: &Path, labels: &[String], bands_file: &Path) -> Result<String, String> {
+/// `bands_file`, and the repeats' cold self-hop range into
+/// `self_hop_file`. Returns the lines to print.
+pub fn bands(
+    results: &Path,
+    labels: &[String],
+    bands_file: &Path,
+    self_hop_file: &Path,
+) -> Result<String, String> {
     if labels.len() < 2 {
         return Err("usage: eval bands <label> <label> [label...]".into());
     }
@@ -177,26 +302,17 @@ pub fn bands(results: &Path, labels: &[String], bands_file: &Path) -> Result<Str
         .and_then(|v| v.parse().ok())
         .ok_or("the labels record no scorer version")?;
     let measured = compute_bands(&totals);
-    let mut file = match std::fs::read_to_string(bands_file) {
-        Ok(t) => match JsValue::parse(&t).map_err(|e| format!("{}: {e}", bands_file.display()))? {
-            JsValue::Object(o) => o,
-            _ => return Err(format!("{}: not an object", bands_file.display())),
-        },
-        Err(_) => JsObject::new(),
-    };
+    let mut file = read_object(bands_file)?;
     write_slot(
         &mut file,
         scorer,
         &mode,
         section(&commits[0], labels, &pairs, &measured),
     );
-    std::fs::write(
-        bands_file,
-        crate::json::js_text(&JsValue::Object(file), true),
-    )
-    .map_err(|e| format!("{}: {e}", bands_file.display()))?;
+    write_object(bands_file, file)?;
+    let hop = self_hop_line(results, labels, &mode, &commits[0], self_hop_file)?;
     Ok(format!(
-        "wrote measured scorer-{scorer} {mode}-mode bands: {}\n",
+        "wrote measured scorer-{scorer} {mode}-mode bands: {}\n{hop}",
         bands_file.display()
     ))
 }

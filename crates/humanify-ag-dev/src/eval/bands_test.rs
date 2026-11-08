@@ -61,7 +61,7 @@ fn repeats_over_different_pair_sets_are_refused() {
     }
     let file = root.join("noise-bands.json");
     let labels = vec!["r1".to_string(), "r2".to_string()];
-    let err = bands(&root, &labels, &file).unwrap_err();
+    let err = bands(&root, &labels, &file, &root.join("self-hop-reference.json")).unwrap_err();
     assert!(err.contains("different pairs"), "{err}");
     assert!(!file.exists(), "nothing written");
 }
@@ -82,4 +82,68 @@ fn a_measured_slot_records_the_pairs_it_was_measured_over() {
         other => panic!("provenance.pairs: {other:?}"),
     };
     assert_eq!(pairs, ["2.1.85->2.1.86"]);
+}
+
+/// Copy frozen labels into a scratch results dir.
+fn frozen(root: &Path, names: &[&str]) {
+    for name in names {
+        let src = Path::new("/work/dev-harness-proof/oracles/a").join(name);
+        let dir = root.join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        for e in std::fs::read_dir(&src).expect("the frozen reference cards") {
+            let p = e.unwrap().path();
+            std::fs::copy(&p, dir.join(p.file_name().unwrap())).unwrap();
+        }
+    }
+}
+
+#[test]
+fn the_repeats_cold_self_hops_become_their_modes_reference_range() {
+    let root = std::env::temp_dir().join(format!("dev-bands-selfhop-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let names = [
+        "ref-names-0357696e-r1",
+        "ref-names-0357696e-r2",
+        "ref-names-0357696e-r3",
+    ];
+    frozen(&root, &names);
+    // r2's cold self-hop re-rolled more: the range must come from the cards.
+    let hop = root.join(names[1]).join("2.1.216-self-hop.json");
+    let text = std::fs::read_to_string(&hop).unwrap();
+    std::fs::write(&hop, text.replace("\"diffLines\":8,", "\"diffLines\":31,")).unwrap();
+    let band_file = root.join("noise-bands.json");
+    let hop_file = root.join("self-hop-reference.json");
+    let committed = crate::paths::repo_root().join("dev/eval/self-hop-reference.json");
+    std::fs::copy(&committed, &hop_file).unwrap();
+    let labels: Vec<String> = names.iter().map(|s| s.to_string()).collect();
+    let said = bands(&root, &labels, &band_file, &hop_file).unwrap();
+    assert!(said.contains("self-hop"), "{said}");
+    let r: crate::committed::eval::SelfHopReference =
+        serde_json::from_str(&std::fs::read_to_string(&hop_file).unwrap()).unwrap();
+    assert_eq!(r.range("names"), Some((8, 31)));
+    let names_slot = &r.by_mode["names"];
+    assert_eq!(names_slot.version, "2.1.216");
+    assert_eq!(names_slot.cold_diff_lines.len(), 3);
+    assert_eq!(names_slot.commits[names[0]], "0357696e");
+    // The off range is kept.
+    assert_eq!(r.range("off"), Some((2, 184)));
+}
+
+#[test]
+fn a_repeat_without_a_cold_self_hop_leaves_the_reference_alone() {
+    let root = std::env::temp_dir().join(format!("dev-bands-noselfhop-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let names = ["ref-names-0357696e-r1", "ref-names-0357696e-r2"];
+    frozen(&root, &names);
+    std::fs::remove_file(root.join(names[1]).join("2.1.216-self-hop.json")).unwrap();
+    let hop_file = root.join("self-hop-reference.json");
+    let committed = crate::paths::repo_root().join("dev/eval/self-hop-reference.json");
+    std::fs::copy(&committed, &hop_file).unwrap();
+    let labels: Vec<String> = names.iter().map(|s| s.to_string()).collect();
+    let said = bands(&root, &labels, &root.join("noise-bands.json"), &hop_file).unwrap();
+    assert!(said.contains("self-hop reference NOT written"), "{said}");
+    assert_eq!(
+        std::fs::read_to_string(&hop_file).unwrap(),
+        std::fs::read_to_string(&committed).unwrap()
+    );
 }
