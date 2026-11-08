@@ -224,7 +224,7 @@ const VERBS: &[Verb] = &[
         proves: "the npm caches the truth layers read hold every manifest and license collection the corpus needs (resumable: a cached file is never fetched again)",
         cannot_prove: "that the registry still answers as it did when a layer was frozen",
         lane: None,
-        today: "experiments/112 origins7.py needs|owners, 104 fetch_metadata.py, 112 bundled.py",
+        today: "",
         settings: &[
             "libscore.bundled",
             "libscore.data_root",
@@ -240,7 +240,7 @@ const VERBS: &[Verb] = &[
         proves: "scorer 14's name evidence (tokens14.mjs's protocol: units / files mode) from the ported acorn tokenizer",
         cannot_prove: "that the evidence is the right evidence for the rule",
         lane: None,
-        today: "node experiments/137-scorer-mapdefect/scorer14/tokens14.mjs (NODE_PATH holding acorn)",
+        today: "",
         settings: &[],
     },
     Verb {
@@ -258,7 +258,7 @@ const VERBS: &[Verb] = &[
         proves: "verify: a corpus's frozen files are byte-identical to its manifest; freeze: re-freezing its inputs reproduces the manifest and origin layer; build: its bundles built from the apps' installs",
         cannot_prove: "that the truth labels are correct",
         lane: None,
-        today: "experiments/096 corpus.py, 181 kind_corpus.py, 150 bun_corpus.py (build/freeze), 100 build.py, 095 closure.py",
+        today: "",
         settings: &[
             "libscore.apps",
             "libscore.data_root",
@@ -272,7 +272,7 @@ const VERBS: &[Verb] = &[
         proves: "re-freezing a corpus's truth layers reproduces every committed layer sha",
         cannot_prove: "that a layer's rule is the right rule",
         lane: None,
-        today: "experiments/150-bun-testbed/scripts/layers.sh, layers2.sh",
+        today: "",
         settings: &[
             "libscore.data_root",
             "libscore.index",
