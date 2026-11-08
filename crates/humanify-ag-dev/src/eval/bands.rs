@@ -3,7 +3,9 @@
 //! pairwise disagreement between the repeats' totals. A band is a property
 //! of a regime — one commit, one naming mode, one SCORER VERSION — so the
 //! repeats must share all three (the identity guard's `Bands` purpose:
-//! the binary and every leaderboard field), and the bands are written into
+//! the binary and every leaderboard field, on EVERY pair) and the same
+//! pair set (exp201: a band is a spread of totals, so it is a property of
+//! the pairs too, recorded as `provenance.pairs`), and the bands are written into
 //! that mode's slot of that scorer version's section of
 //! `noise-bands.json` (scorer 1 at the top; scorer N under
 //! `byScorer.<N>`), every other slot kept.
@@ -14,7 +16,7 @@ use humanify_ag_model::js::{JsObject, JsValue};
 
 use super::card::{obj, text, texts};
 use super::kpis::{KPIS, SPLIT_KPIS};
-use crate::identity::{Identity, Purpose, backfill::eval_label, guard};
+use crate::identity::{Identity, Purpose, backfill::eval_label, guard_labels};
 
 /// Per KPI, the largest pairwise |disagreement| of the labels' totals;
 /// None when fewer than two labels carry it.
@@ -39,7 +41,12 @@ pub fn compute_bands(totals: &[JsValue]) -> Vec<(String, Option<f64>)> {
 
 /// The section written for one mode: provenance + bands (an unmeasured
 /// KPI is left out — absent reads as `±?`, never as 0).
-fn section(commit: &str, labels: &[String], bands: &[(String, Option<f64>)]) -> JsValue {
+fn section(
+    commit: &str,
+    labels: &[String],
+    pairs: &[String],
+    bands: &[(String, Option<f64>)],
+) -> JsValue {
     let mut b = JsObject::new();
     for (k, v) in bands {
         if let Some(v) = v {
@@ -60,6 +67,7 @@ fn section(commit: &str, labels: &[String], bands: &[(String, Option<f64>)]) -> 
                 ),
                 ("commit", text(commit)),
                 ("labels", texts(labels)),
+                ("pairs", texts(pairs)),
             ]),
         ),
         ("bands", JsValue::Object(b)),
@@ -118,16 +126,16 @@ pub fn bands(results: &Path, labels: &[String], bands_file: &Path) -> Result<Str
     if labels.len() < 2 {
         return Err("usage: eval bands <label> <label> [label...]".into());
     }
-    let mut ids: Vec<(String, Identity)> = Vec::new();
+    let mut ids: Vec<(String, Vec<Identity>)> = Vec::new();
     let mut totals = Vec::new();
     let mut commits = Vec::new();
     for l in labels {
         let dir = results.join(l);
-        let id = eval_label(&dir)?
-            .into_iter()
-            .next()
-            .ok_or_else(|| format!("{l}: no cards"))?;
-        ids.push((l.clone(), id));
+        let cards = eval_label(&dir)?;
+        if cards.is_empty() {
+            return Err(format!("{l}: no cards"));
+        }
+        ids.push((l.clone(), cards));
         let summary = std::fs::read_to_string(dir.join("summary.json"))
             .map_err(|e| format!("{l}: summary.json: {e} (run `eval summarize {l}`)"))?;
         let s = JsValue::parse(&summary).map_err(|e| format!("{l}: {e}"))?;
@@ -151,10 +159,11 @@ pub fn bands(results: &Path, labels: &[String], bands_file: &Path) -> Result<Str
             commits.join(", ")
         ));
     }
-    for (l, id) in &ids[1..] {
-        guard(Purpose::Bands, (&ids[0].0, &ids[0].1), (l, id), false)?;
+    let mut pairs: Vec<String> = Vec::new();
+    for (l, cards) in &ids[1..] {
+        pairs = guard_labels(Purpose::Bands, (&ids[0].0, &ids[0].1), (l, cards), false)?.common;
     }
-    let first = &ids[0].1;
+    let first = &ids[0].1[0];
     let mode = first
         .naming_mode
         .known()
@@ -179,7 +188,7 @@ pub fn bands(results: &Path, labels: &[String], bands_file: &Path) -> Result<Str
         &mut file,
         scorer,
         &mode,
-        section(&commits[0], labels, &measured),
+        section(&commits[0], labels, &pairs, &measured),
     );
     std::fs::write(
         bands_file,

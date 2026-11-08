@@ -167,3 +167,66 @@ fn an_identity_round_trips_through_its_file() {
     assert!(text.contains("\"unknown\": \"legacy\""), "{text}");
     assert_eq!(Identity::from_text(&text).unwrap(), a);
 }
+
+fn label_of(entries: &[&str]) -> Vec<Identity> {
+    entries.iter().map(|e| card(e)).collect()
+}
+
+const FOUR: &[&str] = &[
+    "2.1.85->2.1.86",
+    "2.1.118->2.1.119",
+    "2.1.197->2.1.198",
+    "2.1.215->2.1.216",
+];
+const FIVE: &[&str] = &[
+    "2.1.85->2.1.86",
+    "2.1.118->2.1.119",
+    "2.1.179->2.1.181",
+    "2.1.197->2.1.198",
+    "2.1.215->2.1.216",
+];
+
+#[test]
+fn a_four_pair_and_a_five_pair_label_compare_over_their_common_pairs_out_loud() {
+    let (four, five) = (label_of(FOUR), label_of(FIVE));
+    let s = guard_labels(Purpose::Leaderboard, ("OLD", &four), ("NEW", &five), false).unwrap();
+    assert_eq!(s.common, FOUR, "the common pairs, in the baseline's order");
+    assert!(s.lines[0].starts_with("!! COMMON PAIRS"), "{:?}", s.lines);
+    let all = s.lines.join("\n");
+    assert!(all.contains("only NEW: 2.1.179->2.1.181"), "{all}");
+    assert!(all.contains("over the 4 common pairs"), "{all}");
+    // The same sets: nothing to say.
+    let same = guard_labels(Purpose::Leaderboard, ("A", &five), ("B", &five), false).unwrap();
+    assert_eq!(same.common, FIVE);
+    assert!(same.lines.is_empty(), "{:?}", same.lines);
+}
+
+#[test]
+fn the_common_pairs_still_go_through_the_field_guard() {
+    let four = label_of(FOUR);
+    let mut five = label_of(FIVE);
+    five[0].naming_mode = known(Some("off".into()));
+    let err =
+        guard_labels(Purpose::Leaderboard, ("OLD", &four), ("NEW", &five), false).unwrap_err();
+    assert!(err.contains("namingMode"), "{err}");
+    // A field on the pair only one side scored is never compared.
+    let mut five = label_of(FIVE);
+    five[2].naming_mode = known(Some("off".into()));
+    assert!(guard_labels(Purpose::Leaderboard, ("OLD", &four), ("NEW", &five), false).is_ok());
+}
+
+#[test]
+fn disjoint_pair_sets_are_refused_even_when_forced() {
+    let a = label_of(&["2.1.85->2.1.86"]);
+    let b = label_of(&["2.1.179->2.1.181"]);
+    let err = guard_labels(Purpose::Leaderboard, ("A", &a), ("B", &b), true).unwrap_err();
+    assert!(err.contains("no pair in common"), "{err}");
+}
+
+#[test]
+fn bands_refuse_repeats_over_different_pair_sets_even_when_forced() {
+    let (four, five) = (label_of(FOUR), label_of(FIVE));
+    let err = guard_labels(Purpose::Bands, ("r1", &four), ("r2", &five), true).unwrap_err();
+    assert!(err.contains("different pairs"), "{err}");
+    assert!(err.contains("only r2: 2.1.179->2.1.181"), "{err}");
+}

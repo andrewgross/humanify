@@ -13,9 +13,12 @@ fn pairs_json_loads_typed() {
         [
             "2.1.85->2.1.86",
             "2.1.118->2.1.119",
+            "2.1.179->2.1.181",
             "2.1.197->2.1.198",
             "2.1.215->2.1.216"
-        ]
+        ],
+        "version order: the self-hop runs on the LAST pair's `to`, and the \
+         self-hop reference is 2.1.216's (exp201 added 179->181 mid-list)"
     );
     assert_eq!(
         p.value.llm.concurrency, 472,

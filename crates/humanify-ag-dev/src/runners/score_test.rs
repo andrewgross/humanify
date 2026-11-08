@@ -14,12 +14,18 @@ use crate::runners::recording_test::{
 };
 
 const SCORE_ACCEPTS: &[&str] = &["run", "eval", "llm", "boot"];
-const PAIRS: &[(&str, &str)] = &[
-    ("2.1.85", "2.1.86"),
-    ("2.1.118", "2.1.119"),
-    ("2.1.197", "2.1.198"),
-    ("2.1.215", "2.1.216"),
-];
+/// The committed pairs (`dev/eval/pairs.json`): the fake corpus holds
+/// every one, so the goldens record the full protocol (exp201: a const
+/// list here silently SKIPPED the fifth pair and the goldens still passed).
+fn pairs() -> Vec<(String, String)> {
+    crate::committed::eval::pairs(&crate::paths::repo_root())
+        .expect("pairs.json")
+        .value
+        .pairs
+        .into_iter()
+        .map(|p| (p.from, p.to))
+        .collect()
+}
 
 struct Harness {
     status: u8,
@@ -36,8 +42,8 @@ struct Harness {
 }
 
 fn fake_corpus(root: &Path) {
-    for (from, to) in PAIRS {
-        for v in [from, to] {
+    for (from, to) in pairs() {
+        for v in [&from, &to] {
             let dir = root.join(format!(
                 "inputs/claude-code-{v}/binary-decompiled/src/entrypoints"
             ));
@@ -86,7 +92,7 @@ fn blocks(calls: &str) -> Vec<Vec<String>> {
 /// The scored leg's block: its config file is `<work>/<label>/<v>.toml`.
 fn is_scored(launch: &str) -> bool {
     launch.starts_with("humanify ")
-        && PAIRS
+        && pairs()
             .iter()
             .any(|(_, to)| launch.contains(&format!("/<LABEL>/{to}.toml ")))
 }
@@ -119,7 +125,7 @@ fn run_score(flags: &[&str], prep: impl Fn(&Rec)) -> Result<Harness, Vec<String>
         rec.root.file_name().unwrap().to_string_lossy()
     );
     let results = repo.join(crate::paths::EVAL_RESULTS).join(&label);
-    for (_, to) in PAIRS {
+    for (_, to) in pairs() {
         // the scored leg's stats artifact (run-pipeline.ts's recorder wrote it)
         std::fs::create_dir_all(&results).unwrap();
         std::fs::write(results.join(format!("{to}.stats.json")), "{}\n").unwrap();
@@ -243,7 +249,10 @@ fn archive_mode_rebuilds_nothing() {
     let h = run_score(&with(&["--base-mode", "archive"]), |_| {}).unwrap();
     assert_ran(&h);
     assert!(!h.launches.contains("-rebased "), "{}", h.launches);
-    assert_eq!(h.launches.matches("\"baseMode\": \"archive\"").count(), 4);
+    assert_eq!(
+        h.launches.matches("\"baseMode\": \"archive\"").count(),
+        pairs().len()
+    );
     let p = std::fs::read_to_string(h.results.join("pipeline.json")).unwrap();
     assert!(p.contains("\"baseMode\":\"archive\""), "{p}");
 }
@@ -334,8 +343,10 @@ fn pipeline_sets_reach_all_three_sites_once_each_in_order() {
     .unwrap();
     assert_ran(&h);
     let want = "humanify-config| [naming]\nhumanify-config| schedule = \"sequential\"\nhumanify-config| batch_size = 10";
-    assert_eq!(h.launches.matches(want).count(), 6, "{}", h.launches);
-    assert_eq!(h.scored.iter().filter(|b| b.contains(want)).count(), 4);
+    // Every scored leg plus the two self-hop legs (cold and warm).
+    let n = pairs().len();
+    assert_eq!(h.launches.matches(want).count(), n + 2, "{}", h.launches);
+    assert_eq!(h.scored.iter().filter(|b| b.contains(want)).count(), n);
     let p = std::fs::read_to_string(h.results.join("pipeline.json")).unwrap();
     assert!(
         p.contains(

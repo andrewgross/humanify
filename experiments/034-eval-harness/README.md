@@ -301,12 +301,42 @@ anything LLM-shaped.
 
 ## Pairs (`pairs.json`)
 
-| pair        | character                               |
-| ----------- | --------------------------------------- |
-| 2.1.85→86   | quiet 80s hop, small base — the control |
-| 2.1.118→119 | biggest clean feature drop (+475 KB)    |
-| 2.1.197→198 | feature on a large base (+330 KB)       |
-| 2.1.215→216 | ongoing work, largest base (+284 KB)    |
+| pair        | character                                                                 |
+| ----------- | ------------------------------------------------------------------------- |
+| 2.1.85→86   | quiet 80s hop, small base — the control                                   |
+| 2.1.118→119 | biggest clean feature drop (+475 KB)                                      |
+| 2.1.179→181 | bundler restyle: ~130 vendor modules re-minified, library source unchanged |
+| 2.1.197→198 | feature on a large base (+330 KB)                                         |
+| 2.1.215→216 | ongoing work, largest base (+284 KB)                                      |
+
+**The fifth pair, 2.1.179→181 (exp201, 2026-11-08).** The full walk
+(`/work/walk-9ce9dee2-full`) found that Claude Code was minified differently at
+2.1.181: about 130 vendor modules changed hash while their library source did
+not, and that one hop carried 56,222 vendor noise lines. None of the original
+four pairs crosses it. It sits in VERSION order, not at the end, so 2.1.215→216
+stays the last pair and the self-hop still runs on 2.1.216 (the only version
+`self-hop-reference.json` has a range for).
+
+**Comparing a five-pair label with a four-pair one.** Every label scored before
+exp201 covers four pairs (both off-mode references, `ref-scratch-0f338ffa-*`,
+stay that way — they are not re-measured). The leaderboard compares two labels
+with different pair sets over the pairs BOTH scored: it prints one
+`!! COMMON PAIRS` line naming the pairs each side has alone, and re-folds every
+label's totals over the common pairs only, so a total never mixes four pairs
+with five (`identity::guard_labels`). This needs no `--force-mixed`, and
+`--force-mixed` never overrides a pair-set mismatch elsewhere. Two labels with
+no pair in common are refused. `eval bands` refuses repeats over different pair
+sets outright: a band is the spread of totals, so it belongs to its pairs, and
+each measured slot records them (`provenance.pairs`). When a band slot's pairs
+differ from the pairs being compared (for example five-pair names bands used on
+a comparison over the common four), the leaderboard says so in a
+`bands: MEASURED OVER … PAIRS` line; a slot measured before exp201 records no
+pair set, and the leaderboard says that too.
+
+So for off mode: a new label scores five pairs, the leaderboard compares it
+with the off-mode reference over the original four, and the off-mode bands
+(measured over those four) apply. The fifth pair's off-mode numbers have no
+reference to compare to until someone scores off-mode repeats on five pairs.
 
 Edit `dev/eval/pairs.json` to change the set or the LLM config (endpoint/model/effort).
 
@@ -323,7 +353,7 @@ cargo dev eval score fix-close-match
 cargo dev eval leaderboard main-4117212 fix-close-match
 ```
 
-Each run is one pipeline invocation per pair (~10–15 min each; ~1 hr for four).
+Each run is one pipeline invocation per pair (~10–15 min each; ~1¼ hr for five).
 A failed pair is logged and skipped, never aborts the sweep. Results land in
 `dev/eval/results/<model>/`:
 
