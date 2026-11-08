@@ -160,7 +160,20 @@ spelling, the trees table).
 
 ## 7. Gate
 
-FINAL_GATE_TABLE
+| Check                                                                                       | Result |
+| ------------------------------------------------------------------------------------------- | ------ |
+| `cargo test -p humanify-ag-dev`                                                             | 321 + 8 + 1 + 2 passed |
+| red seen first                                                                              | `long_strings` (my expectation missed the escaped-quote match: Python's finditer does match it — test fixed to the oracle); a planted tokenizer bug (`name` tokens allowing a regex) fails the Node vectors |
+| `cargo dev check` BARE in the worktree (`a7…`, see the merge report)                        | first run FAILED rust:unit: env_guard took the plan rows' `split` field for the pipeline setting -> a constant (`PLAN_SPLIT`), as L2b did; second run failed on a missing `node_modules` (fresh worktree: `npm ci --ignore-scripts`); third run **ALL 11 STAGES PASSED** (rust:unit 270 s, rust:build 49 s, e2e 80 s; census:clones / census:slop REVIEW, advisory) |
+| `cargo dev check` on a clean checkout of the merge commit                                   | see the merge report |
+
+census:clones REVIEW findings in this lane's code (advisory, left as
+follow-ups so the proven binary stays the merged one): `mapdefect14::label_source`
+/ `misattr13::majority` (the same segment walk, two Python functions),
+`mapdefect14::package_of` / `misattr13::package_root` (differ by the dot-entry
+rule), `misattr13::walk_package` / `pypath::walk_files` (one prunes
+node_modules and symlinked files), `npm::dumps_sorted` / `py::write_compact`
+(different separators).
 
 ## 8. What I could not prove
 
