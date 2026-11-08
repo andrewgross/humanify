@@ -239,7 +239,7 @@ matcher's replacement is an open follow-up in `docs/rust-port/19-cutover.md`.
 There is no heap flag: the binary is not a Node process (`--heap-mb`, which
 was inert, is refused). `--no-vendor-score` / `--no-vendor` and `--no-layout`
 are refused too: scorer v2 always scores `vendor/` and the layout block when
-both trees have them (rule 8). Every heavy verb (`eval score|neutrality|walk`, `library score`, `index build`, the batch runners) takes `/work/heavy.lock` itself — `cargo dev` prints when — so never wrap a `cargo dev` verb in `flock` (a nested flock deadlocks); wrap only non-verb heavy jobs, such as a bare `cargo dev check`. Run an eval ALONE — a parallel heavy job (a gate batch, another
+both trees have them (rule 8). There is no host-wide lock (exp205): the coordinating agent decides what runs together, from each verb's `footprint` that `cargo dev` prints (memory, LLM use, time, folders written). Two runs never share a folder by accident: a verb claims the folder it writes (`<folder>.live-run`) and a second run on it is refused at once, naming the first. Run an eval ALONE — a parallel heavy job (a gate batch, another
 eval) has OOM-killed a rebase before and silently degraded a label to the
 archive prior (`ts-control-fec64e5` r1; check eval logs for "rebase FAILED").
 
@@ -309,6 +309,19 @@ them). `novel`/`realLn` have a measured band of ZERO — byte-equal across all
 three repeats — so any movement in either is real; the ±2,800/hop figure that
 circulated before the bands existed is superseded folklore. Details:
 `experiments/034-eval-harness/README.md`.
+
+**When a KPI moves, read the LLM call diagnostics (exp206, 2026-11-08)**
+before explaining it: `--stats-json` `llmCalls` per namer, printed by
+`cargo dev eval summarize` and side by side by `eval leaderboard` (SERVER /
+MODEL ANSWERS / BACKUPS). They separate a slower or failing server
+(latency percentiles, retries by reason, failures by kind) from the model
+answering differently (per-identifier verdicts, answers repeating the prior
+name, hand-offs and ladder repairs) from answers truly lost. They are
+diagnostics, not KPIs, and have no band; between two cold runs the answer
+counts also move with the model's own variation. Labels scored before
+exp206 print `-`, and the coverage `retries` / `avgResponseTimeMs` of every
+Rust-era card before it (2026-09-26 to 2026-11-08, including
+`ref-names-111401fe-*`) are false zeros — never read them.
 
 **Read every KPI per surface (exp170, 2026-10-31).** Each change/noise KPI is
 split three ways, and the three add back up exactly to the old column:
