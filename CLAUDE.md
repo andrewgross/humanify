@@ -270,7 +270,15 @@ see) and one vendor file in three off-mode cards; every other card field is
 byte-equal. The leaderboard REFUSES labels of different scorer versions unless
 `--force-mixed`; re-score a v1 label's trees with `cargo dev eval rescore
 <label>` to compare it. Bands are per scorer version: `noise-bands.json`
-`byScorer.2` (equal to the v1 bands for every KPI).
+`byScorer.2` (equal to the v1 bands for every KPI, except the names-mode
+section, re-measured on five pairs by exp201).
+
+A label scored before exp201 has four pairs (both off-mode references stay
+that way). The leaderboard compares labels with different pair sets over the
+pairs both scored, with a `!! COMMON PAIRS` line and every total re-folded
+over those pairs (`--force-mixed` never overrides a pair-set mismatch;
+labels with no pair in common are refused); `eval bands` refuses repeats
+over different pair sets.
 
 **The self-hop gate has two halves (00-control §3, 2026-09-25).** The COLD
 self-hop rarely reads 0, because the LLM re-rolls: on the scratch-base
@@ -284,10 +292,10 @@ permits. The summary judges both, and says "not judged" when a leg ran on a
 cache or on another version.
 
 ```bash
-cargo dev eval score <label>    # score current tree on 4 pairs (~1hr)
-cargo dev eval leaderboard ref-names-0357696e-r1-s2 <label>
-#   ^ the current reference (names mode, scratch bases, scorer v2; the off-mode
-#     one is ref-scratch-0f338ffa-r1-s2). Comparing against a SEEDED-base label
+cargo dev eval score <label>    # score current tree on 5 pairs (~2.3 hr names mode)
+cargo dev eval leaderboard ref-names-111401fe-r1 <label>
+#   ^ the current reference (names mode, five pairs, scratch bases, scorer v2;
+#     the off-mode one is ref-scratch-0f338ffa-r1-s2, four pairs). Comparing against a SEEDED-base label
 #     (everything before 2026-10-03) needs --base-mode seeded on <label>, or the
 #     leaderboard refuses the mix (--force-mixed to show it anyway)
 ```
@@ -342,27 +350,44 @@ UNKNOWN, not passing. Labels live under `dev/eval/results/<label>/`; the
 current references are NOT committed (their report pages quote bundle code)
 and live on this host only.
 
+- **`ref-names-111401fe-r1/r2/r3` — the current valid NAMES-mode cold
+  reference, FIVE pairs** (2026-11-08, exp201: the four plus 2.1.179→181,
+  the minifier-change hop; scratch bases, scorer v2, full prebuilt index
+  `cb64c1f5…`). In each, all 5 rebases, 5 scored legs and both self-hop legs
+  exit 0, warm self-hops byte-identical with 0 writes, cold self-hop 22/2/8,
+  boots OK (six prompt halves re-recorded after a login expiry, `rerecorded`
+  note). novel 5,336 / realLn 556,875 byte-equal across the three, and
+  4,191 / 416,386 on the four shared pairs, equal to
+  `ref-names-0357696e-*-s2`. They set `noise-bands.json`
+  `byScorer.2.byMode.names` and the names self-hop range (2–22). **Names
+  bands are no longer bimodal: noiseLn ±989, noise ±9, treeLn ±745** (the
+  old ±15,709 / ±397 / ±2,116 were the pre-exp178 197→198 pair). The fifth
+  pair alone carries ~53,300 vendor noise lines and ~35,600 vendor "real"
+  lines with library source unchanged (exp200's target). Results live on
+  this host only: `/work/ref-names-111401fe-frozen/dev/eval/results/`.
+
 - **Scorer v2 references: `ref-names-0357696e-r1/r2/r3-s2` (names mode) and
   `ref-scratch-0f338ffa-r1/r2/r3-s2` (off mode)** — the two references below,
   re-scored by scorer v2 from their frozen trees (`/work/dev-harness-proof`):
   novel **4,191** / realLn **416,386** in every names and every off label
-  (v1: 4,188 / 416,377 — the 3 `async` statements). Compare new labels
-  against these; everything said below about the runs themselves holds.
+  (v1: 4,188 / 416,377 — the 3 `async` statements). Compare new off-mode
+  labels against the off one (four pairs); the names one is superseded by
+  the five-pair reference above; everything said below about the runs themselves holds.
 
-- **`ref-names-0357696e-r1/r2/r3` — the current valid NAMES-mode cold
+- **`ref-names-0357696e-r1/r2/r3` — the previous NAMES-mode cold (four pairs)
   reference** (2026-10-31, scratch bases, full prebuilt index `cb64c1f5…`). All
   12 pairs exit 0, boots OK, warm self-hops byte-identical, cold self-hop
   8/8/8. novel 4,188 / realLn 416,377, byte-equal to every reference. These
   runs set `noise-bands.json` `byMode.names` and the names self-hop range.
-  **Names-mode bands are WIDE: noiseLn ±15,709, noise ±397, treeLn ±2,116.**
+  **Its 4-pair names bands were WIDE (superseded by exp201's five-pair
+  bands): noiseLn ±15,709, noise ±397, treeLn ±2,116.**
   All of it came from one bimodal pair, 2.1.197→198: the error-classes lazy
   init (275 callers) was frozen unrenamed because a library's restored local
   of the same spelling settled its module row by name (exp178, fixed: a row
   settles only for its own binding). From exp178 on, that binding settles by
   module vote in every run and names-mode noise lands in the low mode
-  (~2,745 / ~50,900); the bands still carry the old bimodality until they
-  are re-measured on three cold repeats. Judge names-mode changes on
-  novel/realLn (band 0) and the per-surface columns, not on total noise. vendorReal reads ~10,850 against off mode's ~1,320. That gap is REAL
+  (~2,745 / ~50,900); exp201's three five-pair repeats all
+  landed there and re-measured the bands. vendorReal reads ~10,850 against off mode's ~1,320. That gap is REAL
   dependency change, mostly highlight.js 11 at 2.1.198: names mode prints
   vendor code formatted, while off mode prints one minified line per file
   (exp173 corrects exp171's "defect" reading). In names mode, real change can
