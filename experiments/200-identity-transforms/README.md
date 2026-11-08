@@ -244,7 +244,7 @@ rebase onto main `d293aa886`; the clean checkout is `0dba3d33e` (a detached work
 | rust:unit | PASS | PASS |
 | rust:build | PASS | PASS |
 | format-golden | PASS | PASS |
-| e2e | PASS | CLEAN_E2E |
+| e2e | PASS | PASS |
 
 (The worktree's first attempt failed `rust:unit` on one webpack test only
 because this new worktree had no `node_modules` — the setup step
