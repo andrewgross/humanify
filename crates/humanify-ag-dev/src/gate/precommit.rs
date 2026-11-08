@@ -11,9 +11,9 @@
 //!
 //! The hook is not the gate: it never runs the test suites.
 //!
-//! Until lane L5 removes the TypeScript harness, husky stays the
-//! installed hook (its prettier/biome keep the TS gate's lint stage
-//! green); L5 switches `core.hooksPath` to `.githooks`.
+//! Each clone installs it once: `git config core.hooksPath .githooks`
+//! (husky's `prepare` script used to do that on `npm install`; husky went
+//! with the TypeScript harness in lane L5).
 
 use std::path::Path;
 use std::time::Duration;
