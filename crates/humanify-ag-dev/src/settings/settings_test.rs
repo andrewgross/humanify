@@ -57,8 +57,9 @@ fn positionals_flags_and_defaults_resolve() {
     assert_eq!(p.positionals, vec!["mylabel"]);
     assert_eq!(p.settings.text("eval.base_mode").as_deref(), Some("seeded"));
     assert!(!p.settings.flag_on("eval.self_hop"));
-    assert!(p.settings.flag_on("eval.vendor_score"), "default on");
-    assert_eq!(p.settings.text("run.workdir").as_deref(), Some("/work"));
+    assert!(p.settings.flag_on("eval.boot_prompt"), "default on");
+    // the work dir's default is per verb (eval score: /work/eval-work)
+    assert_eq!(p.settings.text("run.workdir"), None);
     assert_eq!(
         p.settings.text("boot.model").as_deref(),
         Some("claude-opus-4-1")
@@ -80,7 +81,7 @@ fn retired_spellings_are_refused_naming_their_replacement() {
     for (old, new) in [
         ("--seeded-base", "--base-mode seeded"),
         ("--archive-prior", "--base-mode archive"),
-        ("--no-vendor", "--no-vendor-score"),
+        ("--no-vendor", "always scores vendor"),
         ("--heap-mb", "Rust binary"),
         ("--pipeline-arg", "--pipeline-set"),
     ] {

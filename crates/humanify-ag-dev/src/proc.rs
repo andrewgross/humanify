@@ -109,6 +109,98 @@ pub fn run_ok(spawn: &Spawn) -> Result<String, String> {
     String::from_utf8(done.stdout).map_err(|_| format!("{}: stdout is not UTF-8", spawn.describe()))
 }
 
+/// How a [`run_to_file`] child ended.
+#[derive(Debug)]
+pub struct LoggedExit {
+    /// The exit code; -1 when killed by a signal (run-pipeline.ts's
+    /// `code ?? -1`).
+    pub code: i32,
+}
+
+/// Run `spawn` with its stdout and stderr both appended to `log` (a
+/// pipeline launch's `-vv` output can be gigabytes: it goes to a file,
+/// never into memory, and with no pipe there is nothing to drain), inside
+/// its deadline. `on_tick(pid)` is called once right after the spawn and
+/// then every `tick` while the child lives — an OBSERVER (rule 8): the
+/// scored leg samples the process tree's peak RSS there, which can only be
+/// read while the child is alive. The wait is the child's exit event on a
+/// bounded channel with `recv_timeout` (never a sleep-and-poll); on expiry
+/// the child's process group is killed.
+pub fn run_to_file(
+    spawn: &Spawn,
+    log: &Path,
+    tick: Duration,
+    on_tick: &mut dyn FnMut(u32),
+) -> Result<LoggedExit, String> {
+    use std::os::unix::process::CommandExt;
+    use std::sync::mpsc;
+    let file = std::fs::File::create(log).map_err(|e| format!("{}: {e}", log.display()))?;
+    let err = file
+        .try_clone()
+        .map_err(|e| format!("{}: {e}", log.display()))?;
+    let mut command = Command::new(&spawn.program);
+    command
+        .args(&spawn.args)
+        .process_group(0)
+        .stdin(std::process::Stdio::null())
+        .stdout(file)
+        .stderr(err);
+    if let Some(dir) = &spawn.cwd {
+        command.current_dir(dir);
+    }
+    for (k, v) in &spawn.env {
+        command.env(k, v);
+    }
+    let started = std::time::Instant::now();
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("{}: cannot start: {e}", spawn.describe()))?;
+    let pid = child.id();
+    on_tick(pid);
+    // concurrency: the one waiter of a file-logged child; it reports the
+    // exit on a bounded channel and ends with the child.
+    let (tx, rx) = mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        let _ = tx.send(child.wait());
+    });
+    loop {
+        let left = spawn.deadline.saturating_sub(started.elapsed());
+        if left.is_zero() {
+            kill_group(pid);
+            return Err(format!(
+                "{}: timed out after {}s (killed)",
+                spawn.describe(),
+                spawn.deadline.as_secs()
+            ));
+        }
+        match rx.recv_timeout(left.min(tick)) {
+            Ok(Ok(status)) => {
+                return Ok(LoggedExit {
+                    code: status.code().unwrap_or(-1),
+                });
+            }
+            Ok(Err(e)) => return Err(format!("{}: wait: {e}", spawn.describe())),
+            Err(mpsc::RecvTimeoutError::Timeout) => on_tick(pid),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(format!("{}: the waiter died", spawn.describe()));
+            }
+        }
+    }
+}
+
+/// Kill a child's whole process group (`kill -KILL -- -<pgid>`; the
+/// harness forbids no unsafe, but the one owner of this already shells out).
+fn kill_group(pid: u32) {
+    let _ = humanify_ag_core::subprocess::run(
+        Command::new("kill")
+            .arg("-KILL")
+            .arg("--")
+            .arg(format!("-{pid}")),
+        None,
+        Duration::from_secs(10),
+    );
+}
+
 /// The deadline for a quick `git` query.
 pub const GIT_DEADLINE: Duration = Duration::from_secs(60);
 
