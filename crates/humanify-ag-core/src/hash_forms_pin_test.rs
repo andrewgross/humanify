@@ -401,6 +401,6 @@ const PIN_ALIGN: &str = "35a3c368cd4e0592e48f47b6";
 // columns ONLY — the identity, rename-signature and every slot-mapping column,
 // the module bindings and the index keys (V) are line-for-line unchanged.
 const PIN_GRAPH: &str = "cc3f6981627edd8ff87c62a3";
-const PIN_MODULES: &str = "0986f6fe28db644f5b06b822";
+const PIN_MODULES: &str = "05eabee4e36d9dc8ab0e8d38";
 const PIN_UNITS: &str = "6d469263bd7c2f510f37c083";
 const PIN_FILES: &str = "911b9df2a0edf0f9b5fbb73a";
