@@ -365,6 +365,11 @@ pub fn freeze(plan: Plan, data: &Path) -> Result<Frozen, String> {
 
 // ---------------------------------------------------------------- recipes
 
+/// A plan row's dev / held split. A constant: env_guard's "a setting read
+/// out of a JSON map" rule would take the plan's field for the pipeline's
+/// `split` setting.
+pub const PLAN_SPLIT: &str = "split";
+
 /// exp150's apps (`/work/exp150-data/bun`): the draw and the builds.
 pub const BUN_APPS: &str = "/work/exp150-data/bun";
 /// exp181's bundler-kind builds.
@@ -425,7 +430,7 @@ fn kind_plan(corpus: &str, kind: &str) -> Result<Plan, String> {
     let mut entries = Vec::new();
     for a in &apps {
         let id = text_of(a, "id");
-        let dev = a["split"].as_str() == Some("dev")
+        let dev = a[PLAN_SPLIT].as_str() == Some("dev")
             && bun_built
                 .get(&id)
                 .is_some_and(|r| r["node"].as_bool() == Some(true));
@@ -494,7 +499,7 @@ fn bun_plan(corpus: &str) -> Result<Plan, String> {
             let ok = built.get(&id).is_some_and(|r| {
                 r["node"].as_bool() == Some(true) && r["bun"].as_bool() == Some(true)
             });
-            if a["split"].as_str() != Some(split) || !ok {
+            if a[PLAN_SPLIT].as_str() != Some(split) || !ok {
                 continue;
             }
             let slug = text_of(a, "slug");

@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use super::freeze::{BUN_APPS, KIND_DATA};
+use super::freeze::{BUN_APPS, KIND_DATA, PLAN_SPLIT};
 use super::pypath;
 use crate::proc::{self, Spawn};
 
@@ -588,7 +588,7 @@ pub fn build(
             let dev: Vec<&Value> = apps
                 .iter()
                 .filter(|a| {
-                    a["split"].as_str() == Some("dev")
+                    a[PLAN_SPLIT].as_str() == Some("dev")
                         && a["id"]
                             .as_str()
                             .and_then(|id| bun_built.get(id))
@@ -627,7 +627,7 @@ pub fn build(
             let split = if corpus == "bun-dev" { "dev" } else { "held" };
             let mine: Vec<&Value> = apps
                 .iter()
-                .filter(|a| a["split"].as_str() == Some(split))
+                .filter(|a| a[PLAN_SPLIT].as_str() == Some(split))
                 .filter(keep)
                 .collect();
             let results =
