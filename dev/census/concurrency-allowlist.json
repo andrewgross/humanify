@@ -743,7 +743,28 @@
       "scope": "each",
       "construct": "thread-scope",
       "pattern": "subprocess",
-      "reason": "the harness's ONE subprocess fan-out (a discover run per bundle, an index chunk, a walk hop's scoring): `jobs` scoped workers, each running one child at a time through the one subprocess owner; joined before return; results in INPUT order, so completion order reaches nothing (rule 6)"
+      "reason": "the harness's ONE subprocess fan-out (a discover run per bundle, an index chunk, a walk hop's scoring, eval score's pair lanes): `jobs` scoped workers, each running one child at a time through the one subprocess owner; joined before return; results in INPUT order, so completion order reaches nothing (rule 6)"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/mod.rs",
+      "scope": "Ctx::for_lane",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "constructs a lane context's transcript Mutex (see struct Ctx); a lane's lines go to the ordered lane transcript, never this one"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/lanes.rs",
+      "scope": "struct Lanes",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "eval score's ordered lane transcript (exp207): held for one push, or one release of finished slots' lines with their println so two lanes' lines never interleave (like the pipeline's log lock); it only orders what lanes SAY, in canonical pair order, and nothing reads it to decide"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/lanes.rs",
+      "scope": "Lanes::new",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "constructs the ordered lane transcript's Mutex (see struct Lanes)"
     },
     {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",

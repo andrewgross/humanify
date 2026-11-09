@@ -21,7 +21,7 @@ use super::{Ctx, count_files, text, write};
 
 /// How often the child's RSS is sampled (the first sample is taken at
 /// once, so a short run is not recorded as using nothing).
-const RSS_SAMPLE: Duration = Duration::from_millis(250);
+pub const RSS_SAMPLE: Duration = Duration::from_millis(250);
 /// Cap on recorded ERROR lines.
 const MAX_ERRORS: usize = 10;
 /// A whole pipeline run on the biggest pair, cold, on a loaded box.

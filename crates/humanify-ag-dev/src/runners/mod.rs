@@ -15,6 +15,7 @@ pub mod bin;
 pub mod boot;
 pub mod claim;
 pub mod index;
+pub mod lanes;
 pub mod leg;
 pub mod library;
 pub mod neutrality;
@@ -27,7 +28,7 @@ pub mod verbs;
 pub mod walk;
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::env;
@@ -48,6 +49,9 @@ pub struct Ctx {
     /// Echo every line to stdout as it is said (off in tests).
     pub echo: bool,
     said: Mutex<Vec<String>>,
+    /// A lane's context says into its slot of the run's ordered
+    /// transcript instead (`lanes`, exp207).
+    lane: Option<(Arc<lanes::Lanes>, usize)>,
 }
 
 impl Ctx {
@@ -59,7 +63,28 @@ impl Ctx {
             child_env: Vec::new(),
             echo: true,
             said: Mutex::new(Vec::new()),
+            lane: None,
         }
+    }
+
+    /// The context one lane of a parallel run works in: the same host,
+    /// its lines said into `slot` of `lanes`.
+    pub fn for_lane(&self, lanes: &Arc<lanes::Lanes>, slot: usize) -> Ctx {
+        Ctx {
+            repo: self.repo.clone(),
+            host: self.host.clone(),
+            cwd: self.cwd.clone(),
+            child_env: self.child_env.clone(),
+            echo: self.echo,
+            said: Mutex::new(Vec::new()),
+            lane: Some((Arc::clone(lanes), slot)),
+        }
+    }
+
+    /// Lines the lanes already printed, added to this transcript in their
+    /// (canonical) order without printing them again.
+    pub fn absorb(&self, lines: Vec<String>) {
+        self.said.lock().expect("the transcript").extend(lines);
     }
 
     /// `p` as typed, made absolute against the working directory.
@@ -75,6 +100,10 @@ impl Ctx {
     /// Say one line (a runner's progress and verdict lines).
     pub fn say(&self, line: impl Into<String>) {
         let line = line.into();
+        if let Some((lanes, slot)) = &self.lane {
+            lanes.say(*slot, line);
+            return;
+        }
         if self.echo {
             println!("{line}");
         }

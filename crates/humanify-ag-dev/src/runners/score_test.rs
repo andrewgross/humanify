@@ -194,6 +194,12 @@ fn bin_flags() -> Vec<&'static str> {
     vec!["--bin", "<TMP>/shims/humanify", "--force-mixed"]
 }
 
+/// The serial run (`--parallel-pairs 1`): the launch goldens are its
+/// launches IN ORDER, the protocol every serial reference ran with.
+fn serial_flags() -> Vec<&'static str> {
+    with(&["--parallel-pairs", "1"])
+}
+
 fn with(extra: &[&'static str]) -> Vec<&'static str> {
     let mut f = bin_flags();
     f.extend_from_slice(extra);
@@ -230,7 +236,7 @@ fn assert_scored_launches_match_runcfgs(h: &Harness) {
 
 #[test]
 fn every_launch_is_byte_identical_to_the_scratch_golden() {
-    let h = run_score(&bin_flags(), |_| {}).unwrap();
+    let h = run_score(&serial_flags(), |_| {}).unwrap();
     assert_ran(&h);
     assert_golden("run-launch.golden.txt", &h.launches);
     assert_scored_launches_match_runcfgs(&h);
@@ -238,7 +244,11 @@ fn every_launch_is_byte_identical_to_the_scratch_golden() {
 
 #[test]
 fn seeded_base_launches_are_byte_identical_to_the_seeded_golden() {
-    let h = run_score(&with(&["--base-mode", "seeded"]), |_| {}).unwrap();
+    let h = run_score(
+        &with(&["--base-mode", "seeded", "--parallel-pairs", "1"]),
+        |_| {},
+    )
+    .unwrap();
     assert_ran(&h);
     assert_golden("run-launch.seeded-base.golden.txt", &h.launches);
     assert_scored_launches_match_runcfgs(&h);
@@ -338,7 +348,7 @@ fn pipeline_sets_reach_all_three_sites_once_each_in_order() {
             "--pipeline-set",
             "naming.batch_size=10",
         ]),
-        |_| {},
+        lane_recorder("2.1.85-rebased"),
     )
     .unwrap();
     assert_ran(&h);
@@ -548,4 +558,150 @@ fn a_label_folder_another_live_run_writes_is_refused() {
     assert_eq!(h.status, 2, "{}", h.said);
     assert!(h.said.contains("eval score (the other run)"), "{}", h.said);
     assert!(h.launches.is_empty(), "nothing launched: {}", h.launches);
+}
+
+// ─── parallel pairs (exp207) ─────────────────────────────────────────────
+
+/// The recorder behind a wrapper that logs each launch's block in ONE
+/// locked append (the recorder writes a launch line, then its config
+/// lines: two concurrent launches could interleave them), so a parallel
+/// run's calls.log parses into the same blocks as a serial one. A launch
+/// naming `slow` finishes ~2 s late (a lane completing after the lanes
+/// behind it). Serial and parallel runs compared with each other both use it.
+fn lane_recorder(slow: &'static str) -> impl Fn(&Rec) {
+    move |rec: &Rec| {
+        let real = rec.root.join("real/humanify");
+        std::fs::create_dir_all(real.parent().unwrap()).unwrap();
+        write_exec(&real, RUN_RECORDER);
+        let wrapped = format!(
+            "#!/usr/bin/env bash\n\
+             log=\"$RECORDER_ROOT/calls.log\"\n\
+             own=\"$(mktemp -d)\"\n\
+             RECORDER_ROOT=\"$own\" \"$(dirname \"$0\")/../real/humanify\" \"$@\"; rc=$?\n\
+             case \"$*\" in *\"{slow}\"*) sleep 2 ;; esac\n\
+             flock \"$log.lock\" -c \"cat '$own/calls.log' >> '$log'\"\n\
+             rm -rf \"$own\"\n\
+             exit $rc\n"
+        );
+        write_exec(&rec.shims.join("humanify"), &wrapped);
+    }
+}
+
+/// The launch blocks of a recorded run, sorted (a parallel run's launch
+/// ORDER is completion order; its SET must be the serial run's).
+fn sorted_blocks(launches: &str) -> Vec<String> {
+    let mut b: Vec<String> = blocks(launches).into_iter().map(|b| b.join("\n")).collect();
+    b.sort();
+    b
+}
+
+/// What differs between two recorder runs by construction: the measured
+/// wall seconds and peak RSS of each launch.
+fn timing_free(said: &str) -> String {
+    said.lines()
+        .map(|l| match l.find(" peak RSS ") {
+            Some(_)
+                if l.trim_start().starts_with("run: exit")
+                    || l.trim_start().starts_with("launch: exit") =>
+            {
+                l.split(',').next().unwrap_or(l).to_string()
+            }
+            _ => l.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn parallel_lanes_launch_exactly_the_serial_launches() {
+    // the first pair's rebase finishes LAST: every other lane completes
+    // first. The serial run's launches are the golden's
+    // (every_launch_is_byte_identical_to_the_scratch_golden).
+    let serial = run_score(&serial_flags(), lane_recorder("2.1.85-rebased")).unwrap();
+    let h = run_score(&bin_flags(), lane_recorder("2.1.85-rebased")).unwrap();
+    assert_ran(&h);
+    let norm = |h: &Harness| {
+        h.launches
+            .replace(&h.rec.root.display().to_string(), "<TMP>")
+    };
+    assert_eq!(sorted_blocks(&norm(&serial)), sorted_blocks(&norm(&h)));
+    assert_scored_launches_match_runcfgs(&h);
+}
+
+#[test]
+fn completion_order_never_reaches_the_transcript_or_the_label() {
+    let serial = run_score(&serial_flags(), lane_recorder("2.1.85-rebased")).unwrap();
+    let parallel = run_score(&bin_flags(), lane_recorder("2.1.85-rebased")).unwrap();
+    assert_ran(&parallel);
+    let norm = |h: &Harness| timing_free(&h.said);
+    let lanes = |h: &Harness| {
+        norm(h)
+            .lines()
+            .filter(|l| !l.starts_with("PARALLEL PAIRS:"))
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(lanes(&serial), lanes(&parallel));
+    // the self-hop still runs on the last pair's tree, after its scored leg
+    use humanify_ag_model::js::JsValue;
+    assert_eq!(
+        get(&self_hop(&parallel), &["version"]),
+        &JsValue::str(pairs().last().unwrap().1.as_str())
+    );
+    let names = |h: &Harness| {
+        let mut n: Vec<String> = std::fs::read_dir(&h.results)
+            .unwrap()
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .collect();
+        n.sort();
+        n
+    };
+    assert_eq!(names(&serial), names(&parallel));
+}
+
+#[test]
+fn the_label_records_how_many_lanes_ran_and_each_launchs_llm_concurrency() {
+    let concurrency = crate::committed::eval::pairs(&crate::paths::repo_root())
+        .unwrap()
+        .value
+        .llm
+        .concurrency;
+    for (flags, n) in [(bin_flags(), 5), (serial_flags(), 1)] {
+        let h = run_score(&flags, |_| {}).unwrap();
+        let p = std::fs::read_to_string(h.results.join("pipeline.json")).unwrap();
+        assert!(
+            p.contains(&format!(
+                "\"parallelPairs\":{n},\"llmConcurrencyPerRun\":{concurrency}"
+            )),
+            "{p}"
+        );
+    }
+}
+
+#[test]
+fn a_failing_lane_fails_its_pair_and_not_the_others() {
+    // the first pair's rebase writes no tree: that pair falls back to the
+    // archive prior (said in ITS block), every other pair is rebased
+    let h = run_score(&bin_flags(), |rec| {
+        let wrapped = format!(
+            "#!/usr/bin/env bash\ncase \"$*\" in *2.1.85-rebased*) exit 3 ;; esac\nexec \"{}\" \"$@\"\n",
+            rec.root.join("real-humanify").display()
+        );
+        write_exec(&rec.root.join("real-humanify"), RUN_RECORDER);
+        write_exec(&rec.shims.join("humanify"), &wrapped);
+    })
+    .unwrap();
+    assert_ran(&h);
+    assert_eq!(h.said.matches("rebase FAILED").count(), 1, "{}", h.said);
+    let first = h.said.find("rebase FAILED").unwrap();
+    let second_pair = h.said.find(&format!("=== {}->", pairs()[1].0)).unwrap();
+    assert!(
+        first < second_pair,
+        "the failure is said in its own pair's block:\n{}",
+        h.said
+    );
+    assert_eq!(
+        h.said.matches("prior rebased (scratch)").count(),
+        pairs().len() - 1
+    );
 }

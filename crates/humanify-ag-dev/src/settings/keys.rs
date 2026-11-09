@@ -188,6 +188,18 @@ pub static HARNESS_KEYS: &[Key] = &[
         unset: "every pair in pairs.json",
         doc: "The pairs to score, as from->to versions (a PARTIAL label).",
     },
+    Key {
+        section: "eval",
+        name: "parallel_pairs",
+        kind: Kind::Int { min: 1, max: ANY },
+        flag: Some("--parallel-pairs"),
+        default: || Some(Val::Int(5)),
+        unset: "",
+        doc: "How many pairs run at once, each in its own lane (rebase, scored leg, \
+              scoring, boot; the self-hop in the last pair's lane). 1 is the serial run. \
+              Every launch keeps pairs.json's llm.concurrency, so the LLM server sees up \
+              to N times it in flight (exp207).",
+    },
     path_key(
         "eval",
         "llm_cache",

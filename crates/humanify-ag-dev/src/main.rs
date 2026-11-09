@@ -107,7 +107,7 @@ const VERBS: &[Verb] = &[
     },
     Verb {
         words: &["eval", "score"],
-        usage: "eval score <label> [--pairs a->b,...] [--base-mode scratch|seeded|archive] [--llm-cache D] [--force-mixed] [--bin PATH] [--workdir D] [--library-index D] [--no-boot-prompt] [--no-self-hop] [--pipeline-set section.key=value]...",
+        usage: "eval score <label> [--pairs a->b,...] [--base-mode scratch|seeded|archive] [--llm-cache D] [--force-mixed] [--bin PATH] [--workdir D] [--library-index D] [--no-boot-prompt] [--no-self-hop] [--parallel-pairs N] [--pipeline-set section.key=value]...",
         proves: "how the CURRENT TREE's cross-version diff decomposes (KPIs), pipeline exit, boot",
         cannot_prove: "any delta inside the measured noise-bands.json floor — it will still print a sign",
         lane: None,
