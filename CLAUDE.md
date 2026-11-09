@@ -363,14 +363,22 @@ body as its braced `return`, ignores parentheses and matches class-private
 names per class. These rules are entries in the identity-transform registry
 (`crates/humanify-ag-core/src/hash/identity_transforms.rs`); adding one means
 a registry entry, its tests, and a version bump for each form that uses it.
-The library index's forms keep the settings they were built with until the
-index is rebuilt (exp204). The first run of a new match-key version on a tree
+The library index's forms (`units/4`, `vendor-content-key/5`) apply the
+same transforms since exp204 (2026-11-09), which rebuilt the full index from
+the stored builds with `humanify-ag index build --replay <index-dir>` (same
+plan, new forms) as `4736dcfa…`, now pairs.json `libraryIndex`; an index
+stamped with other form versions is refused. The first run of a new match-key version on a tree
 written by an older binary re-matches vendor modules by content (both sides
 formatted; each module's file and `lib_<hash>` identifier carried), so that
 hop costs about 1,000 extra vendor noise lines, not about 38,000. On
 2.1.179→181, vendor noise is about 6,200, against about 53,300 before
 (`exp200-e75f9e25`; its mints read 260 against the band's ±14, accepted by
-Andrew as draw-to-draw noise).
+Andrew as draw-to-draw noise). With the rebuilt index (`exp204-75ae9334`,
+one cold run) noiseLn reads 68,225 against the reference's 77,578, and
+179→181's vendor "real" lines (library source unchanged) fall from 35,554 to
+4,468; novel/realLn exact, mints 230. The `ref-names-111401fe-*` references
+used the OLD index `cb64c1f5…`, so the leaderboard refuses a new label
+against them unless `--force-mixed` until the references are re-run.
 
 **Which reference to use, and why it is not the one this file used to
 name.** Check a reference's `*-run-status.json` before citing it: absent is
