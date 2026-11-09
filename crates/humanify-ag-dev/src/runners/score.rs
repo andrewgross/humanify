@@ -575,6 +575,12 @@ fn rebase(run: &Run, from: &str, to: &str, archive: &Path) -> Base {
     remove(&out);
     let toml = run.work.join(format!("{from}-rebased.toml"));
     let mut own = run.cache_sets();
+    // the rebase's call ledger (exp207): most of the eval's LLM calls are
+    // a rebase's, so its retries / timeouts / latency are recorded too
+    own.push(format!(
+        "diagnostics.stats_json={}",
+        text(&run.results.join(format!("{from}-rebase.stats.json")))
+    ));
     own.push(format!(
         "diagnostics.log_file={}",
         text(&run.results.join(format!("{from}-rebase.log")))

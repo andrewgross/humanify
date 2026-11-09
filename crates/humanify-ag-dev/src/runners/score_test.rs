@@ -705,3 +705,16 @@ fn a_failing_lane_fails_its_pair_and_not_the_others() {
         pairs().len() - 1
     );
 }
+
+#[test]
+fn every_rebase_records_its_llm_call_ledger() {
+    // exp207: the rebases carry ~97% of the eval's LLM calls; under
+    // parallel load their retries / timeouts / latency must be readable
+    let h = run_score(&serial_flags(), |_| {}).unwrap();
+    for (from, _) in pairs() {
+        let want = format!(
+            "humanify-config| stats_json = \"<REPO>/dev/eval/results/<LABEL>/{from}-rebase.stats.json\""
+        );
+        assert!(h.launches.contains(&want), "{want}\n{}", h.launches);
+    }
+}
