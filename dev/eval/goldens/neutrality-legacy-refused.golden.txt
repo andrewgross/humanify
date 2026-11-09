@@ -8,7 +8,7 @@ humanify-config| cache_dir = "<TMP>/work/cache"
 humanify-config| [split]
 humanify-config| enabled = true
 humanify-config| [library]
-humanify-config| index = "/work/library-index/cb64c1f5fd507bee7f80efd46e0d01cec405a8b3028a9c05d56e94d7c071ec28"
+humanify-config| index = "/work/library-index/4736dcfadff79ee2dd921d1d778fd7d92f604a708f3ad5b652c146ed89d67c84"
 cargo :: build --release --locked -p humanify-cli (in <TMP>/work/neutrality-baseline-src)
 <TMP>/work/neutrality-baseline-src/target/release/humanify (in <REPO>) :: --help
 run-config| {
@@ -22,6 +22,6 @@ run-config|   "inputsBase": "<TMP>/inputs",
 run-config|   "endpoint": "http://127.0.0.1:9/v1",
 run-config|   "pipelineSettings": [],
 run-config|   "namingMode": "names",
-run-config|   "libraryIndex": "/work/library-index/cb64c1f5fd507bee7f80efd46e0d01cec405a8b3028a9c05d56e94d7c071ec28"
+run-config|   "libraryIndex": "/work/library-index/4736dcfadff79ee2dd921d1d778fd7d92f604a708f3ad5b652c146ed89d67c84"
 run-config| }
 exit 1
