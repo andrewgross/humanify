@@ -767,6 +767,41 @@
       "reason": "constructs the ordered lane transcript's Mutex (see struct Lanes)"
     },
     {
+      "file": "crates/humanify-ag-dev/src/runners/score.rs",
+      "scope": "Lane::run_gated",
+      "construct": "channel",
+      "pattern": "subprocess",
+      "reason": "eval score's gated rebases (exp207): one bounded sync_channel(1) per pair carrying its ONE rebased base from the rebase driver to that pair's lane; a closed channel (the driver ended without sending) is said loudly and the pair is not scored"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/score.rs",
+      "scope": "Lane::run_gated",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "each pair's receiver in a Mutex<Option<_>> so the lanes' Fn + Sync closure can take it: held for one Option::take, never across the wait"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/score.rs",
+      "scope": "Lane::run_gated",
+      "construct": "thread-scope",
+      "pattern": "subprocess",
+      "reason": "the rebase driver beside the lanes (exp207): one scoped thread running the rebases parallel_rebases at a time through runners::each, each one child through the one subprocess owner with its own deadline; joined before return; it only hands each base to its own pair's lane, so completion order reaches nothing"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/score.rs",
+      "scope": "wait_for_base",
+      "construct": "channel",
+      "pattern": "deadline",
+      "reason": "a gated lane's one wait for its base: recv_timeout, never a sleep-and-poll"
+    },
+    {
+      "file": "crates/humanify-ag-dev/src/runners/score.rs",
+      "scope": "wait_for_base",
+      "construct": "timeout",
+      "pattern": "deadline",
+      "reason": "the wait's deadline covers every rebase ahead of the lane's and its own (PIPELINE_DEADLINE x its place in rebase order); on expiry the pair is said NOT scored"
+    },
+    {
       "file": "crates/humanify-ag-testkit/src/stub_server.rs",
       "scope": "<module>",
       "construct": "atomic",

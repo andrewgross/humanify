@@ -577,9 +577,11 @@ fn lane_recorder(slow: &'static str) -> impl Fn(&Rec) {
             "#!/usr/bin/env bash\n\
              log=\"$RECORDER_ROOT/calls.log\"\n\
              own=\"$(mktemp -d)\"\n\
+             out=\"\"; prev=\"\"; for a in \"$@\"; do [[ \"$prev\" == -o ]] && out=\"${{a##*/}}\"; prev=\"$a\"; done\n\
+             flock \"$log.lock\" -c \"echo start $out >> '$RECORDER_ROOT/spans.log'\"\n\
              RECORDER_ROOT=\"$own\" \"$(dirname \"$0\")/../real/humanify\" \"$@\"; rc=$?\n\
              case \"$*\" in *\"{slow}\"*) sleep 2 ;; esac\n\
-             flock \"$log.lock\" -c \"cat '$own/calls.log' >> '$log'\"\n\
+             flock \"$log.lock\" -c \"cat '$own/calls.log' >> '$log'; echo end $out >> '$RECORDER_ROOT/spans.log'\"\n\
              rm -rf \"$own\"\n\
              exit $rc\n"
         );
@@ -637,7 +639,7 @@ fn completion_order_never_reaches_the_transcript_or_the_label() {
     let lanes = |h: &Harness| {
         norm(h)
             .lines()
-            .filter(|l| !l.starts_with("PARALLEL PAIRS:"))
+            .filter(|l| !l.starts_with("PARALLEL PAIRS:") && !l.starts_with("  base: waited"))
             .map(str::to_string)
             .collect::<Vec<_>>()
     };
@@ -671,7 +673,7 @@ fn the_label_records_how_many_lanes_ran_and_each_launchs_llm_concurrency() {
         let p = std::fs::read_to_string(h.results.join("pipeline.json")).unwrap();
         assert!(
             p.contains(&format!(
-                "\"parallelPairs\":{n},\"llmConcurrencyPerRun\":{concurrency}"
+                "\"parallelPairs\":{n},\"parallelRebases\":1,\"llmConcurrencyPerRun\":{concurrency}"
             )),
             "{p}"
         );
@@ -717,4 +719,64 @@ fn every_rebase_records_its_llm_call_ledger() {
         );
         assert!(h.launches.contains(&want), "{want}\n{}", h.launches);
     }
+}
+
+/// The recorded launch spans (`start <out>` / `end <out>`, in time order).
+fn spans(h: &Harness) -> Vec<String> {
+    std::fs::read_to_string(h.rec.root.join("spans.log"))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn one_rebase_runs_at_a_time_self_hop_pair_first_and_each_lane_says_its_wait() {
+    // exp207 r1: five rebases at once made the LLM server slower in total
+    // (43 req/s vs ~57 serial, p50 latency 3x): the default lets ONE
+    // rebase run at a time, while the CPU-bound legs overlap it.
+    let h = run_score(&bin_flags(), lane_recorder("2.1.85-rebased")).unwrap();
+    assert_ran(&h);
+    let rebases: Vec<String> = spans(&h)
+        .into_iter()
+        .filter(|l| l.ends_with("-rebased"))
+        .collect();
+    let p = pairs();
+    let mut want_order = vec![p.last().unwrap().0.clone()];
+    want_order.extend(p[..p.len() - 1].iter().map(|(f, _)| f.clone()));
+    let mut want = Vec::new();
+    for f in &want_order {
+        want.push(format!("start {f}-rebased"));
+        want.push(format!("end {f}-rebased"));
+    }
+    assert_eq!(
+        rebases, want,
+        "rebases one at a time, the self-hop's pair first"
+    );
+    assert_eq!(
+        h.said.matches("  base: waited ").count(),
+        p.len(),
+        "every lane says how long it waited for its base:\n{}",
+        h.said
+    );
+}
+
+#[test]
+fn parallel_rebases_lets_that_many_overlap() {
+    let h = run_score(
+        &with(&["--parallel-rebases", "5"]),
+        lane_recorder("2.1.85-rebased"),
+    )
+    .unwrap();
+    assert_ran(&h);
+    let s = spans(&h);
+    let first_end = s.iter().position(|l| l.starts_with("end ")).unwrap();
+    assert_eq!(
+        s[..first_end]
+            .iter()
+            .filter(|l| l.ends_with("-rebased"))
+            .count(),
+        pairs().len(),
+        "all five rebases started before any launch ended: {s:?}"
+    );
 }

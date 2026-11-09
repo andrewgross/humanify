@@ -200,6 +200,20 @@ pub static HARNESS_KEYS: &[Key] = &[
               Every launch keeps pairs.json's llm.concurrency, so the LLM server sees up \
               to N times it in flight (exp207).",
     },
+    Key {
+        section: "eval",
+        name: "parallel_rebases",
+        kind: Kind::Int { min: 1, max: ANY },
+        flag: Some("--parallel-rebases"),
+        default: || Some(Val::Int(1)),
+        unset: "",
+        doc: "How many REBASES run at once when pairs run in lanes (exp207). A rebase is \
+              LLM-bound and one at 472 already saturates the server; five at once made it \
+              slower in total (43 req/s vs ~57, p50 latency 3x). With fewer rebases than \
+              lanes, the rebases run in order (the self-hop's pair first) and each lane's \
+              CPU-bound legs overlap the next rebase. R=2 may fit under the server's knee \
+              (~500 in flight); unmeasured.",
+    },
     path_key(
         "eval",
         "llm_cache",
