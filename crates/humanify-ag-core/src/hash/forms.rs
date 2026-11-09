@@ -189,9 +189,9 @@ pub struct CanonicalForm {
 ///     ([`Privates::Slots`]). 2.1.179 -> 2.1.181 moved ~130 vendor
 ///     factories' hashes by exactly these two spellings. A factory with
 ///     neither keeps its bytes across the era: the version gate again.
-///     From this era on the match key runs AHEAD of the library index's
-///     forms, which keep the settings they were stamped with
-///     ([`MATCH_KEY_V4_SETTINGS`]).
+///     exp200 split the library index's forms from the match key; exp204
+///     re-fingerprinted the index under these settings
+///     ([`MATCH_KEY_V5_SETTINGS`], a frozen copy).
 pub const MATCH_KEY: CanonicalForm = CanonicalForm {
     name: "match-key",
     version: 5,
@@ -236,49 +236,64 @@ pub const MATCH_KEY_PRIVATES_VERBATIM: CanonicalForm = CanonicalForm {
     ..MATCH_KEY
 };
 
-/// The match key's settings at version 4 — what every built library index
-/// was fingerprinted with. Not a form of its own (no caller hashes under
-/// it): the base the INDEX forms ([`LIBRARY_UNITS`], [`VENDOR_CONTENT`])
-/// keep since exp200 split them from the match key, so a match-key era
-/// never silently re-keys an index built offline. Re-fingerprinting the
-/// index under the match key's transforms is a new `units` / `module`
-/// version and a rebuild (experiments/200-identity-transforms, phase 2).
-const MATCH_KEY_V4_SETTINGS: CanonicalForm = CanonicalForm {
+/// The match key's settings at version 5 — what the library index is
+/// fingerprinted with since exp204. A FROZEN copy, not `..MATCH_KEY`, and
+/// not a form of its own (no caller hashes under it): the base the INDEX
+/// forms ([`LIBRARY_UNITS`], [`VENDOR_CONTENT`]) derive from, so a later
+/// match-key era never silently re-keys an index built offline (exp200
+/// split them; `forms_test` fails when the match key moves past this copy,
+/// and that is the moment to decide whether the index follows).
+const MATCH_KEY_V5_SETTINGS: CanonicalForm = CanonicalForm {
     name: "match-key",
-    version: 4,
+    version: 5,
     stamped_in: None,
-    privates: Privates::Verbatim,
-    transforms: WRAPPER_SPELLING_ONLY,
-    ..MATCH_KEY
+    walk: Walk::Canonical,
+    locals: Locals::Slots,
+    strings: Strings::Blurred,
+    numbers: Numbers::Exact,
+    property_names: PropertyNames::Verbatim,
+    privates: Privates::Slots,
+    free_names: FreeNames::Verbatim,
+    transforms: TransformSet::of(&[
+        Transform::Parentheses,
+        Transform::ConciseArrowBody,
+        Transform::WrapperSpelling,
+    ]),
+    parent_names: ParentNames::Oxc,
 };
 
 /// The library index's statement-unit prints (`libindex::units`): the
-/// v4 match key with private names blinded (a minifier's `#e` is renamed
+/// v5 match key with private names blinded (a minifier's `#e` is renamed
 /// per build). Its own stamp — the index manifest's `units` — because an
 /// index is built offline and read by a later binary. The version also
 /// covers the UNIT MODEL (what a unit is: `graph::references::container_units`),
 /// pinned by `libindex::units_test`'s `UNIT_MODEL_PINS`: 3 = esbuild 0.28's
-/// guarded `__esm` is a lazy module (main's 68b090e3; exp097).
+/// guarded `__esm` is a lazy module (main's 68b090e3; exp097). 4 = exp204:
+/// the match key's v5 identity transforms (concise arrow body,
+/// parentheses — `hash::identity_transforms`), so a unit a packaging tool
+/// re-styled prints as the index's copy does.
 pub const LIBRARY_UNITS: CanonicalForm = CanonicalForm {
     name: "units",
-    version: 3,
+    version: 4,
     stamped_in: Some("library index manifest `units`"),
     privates: Privates::Blinded,
-    ..MATCH_KEY_V4_SETTINGS
+    ..MATCH_KEY_V5_SETTINGS
 };
 
 /// The vendor content key (`modules::vendor_content`) — the library
-/// index's whole-module print: a factory's v4 match key with every free
-/// name that is not a real global slotted. Until exp200 it was also the
-/// stale-era carry's re-key and moved with the match key; the carry now
-/// has its own form ([`CARRY_CONTENT`]) and this one keeps the settings
-/// every built index was stamped with.
+/// index's whole-module print: a factory's match key with every free
+/// name that is not a real global slotted. 4 = the v4 match key's
+/// settings (every index built before exp204). 5 = exp204: the v5 match
+/// key's (identity transforms; private names slotted per class), so a
+/// module whose release re-styled it (2.1.179 -> 2.1.181: ~130 Bun
+/// factories) gets the whole-module answer again. The stale-era carry's
+/// re-key is its own form ([`CARRY_CONTENT`]), equal in settings today.
 pub const VENDOR_CONTENT: CanonicalForm = CanonicalForm {
     name: "vendor-content-key",
-    version: 4,
+    version: 5,
     stamped_in: Some("library index manifest `module`"),
     free_names: FreeNames::SlottedUnlessGlobal,
-    ..MATCH_KEY_V4_SETTINGS
+    ..MATCH_KEY_V5_SETTINGS
 };
 
 /// The carry's content key (`modules::vendor_content`, exp200): the

@@ -13,7 +13,7 @@ stage), so the default mode runs end to end — index lookup, vendor placement,
 restoration — on the release binary. Its slices are Bun's only, so every
 non-Bun fixture must print the skip line naming its own kind.
 
-`0242134fb663347fed2bd6740f5ca4842d8c0af617e57f9957a8dccc5bdf50aa/` is one merged index (its directory name is its
+`bfe447b7d066adc4f2a426c57e1a827067af4d2dbdec2745d45bfdad21588f58/` is one merged index (its directory name is its
 `manifest.json`'s sha256, the store's convention): `ms`, the one real npm
 package the fixtures bundle (`bun-bundle` holds ms@2.1.3), the four versions
 the `as-of` policy picks at 2026-10-25, both Bun 1.4.0 slices
@@ -24,11 +24,14 @@ Rebuild it (when the index format or a fingerprint version moves, the run
 refuses it as stale and the e2e stage fails — that is the signal):
 
 ```bash
-echo "ms@2.1.3" > packages.txt
-humanify-ag index build --packages packages.txt --as-of 2026-10-25 \
-  --registry registry --store store --work work --out out \
-  --recipe bun:target=bun,format=cjs,minify,production \
-  --recipe bun:target=node,format=cjs,minify,production \
-  --bun <bun 1.4.0> --names
-# then replace <id>/ with out/, renamed to sha256(out/manifest.json)
+humanify-ag index build --replay test/e2e/library-index/<id> --sponge-regions drop \
+  --registry registry --store store --work work --out out
+# then replace <id>/ with out/ (without its build.json, which records
+# local paths), renamed to sha256(out/manifest.json)
 ```
+
+The replay (exp204) rebuilds this index's exact plan — the four `ms`
+versions, the as-of, both Bun slices and Bun 1.4.0, the names pass — under
+the binary's fingerprint forms; the legacy `--packages` flags are gone
+(exp184). exp204's rebuild (`units/4`, `vendor-content-key/5`) changed
+hashes only: every table kept its size and line count.

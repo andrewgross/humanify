@@ -30,7 +30,7 @@ use crate::recipe::{
 };
 use crate::registry;
 use crate::shard::{
-    Shard, ShardInputs, ShardKind, ShardLiteral, ShardModule, ShardNotes, ShardUnit, read_current,
+    Shard, ShardInputs, ShardKind, ShardLiteral, ShardModule, ShardNotes, ShardUnit, has_current,
     write_shard,
 };
 use crate::sourcemap::{SourceMap, lexical, owner_cached};
@@ -70,6 +70,16 @@ pub enum SpongeRegions {
 }
 
 impl SpongeRegions {
+    /// The mode a spec's `build.sponge_regions` or `--sponge-regions`
+    /// spells (`drop`, `origin`).
+    pub fn parse(text: &str) -> Option<SpongeRegions> {
+        match text {
+            "drop" => Some(SpongeRegions::Drop),
+            "origin" => Some(SpongeRegions::Origin),
+            _ => None,
+        }
+    }
+
     /// The unit-rows version this mode's module shards are keyed by.
     fn unit_rows_version(self) -> String {
         match self {
@@ -529,9 +539,10 @@ pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, String> {
         for s in selected {
             let (mut missing, mut reused) = (Vec::new(), Vec::new());
             for inputs in shard_inputs(&name, &s.version, &slices, cfg.sponge_regions, cfg.names) {
-                match read_current(&cfg.store, &inputs) {
-                    Some(_) => reused.push(inputs),
-                    None => missing.push(inputs),
+                if has_current(&cfg.store, &inputs) {
+                    reused.push(inputs);
+                } else {
+                    missing.push(inputs);
                 }
             }
             tasks.push(Task {

@@ -2,18 +2,18 @@
   "format": "humanify-library-index/4",
   "asOf": "2026-10-25T23:59:59.999Z",
   "fingerprints": {
-    "module": "vendor-content-key/4",
+    "module": "vendor-content-key/5",
     "literals": "literals/1",
-    "units": "units/3",
+    "units": "units/4",
     "edges": "edges/2",
     "names": "names/1"
   },
   "registry": {
-    "earliestFetch": "2026-10-31T08:20:25.000Z",
-    "latestFetch": "2026-10-31T08:20:26.000Z",
+    "earliestFetch": "2026-11-08T21:41:46.000Z",
+    "latestFetch": "2026-11-08T21:41:47.000Z",
     "packuments": {
-      "bun": "fd19fdaf3555597da0f8062828a7c2304659502f2e8658e9635449f53ce35629",
-      "ms": "2dc6e090d0810d96d4c1953f01093518d4083914b44cc4c9957ff72ec06b5071"
+      "bun": "a30a74a849013d81a0013f1d68f240d20c960e8da66e50f5bc291c5fc956d093",
+      "ms": "0bb44b473a2aeea32e145342b72d032652899b463d2c54959fc9f8d769df7cb0"
     }
   },
   "slices": [
@@ -44,38 +44,38 @@
     {
       "name": "ms",
       "version": "0.7.3",
-      "role": "major-2",
+      "role": "pinned",
       "published": "2017-03-08T21:59:28.048Z"
     },
     {
       "name": "ms",
       "version": "1.0.0",
-      "role": "major-1",
+      "role": "pinned",
       "published": "2017-03-19T21:43:15.128Z"
     },
     {
       "name": "ms",
       "version": "2.1.2",
-      "role": "patch",
+      "role": "pinned",
       "published": "2019-06-06T17:31:55.859Z"
     },
     {
       "name": "ms",
       "version": "2.1.3",
-      "role": "latest",
+      "role": "pinned",
       "published": "2020-12-08T13:54:35.223Z"
     }
   ],
   "refused": [],
   "shards": {
-    "bun-bun-cjs-min/ms@0.7.3": "f40e9e9acdadf9d3843811232a8310f388094f9c1e8b0615b7070df735745a1c",
-    "bun-bun-cjs-min/ms@1.0.0": "ac36dbe38a1990f8f614bcfc0bb7d740ad6a65e7067299b71f037ad628a9cf4d",
-    "bun-bun-cjs-min/ms@2.1.2": "1a6c7017b7587dc836895df37a7d0945db25fd3cdf7d37ff8225fb140f206b2b",
-    "bun-bun-cjs-min/ms@2.1.3": "7eee4be84d636f48e76f13a0612ac7f42e9c91626572606fd3c3891883de80b0",
-    "bun-node-cjs-min/ms@0.7.3": "e1ad7f4c35ab51e31b3eb9e8ac33246afe45675d0b734aacd024873bd80fd1fe",
-    "bun-node-cjs-min/ms@1.0.0": "60353eadf92ac5f59a79c90fd1736d0e05669ac19c313aea43acc95f9263cd31",
-    "bun-node-cjs-min/ms@2.1.2": "eeedec90675243ff12e7e125d41562cc8dbd32cf6daed2e44ccb5f3eb1ff6251",
-    "bun-node-cjs-min/ms@2.1.3": "b47537c52629253c93a43294ff3cf2b647249239c0d269dea8cb8ac7c8f9913f",
+    "bun-bun-cjs-min/ms@0.7.3": "fb8eb783f0a003a47b143195cbe5864198024f3ef28989dcb9caf94e8ca1e227",
+    "bun-bun-cjs-min/ms@1.0.0": "62f4381219e5942d1e49d59366f9314a7a434479dbdba4398243685cdfbb62ae",
+    "bun-bun-cjs-min/ms@2.1.2": "54f365a4b81870ba6b038f45bc077516fd150f3432d76c16bff3bc93d9870491",
+    "bun-bun-cjs-min/ms@2.1.3": "d10d120dc7e3ed0aeb39dda0ab29b1910f44359bd0caf4cea29c05bc04abef82",
+    "bun-node-cjs-min/ms@0.7.3": "c2bdb7c183fd48972c21cfa4f6865634d2dbeafbb306179cb1f68abe881b7f2e",
+    "bun-node-cjs-min/ms@1.0.0": "2484142b682f1732f5877a947ab4a9a87d72452d45f6cb82bb1569b148ee2258",
+    "bun-node-cjs-min/ms@2.1.2": "18f6f2788c805754dcfa335c30376445ce1510e9cbdb27e6e5671c4ebaa9db52",
+    "bun-node-cjs-min/ms@2.1.3": "aa4fee1aa803bfa865297fed738840825b83e97dc8b6983028702af2494e950e",
     "literals/ms@0.7.3": "8d883b19dd5d7d96ede4c9e2306b1a2fabfaba8a69a5f70182cfa0a3d777e392",
     "literals/ms@1.0.0": "7a49131a778a46a267fd8828817e6c7e842875216e8d287ff2cdb9272a56678d",
     "literals/ms@2.1.2": "c74bd32163767ed98d450fc58753e65eaf499b2af5d3c5edf647999035a8513e",
@@ -83,25 +83,25 @@
   },
   "tables": {
     "callee-prints.bun-bun-cjs-min.bin": "07c4d4955540b4813080faa3315791947628d028061e7e5b994dd63872b98375",
-    "callee-prints.bun-node-cjs-min.bin": "a4eb127a36d1cc1e35342f3501aeedfb3702056e4dd1b28a3ffe9d08f5ebc3b3",
+    "callee-prints.bun-node-cjs-min.bin": "29846401c1ca4fba1b30bbec3a9f68b93fed6949bb9cbde9868f4787b103d3e5",
     "edges.bun-bun-cjs-min.bin": "bb357740cb2dfa61fc1d4242959c832aa4932809a374da7779181f1abf0f4e7c",
     "edges.bun-bun-cjs-min.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "edges.bun-node-cjs-min.bin": "c0d323ded3f41fab63cfbdc6e54e80ca7a680e304e8f30173bdea629f464e1e0",
-    "edges.bun-node-cjs-min.jsonl": "f68734ef2c029d3db0185ef8f2ce5df513e1da442d348628047e203b9d75f256",
+    "edges.bun-node-cjs-min.bin": "fd4f6d8a902f1cb81597bc61dfe798ffff38f9fa66887b21b1a3d9e9d5abf71b",
+    "edges.bun-node-cjs-min.jsonl": "cc2abaed115eb9723870e8d75a9cedd5423f13b37d0fe6ad1b0989e6985fafa3",
     "literals.bin": "326e5ee21a5c18ccdb6ae1084e876332cc210f980a41b63cc7f23d9261806333",
     "literals.files.jsonl": "16201dec2165f5ced8afb30890e992545746d2e8ef82103b5111151640f1e9de",
     "modules.bun-bun-cjs-min.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "modules.bun-node-cjs-min.jsonl": "c75de62db5e4fc34cd49c031d305e6319fa81affd986e656e45bd9d37dff7cd7",
-    "names.bun-bun-cjs-min.bin": "1f7027dd0511ea49af84c7a800270b04e1a810308209a8685e2d4e1a5396e5bf",
-    "names.bun-bun-cjs-min.jsonl": "ea9b3f44dd8840713fe80f4a0b1bfd2c2dff8cea75de3f5756189d95937b3482",
-    "names.bun-node-cjs-min.bin": "55329d3b9327d415625370033b94d6c2dad6dd59c7d9a47d6faec90f1858b500",
-    "names.bun-node-cjs-min.jsonl": "b235c2611c76121902b61015f77c5129cce143d406220f18521e3c6028c3fd83",
+    "modules.bun-node-cjs-min.jsonl": "10f494f1d194b3cd4f85e249b49cf11a9c28cf8434b590d9f5cd75c04e866349",
+    "names.bun-bun-cjs-min.bin": "af97e72a182f74dd4ad5aeda644853b41e51b24c3c401ecc9d3aae8dcfd6afc0",
+    "names.bun-bun-cjs-min.jsonl": "3699ea1e931b14d82ee79cef88bdb60875f7a3541dba7860c7949dfe8cf45035",
+    "names.bun-node-cjs-min.bin": "9bd13b49b2c8b8acfca8405e0892f959027436d279a6eb82fdf44e40248232c4",
+    "names.bun-node-cjs-min.jsonl": "6e0331ef04c5de6595040ba64d1f9e6f9b9bd7ce915405f61bde6917ed0139ca",
     "names.json": "4b1d568e73fb7766cb180b1a88d894ddd866867c85ced74f5afff451153816b3",
     "packages.json": "c6db28cf5b5be84d0c076b535e1c32ad88f256f3eb6e78e7d0ec449527c7e815",
-    "units.bun-bun-cjs-min.bin": "f9f0ad7a98c86f58d5681f952ef983fcb509e65cbb229ee650710c2e7b5405be",
-    "units.bun-bun-cjs-min.jsonl": "f82fd763e75e36721fa0d860a7e0346f8885f1dbdc87d96ae2d76faa235ad6d7",
-    "units.bun-node-cjs-min.bin": "b3870a9ec1b46419cf6b782f3bd26f64dcee0b21d8651f29442acd398a4b1589",
-    "units.bun-node-cjs-min.jsonl": "8fbd91951cd629af8c0a10071c0e5120883852673527b669e46719a31f5cad1c",
+    "units.bun-bun-cjs-min.bin": "9633fdcc56506142d51a716ad76ddf715a805213b81d125f0e72cde27820a028",
+    "units.bun-bun-cjs-min.jsonl": "396b994a9e704d0e94a1aba79448c681f8eb77da4666d8ae484a08b24edfc2e2",
+    "units.bun-node-cjs-min.bin": "000de62941896546bf097cc5a1f402ba0b874045bdd3d0c12f34991a3afca23e",
+    "units.bun-node-cjs-min.jsonl": "5bb2355c34f661006ed34360901d34297a77f51a41cf4cc6899182eb4ddb984a",
     "versions.json": "99345c88cb600ceb9649adc84865f60f7171e50aa755568a02d015496ea5778b"
   },
   "data": {

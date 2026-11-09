@@ -257,6 +257,35 @@ fn every_form_the_index_manifest_stamps_is_a_checked_field() {
 }
 
 #[test]
+fn an_index_fingerprinted_before_the_identity_transforms_is_refused() {
+    // exp204: the full Bun index every run read until now (cb64c1f5…) is
+    // stamped with the v4 match key's settings. A binary whose index forms
+    // apply the v5 transforms must refuse it — its prints would silently
+    // half-match — naming each stale stamp; and the refusal is the same
+    // inequality in the other direction (an index stamped AHEAD of the
+    // binary, as an exp204 index is to an older binary, is refused too).
+    let cb64 = r#"{"format":"humanify-library-index/4","fingerprints":{"module":"vendor-content-key/4","literals":"literals/1","units":"units/3","edges":"edges/2","names":"names/1"},"slices":[{"slice":"bun"}]}"#;
+    let err = super::format::check_manifest_stamps(cb64).expect_err("v4-era index");
+    assert!(
+        err.contains("vendor-content-key/4") && err.contains("units/3"),
+        "{err}"
+    );
+    assert!(err.contains("humanify-ag index build"), "{err}");
+    let ahead = cb64
+        .replace("vendor-content-key/4", "vendor-content-key/6")
+        .replace("units/3", "units/5");
+    let err = super::format::check_manifest_stamps(&ahead).expect_err("future index");
+    assert!(
+        err.contains("vendor-content-key/6") && err.contains("units/5"),
+        "{err}"
+    );
+    let ours = cb64
+        .replace("vendor-content-key/4", "vendor-content-key/5")
+        .replace("units/3", "units/4");
+    assert_eq!(super::format::check_manifest_stamps(&ours), Ok(()));
+}
+
+#[test]
 fn an_older_manifest_is_refused_by_its_stamps_not_a_parse_error() {
     // index v2's manifest shape: format /1, units/2, slices without recipes
     let old = r#"{"format":"humanify-library-index/1","fingerprints":{"module":"vendor-content-key/4","literals":"literals/1","units":"units/2"},"slices":[{"slice":"bun"}]}"#;

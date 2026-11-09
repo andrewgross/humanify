@@ -258,6 +258,33 @@ pub fn write_shard(store: &Path, shard: &Shard) -> Result<(), String> {
     std::fs::rename(&tmp, &path).map_err(|e| format!("rename {}: {e}", path.display()))
 }
 
+/// Whether the store holds a shard for `inputs` with the SAME key — the
+/// plan's reuse check (exp204). A shard file starts with its format and its
+/// key (serde writes [`Shard`]'s fields in order), so this reads the head
+/// of the file, not its rows: the full Bun store is ~285 GB of shard JSON,
+/// and every chunk of a build plans over all of it. A file whose head is
+/// not a shard's falls back to [`read_current`]. (A write is a rename, so a
+/// stored shard with a well-formed head is a whole one.)
+pub fn has_current(store: &Path, inputs: &ShardInputs) -> bool {
+    use std::io::Read;
+    let path = shard_path(store, &inputs.kind.name(), &inputs.package, &inputs.version);
+    let Ok(file) = std::fs::File::open(&path) else {
+        return false;
+    };
+    let mut head = Vec::with_capacity(256);
+    if file.take(256).read_to_end(&mut head).is_err() {
+        return false;
+    }
+    let prefix = format!("{{\"format\":\"{SHARD_FORMAT}\",\"key\":\"");
+    let key = head
+        .strip_prefix(prefix.as_bytes())
+        .and_then(|rest| rest.iter().position(|&b| b == b'"').map(|end| &rest[..end]));
+    match key {
+        Some(key) => key == inputs.key().as_bytes(),
+        None => read_current(store, inputs).is_some(),
+    }
+}
+
 /// The stored shard for `inputs`, if one exists with the SAME key.
 pub fn read_current(store: &Path, inputs: &ShardInputs) -> Option<Shard> {
     let path = shard_path(store, &inputs.kind.name(), &inputs.package, &inputs.version);
