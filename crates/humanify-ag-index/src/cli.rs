@@ -26,6 +26,7 @@ use crate::cache::{BUILD_SIDECAR_SCHEMA, BuildSidecar, SpecSidecar};
 use crate::planner::{self, ResolvedSpec};
 use crate::spec::{IndexSpec, SPEC_SCHEMA};
 use crate::tools;
+use humanify_ag_core::libindex::recipe::Recipe;
 
 /// `humanify-ag index <command>`: build a library fingerprint index from a
 /// spec, or slim a work dir's build maps.
@@ -326,6 +327,58 @@ fn write_sidecar(
     crate::cache::write_build_sidecar(out, &side)
 }
 
+/// What a build plans from — a resolved spec, or a replayed index's pins.
+struct PlanInputs {
+    as_of: String,
+    /// Each recipe with its bundler's pinned version.
+    recipes: Vec<(Recipe, String)>,
+    names: bool,
+    sponge_regions: SpongeRegions,
+    spec: Option<ResolvedSpec>,
+    pinned: Vec<String>,
+    policy: crate::asof::VersionPolicy,
+}
+
+/// The builder's config for `plan` under the command's paths and counts:
+/// every recipe's bundler tool fetched into the store at its pin, and the
+/// `--chunk` parsed.
+fn build_config(
+    args: &BuildArgs,
+    plan: PlanInputs,
+) -> Result<(BuildConfig, Option<(usize, usize)>), String> {
+    let chunk = args.chunk.as_deref().map(parse_chunk).transpose()?;
+    let mut recipes: Vec<crate::recipe::RecipeBuild> = Vec::new();
+    for (recipe, version) in &plan.recipes {
+        let tool = tools::tool_at(&args.store, recipe.bundler, version)?;
+        recipes.push(crate::recipe::RecipeBuild {
+            recipe: *recipe,
+            bin: tool.bin.clone(),
+        });
+    }
+    let cfg = BuildConfig {
+        packages: Vec::new(),
+        spec: plan.spec,
+        as_of: plan.as_of,
+        registry: args.registry.clone(),
+        store: args.store.clone(),
+        work: args.work.clone(),
+        out: args.out.clone(),
+        recipes,
+        jobs: args.jobs,
+        merge_jobs: args.merge_jobs,
+        offline: args.offline,
+        merge_only: args.merge_only,
+        refuse: Vec::new(),
+        quiet: false,
+        names: plan.names,
+        sponge_regions: plan.sponge_regions,
+        pinned: plan.pinned,
+        policy: plan.policy,
+        chunk,
+    };
+    Ok((cfg, chunk))
+}
+
 fn build(spec_path: &std::path::Path, args: &BuildArgs) -> Result<String, String> {
     let (spec, resolved, spec_sha) = resolve_spec(
         spec_path,
@@ -338,39 +391,31 @@ fn build(spec_path: &std::path::Path, args: &BuildArgs) -> Result<String, String
         print_plan(&spec, &resolved);
         return Ok(String::new());
     }
-    let chunk = args.chunk.as_deref().map(parse_chunk).transpose()?;
     // every recipe's bundler tool, at the spec's pin
-    let mut builds: Vec<crate::recipe::RecipeBuild> = Vec::new();
-    for recipe in &spec.recipes {
-        let version = spec.tools.get(&recipe.bundler).expect("checked at parse");
-        let tool = tools::tool_at(&args.store, recipe.bundler, version)?;
-        builds.push(crate::recipe::RecipeBuild {
-            recipe: *recipe,
-            bin: tool.bin.clone(),
-        });
-    }
+    let recipes: Vec<(Recipe, String)> = spec
+        .recipes
+        .iter()
+        .map(|r| {
+            (
+                *r,
+                spec.tools
+                    .get(&r.bundler)
+                    .expect("checked at parse")
+                    .clone(),
+            )
+        })
+        .collect();
     let side_spec = spec_sidecar(&spec, &resolved, &spec_sha);
-    let cfg = BuildConfig {
-        packages: Vec::new(),
-        spec: Some(resolved),
+    let plan = PlanInputs {
         as_of: spec.as_of.clone(),
-        registry: args.registry.clone(),
-        store: args.store.clone(),
-        work: args.work.clone(),
-        out: args.out.clone(),
-        recipes: builds,
-        jobs: args.jobs,
-        merge_jobs: args.merge_jobs,
-        offline: args.offline,
-        merge_only: args.merge_only,
-        refuse: Vec::new(),
-        quiet: false,
+        recipes,
         names: spec.names,
         sponge_regions: spec.sponge_regions,
+        spec: Some(resolved),
         pinned: Vec::new(),
         policy: crate::asof::VersionPolicy::AsOf,
-        chunk,
     };
+    let (cfg, chunk) = build_config(args, plan)?;
     let outcome = run(&cfg, false)?;
     if let (Some(out), false) = (&args.out, chunk.is_some()) {
         let packages = side_spec.selections.len();
@@ -399,36 +444,16 @@ fn build_replay(
     let text =
         std::fs::read_to_string(&manifest).map_err(|e| format!("{}: {e}", manifest.display()))?;
     let replay = crate::replay::replay_plan(&text)?;
-    let chunk = args.chunk.as_deref().map(parse_chunk).transpose()?;
-    let mut builds: Vec<crate::recipe::RecipeBuild> = Vec::new();
-    for (recipe, version) in &replay.recipes {
-        let tool = tools::tool_at(&args.store, recipe.bundler, version)?;
-        builds.push(crate::recipe::RecipeBuild {
-            recipe: *recipe,
-            bin: tool.bin.clone(),
-        });
-    }
-    let cfg = BuildConfig {
-        packages: Vec::new(),
-        spec: None,
+    let plan = PlanInputs {
         as_of: replay.as_of.clone(),
-        registry: args.registry.clone(),
-        store: args.store.clone(),
-        work: args.work.clone(),
-        out: args.out.clone(),
-        recipes: builds,
-        jobs: args.jobs,
-        merge_jobs: args.merge_jobs,
-        offline: args.offline,
-        merge_only: args.merge_only,
-        refuse: Vec::new(),
-        quiet: false,
+        recipes: replay.recipes.clone(),
         names: replay.names,
         sponge_regions,
+        spec: None,
         pinned: replay.pinned.clone(),
         policy: crate::asof::VersionPolicy::PinsOnly,
-        chunk,
     };
+    let (cfg, chunk) = build_config(args, plan)?;
     if args.dry_run {
         run(&cfg, true)?;
         return Ok(String::new());
