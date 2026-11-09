@@ -150,7 +150,39 @@ so the model names them. No module moved to a different path.
 
 ## 3. Library score (bun-dev and bun-held, both rules)
 
-PENDING
+`cargo dev library score`, scorer 14: cb64 with the exp200 head binary
+(`e75f9e254`) vs the new index with this branch (`1314437e0`), labels
+`exp204b-cb64-*` / `exp204b-new-*` (local, gitignored).
+
+| corpus, rule, slice | cb64 P / R / F1 | new P / R / F1 | app bytes claimed |
+| --- | --- | --- | --- |
+| bun-dev, structural (SHIPPED rule), bun | 0.99834 / 0.8640 / 0.9263 | same | 0 / 0 |
+| bun-dev, structural, node | 0.99744 / 0.8594 / 0.9233 | same (named −578 bytes) | 0 / 0 |
+| bun-dev, agreement (lab rule), bun | 0.98998 / 0.4975 / 0.6622 | same, byte-equal | 0 / 0 |
+| bun-dev, agreement, node | 0.99082 / 0.4988 / 0.6635 | same, byte-equal | 0 / 0 |
+| bun-held, structural, bun | 0.99975 / 0.8697 / 0.9302 | same, byte-equal | 0 / 0 |
+| bun-held, structural, node | 0.99716 / 0.8315 / 0.9068 | same, byte-equal | 0 / 0 |
+
+No change, as expected: the corpus apps are bundled with the index's own Bun
+1.4.0 recipes, so there is no restyle between them and the index to
+recover. The gain is across CC releases built by different Bun versions
+(§2). Precision and the app-bytes bar are untouched.
+
+**The node-slice precision miss predates this work.** bun-dev's node slice
+reads 0.99744 against the 0.998 bar on BOTH indexes, and read 0.99742 /
+0.99743 on exp155's and exp150's indexes too (`a582df5b`, `c4d2bd6c`).
+It is 241,822 wrong-family bytes out of 94.2 MB named (the bun slice:
+150,273 out of 90.5 MB). Two apps make up most of the difference between
+the slices: `vscode-github-actions` (26,880 wrong bytes on node vs 3,351 on
+bun) and `novel-engine` (12,342 on node). The largest single app,
+`hugin-desktop`, is ~80 KB wrong on both slices. bun-held's node slice
+(0.99716) misses the bar the same way. Not investigated further here:
+the per-family breakdown is not in the score cards.
+
+The agreement rule took 57.5 min on one entry
+(`bun-dev-node-electron_gh-sanlinhtik3__thalika-voice-clone`, 12 s under
+the structural rule) on both indexes. It is a lab-rule cost and predates
+this work; the shipped rule is structural.
 
 ## 4. Fixtures re-fingerprinted
 
@@ -164,7 +196,27 @@ PENDING
 
 ## 5. Gate
 
-PENDING
+`cargo dev check` at `f3a8bb2a4` (no host lock after exp205; run one at a
+time, coordinator's go). The first worktree run at `1314437e0` also passed;
+its `census:clones` flagged the spec and replay builds' config blocks as
+twins (index crate clone share +1.8 pp), so `build_config` now serves both,
+and the dry runs of both binaries are byte-identical.
+
+| stage | worktree | clean checkout |
+| --- | --- | --- |
+| shims | PASS | PASS |
+| no-private-addresses | PASS | PASS |
+| rust:fmt | PASS | PASS |
+| rust:clippy | PASS | PASS |
+| census:clones | REVIEW (no group in this lane's code) | REVIEW (same) |
+| census:concurrency | PASS | PASS |
+| census:slop | PASS | PASS |
+| rust:unit | PASS | PASS |
+| rust:build | PASS | PASS |
+| format-golden | PASS | PASS |
+| e2e | PASS | PASS |
+
+The README commit after `f3a8bb2a4` is docs only.
 
 ## What this could NOT prove
 
