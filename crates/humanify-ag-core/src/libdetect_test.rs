@@ -494,6 +494,30 @@ fn bun_manifest_found_from_a_nested_first_file() {
     assert_eq!(r.novel_files, vec![runtime]);
 }
 
+// exp211: names mode files library modules at their real npm paths, often
+// five or more folders deep (`vendor/ajv/dist/compile/codegen/code.js`).
+// When such a file is the FIRST unpacked file, a capped walk up from it never
+// reached the tree root, the manifest went unread, every factory body was
+// handed to the formatter as app code and the run failed to parse.
+#[test]
+fn bun_manifest_found_from_a_deeply_nested_first_file() {
+    let t = TempDir::new("bundeep");
+    let deep = t.write("vendor/ajv/dist/compile/codegen/code.js", "function a(){}");
+    let runtime = t.write("runtime.js", "main()");
+    t.write(
+        "vendor/_bun-modules.json",
+        &manifest(&[("vendor/ajv/dist/compile/codegen/code.js", "ajv")]),
+    );
+    let r = detect_libraries(LibraryDetector::VendorRecord, &files(&[&deep, &runtime])).unwrap();
+    let got: Vec<(&Path, Option<&str>)> = r
+        .library_files
+        .iter()
+        .map(|(p, d)| (p.as_path(), d.library_name.as_deref()))
+        .collect();
+    assert_eq!(got, vec![(deep.as_path(), Some("ajv"))]);
+    assert_eq!(r.novel_files, vec![runtime]);
+}
+
 // ---- V8 semantics by hand ---------------------------------------------------
 
 #[test]
