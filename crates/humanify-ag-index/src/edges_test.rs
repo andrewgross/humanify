@@ -36,6 +36,8 @@ fn bundle(tag: &str, lines: &[(Option<&str>, &str, &str)]) -> (PathBuf, String, 
     };
     let mut sources: Vec<String> = Vec::new();
     let mut segments = Vec::new();
+    // each file holds the lines mapped to it: its source confirms them
+    let mut texts: BTreeMap<String, String> = BTreeMap::new();
     for (line, (pkg, file, text)) in lines.iter().enumerate() {
         let source = match pkg {
             Some(pkg) => {
@@ -43,7 +45,11 @@ fn bundle(tag: &str, lines: &[(Option<&str>, &str, &str)]) -> (PathBuf, String, 
                     &format!("node_modules/{pkg}/package.json"),
                     &format!(r#"{{"name":"{pkg}","version":"1.0.0"}}"#),
                 );
-                write(&format!("node_modules/{pkg}/{file}"), "");
+                let rel = format!("node_modules/{pkg}/{file}");
+                let all = texts.entry(rel.clone()).or_default();
+                all.push_str(text);
+                all.push('\n');
+                write(&rel, all);
                 format!("../node_modules/{pkg}/{file}")
             }
             None => "../entries/req.cjs".to_string(),

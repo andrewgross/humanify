@@ -3,6 +3,7 @@ pub mod asof;
 pub mod build;
 pub mod cache;
 pub mod cli;
+pub mod confirm;
 pub mod merge;
 pub mod names;
 pub mod planner;
@@ -24,6 +25,8 @@ mod asof_test;
 mod build_test;
 #[cfg(test)]
 mod cache_test;
+#[cfg(test)]
+mod confirm_test;
 #[cfg(test)]
 mod edges_test;
 #[cfg(test)]

@@ -310,6 +310,13 @@
       "reason": "`npm install --before=<cutoff>` of one package (retried once with --legacy-peer-deps; install calls it at the exact cutoff, then once at the grace cutoff when only the date blocked it), through humanify_ag_core::subprocess::run under INSTALL_DEADLINE (30 min; tens of seconds in the exp095 builds); a failure or timeout fails the task, which writes no shard and is reported as FAILED"
     },
     {
+      "file": "crates/humanify-ag-index/src/build.rs",
+      "scope": "npm_ci",
+      "construct": "subprocess",
+      "pattern": "subprocess",
+      "reason": "`npm ci --prefer-offline` restores an earlier install's tree from its kept lockfile (exp213; retried once with --legacy-peer-deps), through humanify_ag_core::subprocess::run under INSTALL_DEADLINE like npm_install; a failure falls back to the ordinary install path, which fails the task loudly"
+    },
+    {
       "file": "crates/humanify-ag-index/src/recipe.rs",
       "scope": "version_command_of",
       "construct": "subprocess",
