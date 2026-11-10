@@ -101,7 +101,7 @@ fn the_matching_counts_come_from_each_pairs_stats_file() {
     let cards = [card("a->b", 1.0, false), card("b->c", 1.0, false)];
     let (digests, lines) = matching_section(&dir, &cards);
     assert_eq!(digests.len(), 1);
-    assert_eq!(number_at(&digests[0], "fnToLLM"), Some(4.0));
+    assert_eq!(number_at(&digests[0], "fnAsked"), Some(4.0));
     let text = lines.join("\n");
     assert!(text.contains("MATCHING"), "{text}");
     let bc = text.lines().find(|l| l.starts_with("b->c")).unwrap();

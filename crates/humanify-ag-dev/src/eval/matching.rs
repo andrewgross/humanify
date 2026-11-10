@@ -1,6 +1,6 @@
 //! The MATCHING counts of a label (exp208): how many functions, module
 //! bindings and identifiers the pipeline carried from the prior,
-//! close-matched or left unmatched, against how many it sent to the LLM —
+//! close-matched or left unmatched, against how many it ASKED the LLM about —
 //! read from each scored run's `--stats-json` (`coverage`,
 //! `resolutionStats`) through the shared diagnostics engine
 //! (`eval::llm_diag::Spec`). `eval summarize` prints them per pair and
@@ -16,8 +16,16 @@
 //!   repeats at two commits (40921b9f r1-r3 + s1, 111401fe r1-r3). A
 //!   difference between repeats is a harness or determinism problem:
 //!   `eval bands` refuses to write, and a same-commit leaderboard flags it.
-//! - BANDED (the rest): they move with the LLM's draws on the scratch base
-//!   (the base itself is a cold run) or on the scored leg. `eval bands`
+//! - BANDED (the rest): they follow the names of the cold-built scratch
+//!   base (the base itself is a cold LLM run) or the model's draws on the
+//!   scored leg — legitimately, not a bug (exp209: carried / asked module
+//!   bindings and asked identifiers follow the base's names; the model
+//!   keeping a minified name moves "renamed" by 1 while "asked" holds).
+//!
+//! The stats' own key names mislead: `coverage.*.llm` counts ASKED AND
+//! RENAMED, and `coverage.functions.failed` counts ASKED, NOTHING RENAMED
+//! (not a transport failure) — so functions asked = `llm + failed`
+//! (exp209). `eval bands`
 //!   records the spread of their totals (`matchingBands` in the slot), and
 //!   a same-commit leaderboard flags a move outside it.
 
@@ -31,22 +39,22 @@ const FUNCTIONS: &[Col] = &[
     sum("fnCarried", "coverage.functions.cached"),
     sum("fnClose", "coverage.functions.closeMatch"),
     sum(
-        "fnToLLM",
+        "fnAsked",
         "coverage.functions.llm+coverage.functions.failed",
     ),
-    sum("fnLLMNamed", "coverage.functions.llm"),
+    sum("fnLLMRenamed", "coverage.functions.llm"),
     sum("fnUnmatched", "resolutionStats.unmatched"),
     sum("fnAmbiguous", "resolutionStats.stillAmbiguous"),
 ];
 
 const MODULE_BINDINGS: &[Col] = &[
     sum("mbCarried", "coverage.moduleBindings.cached"),
-    sum("mbLLMNamed", "coverage.moduleBindings.llm"),
+    sum("mbLLMRenamed", "coverage.moduleBindings.llm"),
 ];
 
 const IDENTIFIERS: &[Col] = &[
-    sum("idTotal", "coverage.identifiers.total"),
-    sum("idLLMNamed", "coverage.identifiers.llm"),
+    sum("idAsked", "coverage.identifiers.total"),
+    sum("idLLMRenamed", "coverage.identifiers.llm"),
 ];
 
 /// The matching counts.
@@ -54,26 +62,26 @@ pub const MATCHING: Spec = Spec {
     present: "coverage",
     groups: &[
         (
-            "FUNCTIONS (total; carried from the prior; close-matched; sent to the LLM = named by it + not; named by the LLM; unmatched; still ambiguous)",
+            "FUNCTIONS (total; carried from the prior; close-matched; asked the LLM = stats llm+failed; asked AND renamed by the LLM = stats llm; unmatched; still ambiguous)",
             FUNCTIONS,
         ),
         (
-            "MODULE BINDINGS (carried from the prior; named by the LLM)",
+            "MODULE BINDINGS (carried from the prior; asked AND renamed by the LLM; statement-twin names are in neither)",
             MODULE_BINDINGS,
         ),
         (
-            "IDENTIFIERS (in LLM prompts; named by the LLM)",
+            "IDENTIFIERS (asked the LLM; asked AND renamed by the LLM)",
             IDENTIFIERS,
         ),
     ],
-    caption: "MATCHING, not KPIs. EXACT columns (fnTotal fnClose fnToLLM fnUnmatched fnAmbiguous) must be EQUAL across same-commit repeats: a difference is a harness or determinism problem, not the LLM. The other columns move with the LLM's draws (`eval bands` measures their spread). '-' = not in this run's stats.",
+    caption: "MATCHING, not KPIs. EXACT columns (fnTotal fnClose fnAsked fnUnmatched fnAmbiguous) must be EQUAL across same-commit repeats: a difference is a harness or determinism problem, not the LLM. The other columns follow the cold-built base's names and the model's draws (`eval bands` measures their spread). '-' = not in this run's stats.",
 };
 
 /// The counts the code decides alone: equal across same-commit repeats.
 pub const EXACT: &[&str] = &[
     "fnTotal",
     "fnClose",
-    "fnToLLM",
+    "fnAsked",
     "fnUnmatched",
     "fnAmbiguous",
 ];

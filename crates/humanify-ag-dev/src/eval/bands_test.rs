@@ -160,7 +160,7 @@ fn add_matching(root: &Path, name: &str, fn_to_llm: f64, mb_llm: f64) {
             .map(|c| {
                 let pair = super::super::card::at(c, "pair").unwrap().as_str().unwrap();
                 JsValue::parse(&format!(
-                    r#"{{"pair":"{pair}","fnTotal":100,"fnToLLM":{fn_to_llm},"mbLLMNamed":{mb_llm}}}"#
+                    r#"{{"pair":"{pair}","fnTotal":100,"fnAsked":{fn_to_llm},"mbLLMRenamed":{mb_llm}}}"#
                 ))
                 .unwrap()
             })
@@ -194,9 +194,9 @@ fn the_repeats_matching_spreads_are_written_beside_the_kpi_bands() {
     let b: crate::committed::eval::NoiseBands =
         serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
     let m = b.matching_bands(1, "names").unwrap();
-    // Four pairs: mbLLMNamed 16 vs 24; fnToLLM equal.
-    assert_eq!(m.get("mbLLMNamed"), Some(&8.0));
-    assert_eq!(m.get("fnToLLM"), Some(&0.0));
+    // Four pairs: mbLLMRenamed 16 vs 24; fnAsked equal.
+    assert_eq!(m.get("mbLLMRenamed"), Some(&8.0));
+    assert_eq!(m.get("fnAsked"), Some(&0.0));
 }
 
 #[test]
@@ -210,7 +210,7 @@ fn an_exact_matching_count_that_differs_refuses_the_bands() {
     let file = root.join("noise-bands.json");
     let labels: Vec<String> = names.iter().map(|s| s.to_string()).collect();
     let err = bands(&root, &labels, &file, &root.join("self-hop-reference.json")).unwrap_err();
-    assert!(err.contains("MATCHING NOT EQUAL: fnToLLM"), "{err}");
+    assert!(err.contains("MATCHING NOT EQUAL: fnAsked"), "{err}");
     assert!(!file.exists(), "nothing written");
 }
 

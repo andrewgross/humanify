@@ -215,7 +215,7 @@ fn add_matching(root: &Path, name: &str, fn_to_llm: f64, mb_llm: f64) {
             .map(|c| {
                 let pair = card_pair(c).unwrap();
                 JsValue::parse(&format!(
-                    r#"{{"pair":"{pair}","fnTotal":100,"fnToLLM":{fn_to_llm},"mbLLMNamed":{mb_llm}}}"#
+                    r#"{{"pair":"{pair}","fnTotal":100,"fnAsked":{fn_to_llm},"mbLLMRenamed":{mb_llm}}}"#
                 ))
                 .unwrap()
             })
@@ -245,21 +245,21 @@ fn the_matching_counts_print_side_by_side_and_a_same_commit_move_is_flagged() {
     let bands: NoiseBands = serde_json::from_str(
         r#"{"provenance":{"provisional":true,"sources":[],"commit":"","labels":[]},"bands":{},"byMode":{},
         "byScorer":{"2":{"provenance":{"provisional":false,"sources":[],"commit":"x","labels":[]},"bands":{"novel":0},
-        "matchingBands":{"mbLLMNamed":8}}}}"#,
+        "matchingBands":{"mbLLMRenamed":8}}}}"#,
     )
     .unwrap();
     let text = leaderboard(&root, &names, Some(&bands), false).unwrap();
     assert!(text.contains("MATCHING"), "{text}");
-    // Four pairs: fnToLLM 40 vs 44, mbLLMNamed 16 vs 36 (band ±8).
+    // Four pairs: fnAsked 40 vs 44, mbLLMRenamed 16 vs 36 (band ±8).
     let r2: Vec<&str> = text.lines().filter(|l| l.starts_with("r2")).collect();
     assert!(r2.iter().any(|l| l.contains("44 (+4)")), "{r2:?}");
     assert!(
-        text.contains("!! MATCHING NOT EQUAL at the same commit: r2 fnToLLM 44 vs r1 40"),
+        text.contains("!! MATCHING NOT EQUAL at the same commit: r2 fnAsked 44 vs r1 40"),
         "{text}"
     );
     assert!(
         text.contains(
-            "!! MATCHING outside its band at the same commit: r2 mbLLMNamed 36 vs r1 16 (band ±8)"
+            "!! MATCHING outside its band at the same commit: r2 mbLLMRenamed 36 vs r1 16 (band ±8)"
         ),
         "{text}"
     );

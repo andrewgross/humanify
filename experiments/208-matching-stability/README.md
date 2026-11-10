@@ -24,14 +24,14 @@ problem shows up directly instead of being inferred from noisy KPIs.
   | `fnTotal`     | `coverage.functions.total`                       | EXACT  |
   | `fnCarried`   | `coverage.functions.cached`                      | banded |
   | `fnClose`     | `coverage.functions.closeMatch`                  | EXACT  |
-  | `fnToLLM`     | `coverage.functions.llm + .failed` (sent to the LLM, named or not) | EXACT |
-  | `fnLLMNamed`  | `coverage.functions.llm`                         | banded |
+  | `fnAsked`     | `coverage.functions.llm + .failed` (asked the LLM, renamed or not) | EXACT |
+  | `fnLLMRenamed`  | `coverage.functions.llm` (asked AND renamed)    | banded |
   | `fnUnmatched` | `resolutionStats.unmatched`                      | EXACT  |
   | `fnAmbiguous` | `resolutionStats.stillAmbiguous`                 | EXACT  |
   | `mbCarried`   | `coverage.moduleBindings.cached`                 | banded |
-  | `mbLLMNamed`  | `coverage.moduleBindings.llm`                    | banded |
-  | `idTotal`     | `coverage.identifiers.total` (in LLM prompts)    | banded |
-  | `idLLMNamed`  | `coverage.identifiers.llm`                       | banded |
+  | `mbLLMRenamed`  | `coverage.moduleBindings.llm`                    | banded |
+  | `idAsked`     | `coverage.identifiers.total` (asked the LLM)     | banded |
+  | `idLLMRenamed`  | `coverage.identifiers.llm`                       | banded |
 
 - **`eval summarize`** prints a `MATCHING (per pair)` block after the LLM
   call diagnostics and writes `summary.json` `matchingDiagnostics`.
@@ -61,36 +61,47 @@ Evidence: seven same-commit cold repeats at two commits, five pairs each
 - EXACT (equal on every pair of every repeat at both commits): functions
   total, close-matched, sent to the LLM, unmatched, still ambiguous. These
   are structural matching decisions taken before any model answer.
-- `fnToLLM` is `llm + failed`, not `llm`: `functions.llm` moved by 1 on
-  2.1.181 and 2.1.198, exactly offset by `functions.failed` (a function sent
-  to the LLM that came back with no rename). The sum never moved.
+- The stats' key names mislead (exp209, branch `exp209-llm-ask-drift`):
+  `coverage.*.llm` counts ASKED AND RENAMED, and `coverage.functions.failed`
+  counts ASKED, NOTHING RENAMED (not a transport failure). So functions
+  asked = `llm + failed`, and it is EXACT: equal in r1/r2/r3/s1 on all five
+  pairs (631 / 1895 / 918 / 1387 / 1097), and in 111401fe r1-r3. `functions.llm`
+  moved by 1 on 2.1.181 and 2.1.198 because the model kept the minified
+  name (exp209); the asked sum never moved. Every column is labelled with
+  what it counts: `fnAsked`, `fnLLMRenamed`, `mbLLMRenamed`, `idAsked`,
+  `idLLMRenamed`.
+- `moduleBindings.total` is carried + asked only; bindings named by the
+  statement twin are in neither, so it can move by 1 (exp209). Not shown.
+- `identifiers.skippedBySkipList` mostly counts bindings already carried
+  (exp209). Not shown.
 - `fnCarried` is BANDED although equal across all four 40921b9f repeats:
   at 111401fe it read 46239 / 46237 / 46239 on 2.1.181 (offset exactly by
   `alreadyNamed`). On scratch bases the prior is itself a cold LLM run, so
   whether a matched function counts as "carried" or "already named" can
   follow the base's draws. Making it exact would have refused a valid
   reference.
-- Module bindings and identifiers move by a few to ~25 on every commit
-  (why: exp209). Banded.
+- Module bindings carried / renamed, identifiers asked / renamed, and the
+  exact- and close-match transfer counts follow the names of the cold-built
+  scratch base (exp209): legitimately banded, not bugs.
 
 ## What the block prints (40921b9f, totals over five pairs)
 
 ```
 === MATCHING (totals across the compared pairs) ===
 -- FUNCTIONS
-                      fnTotal fnCarried fnClose fnToLLM fnLLMNamed fnUnmatched fnAmbiguous
+                      fnTotal fnCarried fnClose fnAsked fnLLMRenamed fnUnmatched fnAmbiguous
 ref-names-40921b9f-r1  254797    220762    3595    5928       5923        4749        4756
 ref-names-40921b9f-r2  254797    220762    3595    5928  5922 (-1)        4749        4756
 ref-names-40921b9f-r3  254797    220762    3595    5928  5922 (-1)        4749        4756
 serial-40921b9f-s1     254797    220762    3595    5928       5923        4749        4756
 -- MODULE BINDINGS
-                       mbCarried mbLLMNamed
+                       mbCarried mbLLMRenamed
 ref-names-40921b9f-r1      95920       1717
 ref-names-40921b9f-r2 95923 (+3)  1714 (-3)
 ref-names-40921b9f-r3 95922 (+2)  1715 (-2)
 serial-40921b9f-s1    95919 (-1)  1715 (-2)
 -- IDENTIFIERS
-                          idTotal  idLLMNamed
+                          idAsked  idLLMRenamed
 ref-names-40921b9f-r1       26090       25929
 ref-names-40921b9f-r2 26105 (+15)  25928 (-1)
 ref-names-40921b9f-r3  26095 (+5) 25918 (-11)
@@ -100,7 +111,7 @@ serial-40921b9f-s1     26083 (-7) 25941 (+12)
 Per pair (r1 summarize):
 
 ```
-                 fnTotal fnCarried fnClose fnToLLM fnLLMNamed fnUnmatched fnAmbiguous
+                 fnTotal fnCarried fnClose fnAsked fnLLMRenamed fnUnmatched fnAmbiguous
 2.1.85->2.1.86     35872     30700     670     631        630         917         931
 2.1.118->2.1.119   42981     35645     404    1895       1894         473         890
 2.1.179->2.1.181   53295     46826     890     918        917        1146         920
@@ -110,7 +121,7 @@ Per pair (r1 summarize):
 
 `eval bands` dry run (scratch copies; the worktree's bands files restored):
 
-| repeats              | exact counts | fnCarried | fnLLMNamed | mbCarried | mbLLMNamed | idTotal | idLLMNamed |
+| repeats              | exact counts | fnCarried | fnLLMRenamed | mbCarried | mbLLMRenamed | idAsked | idLLMRenamed |
 | -------------------- | ------------ | --------- | ---------- | --------- | ---------- | ------- | ---------- |
 | 40921b9f r1-r3 + s1  | all equal    | ±0        | ±1         | ±4        | ±3         | ±22     | ±23        |
 | 111401fe r1-r3       | all equal    | ±2        | ±1         | ±5        | ±6         | ±26     | ±26        |
@@ -131,7 +142,7 @@ See the final report / the commit; filled in after `cargo dev check`.
   change that makes matching legitimately depend on the base's names would
   trip the refusal; the fix then is to move that column out of `EXACT`
   with evidence, not to loosen the check.
-- `fnToLLM` is derived (`llm + failed`), not a recorded "asked" count; it
+- `fnAsked` is derived (`llm + failed`), not a recorded "asked" count; it
   equals total − carried − already-named − nothing-to-rename only while
   `libraryPrefix` and `fallback` are 0 (they are in every run read).
 

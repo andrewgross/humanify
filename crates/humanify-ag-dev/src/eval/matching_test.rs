@@ -33,14 +33,14 @@ fn functions_sent_to_the_llm_count_the_ones_it_failed_to_name() {
         ("fnTotal", 100.0),
         ("fnCarried", 80.0),
         ("fnClose", 5.0),
-        ("fnToLLM", 12.0),
-        ("fnLLMNamed", 10.0),
+        ("fnAsked", 12.0),
+        ("fnLLMRenamed", 10.0),
         ("fnUnmatched", 7.0),
         ("fnAmbiguous", 3.0),
         ("mbCarried", 40.0),
-        ("mbLLMNamed", 4.0),
-        ("idTotal", 30.0),
-        ("idLLMNamed", 25.0),
+        ("mbLLMRenamed", 4.0),
+        ("idAsked", 30.0),
+        ("idLLMRenamed", 25.0),
     ];
     for (k, v) in expected {
         assert_eq!(number_at(&d, k), Some(v), "{k}");
@@ -53,7 +53,7 @@ fn a_count_missing_from_the_stats_is_absent_never_zero() {
     let partial = JsValue::parse(r#"{"coverage":{"functions":{"total":9,"llm":1}}}"#).unwrap();
     let d = digest(&MATCHING, &partial).unwrap();
     assert_eq!(number_at(&d, "fnTotal"), Some(9.0));
-    assert_eq!(number_at(&d, "fnToLLM"), None);
+    assert_eq!(number_at(&d, "fnAsked"), None);
     assert_eq!(number_at(&d, "fnUnmatched"), None);
 }
 
@@ -62,7 +62,7 @@ fn the_deterministic_counts_are_the_exact_ones() {
     for k in [
         "fnTotal",
         "fnClose",
-        "fnToLLM",
+        "fnAsked",
         "fnUnmatched",
         "fnAmbiguous",
     ] {
@@ -70,11 +70,11 @@ fn the_deterministic_counts_are_the_exact_ones() {
     }
     for k in [
         "fnCarried",
-        "fnLLMNamed",
+        "fnLLMRenamed",
         "mbCarried",
-        "mbLLMNamed",
-        "idTotal",
-        "idLLMNamed",
+        "mbLLMRenamed",
+        "idAsked",
+        "idLLMRenamed",
     ] {
         assert!(!is_exact(k), "{k}");
     }
@@ -112,10 +112,10 @@ fn repeats_band_the_draws_and_name_every_exact_count_that_differs() {
     .unwrap();
     assert!(ok.not_equal.is_empty(), "{:?}", ok.not_equal);
     let spread = |k: &str| ok.spreads.iter().find(|(x, _)| x == k).map(|(_, v)| *v);
-    // Totals over the pairs: mbLLMNamed 5 vs 8.
-    assert_eq!(spread("mbLLMNamed"), Some(3.0));
-    assert_eq!(spread("fnLLMNamed"), Some(1.0));
-    assert_eq!(spread("fnToLLM"), Some(0.0));
+    // Totals over the pairs: mbLLMRenamed 5 vs 8.
+    assert_eq!(spread("mbLLMRenamed"), Some(3.0));
+    assert_eq!(spread("fnLLMRenamed"), Some(1.0));
+    assert_eq!(spread("fnAsked"), Some(0.0));
     // An exact count that differs on one pair is named, pair and values,
     // even when another pair's difference cancels it in the total.
     let bad = repeats(
@@ -139,7 +139,7 @@ fn repeats_band_the_draws_and_name_every_exact_count_that_differs() {
     )
     .unwrap();
     assert_eq!(bad.not_equal.len(), 2, "{:?}", bad.not_equal);
-    assert!(bad.not_equal[0].contains("fnToLLM"), "{:?}", bad.not_equal);
+    assert!(bad.not_equal[0].contains("fnAsked"), "{:?}", bad.not_equal);
     assert!(bad.not_equal[0].contains("a->b"), "{:?}", bad.not_equal);
     assert!(bad.not_equal[0].contains("r1=12") && bad.not_equal[0].contains("r2=13"));
     // A repeat without matching counts: nothing measured.
@@ -156,16 +156,16 @@ fn a_same_commit_comparison_flags_exact_moves_and_banded_moves_outside_the_band(
         ("cand".to_string(), fold(stats(10.0, 3.0, 9.0))),
         ("legacy".to_string(), None),
     ];
-    let band = |k: &str| (k == "mbLLMNamed").then_some(3.0);
+    let band = |k: &str| (k == "mbLLMRenamed").then_some(3.0);
     let text = flags(&rows, &band, true).join("\n");
-    assert!(text.contains("cand") && text.contains("fnToLLM"), "{text}");
+    assert!(text.contains("cand") && text.contains("fnAsked"), "{text}");
     assert!(text.contains("must be EQUAL"), "{text}");
     assert!(
-        text.contains("mbLLMNamed") && text.contains("outside"),
+        text.contains("mbLLMRenamed") && text.contains("outside"),
         "{text}"
     );
-    // fnLLMNamed moved 0, no line; the legacy row cannot be judged.
-    assert!(!text.contains("fnLLMNamed"), "{text}");
+    // fnLLMRenamed moved 0, no line; the legacy row cannot be judged.
+    assert!(!text.contains("fnLLMRenamed"), "{text}");
     // Different commits: the counts move with the code, nothing is flagged.
     let other = flags(&rows, &band, false).join("\n");
     assert!(!other.contains("!!"), "{other}");
