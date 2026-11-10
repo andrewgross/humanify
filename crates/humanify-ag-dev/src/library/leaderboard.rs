@@ -129,6 +129,20 @@ fn scopes_line(scopes: &PyValue) -> String {
     )
 }
 
+/// Scorer 15's columns (exp214), on a label that has them: the credited
+/// copies inside the precision, the map-defect bytes out of both sides.
+fn scorer15_line(r: &PyValue) -> Option<String> {
+    let credit = num(Some(r.get("namedAsCopyCreditBytes")?));
+    Some(format!(
+        "scorer 15: P {:.6} (without copy credit {:.6})  copy credit {:.1} KB  defect excluded {:.1} KB (claimed {:.1} KB)",
+        num(r.get("precision")),
+        num(r.get("precisionNoCopyCredit")),
+        credit / 1e3,
+        num(r.get("defectExcludedBytes")) / 1e3,
+        num(r.get("defectExcludedClaimedBytes")) / 1e3,
+    ))
+}
+
 fn read(path: &Path) -> Result<PyValue, String> {
     let t = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     PyValue::parse(&t).map_err(|e| format!("{}: {e}", path.display()))
@@ -287,6 +301,9 @@ pub fn leaderboard(
             ));
             if let Some(sc) = r.get("scopes") {
                 out.push_str(&format!("  {:w$}  {}\n", "", scopes_line(sc)));
+            }
+            if let Some(line) = scorer15_line(r) {
+                out.push_str(&format!("  {:w$}  {line}\n", ""));
             }
         }
     }

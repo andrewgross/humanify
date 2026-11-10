@@ -1,4 +1,5 @@
-//! The exp096 library-matching scorer (scorer 14) and its instruments,
+//! The exp096 library-matching scorer (scorer 15: scorer 14 plus exp214's
+//! map-defect exclusion and copy credit) and its instruments,
 //! ported from experiments/096-library-matching-score and the exp095
 //! "misses" scripts it imports (docs/dev-harness.md §1.4, lane L2b). The
 //! cards are byte-identical to score.py's: Python's float repr, sorted
@@ -6,15 +7,18 @@
 //! reproduced, not approximated.
 
 pub mod acorn;
+pub mod audit15;
 #[rustfmt::skip]
 mod acorn_tables;
 pub mod chained;
 pub mod cjs_placement;
 pub mod copies2;
+pub mod copy_credit;
 pub mod corpus;
 pub mod corpus_build;
 pub mod counter;
 pub mod decoder;
+pub mod defect15;
 pub mod determinism;
 pub mod families;
 pub mod freeze;

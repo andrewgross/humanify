@@ -206,6 +206,8 @@ pub struct LibraryScore {
     pub force_mixed: bool,
     pub settings: Vec<String>,
     pub data_root: Option<String>,
+    /// The npm registry-manifest cache scorer 15's copy credit reads.
+    pub registry: PathBuf,
 }
 
 fn py_str(s: &str) -> PyValue {
@@ -369,8 +371,8 @@ pub fn score_label(ctx: &Ctx, c: &LibraryScore) -> Result<String, String> {
     crate::library::score::rescore(
         &ctx.repo,
         &c.label,
-        &c.corpus,
-        c.data_root.as_deref(),
+        (&c.corpus, c.data_root.as_deref()),
+        &c.registry,
         &crate::library::score::Out::Committed,
     )
 }

@@ -211,6 +211,10 @@ pub fn library_score(ctx: &Ctx, parsed: &Parsed) -> u8 {
         force_mixed: s.flag_on("run.force_mixed"),
         settings: sets,
         data_root: s.text("libscore.data_root"),
+        registry: s
+            .text("libscore.registry")
+            .unwrap_or_else(|| crate::library::npm::REGISTRY.into())
+            .into(),
     };
     match super::library::score_label(ctx, &c) {
         Ok(log) => {
