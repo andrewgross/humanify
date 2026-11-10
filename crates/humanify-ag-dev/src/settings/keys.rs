@@ -366,7 +366,7 @@ pub static HARNESS_KEYS: &[Key] = &[
         "registry",
         Some("--npm-registry"),
         "/work/exp112-data/registry",
-        "`library npm`: the npm registry-manifest cache to fill.",
+        "The npm registry-manifest cache: `library npm` fills it; scorer 15's copy credit (`library score|rescore|proof`) reads the truth packages' dependencies from it.",
     ),
     path_key(
         "libscore",

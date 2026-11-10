@@ -62,7 +62,12 @@ const NEUTRALITY_SETTINGS: &[&str] = &[
 const LIBRARY_SETTINGS: &[&str] = &["run.force_mixed", "run.pipeline_set", "libscore"];
 const FORCE: &[&str] = &["run.force_mixed"];
 const DETERMINISM_SETTINGS: &[&str] = &["libscore.corpus", "libscore.data_root"];
-const RESCORE_SETTINGS: &[&str] = &["libscore.corpus", "libscore.data_root", "run.out"];
+const RESCORE_SETTINGS: &[&str] = &[
+    "libscore.corpus",
+    "libscore.data_root",
+    "libscore.registry",
+    "run.out",
+];
 const WALK_SETTINGS: &[&str] = &[
     "run.bin",
     "run.force_mixed",
@@ -272,8 +277,8 @@ const VERBS: &[Verb] = &[
     },
     Verb {
         words: &["library", "rescore"],
-        usage: "library rescore <label> [--corpus NAME] [--data-root DIR] [--out DIR]",
-        proves: "the label's cards and summary from its raw discovery reports, byte for byte what score.py (scorer 14) writes",
+        usage: "library rescore <label> [--corpus NAME] [--data-root DIR] [--npm-registry DIR] [--out DIR]",
+        proves: "the label's cards and summary from its raw discovery reports under scorer 15 (scorer 14's cards, which are score.py's, plus exp214's map-defect exclusion and copy credit, each its own column, listed in truth15.json)",
         cannot_prove: "anything the reports do not hold: it re-scores, it never re-runs discovery",
         lane: None,
         today: "",
@@ -282,12 +287,12 @@ const VERBS: &[Verb] = &[
     },
     Verb {
         words: &["library", "proof"],
-        usage: "library proof <label>... --out SCRATCH",
-        proves: "re-scoring each committed label today reproduces its committed cards and summary byte for byte (proof b)",
+        usage: "library proof <label>... --out SCRATCH [--npm-registry DIR]",
+        proves: "re-scoring each committed label today reproduces its committed cards and summary byte for byte (proof b); a label of another scorer version is refused",
         cannot_prove: "anything about a label whose raw reports or index are gone from this host",
         lane: None,
         today: "",
-        settings: &["run.out"],
+        settings: &["run.out", "libscore.registry"],
         footprint: LIGHT,
     },
     Verb {
@@ -719,18 +724,21 @@ fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
 fn library_rescore(parsed: &settings::Parsed) -> (u8, String, String) {
     use humanify_ag_dev::library::score::{Out, rescore};
     let [label] = parsed.positionals.as_slice() else {
-        return (2, String::new(), "usage: humanify-ag-dev library rescore <label> [--corpus NAME] [--data-root DIR] [--out DIR]\n".into());
+        return (2, String::new(), "usage: humanify-ag-dev library rescore <label> [--corpus NAME] [--data-root DIR] [--npm-registry DIR] [--out DIR]\n".into());
     };
     let s = &parsed.settings;
     let corpus = s.text("libscore.corpus").unwrap_or_else(|| "dev".into());
     let out = s
         .text("run.out")
         .map_or(Out::Committed, |d| Out::Dir(d.into()));
+    let registry = s
+        .text("libscore.registry")
+        .unwrap_or_else(|| humanify_ag_dev::library::npm::REGISTRY.into());
     match rescore(
         &humanify_ag_dev::paths::repo_root(),
         label,
-        &corpus,
-        s.text("libscore.data_root").as_deref(),
+        (&corpus, s.text("libscore.data_root").as_deref()),
+        std::path::Path::new(&registry),
         &out,
     ) {
         Ok(log) => (0, log, String::new()),
@@ -985,9 +993,18 @@ fn library_proof(parsed: &settings::Parsed) -> (u8, String, String) {
         );
     };
     let repo = humanify_ag_dev::paths::repo_root();
+    let registry = parsed
+        .settings
+        .text("libscore.registry")
+        .unwrap_or_else(|| humanify_ag_dev::library::npm::REGISTRY.into());
     let (mut ok, mut text) = (true, String::new());
     for label in &parsed.positionals {
-        match humanify_ag_dev::library::score::proof(&repo, label, std::path::Path::new(&out)) {
+        match humanify_ag_dev::library::score::proof(
+            &repo,
+            label,
+            std::path::Path::new(&registry),
+            std::path::Path::new(&out),
+        ) {
             Ok((same, line)) => {
                 ok &= same;
                 text.push_str(&line);

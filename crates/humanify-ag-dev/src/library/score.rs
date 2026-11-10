@@ -16,8 +16,11 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::corpus::{Corpus, RULES7, RULES10, RULES12, rules_are};
+use super::audit15::{self, EntryAudit};
+use super::copy_credit::{LiteralIndex, Registry};
+use super::corpus::{Corpus, RULES7, RULES10, RULES12, Role, read_map, rules_are};
 use super::counter::Counter;
+use super::defect15::EntryTexts;
 use super::families::{self, Families};
 use super::index::{self, Index, Print, TruthFacts, Unit};
 use super::py::{dict, exact, flt, from_json, int, kv, round_int, s, share};
@@ -26,7 +29,7 @@ use super::wrong_families::{self, EntryWrongs, WrongClaim};
 use crate::committed::library::{CorpusEntry, LayerKind};
 use crate::json::py::PyValue;
 
-pub const SCORER_VERSION: &str = "exp096-score/14";
+pub const SCORER_VERSION: &str = "exp096-score/15";
 pub const PRECISION_BAR: f64 = 0.998;
 pub const MISS_CLASSES: &[&str] = &[
     "no-discovery",
@@ -286,6 +289,35 @@ fn prf_i(named: i64, wrong: i64, app: i64, lib: i64, suffix: &str) -> Vec<(Strin
     prf(exact(named), exact(wrong), exact(app), exact(lib), suffix)
 }
 
+/// Scorer 15's three columns (after `namedAsOriginBytes`): the credited
+/// copies (inside `namedBytes`), the defect bytes taken out of both sides,
+/// the claims on them, and the precision with the credit charged as wrong.
+fn s15_cols(
+    named: i64,
+    credit: i64,
+    wrong: i64,
+    app: i64,
+    defect: (i64, i64),
+) -> Vec<(String, PyValue)> {
+    vec![
+        kv("namedAsCopyCreditBytes", int(credit)),
+        kv("defectExcludedBytes", int(defect.0)),
+        kv("defectExcludedClaimedBytes", int(defect.1)),
+        kv(
+            "precisionNoCopyCredit",
+            flt(share(exact(named - credit), exact(named + wrong + app))),
+        ),
+    ]
+}
+
+/// Bytes named right: shipper, family, origin, and (scorer 15) a credited copy.
+fn named_of(claimed: &Ctr) -> i64 {
+    claimed.get("right") + claimed.get("family") + claimed.get("origin") + claimed.get(COPY)
+}
+
+/// Scorer 15's verdict for a credited copy (`copy_credit`).
+const COPY: &str = "copyCredit";
+
 struct Judge<'a> {
     fam: &'a Families,
     app_pkg: Option<&'a str>,
@@ -302,7 +334,7 @@ impl Judge<'_> {
             }
             .into(),
             "<app>" => "app".into(),
-            "<unmapped>" | "<foreign>" => label.trim_matches(['<', '>']).into(),
+            "<unmapped>" | "<foreign>" | "<defect>" => label.trim_matches(['<', '>']).into(),
             _ if claimed == label => "right".into(),
             _ if self.fam.same(Some(claimed), Some(label)) => "family".into(),
             _ => "wrongFamily".into(),
@@ -413,7 +445,7 @@ struct ScopeCounts {
 fn scope_block(sc: &ScopeCounts) -> PyValue {
     let (t, claimed, old) = (&sc.t, &sc.claimed, &sc.old);
     let lib = t.get(LIBRARY);
-    let named = claimed.get("right") + claimed.get("family") + claimed.get("origin");
+    let named = named_of(claimed);
     let old_named = old.get("right") + old.get("family");
     let mut e = vec![kv("libraryBytes", int(lib)), kv("namedBytes", int(named))];
     e.extend(prf_i(
@@ -427,6 +459,15 @@ fn scope_block(sc: &ScopeCounts) -> PyValue {
         kv("appClaimedBytes", int(claimed.get("app"))),
         kv("wrongFamilyBytes", int(claimed.get("wrongFamily"))),
         kv("namedAsOriginBytes", int(claimed.get("origin"))),
+    ]);
+    e.extend(s15_cols(
+        named,
+        claimed.get(COPY),
+        claimed.get("wrongFamily"),
+        claimed.get("app"),
+        (t.get(audit15::DEFECT), claimed.get("defect")),
+    ));
+    e.extend([
         kv("copyBytes", int(t.get("copy"))),
         kv("namedBytesShipperOnly", int(old_named)),
     ]);
@@ -454,6 +495,9 @@ fn totals_scope(lib: i64, named: i64, wrong: i64, app: i64, misses: PyValue) -> 
         kv("appClaimedBytes", int(app)),
         kv("wrongFamilyBytes", int(wrong)),
         kv("namedAsOriginBytes", int(0)),
+    ]);
+    e.extend(s15_cols(named, 0, wrong, app, (0, 0)));
+    e.extend([
         kv("copyBytes", int(0)),
         kv("namedBytesShipperOnly", int(named)),
     ]);
@@ -471,6 +515,7 @@ struct Scorer<'a> {
     ix: &'a Index,
     fam: &'a Families,
     rule: &'a str,
+    ctx: &'a audit15::Ctx<'a>,
 }
 
 fn rule_name(rule: &str) -> &'static str {
@@ -541,9 +586,9 @@ fn map_body(by_scope: &[ScopeCounts; 2], seeds: &Ctr, names: &Names) -> Vec<(Str
     );
     let lib = total.get(LIBRARY);
     let as_shipper = claimed.get("right") + claimed.get("family");
-    let named = as_shipper + claimed.get("origin");
+    let named = named_of(&claimed);
     let old_named = old.get("right") + old.get("family");
-    let seed_named = seeds.get("right") + seeds.get("family") + seeds.get("origin");
+    let seed_named = named_of(seeds);
     let mut totals = vec![kv("libraryBytes", int(lib)), kv("namedBytes", int(named))];
     totals.extend(prf_i(
         named,
@@ -557,6 +602,15 @@ fn map_body(by_scope: &[ScopeCounts; 2], seeds: &Ctr, names: &Names) -> Vec<(Str
         kv("wrongFamilyBytes", int(claimed.get("wrongFamily"))),
         kv("namedAsShipperBytes", int(as_shipper)),
         kv("namedAsOriginBytes", int(claimed.get("origin"))),
+    ]);
+    totals.extend(s15_cols(
+        named,
+        claimed.get(COPY),
+        claimed.get("wrongFamily"),
+        claimed.get("app"),
+        (total.get(audit15::DEFECT), claimed.get("defect")),
+    ));
+    totals.extend([
         kv("copyBytes", int(total.get("copy"))),
         kv("namedBytesShipperOnly", int(old_named)),
     ]);
@@ -603,14 +657,14 @@ impl Scorer<'_> {
         report: &Report,
         truth: &Truth,
         origins: Option<&truth::Origins>,
-        audit: &Audit,
+        (audit, a15): (&Audit, &mut EntryAudit),
     ) -> Result<(Vec<(String, PyValue)>, EntryWrongs), String> {
         let units = run_units(report)?;
         let st = statement_units(&units);
         let mut scope_of: HashMap<usize, usize> = st.iter().map(|u| (u.i, 0)).collect();
         scope_of.extend(factory_units(&units).iter().map(|u| (u.i, 1)));
         let every = scored_units(&units);
-        let labels = truth::label_units(truth, &units, &every, origins, audit)?;
+        let mut labels = truth::label_units(truth, &units, &every, origins, audit)?;
         let judge = Judge {
             fam: self.fam,
             app_pkg: truth.app_package.as_deref(),
@@ -618,6 +672,11 @@ impl Scorer<'_> {
         let key: HashMap<(i64, i64), usize> = every.iter().map(|u| ((u.s, u.e), u.i)).collect();
         let claims = claims_by_unit(&report.claims, &key);
         let vetoed = vetoed_by_unit(&report.vetoed, &key);
+        let claimed: HashMap<usize, &str> = claims
+            .iter()
+            .map(|(i, c)| (*i, c.package.as_str()))
+            .collect();
+        a15.defects(self.ctx, truth, (&every, &mut labels), &claimed);
         let mut by_scope = [ScopeCounts::default(), ScopeCounts::default()];
         for u in &every {
             let l = &labels[&u.i];
@@ -637,13 +696,13 @@ impl Scorer<'_> {
         }
         let by_i: HashMap<usize, &Unit> = units.iter().map(|u| (u.i, u)).collect();
         let mut wrongs = EntryWrongs::default();
-        let (seeds, names) = self.count_claims(
+        let (seeds, names, credited) = self.count_claims(
             &claims,
             &labels,
             &by_i,
             &judge,
             &scope_of,
-            (&mut by_scope, &mut wrongs),
+            (&mut by_scope, &mut wrongs, a15, truth),
         );
         let struct_claims = if self.rule == "agreement" {
             index::claim_all(self.ix, &st)
@@ -651,7 +710,7 @@ impl Scorer<'_> {
             HashMap::new()
         };
         let claim_of: HashMap<usize, &ClaimRow> = claims.iter().map(|(i, c)| (*i, *c)).collect();
-        for u in &every {
+        for u in every.iter().filter(|u| !credited.contains(&u.i)) {
             if let Some(cls) = self.miss_class(
                 u,
                 &labels[&u.i],
@@ -666,7 +725,8 @@ impl Scorer<'_> {
         Ok((map_body(&by_scope, &seeds, &names), wrongs))
     }
 
-    /// The claims' verdicts into the scope counters; (index seeds, names).
+    /// The claims' verdicts into the scope counters; (index seeds, names,
+    /// the units whose claim scorer 15 credited as a copy).
     fn count_claims(
         &self,
         claims: &[(usize, &ClaimRow)],
@@ -674,14 +734,26 @@ impl Scorer<'_> {
         by_i: &HashMap<usize, &Unit>,
         judge: &Judge,
         scope_of: &HashMap<usize, usize>,
-        (by_scope, wrongs): (&mut [ScopeCounts; 2], &mut EntryWrongs),
-    ) -> (Ctr, Names) {
+        (by_scope, wrongs, a15, truth): (
+            &mut [ScopeCounts; 2],
+            &mut EntryWrongs,
+            &mut EntryAudit,
+            &Truth,
+        ),
+    ) -> (Ctr, Names, HashSet<usize>) {
         let mut seeds: Ctr = Counter::new();
         let mut names = Names::default();
+        let mut credited = HashSet::new();
         for (i, c) in claims {
-            let (v, vo) = judge.judge_origin(&c.package, &labels[i]);
+            let (mut v, vo) = judge.judge_origin(&c.package, &labels[i]);
             let b = by_i[i].b;
             let sc = &mut by_scope[scope_of[i]];
+            if v == "wrongFamily"
+                && a15.copy_credit(self.ctx, self.ix, truth, (by_i[i], &c.package, &labels[i]))
+            {
+                v = COPY.into();
+                credited.insert(*i);
+            }
             if v == "wrongFamily" {
                 wrongs.add(WrongClaim {
                     claimed: &c.package,
@@ -707,7 +779,7 @@ impl Scorer<'_> {
                 names.add(self.ix, self.fam, by_i[i], &c.package, truth);
             }
         }
-        (seeds, names)
+        (seeds, names, credited)
     }
 
     /// A labelled sample unit's miss class; None when it is not library
@@ -885,6 +957,17 @@ impl Scorer<'_> {
             kv("wrongFamilyBytes", int(rnd(&claimed, "wrongFamily"))),
             kv("namedAsShipperBytes", int(round_int(named))),
             kv("namedAsOriginBytes", int(0)),
+        ]);
+        // Scorer 15's corrections need per-unit map truth: not judged on
+        // a hand-labelled sample (zero, so the sums stay defined).
+        totals.extend(s15_cols(
+            round_int(named),
+            0,
+            rnd(&claimed, "wrongFamily"),
+            rnd(&claimed, "app"),
+            (0, 0),
+        ));
+        totals.extend([
             kv("copyBytes", int(0)),
             kv("namedBytesShipperOnly", int(round_int(named))),
         ]);
@@ -991,9 +1074,9 @@ fn score_floor(entry: &CorpusEntry, truth: &Truth) -> Result<Vec<(String, PyValu
         kv("wrongFamilyBytes", int(0)),
         kv("namedAsShipperBytes", int(0)),
         kv("namedAsOriginBytes", int(0)),
-        kv("copyBytes", int(0)),
-        kv("namedBytesShipperOnly", int(0)),
     ]);
+    totals.extend(s15_cols(0, 0, 0, 0, (0, 0)));
+    totals.extend([kv("copyBytes", int(0)), kv("namedBytesShipperOnly", int(0))]);
     totals.extend(prf_i(0, 0, 0, lib, "ShipperOnly"));
     totals.push(kv("wrongFamilyBytesShipperOnly", int(0)));
     let nd = || dict(vec![kv("no-discovery", int(lib))]);
@@ -1036,6 +1119,7 @@ type ScopeSum = (HashMap<String, i64>, Vec<(String, i64)>);
 
 /// What `aggregate` reads from one card.
 struct CardSum {
+    entry: Option<String>,
     totals: HashMap<String, i64>,
     miss: Vec<(String, i64)>,
     names: [i64; 5],
@@ -1078,6 +1162,9 @@ const SCOPE_SUMS: &[&str] = &[
     "appClaimedBytes",
     "wrongFamilyBytes",
     "namedAsOriginBytes",
+    "namedAsCopyCreditBytes",
+    "defectExcludedBytes",
+    "defectExcludedClaimedBytes",
     "copyBytes",
     "namedBytesShipperOnly",
     "wrongFamilyBytesShipperOnly",
@@ -1089,6 +1176,9 @@ const TOTAL_SUMS: &[&str] = &[
     "wrongFamilyBytes",
     "namedAsShipperBytes",
     "namedAsOriginBytes",
+    "namedAsCopyCreditBytes",
+    "defectExcludedBytes",
+    "defectExcludedClaimedBytes",
     "copyBytes",
     "wrongFamilyBytesShipperOnly",
     "namedBytesShipperOnly",
@@ -1112,6 +1202,10 @@ fn card_sum(card: &PyValue) -> CardSum {
         )
     };
     CardSum {
+        entry: match card.get("entry") {
+            Some(PyValue::Str(e)) => Some(e.clone()),
+            _ => None,
+        },
         totals: ints_of(get("totals")),
         miss: ordered_ints(get("missBytes")),
         names: NAME_KEYS.map(|k| names[k]),
@@ -1152,6 +1246,7 @@ fn aggregate_scope(blocks: &[&ScopeSum]) -> PyValue {
         t["libraryBytes"],
         "",
     ));
+    e.push(no_credit_precision(&t));
     e.extend(prf_i(
         t["namedBytesShipperOnly"],
         t["wrongFamilyBytesShipperOnly"],
@@ -1161,6 +1256,18 @@ fn aggregate_scope(blocks: &[&ScopeSum]) -> PyValue {
     ));
     e.push(kv("missShares", miss_shares(&mb, t["libraryBytes"])));
     dict(e)
+}
+
+/// The summed precision with every credited copy charged as wrong.
+fn no_credit_precision(t: &HashMap<&str, i64>) -> (String, PyValue) {
+    let named = t["namedBytes"];
+    kv(
+        "precisionNoCopyCredit",
+        flt(share(
+            exact(named - t["namedAsCopyCreditBytes"]),
+            exact(named + t["wrongFamilyBytes"] + t["appClaimedBytes"]),
+        )),
+    )
 }
 
 /// score.py `aggregate`: per set, summed bytes and shares from the sums.
@@ -1208,6 +1315,13 @@ fn aggregate(
             kv("wrongFamilyBytes", int(t["wrongFamilyBytes"])),
             kv("namedAsShipperBytes", int(t["namedAsShipperBytes"])),
             kv("namedAsOriginBytes", int(t["namedAsOriginBytes"])),
+            kv("namedAsCopyCreditBytes", int(t["namedAsCopyCreditBytes"])),
+            kv("defectExcludedBytes", int(t["defectExcludedBytes"])),
+            kv(
+                "defectExcludedClaimedBytes",
+                int(t["defectExcludedClaimedBytes"]),
+            ),
+            no_credit_precision(&t),
             kv("copyBytes", int(t["copyBytes"])),
         ]);
         e.extend(prf_i(
@@ -1313,6 +1427,31 @@ struct Run<'a> {
     pipeline: &'a Pipeline,
     fam: Families,
     indexes: HashMap<String, Index>,
+    /// Scorer 15: the index's literal table (outer None: not read yet).
+    literals: Option<Option<LiteralIndex>>,
+    registry: Registry,
+}
+
+/// One entry's scored body: the card body, its wrong-family breakdown and
+/// scorer 15's corrections (both None on sample truth).
+type Scored = (CardBody, Option<EntryWrongs>, Option<EntryAudit>);
+
+/// One entry's bundle and corpus-map sources, for scorer 15's checks.
+fn entry_texts(corpus: &Corpus, entry: &CorpusEntry) -> Result<EntryTexts, String> {
+    let bpath = corpus.corpus_path(entry, Role::Bundle)?;
+    let bundle = std::fs::read(&bpath).map_err(|e| format!("{}: {e}", bpath.display()))?;
+    let map = read_map(&corpus.source_map_path(entry)?)?;
+    let paths = map
+        .sources
+        .iter()
+        .map(|v| v.as_str().unwrap_or("").to_string())
+        .collect();
+    Ok(EntryTexts::new(
+        bundle,
+        &super::pypath::dirname(&entry.files.bundle.origin),
+        paths,
+        map.sources_content.unwrap_or_default(),
+    ))
 }
 
 impl Run<'_> {
@@ -1336,6 +1475,9 @@ impl Run<'_> {
         }
         self.indexes
             .insert(slice.to_string(), Index::load(dir, slice)?);
+        if self.literals.is_none() {
+            self.literals = Some(LiteralIndex::open(dir)?);
+        }
         Ok(())
     }
 
@@ -1347,9 +1489,14 @@ impl Run<'_> {
         doc: &ReportDoc,
         truth: &Truth,
         origins: Option<&truth::Origins>,
-    ) -> Result<(CardBody, Option<EntryWrongs>), String> {
+    ) -> Result<Scored, String> {
         let Some(report) = &doc.library_discovery else {
-            return Ok((score_floor(entry, truth)?, Some(EntryWrongs::default())));
+            let none = EntryAudit::new(EntryTexts::new(Vec::new(), "", Vec::new(), Vec::new()));
+            return Ok((
+                score_floor(entry, truth)?,
+                Some(EntryWrongs::default()),
+                Some(none),
+            ));
         };
         if report.index_id.as_deref() != Some(self.pipeline.index_id.as_str()) {
             return Err(format!(
@@ -1364,17 +1511,24 @@ impl Run<'_> {
             .ok_or("toolchain.slice")?
             .to_string();
         self.index(&slice)?;
+        let ctx = audit15::Ctx {
+            lits: self.literals.as_ref().and_then(Option::as_ref),
+            registry: &self.registry,
+        };
         let scorer = Scorer {
             ix: &self.indexes[&slice],
             fam: &self.fam,
             rule: &self.pipeline.rule,
+            ctx: &ctx,
         };
         if truth.method == "sample" {
-            Ok((scorer.score_sample(report, truth)?, None))
+            Ok((scorer.score_sample(report, truth)?, None, None))
         } else {
             let audit = Audit::new(self.corpus, entry, truth)?;
-            let (body, wrongs) = scorer.score_map(report, truth, origins, &audit)?;
-            Ok((body, Some(wrongs)))
+            let mut a15 = EntryAudit::new(entry_texts(self.corpus, entry)?);
+            let (body, wrongs) = scorer.score_map(report, truth, origins, (&audit, &mut a15))?;
+            a15.release();
+            Ok((body, Some(wrongs), Some(a15)))
         }
     }
 
@@ -1384,7 +1538,7 @@ impl Run<'_> {
         label: &str,
         entry: &CorpusEntry,
         run_dir: &Path,
-    ) -> Result<(PyValue, Option<EntryWrongs>), String> {
+    ) -> Result<(PyValue, Option<EntryWrongs>, Option<EntryAudit>), String> {
         let rp = run_dir.join("reports").join(format!("{}.json", entry.id));
         let bytes = std::fs::read(&rp).map_err(|e| format!("{}: {e}", rp.display()))?;
         let doc: ReportDoc =
@@ -1395,7 +1549,7 @@ impl Run<'_> {
             let o = truth::load_origins(self.corpus, entry)?;
             origins = truth::redecode(self.corpus, entry, &mut truth, Some(o))?;
         }
-        let (body, wrongs) = self.body(entry, &doc, &truth, origins.as_ref())?;
+        let (body, wrongs, a15) = self.body(entry, &doc, &truth, origins.as_ref())?;
         let p = self.pipeline;
         let mut card = vec![
             kv("schema", s(SCORER_VERSION)),
@@ -1421,7 +1575,7 @@ impl Run<'_> {
             kv("reportSha256", s(&crate::committed::sha256_hex(&bytes))),
         ];
         card.extend(body);
-        Ok((dict(card), wrongs))
+        Ok((dict(card), wrongs, a15))
     }
 }
 
@@ -1493,8 +1647,8 @@ fn bars(agg: &[(String, PyValue, f64)]) -> PyValue {
 pub fn rescore(
     repo: &Path,
     label: &str,
-    corpus_name: &str,
-    data_root: Option<&str>,
+    (corpus_name, data_root): (&str, Option<&str>),
+    registry: &Path,
     out: &Out,
 ) -> Result<String, String> {
     let corpus = Corpus::open(repo, corpus_name, data_root)?;
@@ -1519,8 +1673,12 @@ pub fn rescore(
         pipeline: &pipeline,
         fam: Families::shipped(),
         indexes: HashMap::new(),
+        literals: None,
+        registry: Registry::new(registry),
     };
     let mut sets: std::collections::BTreeMap<String, Vec<(CardSum, PyValue)>> = Default::default();
+    let mut audits: std::collections::BTreeMap<String, Vec<(String, EntryAudit)>> =
+        Default::default();
     let mut timing: Vec<(String, PyValue)> = Vec::new();
     let mut wrongs: std::collections::BTreeMap<String, Vec<(String, EntryWrongs)>> =
         Default::default();
@@ -1532,7 +1690,13 @@ pub fn rescore(
         .iter()
         .filter(|e| only.is_none_or(|o| o.contains(&e.set)))
     {
-        let (card, entry_wrongs) = run.card(label, entry, &run_dir)?;
+        let (card, entry_wrongs, a15) = run.card(label, entry, &run_dir)?;
+        if let Some(a) = a15 {
+            audits
+                .entry(entry.set.clone())
+                .or_default()
+                .push((entry.id.clone(), a));
+        }
         match entry_wrongs {
             Some(w) => wrongs
                 .entry(entry.set.clone())
@@ -1564,11 +1728,16 @@ pub fn rescore(
     }
     let agg = aggregate(&sets);
     write_wrong_families(&cards_dir, label, &agg, &wrongs, &sample_sets, &run.fam)?;
+    write_truth15(&cards_dir, label, &sets, &audits)?;
     let bars = bars(&agg);
+    let mut config = summary_config(&corpus, &pipeline)?;
+    if let PyValue::Dict(es) = &mut config {
+        es.push(kv("copyCredit", copy_credit_config(&run, registry)));
+    }
     let summary = dict(vec![
         kv("schema", s(SCORER_VERSION)),
         kv("label", s(label)),
-        kv("config", summary_config(&corpus, &pipeline)?),
+        kv("config", config),
         kv("bars", bars.clone()),
         kv(
             "sets",
@@ -1585,6 +1754,57 @@ pub fn rescore(
     )?;
     log.push_str(&crate::json::py_text(&bars, true));
     Ok(log)
+}
+
+/// summary.json's `config.copyCredit`: what scorer 15's credits read.
+fn copy_credit_config(run: &Run, registry: &Path) -> PyValue {
+    let lits = match &run.literals {
+        Some(Some(_)) => "the label's index literal table (literals.bin)",
+        Some(None) => "none: the label's index has no literal table, so no claim is credited",
+        None => "not read: no entry ran discovery",
+    };
+    dict(vec![
+        kv("literals", s(lits)),
+        kv("registry", s(&registry.display().to_string())),
+    ])
+}
+
+/// `truth15.json` beside the cards (scorer 15's defects and credits),
+/// held equal per set to the map-truth cards' columns.
+fn write_truth15(
+    cards_dir: &Path,
+    label: &str,
+    sets: &std::collections::BTreeMap<String, Vec<(CardSum, PyValue)>>,
+    audits: &std::collections::BTreeMap<String, Vec<(String, EntryAudit)>>,
+) -> Result<(), String> {
+    let mut by_set: std::collections::BTreeMap<String, Vec<(String, &EntryAudit)>> =
+        Default::default();
+    for (set, es) in audits {
+        let rows: Vec<(String, &EntryAudit)> = es.iter().map(|(id, a)| (id.clone(), a)).collect();
+        let cards: Vec<&CardSum> = sets[set]
+            .iter()
+            .filter(|(c, _)| {
+                es.iter()
+                    .any(|(id, _)| Some(id.as_str()) == c.entry.as_deref())
+            })
+            .map(|(c, _)| c)
+            .collect();
+        let sum = |k: &str| cards.iter().map(|c| c.totals[k]).sum::<i64>();
+        audit15::check_totals(
+            set,
+            &rows,
+            (
+                sum("namedAsCopyCreditBytes"),
+                sum("wrongFamilyBytes"),
+                sum("defectExcludedBytes"),
+            ),
+        )?;
+        by_set.insert(set.clone(), rows);
+    }
+    write(
+        &cards_dir.join("truth15.json"),
+        &crate::json::py_text(&audit15::doc(label, &by_set), true),
+    )
 }
 
 /// `wrong-families.json` beside the cards (a private corpus's stays in its
@@ -1750,7 +1970,12 @@ pub fn read_card(path: &Path) -> Result<PyValue, String> {
 /// Proof (b) as a self-test: re-score `label` into `scratch` and compare
 /// its cards and summary byte for byte with the committed ones (a private
 /// corpus's cards: the ones beside its reports). Ok: one verdict line.
-pub fn proof(repo: &Path, label: &str, scratch: &Path) -> Result<(bool, String), String> {
+pub fn proof(
+    repo: &Path,
+    label: &str,
+    registry: &Path,
+    scratch: &Path,
+) -> Result<(bool, String), String> {
     let summary = repo
         .join(crate::paths::LIBRARY_RESULTS)
         .join(label)
@@ -1758,6 +1983,18 @@ pub fn proof(repo: &Path, label: &str, scratch: &Path) -> Result<(bool, String),
     let text =
         std::fs::read_to_string(&summary).map_err(|e| format!("{}: {e}", summary.display()))?;
     let v = PyValue::parse(&text).map_err(|e| format!("{}: {e}", summary.display()))?;
+    match v.get("schema") {
+        Some(PyValue::Str(x)) if x == SCORER_VERSION => {}
+        other => {
+            return Err(format!(
+                "REFUSED: {label} was scored by {}, this harness is {SCORER_VERSION}: a proof compares one scorer version with itself (re-score the label with `library rescore --out DIR`)",
+                match other {
+                    Some(PyValue::Str(x)) => x.as_str(),
+                    _ => "an unknown scorer",
+                }
+            ));
+        }
+    }
     let corpus_name = match v.get("config").and_then(|c| c.get("corpus")) {
         Some(PyValue::Str(c)) => c.clone(),
         _ => "dev".to_string(),
@@ -1771,7 +2008,13 @@ pub fn proof(repo: &Path, label: &str, scratch: &Path) -> Result<(bool, String),
             .join("cards")
     };
     let out = scratch.join(label);
-    rescore(repo, label, &corpus_name, None, &Out::Dir(out.clone()))?;
+    rescore(
+        repo,
+        label,
+        (&corpus_name, None),
+        registry,
+        &Out::Dir(out.clone()),
+    )?;
     let mut differ = Vec::new();
     for e in corpus.entries() {
         let name = format!("{}.json", e.id);

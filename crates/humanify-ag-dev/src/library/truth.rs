@@ -19,8 +19,9 @@ use super::index::Unit;
 use super::pyre;
 use crate::committed::library::{CorpusEntry, LayerKind};
 
-/// Truth labels that are not a library package.
-pub const NOT_LIBRARY: &[&str] = &["<app>", "<self>", "<unmapped>", "<foreign>"];
+/// Truth labels that are not a library package (`<defect>`: scorer 15's
+/// map defect, `audit15`).
+pub const NOT_LIBRARY: &[&str] = &["<app>", "<self>", "<unmapped>", "<foreign>", "<defect>"];
 
 pub fn is_library(label: &str) -> bool {
     !NOT_LIBRARY.contains(&label)
@@ -565,6 +566,9 @@ pub struct Label {
     pub via: Option<String>,
     /// Python's `"misattributedFrom" in row`: scorer 13 relabelled it.
     pub misattributed: bool,
+    /// Scorer 14's map-defect layer relabelled it (installed evidence;
+    /// scorer 15's own defect check leaves it alone).
+    pub mapdefect: bool,
 }
 
 impl Label {
@@ -676,6 +680,7 @@ fn audit_library(row: &mut Label, lab: &str, audit: &Audit, s: i64, e: i64) -> R
             pkg: Some(pkg.clone()),
             version: opt_str(md.get(4))?,
             file: opt_str(md.get(5))?,
+            mapdefect: true,
             ..Label::default()
         };
         lab = pkg;
