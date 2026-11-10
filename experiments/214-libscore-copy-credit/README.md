@@ -1,7 +1,7 @@
 # exp214 — library scorer 15: credit copied code, exclude map defects
 
 STATUS: BUILT, RESCORED (bun-dev, bun-held, kind-esbuild/webpack/rollup),
-GATE: see §6, NOT MERGED (2026-11-10). Branch `exp214-libscore-copy-credit`
+GATE: ALL 11 STAGES PASS (worktree and clean checkout, §6), NOT MERGED (2026-11-10). Branch `exp214-libscore-copy-credit`
 from main `622279472`. Harness crate only (`crates/humanify-ag-dev`); the
 pipeline, the index builder and every pipeline output are untouched, so no
 eval applies. Scorer version `exp096-score/14` -> `exp096-score/15`.
@@ -230,11 +230,28 @@ rambdax 7,678, readable-stream → safe-buffer 5,367, takumi → ast-grep
 
 ## 6. Gate
 
-`cargo dev check` — see the table filled in below at commit time.
+`cargo dev check` at `c81da2adb` (rebased on main `2df1f28a6`), the
+coordinator's go; worktree first, then a clean detached checkout, one at a
+time. The commit after it changes only this README.
 
 | stage | worktree | clean checkout |
 | --- | --- | --- |
-| (pending) | | |
+| shims | PASS | PASS |
+| no-private-addresses | PASS | PASS |
+| rust:fmt | PASS | PASS |
+| rust:clippy | PASS | PASS |
+| census:clones (advisory) | REVIEW: only twins already on main (none in the new code; scope_block/map_body, which this branch made twins, were unified into `verdict_cols`, output byte-identical) | REVIEW (same) |
+| census:concurrency | PASS | PASS |
+| census:slop (advisory) | PASS | PASS |
+| rust:unit | PASS | PASS |
+| rust:build | PASS | PASS |
+| format-golden | PASS | PASS |
+| e2e | PASS (19 fixture pairs, 152 launches = golden) | PASS |
+
+The first worktree run failed `rust:unit` (`pipeline_stages` webpack
+test: `Cannot find package 'webcrack'`): the fresh worktree had no
+`npm ci` yet (setup step), not this change; after `npm ci
+--ignore-scripts` all 11 stages pass.
 
 ## What this could NOT prove
 
