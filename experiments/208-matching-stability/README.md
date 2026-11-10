@@ -1,6 +1,7 @@
 # exp208 — matching counts as a stability check
 
-STATUS: DONE, NOT MERGED (2026-11-10), branch `exp208-matching-stability`.
+STATUS: DONE, NOT MERGED (2026-11-10), branch `exp208-matching-stability`,
+gate green (worktree + clean checkout) on `41caeca7c`.
 Harness only (`crates/humanify-ag-dev`); the pipeline and its output are
 unchanged. noise-bands.json NOT regenerated here (the main agent adopts
 the 40921b9f bands; a `matchingBands` block appears in the slot the next
@@ -88,31 +89,31 @@ Evidence: seven same-commit cold repeats at two commits, five pairs each
 
 ```
 === MATCHING (totals across the compared pairs) ===
--- FUNCTIONS
+-- FUNCTIONS (total; carried from the prior; close-matched; asked the LLM = stats llm+failed; asked AND renamed by the LLM = stats llm; unmatched; still ambiguous)
                       fnTotal fnCarried fnClose fnAsked fnLLMRenamed fnUnmatched fnAmbiguous
-ref-names-40921b9f-r1  254797    220762    3595    5928       5923        4749        4756
-ref-names-40921b9f-r2  254797    220762    3595    5928  5922 (-1)        4749        4756
-ref-names-40921b9f-r3  254797    220762    3595    5928  5922 (-1)        4749        4756
-serial-40921b9f-s1     254797    220762    3595    5928       5923        4749        4756
--- MODULE BINDINGS
+ref-names-40921b9f-r1  254797    220762    3595    5928         5923        4749        4756
+ref-names-40921b9f-r2  254797    220762    3595    5928    5922 (-1)        4749        4756
+ref-names-40921b9f-r3  254797    220762    3595    5928    5922 (-1)        4749        4756
+serial-40921b9f-s1     254797    220762    3595    5928         5923        4749        4756
+-- MODULE BINDINGS (carried from the prior; asked AND renamed by the LLM; statement-twin names are in neither)
                        mbCarried mbLLMRenamed
-ref-names-40921b9f-r1      95920       1717
-ref-names-40921b9f-r2 95923 (+3)  1714 (-3)
-ref-names-40921b9f-r3 95922 (+2)  1715 (-2)
-serial-40921b9f-s1    95919 (-1)  1715 (-2)
--- IDENTIFIERS
-                          idAsked  idLLMRenamed
-ref-names-40921b9f-r1       26090       25929
-ref-names-40921b9f-r2 26105 (+15)  25928 (-1)
-ref-names-40921b9f-r3  26095 (+5) 25918 (-11)
-serial-40921b9f-s1     26083 (-7) 25941 (+12)
+ref-names-40921b9f-r1      95920         1717
+ref-names-40921b9f-r2 95923 (+3)    1714 (-3)
+ref-names-40921b9f-r3 95922 (+2)    1715 (-2)
+serial-40921b9f-s1    95919 (-1)    1715 (-2)
+-- IDENTIFIERS (asked the LLM; asked AND renamed by the LLM)
+                          idAsked idLLMRenamed
+ref-names-40921b9f-r1       26090        25929
+ref-names-40921b9f-r2 26105 (+15)   25928 (-1)
+ref-names-40921b9f-r3  26095 (+5)  25918 (-11)
+serial-40921b9f-s1     26083 (-7)  25941 (+12)
 ```
 
 Per pair (r1 summarize):
 
 ```
                  fnTotal fnCarried fnClose fnAsked fnLLMRenamed fnUnmatched fnAmbiguous
-2.1.85->2.1.86     35872     30700     670     631        630         917         931
+2.1.85->2.1.86     35872     30700     670     631          630         917         931
 2.1.118->2.1.119   42981     35645     404    1895       1894         473         890
 2.1.179->2.1.181   53295     46826     890     918        917        1146         920
 2.1.197->2.1.198   58156     50459     942    1387       1386        1397        1150
@@ -134,7 +135,28 @@ perturbed-s1 fnUnmatched 4750 vs ref-names-40921b9f-r1 4749`.
 
 ## Gate
 
-See the final report / the commit; filled in after `cargo dev check`.
+On `41caeca7c` (rebased onto main `61063385e`, the 40921b9f names bands):
+
+| check                         | worktree | clean checkout |
+| ----------------------------- | -------- | -------------- |
+| shims                         | PASS     | PASS           |
+| no-private-addresses          | PASS     | PASS           |
+| rust:fmt                      | PASS     | PASS           |
+| rust:clippy                   | PASS     | PASS           |
+| census:clones (advisory)      | REVIEW   | REVIEW         |
+| census:concurrency            | PASS     | PASS           |
+| census:slop (advisory)        | PASS     | PASS           |
+| rust:unit                     | PASS     | PASS           |
+| rust:build                    | PASS     | PASS           |
+| format-golden                 | PASS     | PASS           |
+| e2e                           | PASS     | PASS           |
+
+census:clones: the first run flagged this lane's test helpers (two
+`add_matching` copies, `add_llm_diagnostics`, two bands-test setups);
+unified into `eval/test_support.rs` and a `bands_over` helper. What remains
+predates this branch. The first worktree run failed rust:unit only because
+the fresh worktree had no `node_modules` (webcrack shim); after `npm ci
+--ignore-scripts` it passed.
 
 ## What this could NOT prove
 
