@@ -442,8 +442,13 @@ struct ScopeCounts {
     misses: Ctr,
 }
 
-fn scope_block(sc: &ScopeCounts) -> PyValue {
-    let (t, claimed, old) = (&sc.t, &sc.claimed, &sc.old);
+/// The verdict columns a scope block and a card's totals share, from
+/// `libraryBytes` to `wrongFamilyBytesShipperOnly`; the totals also carry
+/// `namedAsShipperBytes` (`with_shipper`).
+fn verdict_cols(
+    (t, claimed, old): (&Ctr, &Ctr, &Ctr),
+    with_shipper: bool,
+) -> Vec<(String, PyValue)> {
     let lib = t.get(LIBRARY);
     let named = named_of(claimed);
     let old_named = old.get("right") + old.get("family");
@@ -458,8 +463,14 @@ fn scope_block(sc: &ScopeCounts) -> PyValue {
     e.extend([
         kv("appClaimedBytes", int(claimed.get("app"))),
         kv("wrongFamilyBytes", int(claimed.get("wrongFamily"))),
-        kv("namedAsOriginBytes", int(claimed.get("origin"))),
     ]);
+    if with_shipper {
+        e.push(kv(
+            "namedAsShipperBytes",
+            int(claimed.get("right") + claimed.get("family")),
+        ));
+    }
+    e.push(kv("namedAsOriginBytes", int(claimed.get("origin"))));
     e.extend(s15_cols(
         named,
         claimed.get(COPY),
@@ -478,10 +489,18 @@ fn scope_block(sc: &ScopeCounts) -> PyValue {
         lib,
         "ShipperOnly",
     ));
+    e.push(kv(
+        "wrongFamilyBytesShipperOnly",
+        int(old.get("wrongFamily")),
+    ));
+    e
+}
+
+fn scope_block(sc: &ScopeCounts) -> PyValue {
+    let mut e = verdict_cols((&sc.t, &sc.claimed, &sc.old), false);
     e.extend([
-        kv("wrongFamilyBytesShipperOnly", int(old.get("wrongFamily"))),
-        kv("statementBytes", sorted_block(t)),
-        kv("claimedBytes", sorted_block(claimed)),
+        kv("statementBytes", sorted_block(&sc.t)),
+        kv("claimedBytes", sorted_block(&sc.claimed)),
         kv("missBytes", miss_block(&sc.misses)),
     ]);
     dict(e)
@@ -585,46 +604,8 @@ fn map_body(by_scope: &[ScopeCounts; 2], seeds: &Ctr, names: &Names) -> Vec<(Str
         sum(|x| &x.misses),
     );
     let lib = total.get(LIBRARY);
-    let as_shipper = claimed.get("right") + claimed.get("family");
-    let named = named_of(&claimed);
-    let old_named = old.get("right") + old.get("family");
     let seed_named = named_of(seeds);
-    let mut totals = vec![kv("libraryBytes", int(lib)), kv("namedBytes", int(named))];
-    totals.extend(prf_i(
-        named,
-        claimed.get("wrongFamily"),
-        claimed.get("app"),
-        lib,
-        "",
-    ));
-    totals.extend([
-        kv("appClaimedBytes", int(claimed.get("app"))),
-        kv("wrongFamilyBytes", int(claimed.get("wrongFamily"))),
-        kv("namedAsShipperBytes", int(as_shipper)),
-        kv("namedAsOriginBytes", int(claimed.get("origin"))),
-    ]);
-    totals.extend(s15_cols(
-        named,
-        claimed.get(COPY),
-        claimed.get("wrongFamily"),
-        claimed.get("app"),
-        (total.get(audit15::DEFECT), claimed.get("defect")),
-    ));
-    totals.extend([
-        kv("copyBytes", int(total.get("copy"))),
-        kv("namedBytesShipperOnly", int(old_named)),
-    ]);
-    totals.extend(prf_i(
-        old_named,
-        old.get("wrongFamily"),
-        old.get("app"),
-        lib,
-        "ShipperOnly",
-    ));
-    totals.push(kv(
-        "wrongFamilyBytesShipperOnly",
-        int(old.get("wrongFamily")),
-    ));
+    let totals = verdict_cols((&total, &claimed, &old), true);
     let mut seeds_block = vec![kv("namedBytes", int(seed_named))];
     seeds_block.extend(prf_i(
         seed_named,
