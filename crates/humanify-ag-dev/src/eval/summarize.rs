@@ -820,7 +820,9 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
     ];
     head.extend(banner_lines);
     let banner_lines = head;
-    let (llm_digests, llm_lines) = llm_section(dir, &cards);
+    let (llm_digests, mut llm_lines) = llm_section(dir, &cards);
+    let (matching_digests, matching_lines) = matching_section(dir, &cards);
+    llm_lines.extend(matching_lines);
     let summary = obj(vec![
         ("model", text(label)),
         ("provenance", prov),
@@ -829,6 +831,7 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
         ("runStatuses", JsValue::Array(statuses.clone())),
         ("verdicts", v),
         ("llmDiagnostics", JsValue::Array(llm_digests)),
+        ("matchingDiagnostics", JsValue::Array(matching_digests)),
     ]);
     let path = dir.join("summary.json");
     std::fs::write(&path, crate::json::js_text(&summary, false))
@@ -893,8 +896,30 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
 /// digest per pair whose scored run left a call ledger, and the per-pair
 /// tables (a pair without one prints `-`).
 fn llm_section(dir: &Path, cards: &[JsValue]) -> (Vec<JsValue>, Vec<String>) {
-    let digests = super::llm_diag::pair_digests(dir, cards);
-    let rows: Vec<(String, Option<JsValue>)> = cards
+    let digests = super::llm_diag::pair_digests(&super::llm_diag::LLM_CALLS, dir, cards);
+    let rows = pair_rows(cards, &digests);
+    let lines = super::llm_diag::tables(
+        &super::llm_diag::LLM_CALLS,
+        "LLM call diagnostics (per pair)",
+        &rows,
+        false,
+    );
+    (digests, lines)
+}
+
+/// The label's matching counts (exp208, `eval::matching`), per pair, from
+/// the same stats files.
+fn matching_section(dir: &Path, cards: &[JsValue]) -> (Vec<JsValue>, Vec<String>) {
+    let spec = &super::matching::MATCHING;
+    let digests = super::llm_diag::pair_digests(spec, dir, cards);
+    let rows = pair_rows(cards, &digests);
+    let lines = super::llm_diag::tables(spec, "MATCHING (per pair)", &rows, false);
+    (digests, lines)
+}
+
+/// One `(pair, digest)` row per card, in card order (None prints `-`).
+fn pair_rows(cards: &[JsValue], digests: &[JsValue]) -> Vec<(String, Option<JsValue>)> {
+    cards
         .iter()
         .map(|c| {
             let pair = str_at(c, "pair").unwrap_or("").to_string();
@@ -904,9 +929,7 @@ fn llm_section(dir: &Path, cards: &[JsValue]) -> (Vec<JsValue>, Vec<String>) {
                 .cloned();
             (pair, d)
         })
-        .collect();
-    let lines = super::llm_diag::tables("LLM call diagnostics (per pair)", &rows, false);
-    (digests, lines)
+        .collect()
 }
 
 fn print_layout(cards: &[JsValue], totals: &JsValue, clean_cards: usize, out: &mut Vec<String>) {

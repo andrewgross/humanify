@@ -391,6 +391,12 @@ pub fn leaderboard(
         }
     }
     out.extend(llm_diagnostics(&labels, &common));
+    let matching_band = |key: &str| {
+        bands
+            .and_then(|b| b.matching_bands(scorer, mode))
+            .and_then(|m| m.get(key).copied())
+    };
+    out.extend(matching(&labels, &common, &matching_band));
     out.extend(notes);
     Ok(out.join("\n") + "\n")
 }
@@ -406,14 +412,53 @@ fn llm_diagnostics(labels: &[Label], common: &[String]) -> Vec<String> {
                 Some(JsValue::Array(a)) => a.clone(),
                 _ => Vec::new(),
             };
-            (l.name.clone(), super::llm_diag::fold(&digests, common))
+            (
+                l.name.clone(),
+                super::llm_diag::fold(&super::llm_diag::LLM_CALLS, &digests, common),
+            )
         })
         .collect();
     super::llm_diag::tables(
+        &super::llm_diag::LLM_CALLS,
         "LLM call diagnostics (totals across the compared pairs)",
         &rows,
         true,
     )
+}
+
+/// The labels' matching counts over the compared pairs (exp208):
+/// `summary.json` `matchingDiagnostics`, side by side, then the flags —
+/// labels at the same commit must agree exactly on the deterministic
+/// counts and within the measured band on the rest.
+fn matching(
+    labels: &[Label],
+    common: &[String],
+    band: &dyn Fn(&str) -> Option<f64>,
+) -> Vec<String> {
+    let spec = &super::matching::MATCHING;
+    let rows: Vec<(String, Option<JsValue>)> = labels
+        .iter()
+        .map(|l| {
+            let digests = match at(&l.summary, "matchingDiagnostics") {
+                Some(JsValue::Array(a)) => a.clone(),
+                _ => Vec::new(),
+            };
+            (
+                l.name.clone(),
+                super::llm_diag::fold(spec, &digests, common),
+            )
+        })
+        .collect();
+    let commits: BTreeSet<Option<&String>> = labels.iter().map(|l| l.commit.as_ref()).collect();
+    let same_commit = commits.len() == 1 && !commits.contains(&None);
+    let mut out = super::llm_diag::tables(
+        spec,
+        "MATCHING (totals across the compared pairs)",
+        &rows,
+        true,
+    );
+    out.extend(super::matching::flags(&rows, band, same_commit));
+    out
 }
 
 #[cfg(test)]

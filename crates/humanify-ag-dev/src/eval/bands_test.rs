@@ -73,6 +73,7 @@ fn a_measured_slot_records_the_pairs_it_was_measured_over() {
         &["r1".to_string(), "r2".to_string()],
         &["2.1.85->2.1.86".to_string()],
         &[("novel".to_string(), Some(0.0))],
+        None,
     );
     let pairs = match super::super::card::at(&s, "provenance.pairs") {
         Some(JsValue::Array(a)) => a
@@ -146,4 +147,71 @@ fn a_repeat_without_a_cold_self_hop_leaves_the_reference_alone() {
         std::fs::read_to_string(&hop_file).unwrap(),
         std::fs::read_to_string(&committed).unwrap()
     );
+}
+
+/// `eval bands` over two frozen names-mode repeats in a scratch results
+/// dir (`tag` names it), the committed bands file copied in, after
+/// `setup` has touched the labels: the verdict and the bands file.
+fn bands_over(
+    tag: &str,
+    setup: impl Fn(&Path, &[&str]),
+) -> (Result<String, String>, std::path::PathBuf) {
+    let root = std::env::temp_dir().join(format!("dev-bands-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let names = ["ref-names-0357696e-r1", "ref-names-0357696e-r2"];
+    frozen(&root, &names);
+    setup(&root, &names);
+    let file = root.join("noise-bands.json");
+    std::fs::copy(
+        crate::paths::repo_root().join("dev/eval/noise-bands.json"),
+        &file,
+    )
+    .unwrap();
+    let labels: Vec<String> = names.iter().map(|s| s.to_string()).collect();
+    let said = bands(&root, &labels, &file, &root.join("self-hop-reference.json"));
+    (said, file)
+}
+
+fn read_bands(file: &Path) -> crate::committed::eval::NoiseBands {
+    serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
+}
+
+use crate::eval::test_support::set_matching;
+
+#[test]
+fn the_repeats_matching_spreads_are_written_beside_the_kpi_bands() {
+    let (said, file) = bands_over("match", |root, names| {
+        set_matching(&root.join(names[0]), 10.0, 4.0);
+        set_matching(&root.join(names[1]), 10.0, 6.0);
+    });
+    assert!(said.unwrap().contains("matching"));
+    let b = read_bands(&file);
+    let m = b.matching_bands(1, "names").unwrap();
+    // Four pairs: mbLLMRenamed 16 vs 24; fnAsked equal.
+    assert_eq!(m.get("mbLLMRenamed"), Some(&8.0));
+    assert_eq!(m.get("fnAsked"), Some(&0.0));
+}
+
+#[test]
+fn an_exact_matching_count_that_differs_refuses_the_bands() {
+    let (said, file) = bands_over("match-ne", |root, names| {
+        set_matching(&root.join(names[0]), 10.0, 4.0);
+        set_matching(&root.join(names[1]), 11.0, 4.0);
+    });
+    let err = said.unwrap_err();
+    assert!(err.contains("MATCHING NOT EQUAL: fnAsked"), "{err}");
+    // The copied-in committed file is untouched.
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        std::fs::read_to_string(crate::paths::repo_root().join("dev/eval/noise-bands.json"))
+            .unwrap()
+    );
+}
+
+#[test]
+fn repeats_without_matching_counts_still_get_kpi_bands_and_say_so() {
+    let (said, file) = bands_over("match-none", |_, _| {});
+    let said = said.unwrap();
+    assert!(said.contains("matching counts NOT measured"), "{said}");
+    assert!(read_bands(&file).matching_bands(1, "names").is_none());
 }

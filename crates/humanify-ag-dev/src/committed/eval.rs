@@ -79,6 +79,10 @@ pub fn pairs(repo: &Path) -> Result<Loaded<Pairs>, String> {
 pub struct NoiseBands {
     pub provenance: BandProvenance,
     pub bands: BTreeMap<String, f64>,
+    /// The spread of each banded matching count over the repeats
+    /// (`eval::matching`, exp208); empty for a slot measured before.
+    #[serde(default)]
+    pub matching_bands: BTreeMap<String, f64>,
     pub by_mode: BTreeMap<String, ModeBands>,
     #[serde(default)]
     pub by_scorer: BTreeMap<String, ScorerBands>,
@@ -91,16 +95,24 @@ pub struct NoiseBands {
 pub struct ScorerBands {
     pub provenance: BandProvenance,
     pub bands: BTreeMap<String, f64>,
+    /// The spread of each banded matching count over the repeats
+    /// (`eval::matching`, exp208); empty for a slot measured before.
+    #[serde(default)]
+    pub matching_bands: BTreeMap<String, f64>,
     #[serde(default)]
     pub by_mode: BTreeMap<String, ModeBands>,
 }
 
 /// One naming mode's bands.
 #[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ModeBands {
     pub provenance: BandProvenance,
     pub bands: BTreeMap<String, f64>,
+    /// The spread of each banded matching count over the repeats
+    /// (`eval::matching`, exp208); empty for a slot measured before.
+    #[serde(default)]
+    pub matching_bands: BTreeMap<String, f64>,
 }
 
 /// Where a band came from.
@@ -117,6 +129,13 @@ pub struct BandProvenance {
     #[serde(default)]
     pub pairs: Option<Vec<String>>,
 }
+
+/// One slot's provenance, KPI bands and matching bands.
+type SlotRef<'a> = (
+    &'a BandProvenance,
+    &'a BTreeMap<String, f64>,
+    &'a BTreeMap<String, f64>,
+);
 
 impl NoiseBands {
     /// Scorer 1's bands of a naming mode: `off` is the top level.
@@ -136,15 +155,33 @@ impl NoiseBands {
         scorer: u64,
         mode: &str,
     ) -> Option<(&BandProvenance, &BTreeMap<String, f64>)> {
-        let (top, top_bands, by_mode) = if scorer == 1 {
-            (&self.provenance, &self.bands, &self.by_mode)
+        self.slot(scorer, mode).map(|(p, b, _)| (p, b))
+    }
+
+    /// The matching-count spreads of one scorer version's naming mode;
+    /// None when that slot has none (measured before exp208).
+    pub fn matching_bands(&self, scorer: u64, mode: &str) -> Option<&BTreeMap<String, f64>> {
+        self.slot(scorer, mode)
+            .map(|(_, _, m)| m)
+            .filter(|m| !m.is_empty())
+    }
+
+    /// One slot: provenance, KPI bands, matching bands.
+    fn slot(&self, scorer: u64, mode: &str) -> Option<SlotRef<'_>> {
+        let (top, by_mode) = if scorer == 1 {
+            (
+                (&self.provenance, &self.bands, &self.matching_bands),
+                &self.by_mode,
+            )
         } else {
             let s = self.by_scorer.get(&scorer.to_string())?;
-            (&s.provenance, &s.bands, &s.by_mode)
+            ((&s.provenance, &s.bands, &s.matching_bands), &s.by_mode)
         };
         match mode {
-            "off" => Some((top, top_bands)),
-            other => by_mode.get(other).map(|m| (&m.provenance, &m.bands)),
+            "off" => Some(top),
+            other => by_mode
+                .get(other)
+                .map(|m| (&m.provenance, &m.bands, &m.matching_bands)),
         }
     }
 }

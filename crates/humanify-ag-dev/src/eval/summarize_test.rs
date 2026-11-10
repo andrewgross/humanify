@@ -84,3 +84,26 @@ fn the_llm_diagnostics_come_from_each_pairs_stats_file() {
     let bc = text.lines().find(|l| l.starts_with("b->c")).unwrap();
     assert!(bc.split_whitespace().skip(1).all(|c| c == "-"), "{bc}");
 }
+
+/// exp208: the matching counts come from the same stats file; a pair
+/// whose stats carry no coverage prints `-` and gets no digest.
+#[test]
+fn the_matching_counts_come_from_each_pairs_stats_file() {
+    let dir = std::env::temp_dir().join(format!("dev-summarize-match-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("b.stats.json"),
+        r#"{"coverage":{"functions":{"total":40,"llm":3,"failed":1,"cached":30}},"resolutionStats":{"unmatched":2}}"#,
+    )
+    .unwrap();
+    std::fs::write(dir.join("c.stats.json"), r#"{"reask":{}}"#).unwrap();
+    let cards = [card("a->b", 1.0, false), card("b->c", 1.0, false)];
+    let (digests, lines) = matching_section(&dir, &cards);
+    assert_eq!(digests.len(), 1);
+    assert_eq!(number_at(&digests[0], "fnAsked"), Some(4.0));
+    let text = lines.join("\n");
+    assert!(text.contains("MATCHING"), "{text}");
+    let bc = text.lines().find(|l| l.starts_with("b->c")).unwrap();
+    assert!(bc.split_whitespace().skip(1).all(|c| c == "-"), "{bc}");
+}

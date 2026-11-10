@@ -3,7 +3,7 @@
 
 use humanify_ag_model::js::JsValue;
 
-use super::{digest, fold, tables};
+use super::{LLM_CALLS, digest, fold, tables};
 
 fn stats(calls: f64, p90: f64, taken: f64) -> JsValue {
     JsValue::parse(&format!(
@@ -34,8 +34,14 @@ fn n(v: &JsValue, k: &str) -> Option<f64> {
 
 #[test]
 fn a_run_without_a_call_ledger_has_no_digest() {
-    assert!(digest(&JsValue::parse(r#"{"reask":{"lateRejections":3}}"#).unwrap()).is_none());
-    let d = digest(&stats(5.0, 20.0, 1.0)).unwrap();
+    assert!(
+        digest(
+            &LLM_CALLS,
+            &JsValue::parse(r#"{"reask":{"lateRejections":3}}"#).unwrap()
+        )
+        .is_none()
+    );
+    let d = digest(&LLM_CALLS, &stats(5.0, 20.0, 1.0)).unwrap();
     assert_eq!(n(&d, "calls"), Some(5.0));
     assert_eq!(n(&d, "rTimeout"), Some(2.0));
     assert_eq!(n(&d, "taken"), Some(1.0));
@@ -47,24 +53,25 @@ fn a_run_without_a_call_ledger_has_no_digest() {
 #[test]
 fn counts_sum_and_percentiles_take_the_worst_pair() {
     let digests = vec![
-        with_pair("a->b", digest(&stats(5.0, 20.0, 1.0)).unwrap()),
-        with_pair("b->c", digest(&stats(7.0, 90.0, 2.0)).unwrap()),
+        with_pair("a->b", digest(&LLM_CALLS, &stats(5.0, 20.0, 1.0)).unwrap()),
+        with_pair("b->c", digest(&LLM_CALLS, &stats(7.0, 90.0, 2.0)).unwrap()),
     ];
     let pairs = vec!["a->b".to_string(), "b->c".to_string()];
-    let f = fold(&digests, &pairs).unwrap();
+    let f = fold(&LLM_CALLS, &digests, &pairs).unwrap();
     assert_eq!(n(&f, "calls"), Some(12.0));
     assert_eq!(n(&f, "taken"), Some(3.0));
     assert_eq!(n(&f, "p90ms"), Some(90.0));
     // A pair without a digest makes the whole fold unknown.
     let more = vec!["a->b".to_string(), "c->d".to_string()];
-    assert!(fold(&digests, &more).is_none());
+    assert!(fold(&LLM_CALLS, &digests, &more).is_none());
 }
 
 #[test]
 fn the_tables_print_deltas_against_the_first_row_and_dash_for_legacy() {
-    let a = digest(&stats(5.0, 20.0, 1.0));
-    let b = digest(&stats(5.0, 80.0, 4.0));
+    let a = digest(&LLM_CALLS, &stats(5.0, 20.0, 1.0));
+    let b = digest(&LLM_CALLS, &stats(5.0, 80.0, 4.0));
     let text = tables(
+        &LLM_CALLS,
         "t",
         &[
             ("base".into(), a),

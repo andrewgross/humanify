@@ -13,6 +13,10 @@
 //! (a warm cache), so between two cold runs they move with the model's
 //! draws as well as with the change under test. A run scored before
 //! exp206 has no ledger: every column prints `-`.
+//!
+//! The digest / fold / table engine is shared by every per-run stats
+//! diagnostic (a `Spec`): the call ledger here (`LLM_CALLS`) and the
+//! matching counts (`eval::matching::MATCHING`, exp208).
 
 use std::path::Path;
 
@@ -28,14 +32,15 @@ enum Fold {
     Max,
 }
 
-struct Col {
-    key: &'static str,
-    /// Where the number lives in a `--stats-json` record.
+pub struct Col {
+    pub key: &'static str,
+    /// Where the number lives in a `--stats-json` record; `a+b` is the
+    /// sum of two paths (absent when either is).
     path: &'static str,
     fold: Fold,
 }
 
-const fn sum(key: &'static str, path: &'static str) -> Col {
+pub const fn sum(key: &'static str, path: &'static str) -> Col {
     Col {
         key,
         path,
@@ -51,7 +56,23 @@ const fn max(key: &'static str, path: &'static str) -> Col {
     }
 }
 
-/// (group title, columns). Every column of every group is in the digest.
+/// One family of per-run diagnostics read from `--stats-json`.
+pub struct Spec {
+    /// A run without this block has no digest at all (every cell `-`).
+    pub present: &'static str,
+    /// (group title, columns). Every column of every group is in the digest.
+    pub groups: &'static [(&'static str, &'static [Col])],
+    /// The line printed under every table's title.
+    pub caption: &'static str,
+}
+
+/// The LLM call ledger (exp206).
+pub const LLM_CALLS: Spec = Spec {
+    present: "llmCalls",
+    groups: GROUPS,
+    caption: "DIAGNOSTICS, not KPIs: no band, no grade — they say WHY a KPI moved (server speed, the model's answers, backups taken, lost answers). '-' = scored before exp206 (no call ledger).",
+};
+
 const GROUPS: &[(&str, &[Col])] = &[
     (
         "SERVER (moves with the endpoint and the cache; ms columns: worst pair)",
@@ -107,17 +128,26 @@ const GROUPS: &[(&str, &[Col])] = &[
     ),
 ];
 
-fn cols() -> impl Iterator<Item = &'static Col> {
-    GROUPS.iter().flat_map(|(_, c)| c.iter())
+impl Spec {
+    pub fn cols(&self) -> impl Iterator<Item = &'static Col> {
+        self.groups.iter().flat_map(|(_, c)| c.iter())
+    }
+}
+
+/// The number a column reads from a stats record (`a+b` sums two paths).
+fn read(stats: &JsValue, path: &str) -> Option<f64> {
+    path.split('+')
+        .map(|p| number_at(stats, p))
+        .sum::<Option<f64>>()
 }
 
 /// One run's digest from its `--stats-json` record; None for a run
-/// without a call ledger (scored before exp206).
-pub fn digest(stats: &JsValue) -> Option<JsValue> {
-    at(stats, "llmCalls")?;
+/// without the spec's block (for the call ledger: scored before exp206).
+pub fn digest(spec: &Spec, stats: &JsValue) -> Option<JsValue> {
+    at(stats, spec.present)?;
     let mut o = JsObject::new();
-    for c in cols() {
-        if let Some(n) = number_at(stats, c.path) {
+    for c in spec.cols() {
+        if let Some(n) = read(stats, c.path) {
             o.insert(c.key, JsValue::Number(n));
         }
     }
@@ -126,14 +156,14 @@ pub fn digest(stats: &JsValue) -> Option<JsValue> {
 
 /// `{pair, ...digest}` for every card whose scored run left a ledger, read
 /// from the label's `<to>.stats.json`.
-pub fn pair_digests(dir: &Path, cards: &[JsValue]) -> Vec<JsValue> {
+pub fn pair_digests(spec: &Spec, dir: &Path, cards: &[JsValue]) -> Vec<JsValue> {
     cards
         .iter()
         .filter_map(|card| {
             let pair = at(card, "pair")?.as_str()?;
             let to = pair.rsplit("->").next()?;
             let text = std::fs::read_to_string(dir.join(format!("{to}.stats.json"))).ok()?;
-            let d = digest(&JsValue::parse(&text).ok()?)?;
+            let d = digest(spec, &JsValue::parse(&text).ok()?)?;
             let mut o = JsObject::new();
             o.insert("pair", JsValue::str(pair));
             for (k, v) in d.as_object()?.entries() {
@@ -147,7 +177,7 @@ pub fn pair_digests(dir: &Path, cards: &[JsValue]) -> Vec<JsValue> {
 /// A label's digests folded over `pairs` (sum, or the worst pair for a
 /// percentile). None when any of those pairs has no digest — a partial
 /// total would read as a real drop.
-pub fn fold(digests: &[JsValue], pairs: &[String]) -> Option<JsValue> {
+pub fn fold(spec: &Spec, digests: &[JsValue], pairs: &[String]) -> Option<JsValue> {
     let chosen: Vec<&JsValue> = pairs
         .iter()
         .map(|p| {
@@ -157,7 +187,7 @@ pub fn fold(digests: &[JsValue], pairs: &[String]) -> Option<JsValue> {
         })
         .collect::<Option<_>>()?;
     let mut o = JsObject::new();
-    for c in cols() {
+    for c in spec.cols() {
         let values: Vec<f64> = chosen.iter().filter_map(|d| number_at(d, c.key)).collect();
         if values.len() != chosen.len() {
             continue;
@@ -192,11 +222,14 @@ fn value_cell(v: Option<f64>, base: Option<f64>, is_base: bool) -> String {
 /// `-`). With `deltas`, the first row is the baseline the others' deltas
 /// are against (the leaderboard); without, plain values (summarize's
 /// per-pair rows).
-pub fn tables(title: &str, rows: &[(String, Option<JsValue>)], deltas: bool) -> Vec<String> {
+pub fn tables(
+    spec: &Spec,
+    title: &str,
+    rows: &[(String, Option<JsValue>)],
+    deltas: bool,
+) -> Vec<String> {
     let mut out = vec![format!("\n=== {title} ===")];
-    out.push(
-        "DIAGNOSTICS, not KPIs: no band, no grade — they say WHY a KPI moved (server speed, the model's answers, backups taken, lost answers). '-' = scored before exp206 (no call ledger).".into(),
-    );
+    out.push(spec.caption.into());
     let name_w = rows
         .iter()
         .map(|(n, _)| n.chars().count())
@@ -207,7 +240,7 @@ pub fn tables(title: &str, rows: &[(String, Option<JsValue>)], deltas: bool) -> 
         .first()
         .and_then(|(_, d)| d.as_ref())
         .filter(|_| deltas);
-    for (group, columns) in GROUPS {
+    for (group, columns) in spec.groups {
         out.push(format!("-- {group}"));
         let widths: Vec<usize> = columns
             .iter()

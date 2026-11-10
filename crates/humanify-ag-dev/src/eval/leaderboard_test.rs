@@ -150,26 +150,11 @@ fn bands_measured_over_other_pairs_say_so() {
 /// Give `name`'s summary an `llmDiagnostics` entry per pair (exp206) with
 /// `sent` calls and a `p90ms` of `p90` each.
 fn add_llm_diagnostics(root: &Path, name: &str, sent: f64, p90: f64) {
-    let path = root.join(name).join("summary.json");
-    let summary = JsValue::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
-    let diags: Vec<JsValue> = match at(&summary, "pairs") {
-        Some(JsValue::Array(a)) => a
-            .iter()
-            .map(|c| {
-                let pair = card_pair(c).unwrap();
-                JsValue::parse(&format!(
-                    r#"{{"pair":"{pair}","sent":{sent},"p90ms":{p90},"failed":0}}"#
-                ))
-                .unwrap()
-            })
-            .collect(),
-        _ => panic!("summary.json pairs"),
-    };
-    let JsValue::Object(mut o) = summary else {
-        panic!("summary.json is an object")
-    };
-    o.insert("llmDiagnostics", JsValue::Array(diags));
-    std::fs::write(&path, crate::json::js_text(&JsValue::Object(o), true)).unwrap();
+    crate::eval::test_support::set_pair_diagnostics(
+        &root.join(name),
+        "llmDiagnostics",
+        &format!(r#""sent":{sent},"p90ms":{p90},"failed":0"#),
+    );
 }
 
 #[test]
@@ -203,4 +188,45 @@ fn the_llm_diagnostics_print_side_by_side_and_dash_for_a_legacy_label() {
         legacy >= 3,
         "a legacy label prints '-' in every group: {text}"
     );
+}
+
+#[test]
+fn the_matching_counts_print_side_by_side_and_a_same_commit_move_is_flagged() {
+    let root = std::env::temp_dir().join(format!("dev-leaderboard-match-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    for n in ["r1", "r2", "legacy"] {
+        label(&root, n, Some(2));
+    }
+    crate::eval::test_support::set_matching(&root.join("r1"), 10.0, 4.0);
+    crate::eval::test_support::set_matching(&root.join("r2"), 11.0, 9.0);
+    let names: Vec<String> = ["r1", "r2", "legacy"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let bands: NoiseBands = serde_json::from_str(
+        r#"{"provenance":{"provisional":true,"sources":[],"commit":"","labels":[]},"bands":{},"byMode":{},
+        "byScorer":{"2":{"provenance":{"provisional":false,"sources":[],"commit":"x","labels":[]},"bands":{"novel":0},
+        "matchingBands":{"mbLLMRenamed":8}}}}"#,
+    )
+    .unwrap();
+    let text = leaderboard(&root, &names, Some(&bands), false).unwrap();
+    assert!(text.contains("MATCHING"), "{text}");
+    // Four pairs: fnAsked 40 vs 44, mbLLMRenamed 16 vs 36 (band ±8).
+    let r2: Vec<&str> = text.lines().filter(|l| l.starts_with("r2")).collect();
+    assert!(r2.iter().any(|l| l.contains("44 (+4)")), "{r2:?}");
+    assert!(
+        text.contains("!! MATCHING NOT EQUAL at the same commit: r2 fnAsked 44 vs r1 40"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "!! MATCHING outside its band at the same commit: r2 mbLLMRenamed 36 vs r1 16 (band ±8)"
+        ),
+        "{text}"
+    );
+    let legacy = text
+        .lines()
+        .filter(|l| l.starts_with("legacy") && l.split_whitespace().nth(1) == Some("-"))
+        .count();
+    assert!(legacy >= 3, "{text}");
 }

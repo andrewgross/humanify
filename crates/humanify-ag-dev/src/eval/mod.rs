@@ -13,6 +13,7 @@ pub mod leaderboard;
 pub mod line_churn;
 pub mod line_tokens;
 pub mod llm_diag;
+pub mod matching;
 pub mod real_ledger;
 pub mod report;
 pub mod rescore;
@@ -22,3 +23,6 @@ pub mod surfaces;
 pub mod text;
 pub mod vendor;
 pub mod verbs;
+
+#[cfg(test)]
+mod test_support;
