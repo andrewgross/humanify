@@ -765,7 +765,10 @@ fn one_rebase_runs_at_a_time_self_hop_pair_first_and_each_lane_says_its_wait() {
 fn parallel_rebases_lets_that_many_overlap() {
     let h = run_score(
         &with(&["--parallel-rebases", "5"]),
-        lane_recorder("2.1.85-rebased"),
+        // EVERY rebase is slow (~2 s): an instant one could end before the
+        // last one starts and make the overlap a race (seen once in a
+        // clean-checkout gate)
+        lane_recorder("-rebased"),
     )
     .unwrap();
     assert_ran(&h);
