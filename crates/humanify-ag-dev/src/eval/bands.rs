@@ -8,7 +8,9 @@
 //! the pairs too, recorded as `provenance.pairs`), and the bands are written into
 //! that mode's slot of that scorer version's section of
 //! `noise-bands.json` (scorer 1 at the top; scorer N under
-//! `byScorer.<N>`), every other slot kept.
+//! `byScorer.<N>`), every other slot kept. The repeats' matching counts
+//! (`eval::matching`, exp208) are checked first: an EXACT count that
+//! differs refuses the write; the rest's spreads go in as `matchingBands`.
 
 use std::path::Path;
 
@@ -46,6 +48,7 @@ fn section(
     labels: &[String],
     pairs: &[String],
     bands: &[(String, Option<f64>)],
+    matching: Option<&[(String, f64)]>,
 ) -> JsValue {
     let mut b = JsObject::new();
     for (k, v) in bands {
@@ -53,7 +56,7 @@ fn section(
             b.insert(k.clone(), JsValue::Number(*v));
         }
     }
-    obj(vec![
+    let mut entries = vec![
         (
             "provenance",
             obj(vec![
@@ -71,7 +74,42 @@ fn section(
             ]),
         ),
         ("bands", JsValue::Object(b)),
-    ])
+    ];
+    if let Some(m) = matching {
+        let mut o = JsObject::new();
+        for (k, v) in m {
+            o.insert(k.clone(), JsValue::Number(*v));
+        }
+        entries.push(("matchingBands", JsValue::Object(o)));
+    }
+    obj(entries)
+}
+
+/// The repeats' matching counts (exp208): their spreads, or the
+/// NOT-EQUAL lines that refuse the whole slot (an exact count that
+/// differs between same-commit repeats is a harness or determinism
+/// problem, so their KPI spread is not a floor either). Ok(None) when a
+/// repeat records no matching counts.
+fn matching_spreads(
+    labels: &[String],
+    summaries: &[JsValue],
+    pairs: &[String],
+) -> Result<Option<Vec<(String, f64)>>, String> {
+    let digests: Vec<(String, Vec<JsValue>)> = labels
+        .iter()
+        .zip(summaries)
+        .map(|(l, s)| (l.clone(), super::matching::summary_digests(s)))
+        .collect();
+    let Some(r) = super::matching::repeats(&digests, pairs) else {
+        return Ok(None);
+    };
+    if !r.not_equal.is_empty() {
+        return Err(format!(
+            "refusing: an EXACT matching count differs between same-commit repeats — a harness or determinism problem, not the LLM; nothing written.\n{}",
+            r.not_equal.join("\n")
+        ));
+    }
+    Ok(Some(r.spreads))
 }
 
 fn get_obj<'a>(o: &'a mut JsObject, key: &str) -> &'a mut JsObject {
@@ -239,6 +277,29 @@ fn self_hop_line(
     })
 }
 
+/// What the bands verb says about the matching counts it wrote.
+fn matching_line(matching: Option<&[(String, f64)]>) -> String {
+    match matching {
+        None => "matching counts NOT measured: a repeat's summary.json has no matchingDiagnostics for every pair (re-run `eval summarize` on each; a run without stats has none).\n".into(),
+        Some(m) => {
+            let said: Vec<String> = m
+                .iter()
+                .map(|(k, v)| {
+                    if super::matching::is_exact(k) {
+                        format!("{k} equal")
+                    } else {
+                        format!("{k} ±{}", humanify_ag_model::js::number_to_string(*v))
+                    }
+                })
+                .collect();
+            format!(
+                "matching counts: every EXACT count equal across the repeats on every pair; spreads written as matchingBands: {}\n",
+                said.join(", ")
+            )
+        }
+    }
+}
+
 /// Measure bands from `labels` (under `results`) and write them into
 /// `bands_file`, and the repeats' cold self-hop range into
 /// `self_hop_file`. Returns the lines to print.
@@ -253,6 +314,7 @@ pub fn bands(
     }
     let mut ids: Vec<(String, Vec<Identity>)> = Vec::new();
     let mut totals = Vec::new();
+    let mut summaries = Vec::new();
     let mut commits = Vec::new();
     for l in labels {
         let dir = results.join(l);
@@ -269,6 +331,7 @@ pub fn bands(
                 .cloned()
                 .unwrap_or(JsValue::Null),
         );
+        summaries.push(s);
         commits.push(
             std::fs::read_to_string(dir.join("commit.txt"))
                 .map(|c| c.split_whitespace().next().unwrap_or_default().to_string())
@@ -301,19 +364,21 @@ pub fn bands(
         .known()
         .and_then(|v| v.parse().ok())
         .ok_or("the labels record no scorer version")?;
+    let matching = matching_spreads(labels, &summaries, &pairs)?;
     let measured = compute_bands(&totals);
     let mut file = read_object(bands_file)?;
     write_slot(
         &mut file,
         scorer,
         &mode,
-        section(&commits[0], labels, &pairs, &measured),
+        section(&commits[0], labels, &pairs, &measured, matching.as_deref()),
     );
     write_object(bands_file, file)?;
     let hop = self_hop_line(results, labels, &mode, &commits[0], self_hop_file)?;
     Ok(format!(
-        "wrote measured scorer-{scorer} {mode}-mode bands: {}\n{hop}",
-        bands_file.display()
+        "wrote measured scorer-{scorer} {mode}-mode bands: {}\n{}{hop}",
+        bands_file.display(),
+        matching_line(matching.as_deref())
     ))
 }
 
