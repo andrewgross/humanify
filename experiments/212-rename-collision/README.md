@@ -116,7 +116,7 @@ only the catch-parameter direction (op 2).
 | format-golden | PASS |
 | e2e | PASS |
 
-Clean checkout gate: see the report (run after the commit).
+Clean checkout of `b0489d98d` (`/work/exp212-rename-collision-clean`): ALL 11 STAGES PASSED (same table; census:clones REVIEW).
 
 ## What this does NOT prove
 
