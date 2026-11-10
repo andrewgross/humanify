@@ -922,20 +922,6 @@ fn entry_factories_of(
     )
 }
 
-/// The package a names-mode placement path files a module under
-/// (`vendor/<package>/…`, `vendor/@scope/name/…`).
-fn package_of_vendor_path(path: &str) -> Option<String> {
-    let mut parts = path.strip_prefix(VENDOR_DIR)?.strip_prefix('/')?.split('/');
-    let first = parts.next()?;
-    let package = if first.starts_with('@') {
-        format!("{first}/{}", parts.next()?)
-    } else {
-        first.to_string()
-    };
-    // A file directly under vendor/ names no package.
-    parts.next().map(|_| package)
-}
-
 /// The app-module decision (exp172, `modules::app_factories`) over the
 /// RETAINED factories: every accepted one is removed from the
 /// classification (it stays in the app text, which the naming, the split
@@ -988,7 +974,11 @@ fn keep_app_factories(
                 ),
                 u64::from(f.span.end - f.span.start),
             );
-            if let Some(p) = f.index_path.as_deref().and_then(package_of_vendor_path) {
+            if let Some(p) = f
+                .index_path
+                .as_deref()
+                .and_then(crate::modules::vendor_names::package_of_vendor_path)
+            {
                 packages.insert(p);
             }
             let declared = f.identity.as_ref().and_then(|d| d.package.clone());
@@ -1138,11 +1128,16 @@ fn place_factories_from_index(
             sort_key: keys[i]
                 .clone()
                 .unwrap_or_else(|| factory.structural_hash.clone()),
+            // A factory's prior path is the manifest carry's (exp194), which
+            // the naming ladder applies before the index's: nothing to pass.
+            carried: None,
         })
         .collect();
+    let families = crate::libindex::families::PackageFamilies::shipped();
     let layout = plan(&LayoutInput {
         regions,
         module_answers: &answers,
+        families: &families,
     });
     for ((factory, placement), key) in c.factories.iter_mut().zip(&layout.regions).zip(keys.iter())
     {

@@ -161,6 +161,7 @@ fn run(fresh: &str, prior: Option<&str>, provider: &ModuleProvider) -> NamingOut
             prior,
             library: None,
             claimed_regions: &[],
+            prior_library: &Default::default(),
             era_bridge: None,
             restorations: crate::naming::driver::no_restorations(),
             statement_holds: &[],
@@ -482,6 +483,7 @@ fn run_with_regions(
             prior,
             library: None,
             claimed_regions: regions,
+            prior_library: &Default::default(),
             era_bridge: None,
             restorations: crate::naming::driver::no_restorations(),
             statement_holds: &[],
@@ -508,6 +510,7 @@ fn run_with_restorations(
             prior,
             library: None,
             claimed_regions: regions,
+            prior_library: &Default::default(),
             era_bridge: None,
             restorations,
             statement_holds: &[],
@@ -709,6 +712,7 @@ fn run_bridged(
             prior: None,
             library: None,
             claimed_regions: regions,
+            prior_library: &Default::default(),
             era_bridge: Some(crate::naming::driver::EraBridgeInput { bridge, origins }),
             restorations: crate::naming::driver::no_restorations(),
             statement_holds: &[],
@@ -898,6 +902,25 @@ use crate::naming::module_names::{ModuleSource, plan_library_modules};
 /// The naming era, purely: parse `source`, take the program body (no
 /// wrapper), and plan the claimed regions against the era's extraction.
 fn era_layout(source: &str, regions: &[ClaimedRegion]) -> LibraryLayout {
+    era_layout_with_prior(source, regions, &Default::default())
+}
+
+/// The program body's statements as the era sees them.
+fn era_body(source: &str) -> Vec<serde_json::Value> {
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, source, "test.js");
+    let json = crate::ingest::program_estree_json(ingest.program);
+    crate::cut::container_statement_values(&json, None)
+        .expect("program body")
+        .clone()
+}
+
+/// [`era_layout`] with the prior release's placement carry (exp211).
+fn era_layout_with_prior(
+    source: &str,
+    regions: &[ClaimedRegion],
+    prior: &std::collections::BTreeMap<String, String>,
+) -> LibraryLayout {
     let allocator = oxc_allocator::Allocator::default();
     let ingest = crate::ingest::Ingest::parse(&allocator, source, "test.js");
     let json = crate::ingest::program_estree_json(ingest.program);
@@ -911,6 +934,7 @@ fn era_layout(source: &str, regions: &[ClaimedRegion]) -> LibraryLayout {
             grammar: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
         },
         regions,
+        prior,
     )
 }
 
@@ -1072,5 +1096,125 @@ fn a_module_two_packages_claim_is_never_moved() {
         out.moved.is_empty(),
         "a contested module never moves: {:?}",
         out.moved
+    );
+}
+
+// exp211: the prior release's library placement, by module CONTENT key —
+// the same key the era names a synthetic vendor file by — read from the
+// prior's split ledger (`fossilModules`: each module's file and sorted
+// statement hashes).
+fn ledger_module(file: &str, hashes: &[&str]) -> crate::place::ledger::FossilLedgerModule {
+    crate::place::ledger::FossilLedgerModule {
+        file: file.to_string(),
+        hashes: hashes.iter().map(|h| h.to_string()).collect(),
+        ..Default::default()
+    }
+}
+
+fn ledger_of(
+    modules: Vec<crate::place::ledger::FossilLedgerModule>,
+) -> crate::place::ledger::StableSplitLedger {
+    crate::place::ledger::StableSplitLedger {
+        hash_version: Some(crate::hash::forms::STATEMENT.version),
+        fossil_modules: Some(modules),
+        ..Default::default()
+    }
+}
+
+fn key(hashes: &[&str]) -> String {
+    let hashes: Vec<String> = hashes.iter().map(|h| h.to_string()).collect();
+    crate::naming::module_names::content_key_of_hashes(&hashes)
+}
+
+#[test]
+fn the_prior_s_vendor_modules_carry_their_package_by_content() {
+    let ledger = ledger_of(vec![
+        ledger_module("vendor/lodash-es/module-0581b523.js", &["h1", "h2"]),
+        ledger_module("vendor/@aws-sdk/core/dist-cjs/index.js", &["h3"]),
+        ledger_module("src/app/main.js", &["h4"]),
+        ledger_module("vendor/lib_abcdef12.js", &["h5"]),
+    ]);
+    let carry = crate::naming::module_names::prior_library_packages(&ledger);
+    assert_eq!(
+        carry,
+        std::collections::BTreeMap::from([
+            (key(&["h1", "h2"]), "lodash-es".to_string()),
+            (key(&["h3"]), "@aws-sdk/core".to_string()),
+        ]),
+        "a vendor module under a package folder carries that package; app \
+         modules and files at the vendor root name no package"
+    );
+    assert_eq!(
+        key(&["h2", "h1"]),
+        key(&["h1", "h2"]),
+        "the key is the SORTED statement hashes, in either order"
+    );
+}
+
+#[test]
+fn content_the_prior_filed_under_two_packages_carries_nothing() {
+    let ledger = ledger_of(vec![
+        ledger_module("vendor/lodash/module-171a8dac.js", &["h1"]),
+        ledger_module("vendor/lodash-es/module-171a8dac.js", &["h1"]),
+        ledger_module("vendor/lodash-es/module-d45aa709.js", &["h2"]),
+        ledger_module("vendor/lodash-es/module-d45aa709-2.js", &["h2"]),
+    ]);
+    let carry = crate::naming::module_names::prior_library_packages(&ledger);
+    assert_eq!(
+        carry,
+        std::collections::BTreeMap::from([(key(&["h2"]), "lodash-es".to_string())]),
+        "two copies under one package carry it; copies under two packages \
+         are no choice at all"
+    );
+}
+
+#[test]
+fn a_stale_era_ledger_carries_nothing() {
+    let mut ledger = ledger_of(vec![ledger_module("vendor/ms/index.js", &["h1"])]);
+    ledger.hash_version = Some(1);
+    assert!(
+        crate::naming::module_names::prior_library_packages(&ledger).is_empty(),
+        "another hash era's statement hashes are not this run's keys"
+    );
+}
+
+// exp211 end to end through the era: the prior filed module m1 (statements
+// 3..=4) under `lodash-es`; this version's discovery claims it for
+// `lodash`, its family twin. The prior's package is kept, by the module's
+// own content key — the key the ledger carry computes the same way.
+#[test]
+fn the_era_keeps_the_prior_s_package_for_a_family_twin_claim() {
+    let body = era_body(TIE_BUNDLE);
+    let hashes: Vec<String> = [3usize, 4]
+        .iter()
+        .map(|&i| crate::hash::statement_hash::statement_hash(&body[i]))
+        .collect();
+    let key = crate::naming::module_names::content_key_of_hashes(&hashes);
+    let fresh = era_layout(TIE_BUNDLE, &[claimed_all(&[3, 4], "lodash")]);
+    assert_eq!(fresh.moved.len(), 1, "{:?}", fresh.moved);
+    assert_eq!(
+        fresh.moved[0].1,
+        format!("vendor/lodash/module-{}.js", &key[..8]),
+        "without a prior the claim decides, and the synthetic name is the \
+         content key the carry reads"
+    );
+    let carried = era_layout_with_prior(
+        TIE_BUNDLE,
+        &[claimed_all(&[3, 4], "lodash")],
+        &std::collections::BTreeMap::from([(key.clone(), "lodash-es".to_string())]),
+    );
+    assert_eq!(
+        carried.moved[0].1,
+        format!("vendor/lodash-es/module-{}.js", &key[..8]),
+        "the prior's package for the same content wins within the family"
+    );
+    let foreign = era_layout_with_prior(
+        TIE_BUNDLE,
+        &[claimed_all(&[3, 4], "lodash")],
+        &std::collections::BTreeMap::from([(key, "ms".to_string())]),
+    );
+    assert_eq!(
+        foreign.moved, fresh.moved,
+        "a prior package of another family changes nothing"
     );
 }

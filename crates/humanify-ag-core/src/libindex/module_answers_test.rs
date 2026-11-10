@@ -48,8 +48,7 @@ fn a_single_owner_row_answers_its_files() {
         BTreeMap::from([(
             "k1".to_string(),
             crate::place::library_layout::ModuleAnswer {
-                owners: vec!["ms".to_string()],
-                files: vec!["index.js".to_string()],
+                owners: BTreeMap::from([("ms".to_string(), vec!["index.js".to_string()])]),
             }
         )]),
         "only the keys asked for are read back, with their files"
@@ -57,23 +56,25 @@ fn a_single_owner_row_answers_its_files() {
 }
 
 #[test]
-fn a_key_two_packages_hold_answers_foreign() {
+fn a_key_two_packages_hold_answers_every_owner_with_its_own_files() {
     let d = dir("collide");
     write_rows(
         &d,
         "s",
         &[
-            row("k1", "aa", &["index.js"]),
-            row("k1", "bb", &["index.js"]),
+            row("k1", "aa", &["lib/a.js"]),
+            row("k1", "bb", &["dist/b.js"]),
         ],
     );
     let out = read_module_answers(&d, "s", &keys(&["k1"])).unwrap();
-    let answer = &out["k1"];
-    assert_eq!(answer.owners, vec!["aa".to_string(), "bb".to_string()]);
-    assert!(
-        answer.files.is_empty(),
-        "a key held by two packages is the planner's disagreement case — \
-         no file is offered"
+    assert_eq!(
+        out["k1"].owners,
+        BTreeMap::from([
+            ("aa".to_string(), vec!["lib/a.js".to_string()]),
+            ("bb".to_string(), vec!["dist/b.js".to_string()]),
+        ]),
+        "a key held by two packages keeps each owner's files (exp211): \
+         whether the claim is one of them is the planner's question"
     );
 }
 
@@ -83,7 +84,7 @@ fn a_multi_file_row_answers_all_its_files_sorted() {
     write_rows(&d, "s", &[row("k1", "ms", &["b.js", "a.js"])]);
     let out = read_module_answers(&d, "s", &keys(&["k1"])).unwrap();
     assert_eq!(
-        out["k1"].files,
+        out["k1"].owners["ms"],
         vec!["a.js".to_string(), "b.js".to_string()]
     );
 }

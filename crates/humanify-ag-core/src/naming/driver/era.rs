@@ -93,6 +93,10 @@ pub struct EraOptions<'o> {
     /// `era_bridge`. Read BEFORE the freeze: the layout it plans feeds the
     /// split's vendor paths and the restored-binding holds.
     pub claimed_regions: &'o [crate::naming::module_names::ClaimedRegion],
+    /// The prior release's library placement by module content key
+    /// (exp211, [`crate::naming::module_names::prior_library_packages`]);
+    /// empty without a prior or outside names mode.
+    pub prior_library: &'o std::collections::BTreeMap<String, String>,
     /// The raw-to-era bridge (exp166) for this file, names mode only.
     pub era_bridge: Option<crate::naming::driver::EraBridgeInput<'o>>,
     /// The claimed units' captured restoration answers (exp160,
@@ -1033,8 +1037,11 @@ fn plan_layout(
     let Some(bridge) = opts.era_bridge else {
         // No bridge: the regions are taken as given (era ordinals) and,
         // with no restoration record, nothing is frozen.
-        let mut layout =
-            crate::naming::module_names::plan_library_modules(source, opts.claimed_regions);
+        let mut layout = crate::naming::module_names::plan_library_modules(
+            source,
+            opts.claimed_regions,
+            opts.prior_library,
+        );
         layout.spans.clear();
         layout.regions = opts.claimed_regions.to_vec();
         if !opts.statement_holds.is_empty() {
@@ -1066,12 +1073,17 @@ fn plan_layout(
     let era_raw = bridge.bridge.era_raw_spans(&body_spans, bridge.origins);
     let (regions, conversion) =
         crate::naming::module_names::convert_regions(opts.claimed_regions, &era_raw);
-    let mut layout = crate::naming::module_names::plan_library_modules(source, &regions);
+    let mut layout =
+        crate::naming::module_names::plan_library_modules(source, &regions, opts.prior_library);
     // The baseline the precision check compares against (diagnostics
     // only): the retired ordinal conversion's plan over the same groups.
     let ordinal_regions = bridge.bridge.ordinal_regions(opts.claimed_regions);
-    layout.ordinal_moved_files =
-        crate::naming::module_names::plan_library_modules(source, &ordinal_regions).moved_files;
+    layout.ordinal_moved_files = crate::naming::module_names::plan_library_modules(
+        source,
+        &ordinal_regions,
+        opts.prior_library,
+    )
+    .moved_files;
     layout.ordinal_regions = ordinal_regions;
     layout.spans = restored_binding_spans(
         semantic,
