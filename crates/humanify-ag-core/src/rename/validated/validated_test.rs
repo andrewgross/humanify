@@ -579,6 +579,82 @@ fn the_catch_var_capture_is_rejected() {
     }
 }
 
+/// exp212 (2.1.89 cold walk, 2026-11-10): the OTHER direction of #15.
+/// The disposal lowering emits `catch (e) { var err = e; } finally {
+/// dispose(err); }`. With the catch param already renamed to `x`, renaming
+/// the function-scoped `var err` to `x` too was APPLIED: none of its reads
+/// sits under the catch, but its own initialized declarator does, and
+/// there `var x = x` assigns the param to itself — the hoisted `x` the
+/// finally reads stays undefined. The rename invariant rejected the whole
+/// file. The declarator is a write of the binding inside the catch scope,
+/// so `shadows-child` must see it; an uninitialized `var` writes nothing
+/// and stays allowed (as in #15).
+#[test]
+fn renaming_a_catch_body_var_to_the_catch_param_name_is_rejected() {
+    let cases = [
+        (
+            "function f() { try { g(); } catch (x) { var err = x; } finally { h(err); } }",
+            false,
+        ),
+        (
+            "function f() { try { g(); } catch (x) { var err; use(x); } finally { h(err); } }",
+            true,
+        ),
+    ];
+    for (code, allowed) in cases {
+        program_state(code, |state| {
+            let err = (0..state.view().bindings.len() as u32)
+                .map(BindingId)
+                .find(|b| state.view().binding(*b).name == "err")
+                .expect("err");
+            let fn_scope = state.scope_of_binding(err);
+            let result = attempt(state, fn_scope, "err", "x");
+            assert_eq!(result.applied, allowed, "{code}: {result:?}");
+            if !allowed {
+                assert_eq!(
+                    result.reason.map(RejectionReason::as_str),
+                    Some("shadows-child"),
+                    "{code}"
+                );
+            }
+        });
+    }
+}
+
+/// exp212, the up walk's exact sequence on its rejected method (shape
+/// only: an object method whose disposal lowering keeps the caught error
+/// in a function-scoped `var` for the `finally`). The run applied the
+/// catch param `O` → `readError`, then a re-ask named the var `T` →
+/// `readError` as well; the second rename must be refused and every
+/// reference keep its binding.
+#[test]
+fn the_2_1_89_disposal_catch_sequence_is_refused() {
+    let code = "var api = { read(H, _) { let $ = []; try { open(H, _); } \
+                catch (O) { var T = O; var z = 1; } finally { dispose($, T, z); } } };";
+    program_state(code, |state| {
+        let find = |state: &RenameState, name: &str| {
+            (0..state.view().bindings.len() as u32)
+                .map(BindingId)
+                .find(|b| state.view().binding(*b).name == name)
+                .expect(name)
+        };
+        let o = find(state, "O");
+        let t = find(state, "T");
+        let catch_scope = state.scope_of_binding(o);
+        let fn_scope = state.scope_of_binding(t);
+        assert!(attempt(state, catch_scope, "O", "readError").applied);
+        let second = attempt(state, fn_scope, "T", "readError");
+        assert!(!second.applied, "{second:?}");
+        assert_eq!(
+            second.reason.map(RejectionReason::as_str),
+            Some("shadows-child")
+        );
+        assert_eq!(state.name_of(t), "T");
+        // The model's first answer for the var stays legal.
+        assert!(attempt(state, fn_scope, "T", "error").applied);
+    });
+}
+
 /// The waves' fresh-era re-crawl (WP4.3): a rename moves the name to the
 /// END of Babel's map; a re-crawl (a fresh Scope object after the
 /// prior-match cache clear) lists registration order under current names.
