@@ -254,7 +254,27 @@ see.
 
 ## 6. Gate
 
-GATE_TABLE
+`cargo dev check` at `56f7d00ae` (the coordinator's go; worktree first,
+then a clean checkout, one at a time). The commit after it changes only
+this README.
+
+| stage | worktree | clean checkout |
+| --- | --- | --- |
+| shims | PASS | PASS |
+| no-private-addresses | PASS | PASS |
+| rust:fmt | PASS | PASS |
+| rust:clippy | PASS | PASS |
+| census:clones | REVIEW (no group in this lane's code; `score.rs` `read_card` was already in a group) | REVIEW (same) |
+| census:concurrency | PASS | PASS |
+| census:slop | PASS (humanify-ag-dev erosion −0.2 pp) | PASS |
+| rust:unit | PASS | PASS |
+| rust:build | PASS | PASS |
+| format-golden | PASS | PASS |
+| e2e | PASS | PASS |
+
+Also: `cargo dev library proof bun-dev-exp150-main` — cards IDENTICAL,
+summary IDENTICAL (the scorer's output is unchanged; only the new file is
+added).
 
 ## What this could NOT prove
 
