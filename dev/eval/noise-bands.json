@@ -244,6 +244,19 @@
             "cross:relocSt": 0,
             "cross:reloc": 7,
             "mints:unattributed": 4
+          },
+          "matchingBands": {
+            "fnTotal": 0,
+            "fnCarried": 0,
+            "fnClose": 0,
+            "fnAsked": 0,
+            "fnLLMRenamed": 1,
+            "fnUnmatched": 0,
+            "fnAmbiguous": 0,
+            "mbCarried": 4,
+            "mbLLMRenamed": 3,
+            "idAsked": 22,
+            "idLLMRenamed": 23
           }
         }
       }

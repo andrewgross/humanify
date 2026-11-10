@@ -329,6 +329,22 @@ exp206 print `-`, and the coverage `retries` / `avgResponseTimeMs` of every
 Rust-era card before it (2026-09-26 to 2026-11-08, including
 `ref-names-111401fe-*`) are false zeros — never read them.
 
+**Read the MATCHING block before the KPIs (exp208, 2026-11-10).** `eval
+summarize` and `eval leaderboard` print how many functions the pipeline
+carried, close-matched, left unmatched or ambiguous, and sent to the LLM,
+and how many module bindings and identifiers the LLM named (read from each
+scored run's stats). Five of them — functions total, close-matched, sent
+to the LLM, unmatched, still ambiguous — are decided before any model
+answer and must be EQUAL between same-commit repeats: `eval bands`
+refuses to write when one differs, and a same-commit leaderboard prints
+`!! MATCHING NOT EQUAL`. That is a harness or determinism bug, not the
+LLM — find it before reading any KPI. The other counts move with the
+names of the cold-built base and the model's draws (exp209 proved the
+asked set is a pure function of bundle + prior); `eval bands` records
+their spread as `matchingBands` beside the KPI bands, and a same-commit
+move past it is flagged. The stats' `coverage.*.llm` columns mean "asked
+AND renamed", and `functions.failed` means "asked, nothing renamed".
+
 **Read every KPI per surface (exp170, 2026-10-31).** Each change/noise KPI is
 split three ways, and the three add back up exactly to the old column:
 
