@@ -114,6 +114,18 @@ recipe version (`humanify_ag_index::replay`).
    was published, so no dependency newer than the version itself (and so
    none newer than the as-of date) enters the build. No package code is run.
    Input sourcemap comments are stripped so a bundler does not chain them.
+   A work directory that kept its `package-lock.json` and `build/` but
+   lost its tree (the builder deletes trees after their shards land; the
+   exp152 trees were deleted 2026-11-10) is restored EXACTLY from the lock
+   instead, so its stored builds stay the builds of the tree their maps
+   name (exp213): `npm ci --before=<publish time>` (npm validates the
+   lock's peer ranges against the registry, read as of that date), else an
+   `npm install --before` guided by the kept lock that must leave it
+   byte-identical (a lock without an optional platform binary published
+   later is refused by `npm ci`); either way the tree must hold every
+   non-optional package the lock lists. Anything else falls back to the
+   fresh install above (a re-resolve and re-bundle: not the original
+   tree), and `install <pkg>@<v>: restored|fresh …` says which on stderr.
 4. **Bundle**, per slice: the slice's recipe (§6) builds a `require()` entry
    and an `import()` entry, minified, with a sourcemap. An unresolvable
    specifier is retried as external (up to 4 rounds); top-level await is
@@ -130,6 +142,17 @@ recipe version (`humanify_ag_index::replay`).
    `bundled`, `bundle.`, `.min.`, `.global.`, `.umd.`, `browser` in the
    file name, or a name starting `cdn.`) are dropped at extraction; the
    scale lane measured that they cause most wrong literal claims at size.
+   **Source confirmation (exp213, `unit-rows/6`):** a statement unit keeps
+   its row only when the source files its map segments name (within its
+   owner package) hold its strings and static property names: of its
+   checkable tokens (`S:` / `P:` content tokens with a word of 3+
+   characters, at least 3 of them), at least half must be found word by
+   word. Bun 1.4.0's map filed string_decoder's and safe-buffer's code
+   under readable-stream's `async_iterator.js` / `from.js` in 35 node
+   shards (exp210 §5b). A unit with fewer checkable tokens, or whose file
+   cannot be read, keeps its row; each shard's notes count rows
+   `confirmed` / `refused` / `noTokens` / `unreadable` and the refused
+   rows by file (`sourceConfirm`).
 6. **Shard.** One file per `pkg@version` per kind:
    `store/shards/<slice>/<pkg>@<version>.json` (module rows) and
    `store/shards/literals/<pkg>@<version>.json` (literal rows). Rows are

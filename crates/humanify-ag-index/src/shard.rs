@@ -187,6 +187,53 @@ pub struct ShardNotes {
     /// entry, a mixed span, a dropped sponge unit). exp151.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub unrecorded_edges: std::collections::BTreeMap<String, usize>,
+    /// What the source files said about the unit rows (exp213,
+    /// `crate::confirm`).
+    #[serde(default)]
+    pub source_confirm: SourceConfirmNotes,
+}
+
+/// Unit rows by source-confirmation verdict (`crate::confirm::Verdict`):
+/// every row a unit's owner gave it is counted once, under its statement's
+/// verdict, before the multi-module drop (`multi_module_units_dropped`
+/// counts what that drop removes after). `refused` rows are not in the
+/// shard.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceConfirmNotes {
+    pub confirmed: usize,
+    pub refused: usize,
+    /// Kept: too few checkable tokens to judge.
+    pub no_tokens: usize,
+    /// Kept: a source file could not be read.
+    pub unreadable: usize,
+    /// Refused rows by the file the map named (`package@version file`).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub refused_files: std::collections::BTreeMap<String, usize>,
+}
+
+impl SourceConfirmNotes {
+    /// Count `rows` rows under `verdict`.
+    pub fn count(&mut self, verdict: crate::confirm::Verdict, rows: usize) {
+        use crate::confirm::Verdict;
+        *match verdict {
+            Verdict::Confirmed => &mut self.confirmed,
+            Verdict::Refused => &mut self.refused,
+            Verdict::NoTokens => &mut self.no_tokens,
+            Verdict::Unreadable => &mut self.unreadable,
+        } += rows;
+    }
+
+    /// Add another bundle's counts (a shard holds both entries' builds).
+    pub fn add(&mut self, other: SourceConfirmNotes) {
+        self.confirmed += other.confirmed;
+        self.refused += other.refused;
+        self.no_tokens += other.no_tokens;
+        self.unreadable += other.unreadable;
+        for (file, n) in other.refused_files {
+            *self.refused_files.entry(file).or_default() += n;
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

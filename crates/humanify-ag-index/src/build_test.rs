@@ -271,9 +271,9 @@ fn unit_rows_are_attributed_through_the_sourcemap() {
         "node_modules/dep/package.json",
         r#"{"name":"dep","version":"1.2.3"}"#,
     );
-    write("node_modules/dep/lib.js", "");
     // line 0: the library's statement; line 1: the app entry's.
     let lib = "var parse=function(t){return t.split(\",\").map(function(e){return e.trim().toLowerCase()})};";
+    write("node_modules/dep/lib.js", lib);
     let app = "var main=function(){return parse(process.argv[2]).join(\"|\").length+1};";
     let code = format!("{lib}\n{app}\n");
     let col = |n: usize| (0..n as u32).step_by(4);
@@ -579,16 +579,22 @@ fn unit_rows_of_a_pre_bundled_file_are_dropped_by_evidence() {
         "node_modules/sp/package.json",
         r#"{"name":"sp","version":"3.0.0"}"#,
     );
+    // every file holds the statement's source (exp213: a row its file does
+    // not confirm is refused, whatever the sponge evidence says)
+    let body = "t.split(',').map(e => e.trim().toLowerCase());\n";
     write(
         "node_modules/sp/index.mjs",
-        "// node_modules/other-pkg/lib/parse.js\nvar parse = 1;\n",
+        &format!("// node_modules/other-pkg/lib/parse.js\nvar parse = {body}"),
     );
     write(
         "node_modules/sp/own.js",
-        "// src/own.ts\nexport const own = 1;\n",
+        &format!("// src/own.ts\nexport const own = {body}"),
     );
-    write("node_modules/sp/vendor/copy.js", "var copy = 1;\n");
-    write("node_modules/sp/dist/sp.min.js", "var m = 1;\n");
+    write(
+        "node_modules/sp/vendor/copy.js",
+        &format!("var copy = {body}"),
+    );
+    write("node_modules/sp/dist/sp.min.js", &format!("var m = {body}"));
     let stmt = |n: &str| {
         format!(
             "var {n}=function(t){{return t.split(\",\").map(function(e){{return e.trim().toLowerCase()}})}};"
@@ -782,6 +788,7 @@ fn region_chunk_rows(
         "  lz = 1;",            // 15 lazy-pkg
         "});",                  // 16
         "export { own };",      // 17 own again
+        "/* t.split(',').map(e => e.trim().toLowerCase()) */", // 18 what each unit spells
     ];
     write("node_modules/sp/dist/chunk.mjs", &(chunk.join("\n") + "\n"));
     let stmt = |n: &str| {
@@ -1185,4 +1192,166 @@ fn only_a_date_blocked_install_is_retried_at_the_grace_cutoff() {
         "npm error code ENOVERSIONS\nnpm error No versions available for y"
     ));
     assert!(!date_blocked("npm error code ERESOLVE"));
+}
+
+/// exp213 (exp210 §5b): Bun's map can file one package's statement under
+/// a NEIGHBOURING package's source (string_decoder's `isEncoding` under
+/// readable-stream's `async_iterator.js`). The file the map names does not
+/// hold the statement's strings and property names: the row is refused,
+/// and counted. The other rows stay: the package's own statement, the
+/// misfiled package's own correctly mapped statement, and a statement too
+/// plain to check (no checkable token: kept, counted unconfirmable).
+#[test]
+fn a_unit_row_its_source_file_does_not_confirm_is_refused() {
+    use crate::build::unit_rows;
+    use crate::sourcemap::SourceMap;
+    let root =
+        std::env::temp_dir().join(format!("humanify-ag-index-confirm-{}", std::process::id()));
+    let write = |rel: &str, text: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().expect("dir")).expect("mkdir");
+        std::fs::write(p, text).expect("write");
+    };
+    write(
+        "node_modules/rs/package.json",
+        r#"{"name":"rs","version":"3.6.0"}"#,
+    );
+    write(
+        "node_modules/rs/lib/async.js",
+        "var kLastResolve = Symbol('lastResolve');\nfunction readAndResolve(iter) {\n  var resolve = iter[kLastResolve];\n  var data = iter.stream.read();\n  if (data !== null) { iter.lastPromise = null; resolve({ value: data, done: false }); }\n}\nfunction plain(a, b) { return a + b * 2 - (a - b) / 3; }\n",
+    );
+    write(
+        "node_modules/sd/package.json",
+        r#"{"name":"sd","version":"1.3.0"}"#,
+    );
+    write(
+        "node_modules/sd/lib/sd.js",
+        "var isEncoding = Buffer.isEncoding || function (encoding) {\n  switch (encoding && encoding.toLowerCase()) {\n    case 'hex': case 'utf8': case 'ascii': case 'ucs2': case 'utf16le': return true;\n    default: return false;\n  }\n};\nfunction normalizeEncoding(enc) { var nenc = enc.toLowerCase(); if (nenc === 'ucs2' || nenc === 'utf16le') return 'utf16le'; return nenc; }\n",
+    );
+    let lines = [
+        // rs's own statement, mapped to rs/lib/async.js
+        "var R=function(e){var t=e[L];var r=e.stream.read();if(r!==null){e.lastPromise=null;t({value:r,done:!1})}};",
+        // sd's statement, MISFILED under rs/lib/async.js
+        "var S=Buffer.isEncoding||function(e){switch(e&&e.toLowerCase()){case\"hex\":case\"utf8\":case\"ascii\":case\"ucs2\":case\"utf16le\":return!0;default:return!1}};",
+        // sd's other statement, mapped to its own file
+        "var N=function(e){var t=e.toLowerCase();if(t===\"ucs2\"||t===\"utf16le\")return\"utf16le\";return t};",
+        // a statement with no checkable token, mapped to rs/lib/async.js
+        "var P=function(a,b){return a+b*2-(a-b)/3+(a*b-a)/(b+1)-a%b};",
+    ];
+    let source_of = [0u32, 0, 1, 0];
+    let code = lines.join("\n") + "\n";
+    let col = |n: usize| (0..n as u32).step_by(4);
+    let map = SourceMap {
+        sources: vec![
+            "../node_modules/rs/lib/async.js".into(),
+            "../node_modules/sd/lib/sd.js".into(),
+        ],
+        segments: lines
+            .iter()
+            .enumerate()
+            .flat_map(|(i, l)| col(l.len()).map(move |c| (i as u32, c, source_of[i], 0)))
+            .collect(),
+    };
+    let (rows, notes) = unit_rows(
+        bun_node(),
+        &code,
+        &map,
+        &root.join("out"),
+        SpongeRegions::Drop,
+        false,
+    );
+    let owned: std::collections::BTreeSet<(&str, &str)> = rows
+        .iter()
+        .map(|r| (r.owner.as_str(), r.file.as_str()))
+        .collect();
+    assert_eq!(
+        owned,
+        [("rs", "lib/async.js"), ("sd", "lib/sd.js")]
+            .into_iter()
+            .collect(),
+        "{rows:?}"
+    );
+    let rs = rows.iter().filter(|r| r.owner == "rs").count();
+    assert_eq!(
+        rs, 4,
+        "rs's own and the plain statement, each with its function: {rows:?}"
+    );
+    let c = &notes.source_confirm;
+    assert_eq!(
+        c.refused, 2,
+        "the misfiled statement and its function: {c:?}"
+    );
+    assert_eq!(
+        c.refused_files,
+        [("rs@3.6.0 lib/async.js".to_string(), 2)]
+            .into_iter()
+            .collect(),
+    );
+    assert_eq!(
+        c.confirmed, 4,
+        "rs's own and sd's own, each with its function: {c:?}"
+    );
+    assert_eq!(
+        c.no_tokens, 2,
+        "the plain statement and its function: {c:?}"
+    );
+    assert_eq!(c.unreadable, 0);
+    assert_eq!(rows.len(), c.confirmed + c.no_tokens + c.unreadable);
+    std::fs::remove_dir_all(&root).ok();
+}
+
+/// exp213: an install dir that kept its lockfile and builds but lost its
+/// tree (exp152's work dirs after the 2026-11-10 cleanup) is restored
+/// from the lock, never wiped and re-resolved: its stored builds' maps
+/// name THAT tree. Anything else takes the ordinary install path.
+#[test]
+fn an_install_that_kept_its_lock_and_builds_is_restorable() {
+    use crate::build::restorable;
+    let dir = temp("restorable");
+    assert!(!restorable(&dir), "an empty dir is a fresh install");
+    std::fs::write(dir.join("package-lock.json"), "{}").unwrap();
+    assert!(!restorable(&dir), "no builds: nothing to keep");
+    std::fs::create_dir_all(dir.join("build/bun-node-cjs-min/req")).unwrap();
+    assert!(restorable(&dir));
+    std::fs::create_dir_all(dir.join("node_modules")).unwrap();
+    assert!(!restorable(&dir), "a tree is there (a broken install)");
+    std::fs::remove_dir_all(dir.join("node_modules")).unwrap();
+    std::fs::write(dir.join(".installed"), "").unwrap();
+    assert!(!restorable(&dir), "installed already");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// exp213: a restore is exact only when the tree holds every package the
+/// lock lists (optional ones may be absent: a platform binary for another
+/// OS). `npm ci --legacy-peer-deps` "succeeds" leaving the lock's peer
+/// packages out (react-three/fiber without three.js) — that tree is not
+/// the one the stored builds were made from, so it is refused.
+#[test]
+fn a_restored_tree_missing_a_locked_package_is_incomplete() {
+    use crate::build::lock_complete;
+    let dir = temp("lock-complete");
+    std::fs::write(
+        dir.join("package-lock.json"),
+        r#"{"lockfileVersion":3,"packages":{
+            "":{"name":"ix-app"},
+            "node_modules/fiber":{"version":"7.0.29"},
+            "node_modules/three":{"version":"0.140.2","peer":true},
+            "node_modules/fiber/node_modules/nested":{"version":"1.0.0"},
+            "node_modules/@scope/bin-win32":{"version":"1.0.0","optional":true}
+        }}"#,
+    )
+    .unwrap();
+    let pkg = |rel: &str| {
+        std::fs::create_dir_all(dir.join(rel)).unwrap();
+        std::fs::write(dir.join(rel).join("package.json"), "{}").unwrap();
+    };
+    pkg("node_modules/fiber");
+    pkg("node_modules/fiber/node_modules/nested");
+    assert!(!lock_complete(&dir), "three (a peer) is missing");
+    pkg("node_modules/three");
+    assert!(
+        lock_complete(&dir),
+        "the optional platform binary may be absent"
+    );
+    std::fs::remove_dir_all(&dir).ok();
 }

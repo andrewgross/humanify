@@ -73,6 +73,12 @@ pub struct NamedPrint {
 pub struct NamedStatementPrints {
     pub whole: NamedPrint,
     pub functions: Vec<NamedPrint>,
+    /// The WHOLE statement's distinct content tokens (the set
+    /// [`UnitPrint::content`] counts), each tagged by kind: `S:` a string
+    /// or template text, `P:` a static property name, `R:` a regex
+    /// pattern, `G:` a free identifier. The index builder checks a unit's
+    /// tokens against the source file its sourcemap names (exp213).
+    pub tokens: BTreeSet<String>,
 }
 
 /// [`statement_prints`] with the mappings kept (the builder's `--names`
@@ -80,19 +86,26 @@ pub struct NamedStatementPrints {
 pub fn statement_named_prints(node: &Value, tables: &SymbolTables) -> NamedStatementPrints {
     let mut functions = Vec::new();
     collect_functions(node, tables, &mut functions, true);
+    let (whole, tokens) = print_with_tokens(node, tables);
     NamedStatementPrints {
-        whole: named_print(node, tables),
+        whole,
         functions,
+        tokens,
     }
 }
 
 fn named_print(node: &Value, tables: &SymbolTables) -> NamedPrint {
+    print_with_tokens(node, tables).0
+}
+
+/// A print and the content tokens it counted.
+fn print_with_tokens(node: &Value, tables: &SymbolTables) -> (NamedPrint, BTreeSet<String>) {
     let mut content = BTreeSet::new();
     content_tokens(node, tables, &mut content);
     // The mapping is built by the walk regardless; keeping it costs only
     // the Vec the caller drops.
     let out = canonical_serialize(node, tables, &LIBRARY_UNITS);
-    NamedPrint {
+    let print = NamedPrint {
         print: UnitPrint {
             span: span_of(node),
             // Private names are the minifier's (`#e`), renamed per build: the
@@ -102,7 +115,8 @@ fn named_print(node: &Value, tables: &SymbolTables) -> NamedPrint {
             content: content.len() as u32,
         },
         mapping: out.mapping,
-    }
+    };
+    (print, content)
 }
 
 fn span_of(node: &Value) -> Span {
@@ -261,6 +275,10 @@ pub struct BundleUnits {
     /// The mappings of every printed unit (Some exactly where `prints` is
     /// Some) — `None` everywhere on the plain path.
     pub named: Vec<Option<NamedStatementPrints>>,
+    /// Every printed unit's content tokens
+    /// ([`NamedStatementPrints::tokens`]; empty for a container), on both
+    /// paths.
+    pub tokens: Vec<BTreeSet<String>>,
     pub graph: Option<crate::graph::references::ReferenceGraph>,
 }
 
@@ -297,16 +315,19 @@ fn bundle_units(
     let facts = crate::cut::units::BundlerFacts::recognise(code, statements, grammar, interop);
     let units = crate::cut::units::container_units(statements, &factories, &facts, true);
     let blurred = grammar.blurred_literals(statements, semantic);
-    let (prints, named) = if with_named {
-        let named = unit_named_prints(&units, &tables, &blurred);
-        let prints = named.iter().map(|n| n.as_ref().map(plain_of)).collect();
-        (prints, named)
-    } else {
-        (
-            unit_prints(&units, &tables, &blurred),
-            vec![None; units.units.len()],
-        )
-    };
+    let mut named = unit_named_prints(&units, &tables, &blurred);
+    let prints = named.iter().map(|n| n.as_ref().map(plain_of)).collect();
+    let tokens = named
+        .iter_mut()
+        .map(|n| {
+            n.as_mut()
+                .map(|n| std::mem::take(&mut n.tokens))
+                .unwrap_or_default()
+        })
+        .collect();
+    if !with_named {
+        named = vec![None; units.units.len()];
+    }
     let graph = with_graph.then(|| {
         crate::graph::references::build_reference_graph_with(
             code, semantic, statements, &factories, &facts, true,
@@ -321,6 +342,7 @@ fn bundle_units(
         units: units.units,
         prints,
         named,
+        tokens,
         graph,
     }
 }

@@ -23,6 +23,7 @@ use humanify_ag_core::libindex::literals::{LiteralMode, code_literals, json_lite
 use humanify_ag_core::libindex::recipe::Recipe;
 
 use crate::asof::{Selected, VersionPolicy, grace_cutoff, normalize_time, select_versions};
+use crate::confirm::{SourceWords, Verdict};
 use crate::merge::{GIANT_SHARD_BYTES, MergeMeta, ShardFlow, finish_workers, stream_parallel};
 use crate::recipe::{
     MAX_SOURCE_BYTES, RECIPE_VERSION, RecipeBuild, bundler_package, entry_specifiers,
@@ -50,9 +51,11 @@ const PURITY: f64 = 0.9;
 /// esquery's own min build, glob comments that mention node_modules); 5 =
 /// region-aware (exp124): a marker drops only the units inside the region
 /// it opens, the file's own code outside every foreign region keeps its
-/// rows ([`SpongeRegions`] says what the foreign regions become). In every
-/// module shard's key.
-pub const UNIT_ROWS_VERSION: &str = "unit-rows/5";
+/// rows ([`SpongeRegions`] says what the foreign regions become); 6 =
+/// source-confirmed (exp213): a unit whose strings and property names its
+/// mapped source file does not hold has no row ([`crate::confirm`]), and
+/// the notes count every row's verdict. In every module shard's key.
+pub const UNIT_ROWS_VERSION: &str = "unit-rows/6";
 
 /// What the units inside a FOREIGN region of a pre-bundled file become (a
 /// region whose bundler module marker names another package's
@@ -742,10 +745,26 @@ fn write_entries(dir: &Path, name: &str) -> Result<(), String> {
 /// version that old for a dependency, once more as of [`grace_cutoff`]
 /// (a sibling of the same release published moments later); the planner
 /// resolves ranges by the same two cutoffs.
-fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<PathBuf, String> {
+fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<(PathBuf, String), String> {
     let dir = work.join(format!("{}@{}", task.name.replace('/', "__"), task.version));
     if dir.join(".installed").exists() {
-        return Ok(dir);
+        return Ok((dir, "installed".into()));
+    }
+    let mut path = "fresh".to_string();
+    if restorable(&dir) {
+        match restore(&dir, task, trace) {
+            Ok(()) => {
+                strip_source_map_comments(&dir.join("node_modules"));
+                std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
+                return Ok((dir, "restored".into()));
+            }
+            Err(e) => {
+                path = format!(
+                    "fresh (restore refused: {})",
+                    e.lines().next().unwrap_or("")
+                )
+            }
+        }
     }
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -762,7 +781,102 @@ fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<PathBuf, String
     }
     strip_source_map_comments(&dir.join("node_modules"));
     std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
-    Ok(dir)
+    Ok((dir, path))
+}
+
+/// Whether `dir` is an earlier install whose tree was removed but whose
+/// lockfile and builds were kept (exp213: exp152's work dirs after the
+/// 2026-11-10 cleanup): it is restored EXACTLY from its lockfile
+/// ([`npm_ci`], npm's cache), so the stored builds stay the builds of the
+/// tree their maps name, and a replay re-fingerprints them without one
+/// re-resolve or re-bundle. A fresh `npm install --before` could resolve
+/// a different tree under the same builds.
+pub(crate) fn restorable(dir: &Path) -> bool {
+    !dir.join(".installed").exists()
+        && !dir.join("node_modules").exists()
+        && dir.join("package-lock.json").is_file()
+        && dir.join("build").is_dir()
+}
+
+/// Whether the tree in `dir` holds every package its lockfile lists
+/// (optional ones excepted: a platform binary for another OS): the check
+/// that a restore is EXACT. `npm ci --legacy-peer-deps` would "succeed"
+/// leaving the lock's peer packages out.
+pub(crate) fn lock_complete(dir: &Path) -> bool {
+    let Some(lock) = std::fs::read_to_string(dir.join("package-lock.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+    else {
+        return false;
+    };
+    let Some(packages) = lock.get("packages").and_then(|p| p.as_object()) else {
+        return false;
+    };
+    packages.iter().all(|(path, entry)| {
+        path.is_empty()
+            || entry.get("optional").and_then(|o| o.as_bool()) == Some(true)
+            || entry.get("link").and_then(|l| l.as_bool()) == Some(true)
+            || dir.join(path).join("package.json").is_file()
+    })
+}
+
+/// Restore `dir`'s tree from its kept lockfile: [`npm_ci`] as of the
+/// task's publish time, else an `npm install` guided by the kept lock that
+/// must leave it byte-identical (once more at the grace cutoff when only
+/// the date blocked it, as [`install`] does); the tree must hold the whole
+/// lock ([`lock_complete`]). An Err leaves no tree: the caller installs
+/// fresh.
+fn restore(dir: &Path, task: &Task, trace: Trace<'_>) -> Result<(), String> {
+    let lock = std::fs::read(dir.join("package-lock.json")).map_err(|e| e.to_string())?;
+    let at = |before: &str| {
+        npm_ci(dir, before, trace).or_else(|e| {
+            // `npm ci` refuses a lock that lacks an optional platform
+            // binary published after the cutoff (EUSAGE): an install
+            // GUIDED by the lock keeps every locked version, and is
+            // accepted only when it leaves the lock byte-identical
+            let _ = std::fs::remove_dir_all(dir.join("node_modules"));
+            npm_install(dir, before, trace).map_err(|e2| format!("{e} / {e2}"))?;
+            match std::fs::read(dir.join("package-lock.json")) {
+                Ok(now) if now == lock => Ok(()),
+                _ => Err(format!("{e} / the lock-guided install changed the lock")),
+            }
+        })
+    };
+    let done = at(&task.published).or_else(|e| {
+        match grace_cutoff(&task.published).filter(|_| date_blocked(&e)) {
+            Some(grace) => at(&grace),
+            None => Err(e),
+        }
+    });
+    let done = done.and_then(|()| {
+        lock_complete(dir)
+            .then_some(())
+            .ok_or_else(|| "the tree lacks a package its lock lists".to_string())
+    });
+    if done.is_err() {
+        let _ = std::fs::remove_dir_all(dir.join("node_modules"));
+    }
+    done
+}
+
+/// `npm ci` in `dir` as of `before` (the lockfile's exact tree, npm's
+/// cache first): `--before` because npm validates the lock's peer ranges
+/// against the registry, which must be read as the original install read
+/// it. No `--legacy-peer-deps` retry: it drops the lock's peers.
+fn npm_ci(dir: &Path, before: &str, trace: Trace<'_>) -> Result<(), String> {
+    let mut cmd = Command::new("npm");
+    cmd.current_dir(dir)
+        .args([
+            "ci",
+            "--ignore-scripts",
+            "--no-audit",
+            "--no-fund",
+            "--prefer-offline",
+            "--loglevel=error",
+        ])
+        .arg(format!("--before={before}"));
+    let _s = trace.stage("library.index.install");
+    run_cmd(&mut cmd)
 }
 
 /// `npm install` in `dir` as of `before`, retried with
@@ -988,6 +1102,7 @@ pub(crate) fn fingerprint_bundle(
         *shard.notes.sponge_unit_files.entry(kind).or_default() += n;
     }
     shard.notes.sponge_unit_rows += notes.sponge_unit_rows;
+    shard.notes.source_confirm.add(notes.source_confirm);
     for (why, n) in notes.unrecorded_edges {
         *shard.notes.unrecorded_edges.entry(why).or_default() += n;
     }
@@ -1050,6 +1165,8 @@ pub fn unit_rows(
     // index it was credited to (the names pass reads that source's file)
     let mut owner_of: Vec<Option<crate::sourcemap::Owner>> = vec![None; bundle.units.len()];
     let mut src_of: Vec<Option<u32>> = vec![None; bundle.units.len()];
+    let mut verdict_of: Vec<Option<Verdict>> = vec![None; bundle.units.len()];
+    let mut words: HashMap<u32, Option<SourceWords>> = HashMap::new();
     for (&i, segs) in printed.iter().zip(map.span_segments(code, &spans)) {
         let tally = crate::sourcemap::tally_of(&segs);
         match unit_owner(map, out, &tally, &mut cache) {
@@ -1057,6 +1174,8 @@ pub fn unit_rows(
                 let evidence = sponges.entry(src).or_insert_with(|| {
                     sponge_evidence(&owner, &lexical(&out.join(&map.sources[src as usize])))
                 });
+                let named = format!("{}@{} {}", owner.package, owner.version, owner.file);
+                let mapped = same_package_sources(map, out, &tally, &owner.package, &mut cache);
                 let Some(owner) = evidence.unit_owner(owner, src, &segs, regions) else {
                     if sponge_files.insert(src) {
                         let kind = evidence.kind().unwrap_or("bundler-marker");
@@ -1065,8 +1184,19 @@ pub fn unit_rows(
                     notes.sponge_unit_rows += 1;
                     continue;
                 };
+                let source = Source {
+                    map,
+                    out,
+                    sources: &mapped,
+                    named,
+                };
+                let Some(verdict) = confirm_unit(&source, &bundle, i, &mut words, &mut notes)
+                else {
+                    continue;
+                };
                 owner_of[i] = Some(owner);
                 src_of[i] = Some(src);
+                verdict_of[i] = Some(verdict);
             }
             UnitOwner::Mixed => notes.mixed_spans += 1,
             UnitOwner::Unowned => notes.unowned += 1,
@@ -1119,6 +1249,9 @@ pub fn unit_rows(
         };
         for (p, mapping) in with_mappings {
             if p.nodes >= UNIT_ROW_MIN_NODES {
+                if let Some(v) = verdict_of[i] {
+                    notes.source_confirm.count(v, 1);
+                }
                 let restored = match (anchors.as_ref(), mapping) {
                     (Some(anchors), Some(mapping)) => crate::names::print_names(
                         mapping,
@@ -1146,6 +1279,92 @@ pub fn unit_rows(
         }
     }
     (rows, notes)
+}
+
+/// The rows a unit's prints make: the whole statement and every function
+/// inside it, at or over [`UNIT_ROW_MIN_NODES`].
+fn row_count(prints: Option<&humanify_ag_core::libindex::units::StatementPrints>) -> usize {
+    prints.map_or(0, |p| {
+        std::iter::once(&p.whole)
+            .chain(&p.functions)
+            .filter(|p| p.nodes >= UNIT_ROW_MIN_NODES)
+            .count()
+    })
+}
+
+/// The sources a unit's segments name that belong to `package` (its
+/// owner): the files its tokens may come from (a unit of a package's own
+/// pre-bundled file maps back to several of its sources).
+fn same_package_sources(
+    map: &SourceMap,
+    out: &Path,
+    tally: &[(u32, usize)],
+    package: &str,
+    cache: &mut HashMap<PathBuf, Option<(String, String)>>,
+) -> Vec<u32> {
+    tally
+        .iter()
+        .filter(|&&(src, _)| {
+            owner_cached(out, &map.sources[src as usize], cache)
+                .is_some_and(|o| o.package == package)
+        })
+        .map(|&(src, _)| src)
+        .collect()
+}
+
+/// Where a unit's code came from, by its map: the sources it names in its
+/// owner package, and that owner's `package@version file`.
+struct Source<'a> {
+    map: &'a SourceMap,
+    out: &'a Path,
+    sources: &'a [u32],
+    named: String,
+}
+
+/// Unit `i`'s source verdict; None when its source refuses it (its rows
+/// are counted refused, under the file the map named).
+fn confirm_unit(
+    source: &Source<'_>,
+    bundle: &humanify_ag_core::libindex::units::BundleUnits,
+    i: usize,
+    words: &mut HashMap<u32, Option<SourceWords>>,
+    notes: &mut ShardNotes,
+) -> Option<Verdict> {
+    let verdict = source_verdict(
+        source.map,
+        source.out,
+        source.sources,
+        &bundle.tokens[i],
+        words,
+    );
+    if verdict != Verdict::Refused {
+        return Some(verdict);
+    }
+    let n = row_count(bundle.prints[i].as_ref());
+    let c = &mut notes.source_confirm;
+    c.count(verdict, n);
+    *c.refused_files.entry(source.named.clone()).or_default() += n;
+    None
+}
+
+/// [`crate::confirm::verdict`] on a unit's tokens against the words of its
+/// sources (each source file read once per bundle).
+fn source_verdict(
+    map: &SourceMap,
+    out: &Path,
+    sources: &[u32],
+    tokens: &BTreeSet<String>,
+    words: &mut HashMap<u32, Option<SourceWords>>,
+) -> Verdict {
+    for &src in sources {
+        words.entry(src).or_insert_with(|| {
+            std::fs::read_to_string(lexical(&out.join(&map.sources[src as usize])))
+                .ok()
+                .map(|text| SourceWords::of(&text))
+        });
+    }
+    let read: Vec<Option<&SourceWords>> = sources.iter().map(|s| words[s].as_ref()).collect();
+    crate::confirm::verdict(tokens, &read)
 }
 
 /// Unit `i`'s recorded callees (`edges/1`): the WHOLE print of every unit
@@ -1534,7 +1753,10 @@ fn module_shard(
 /// Build every missing shard of `task`: the module shards first, since the
 /// literal shard reads their builds (any build not yet made is made).
 pub(crate) fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), String> {
-    let dir = install(&cfg.work, task, trace)?;
+    let (dir, path) = install(&cfg.work, task, trace)?;
+    if !cfg.quiet {
+        eprintln!("install {}@{}: {path}", task.name, task.version);
+    }
     // the entries are the recipe's: rewritten on every build
     write_entries(&dir, &task.name)?;
     let mut missing: Vec<&ShardInputs> = task.missing.iter().collect();
