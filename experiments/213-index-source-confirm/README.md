@@ -292,7 +292,28 @@ exp210 §5b sized it (142 of readable-stream's 1,718 node rows dropped).
 
 ## Gate
 
-<!-- GATE -->
+`cargo dev check`, run bare. Worktree at `138a89ee4` plus the README;
+the clean checkout is `30777ae53`, a detached worktree with
+`npm ci --ignore-scripts`. The first worktree run failed one test,
+`a_webpack_run_with_a_relative_output_dir_writes_only_there`, because the
+new worktree had no `node_modules` for the webcrack shim. It passed after
+`npm ci --ignore-scripts`.
+
+| stage | worktree | clean checkout |
+| --- | --- | --- |
+| shims | PASS | PASS |
+| no-private-addresses | PASS | PASS |
+| rust:fmt | PASS | PASS |
+| rust:clippy | PASS | PASS |
+| census:clones | REVIEW (no group in this lane's code) | REVIEW (same) |
+| census:concurrency | PASS | PASS |
+| census:slop | PASS | PASS |
+| rust:unit | PASS | PASS |
+| rust:build | PASS | PASS |
+| format-golden | PASS | PASS |
+| e2e | PASS | PASS |
+
+The commit after `30777ae53` changes this README only.
 
 ## What this could NOT prove
 
