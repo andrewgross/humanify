@@ -130,6 +130,24 @@ cargo dev eval walk <from>..<to> --walk-dir D   # a real version walk; its repor
 cargo dev library score <label> --index D --rule agreement|structural   # library naming P/R on a frozen corpus
 ```
 
+**The library scorer is scorer 15 (`exp096-score/15`, exp214, 2026-11-10).**
+Scorer 14's cards plus two truth corrections, each its own column: a
+source-map DEFECT (the label's package — its map files, its published files
+in the index literal table and its installed copy — holds at most 20% of the
+unit's literals) is out of both sides (`defectExcludedBytes`); a COPY CREDIT
+(the claimed package's own published file holds the unit's print and >= 90%
+of its literals, the truth's file holds the code, and a dependency / fork /
+vendored / same-file link says the truth package ships a copy) counts as
+named (`namedAsCopyCreditBytes`; `precisionNoCopyCredit` charges it as
+wrong). Every corrected unit is listed in `truth15.json` beside the cards,
+with the wrong claims left wrong by reason. Labels of scorer 14 and 15 do
+not share a leaderboard, and `library proof` refuses a label of another
+version: rescore it with `library rescore <label> --out DIR`. The defect
+check reads the corpus apps' installed trees and the copy credit reads the
+npm registry-manifest cache, NEITHER of which is frozen: on a host without
+them scorer 15 finds no defects. On index 4736dcfa, bun-dev node reads
+0.998138 (0.997511 without copy credit), bun-held node 0.999032.
+
 The verb table in `crates/humanify-ag-dev/src/main.rs` is the only place to
 look — an instrument not listed there is not supported. Every setting is a
 harness key (`crates/humanify-ag-dev/src/settings/keys.rs`, one parse point):
