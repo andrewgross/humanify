@@ -1,6 +1,7 @@
 # exp215 — an unchanged module keeps its prior file when upstream splits a module
 
-STATUS: BUILT, STUB-MEASURED, GATED, NOT EVALUATED, NOT MERGED (2026-11-10).
+STATUS: BUILT, STUB-MEASURED, GATED (all 11 stages, twice), NOT EVALUATED, NOT
+MERGED (2026-11-10).
 Branch `exp215-split-keep-file` from main `73d01430b`. No live-LLM run:
 two version walks held the LLM server, so `eval score` waits until they
 finish. Every number below is from the stub LLM (`cargo dev run stub`).
@@ -100,10 +101,31 @@ run above.
 
 ## Gate
 
-| run                                              | result |
-| ------------------------------------------------ | ------ |
-| `cargo dev check`, worktree `/work/exp215-split-keep-file` | see below |
-| `cargo dev check`, clean checkout of the branch  | see below |
+`cargo dev check`, run twice, never at the same time: in the worktree
+(`/work/exp215-split-keep-file`, before the commit), then in a fresh clone of
+the branch at `117291e46` (`/work/exp215-clean`).
+
+| stage                | worktree | clean clone |
+| -------------------- | -------- | ----------- |
+| shims                | PASS     | PASS        |
+| no-private-addresses | PASS     | PASS        |
+| rust:fmt             | PASS     | PASS        |
+| rust:clippy          | PASS     | PASS        |
+| census:clones        | REVIEW   | REVIEW      |
+| census:concurrency   | PASS     | PASS        |
+| census:slop          | PASS     | REVIEW      |
+| rust:unit            | PASS     | PASS        |
+| rust:build           | PASS     | PASS        |
+| format-golden        | PASS     | PASS        |
+| e2e                  | PASS (19 pairs, 152 launches equal to the golden) | PASS (same) |
+
+- census:clones (advisory): two twins, both in `humanify-ag-dev` and both
+  already on main (`js_of`, the library card `read`). None is in this
+  change.
+- census:slop (advisory) in the clean clone: the clone has no `main`
+  branch, so the merge-base lookup failed and no measure was taken. In the
+  worktree it passed.
+- e2e goldens did not change: no e2e fixture splits a module across a hop.
 
 ## Not fixed, noted
 
