@@ -50,11 +50,6 @@ const LIGHT: Footprint = Footprint {
     writes: "only the output it names",
 };
 
-/// One pipeline run on a Claude Code bundle, names mode: the scored legs of
-/// ref-names-111401fe-r1/r2/r3 (15 runs) peaked at 9.7-17.4 GB RSS
-/// (largest: 2.1.216) and took 189-500 s each.
-const PIPELINE_RUN_MEMORY: &str = "one pipeline run at a time: 9.7-17.4 GB peak RSS each on a Claude Code bundle (ref-names-111401fe, names mode)";
-
 const SCORE_SETTINGS: &[&str] = &["run", "eval", "llm", "boot"];
 const NEUTRALITY_SETTINGS: &[&str] = &[
     "run.workdir",
@@ -114,9 +109,9 @@ const VERBS: &[Verb] = &[
         today: "",
         settings: SCORE_SETTINGS,
         footprint: Footprint {
-            memory: PIPELINE_RUN_MEMORY,
-            llm: "yes: every rebase, scored leg and cold self-hop asks the LLM server, cold (the warm self-hop replays); the boot gate asks the Claude API (boot.model)",
-            time: "~2.4 h for the five pairs (ref-names-111401fe r1 -> r2 -> r3); a scored leg 189-500 s",
+            memory: "up to 5 pipeline runs at once (--parallel-pairs 5): summed RSS peak 26.6-30.8 GB, one run 6-19 GB (rebases 6.0-10.7, scored legs 9.7-17.7, self-hops 18.5-18.8; ref-names-40921b9f r1-r3, exp207)",
+            llm: "yes: every rebase, scored leg and cold self-hop asks the LLM server, cold (the warm self-hop replays); ONE rebase at a time by default (--parallel-rebases 1: one rebase at 472 saturates the 4-replica server; five at once made it slower in total), scored legs overlap it at 10-35 in flight; the boot gate asks the Claude API (boot.model)",
+            time: "~95 min for the five pairs in parallel lanes, ~119 min serial (--parallel-pairs 1), both stall-free the same night (ref-names-40921b9f-r3, serial-40921b9f-s1; exp207); a scored leg 188-546 s",
             writes: "<workdir>/<label>/ (default /work/eval-work/<label>; claimed while it runs), dev/eval/results/<label>/, this checkout's target/release",
         },
     },

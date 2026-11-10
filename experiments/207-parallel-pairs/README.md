@@ -1,6 +1,10 @@
 # exp207 — `eval score` runs its pairs in parallel
 
-STATUS: IN PROGRESS (2026-11-09), branch `exp207-parallel-pairs`. Not merged.
+STATUS: DONE, NOT MERGED (2026-11-10), branch `exp207-parallel-pairs`. `--parallel-pairs 5
+--parallel-rebases 1` is the default. Three valid parallel references
+`ref-names-40921b9f-r1/r2/r3` plus a serial control `serial-40921b9f-s1`.
+Bands NOT adopted (noise-bands.json and self-hop-reference.json
+unchanged): see "Bands" below.
 
 Andrew, 2026-11-09: "ok lets run in parallel" (earlier: "taking extremely
 long to do these tests right now").
@@ -131,6 +135,240 @@ R=2 might fit under the ~500 knee (one rebase averages ~250 in flight and
 is under 50 for a third of its time); that is a later, MEASURED option,
 not a default.
 
+## The host during this lane (read every time number below with it)
+
+- **LLM server: 4x gpt-oss-20b (half the GPUs; the other half runs
+  glm53-flash)**, behind vllm-lb (replicas r4-r7). CLAUDE.md describes
+  the references as 8x. The ~500-in-flight knee above was measured on
+  these 4 replicas; R=2 may only pay off on 8. exp204-75ae9334 (the serial
+  run this lane compares against) shows the same per-call latency and the
+  same best-minute throughput as a single rebase here (table below), so it
+  very likely ran on the same 4 replicas.
+- **Host memory contention.** Docker sets no memory limit on the container
+  (`memory.max` / `memory.high` = max), but the host has one NUMA node, ~49
+  GB shmem held by the model servers, glm53-flash holds ~67 GB of host RAM,
+  and swap is full. During the runs the container's `memory.pressure` went
+  to 94-96% (full stall) for minutes at a time; a pipeline then spends its
+  time in kernel reclaim (one 2.1.215 rebase: utime 30 s, stime 3,260 s,
+  no log line for 29 min). The cgroup's page cache sat at ~85-89 GB with
+  anon at 5-9 GB; `fincore` put only ~0.5 GB of it in the 43 GB library
+  index and ~3.0 GB in every file over 200 MB under /work and the source
+  tree, so the cache is not ours to explain and the stalls come from
+  host-wide contention. A stall delays prompts; it does not change them.
+
 ## Step 3 — does running in parallel change what the eval measures?
 
-(in progress)
+Three cold repeats of `40921b9f7` (pipeline code = main 1c07bf20f; only
+the harness differs) from the frozen worktree `/work/ref-names-40921b9f-frozen`,
+default schedule (5 lanes, 1 rebase at a time, 472 per launch), names mode,
+index 4736dcfa.
+
+### r1 — `ref-names-40921b9f-r1` (2026-11-09 16:17-18:45)
+
+Valid: 5 rebases, 5 scored legs, cold and warm self-hop all exit 0; 5
+run-status files; 5 boots OK; warm self-hop byte-identical, 0 files, 0
+cache writes; cold self-hop 2 ln (range 2-22); cache +0 on every leg; no
+call failed, 0 timeouts, the only retries were recovered 5xx answers
+(rebases 3/10/6/6/5, scored legs 0). novel 5,336 / realLn 556,875,
+byte-equal to exp204-75ae9334.
+
+| KPI        | exp204-75ae9334 (serial) | r1      | delta | band (byScorer.2 names) |
+| ---------- | ------------------------ | ------- | ----- | ----------------------- |
+| noise      | 3,038                    | 3,034   | −4    | ±9                      |
+| noiseLn    | 68,225                   | 68,179  | −46   | ±989                    |
+| reloc      | 1,671                    | 1,653   | −18   | ±24                     |
+| mints      | 230                      | 239     | +9    | ±14                     |
+| treeLn     | 176,009                  | 175,268 | −741  | ±745                    |
+| vendorLn   | 10,015                   | 10,027  | +12   | ±64                     |
+| vendorReal | 14,241                   | 14,305  | +64   | ±148                    |
+| newName    | 4,066                    | 4,029   | −37   | ±26 (outside)           |
+
+Server, rebase by rebase (each now runs alone at 472, as in serial):
+
+| rebase | p50 serial / r1 | p90 serial / r1 | max serial / r1 | best minute serial / r1 |
+| ------ | --------------- | --------------- | --------------- | ----------------------- |
+| 2.1.85  | 3.0 / 3.1 s | 6.2 / 6.4 s | 39 / 70 s | 117 / 110 req/s |
+| 2.1.118 | 3.3 / 3.3 s | 6.7 / 7.0 s | 46 / 60 s | — / 119 req/s   |
+| 2.1.179 | 3.5 / 3.6 s | 7.6 / 7.7 s | 54 / 70 s | — / 113 req/s   |
+| 2.1.197 | 3.6 / 3.7 s | 7.9 / 8.0 s | 64 / 77 s | — / 115 req/s   |
+| 2.1.215 | 4.0 / 4.1 s | 8.3 / 8.4 s | 66 / 74 s | 103 / 108 req/s |
+
+Scored legs now overlap a rebase: p50 3.3-4.7 s / p90 5.6-8.5 s (serial
+2.5-3.4 / 4.5-5.6), no retries, no timeouts, no failures. Model answers
+per pair (asked 3,752 / 9,615 / 4,983 / 7,282 / 5,814 vs serial 3,718 /
+9,391 / 4,946 / 7,298 / 5,878) show no shift beyond cold-run variation.
+
+Time and memory: raw wall **148 min**; memory stalls (pressure avg10 > 50%)
+16:18-16:47 (~29 min, from the log gap; before the sampler started),
+17:11-19, 17:30-31, 17:35-36, 17:45-50, 18:11-15, 18:36-39: **~55 min
+in all**; net ~93 min (crude: a stall slows everything, it does not add
+a fixed delay). The lanes overlapped as designed (waits for the base
+3,188 / 4,420 / 5,212 / 6,754 / 8,292 s; the 2.1.216 self-hop finished at
+17:39, while the 179 and 197 rebases still ran). Peak host used 127.9 GB;
+summed pipeline RSS peak 30.8 GB. Peak RSS: rebases 5.9 / 6.8 / 8.9 / 9.6 /
+10.6 GB (new: never recorded before), scored legs 9.8-17.7 GB, self-hops
+18.5 / 18.7 GB.
+
+### r2 — `ref-names-40921b9f-r2` (2026-11-09 18:45:47-20:29:45)
+
+Valid on every check r1 passed (all legs exit 0, 5 run-status, 5 boots
+OK, warm self-hop byte-identical with 0 writes, cold self-hop 2 ln,
+cache +0, 0 failed calls, 0 timeouts). novel 5,336 / realLn 556,875.
+
+- **Wall 103 min** (serial 141). One memory stall, 18:46:47-18:54:17 (7.8
+  min), at the start; stall-free from 18:54 to the end. Rebases 673 / 764
+  / 1,180 / 1,301 / 1,948 s (serial 679 / 690 / 1,128 / 1,241 / 1,458; the
+  215 rebase carries the stall). Self-hops 154 + 152 s (serial 744 + 654).
+  Peak host used 100.9 GB, summed pipeline RSS 26.6 GB.
+- **Connection retries, new:** the 2.1.119 scored leg (started
+  19:42:11 UTC, 443 s) retried 6 calls and the 2.1.181 scored leg (started
+  20:01:51 UTC, 448 s) retried 27 calls on `connection` errors, all
+  recovered. r1's scored legs and exp204's had none (exp204: one 5xx).
+  Memory pressure was 0 then; a rebase at 472 ran beside each, as in r1.
+  For the load balancer's logs: 2026-11-09 19:42-19:50 and 20:01-20:09
+  UTC. A retry resends the same prompt; it cannot change a question.
+  Rebase retries were 5xx only (10 / 16 / 8 / 5 / 8; r1 5 / 3 / 10 / 6 / 6).
+
+### r3 — `ref-names-40921b9f-r3` (2026-11-09 20:30:39-22:05:17), STALL-FREE
+
+Valid on every check (all legs exit 0, 5 run-status, 5 boots OK, warm
+self-hop byte-identical with 0 writes, cold self-hop 2 ln, cache +0, 0
+failed calls, 0 timeouts). novel 5,336 / realLn 556,875.
+
+- **Wall 94.6 min, 0 stalled samples** (15 s sampling). Rebases 652 / 776 /
+  1,165 / 1,282 / 1,447 s; scored legs 328-546 s; self-hops 157 + 150 s.
+  Peak host used 59.9 GB, summed pipeline RSS 29.0 GB.
+- Connection retries again in two scored legs: 2.1.216 (started
+  20:54:46 UTC, 546 s) 9, 2.1.181 (started 21:37:59 UTC, 473 s) 9, all
+  recovered. Rebase retries 5xx only: 5 / 10 / 9 / 10 / 6.
+
+### Serial control — `serial-40921b9f-s1` (`--parallel-pairs 1`, 2026-11-09 22:05:17 - 11-10 00:03:57), STALL-FREE
+
+A control, not a reference: same sha, same night, right after r3.
+Valid on every check (cold self-hop 8 ln). novel 5,336 / realLn 556,875.
+
+- **Wall 118.7 min, 0 stalled samples.** Rebases 659 / 708 / 1,173 / 1,242 /
+  1,504 s; scored legs 188-367 s; self-hops 151 + 148 s.
+- Scored legs: 0 retries of any kind (the parallel runs' connection retries
+  only ever hit a scored leg that ran beside a rebase).
+- The 2.1.197 rebase (about 23:01-23:21 UTC) retried on 5xx 3,277 times
+  (371 calls answered after a retry, 0 failed); every other rebase 3-11.
+  Its latency (p50 3.5 s, p90 7.8 s) was normal: a server-side burst.
+
+## Speed (the verdict)
+
+| run | schedule | wall | stalled | note |
+| --- | --- | --- | --- | --- |
+| exp204-75ae9334 | serial | 141 min | unknown | self-hops 744 + 654 s |
+| serial-40921b9f-s1 | serial | **118.7 min** | 0 | self-hops 151 + 148 s |
+| ref-names-40921b9f-r3 | 5 lanes, 1 rebase | **94.6 min** | 0 | |
+| ref-names-40921b9f-r2 | 5 lanes, 1 rebase | 103 min | 7.8 min | |
+| ref-names-40921b9f-r1 | 5 lanes, 1 rebase | 148 min | ~55 min | |
+| killed d751229f-r1 | 5 lanes, 5 rebases | (stopped at 28 min) | | server slower in total |
+
+**Parallel lanes save ~24 min (−20%) against a serial run on the same host
+the same night** (94.6 vs 118.7 min, both stall-free). That is less than
+the census predicted from exp204's 141 min, because exp204's self-hops took
+23 min and tonight's took 5: the self-hop was the biggest thing parallel
+mode could hide, and it shrank on its own (likely host contention during
+exp204; not established). What parallel mode hides now is the five scored
+legs (~21-24 min serial) behind the rebases. The rebases themselves (~88
+min) are the floor while one rebase saturates the server; on 8 replicas,
+`--parallel-rebases 2` might lower it (unmeasured).
+
+## LLM diagnostics, serial vs parallel
+
+- Rebase calls, each alone at 472 in every run: p50 3.1-4.1 s, p90 6.4-8.4 s,
+  best minute 108-119 req/s; equal to exp204's serial rebases within
+  0.1-0.2 s. Rebase 5xx retries: parallel 3-16 per rebase, serial 3-11
+  (plus the one 3,277 burst in serial). 0 timeouts, 0 failures anywhere.
+- Scored legs: parallel p50 3.3-4.7 s / p90 5.6-8.5 s (a rebase runs beside
+  them) vs serial 2.5-3.4 / 4.5-5.6. **Connection retries appear only in
+  parallel scored legs** (r2: 6 + 27, r3: 9 + 9; r1: 0; both serial runs:
+  0), all recovered, same prompt resent. Times for the load balancer's logs
+  are listed under r2 and r3.
+- Model answers per pair (asked / proposed / taken / dupInAns / unchanged)
+  move by tens per pair between any two runs, serial or parallel; no
+  direction separates the parallel runs from the serial ones.
+
+## Bands
+
+The spread of each KPI (max − min) over the three parallel runs and over
+the two serial points on index 4736dcfa, against the current names band
+(three serial repeats of 111401fe on the OLD index cb64):
+
+| KPI        | exp204 | s1      | r1      | r2      | r3      | parallel | serial (2) | old band | parallel fits? |
+| ---------- | ------ | ------- | ------- | ------- | ------- | -------- | ---------- | -------- | -------------- |
+| noise      | 3,038  | 3,052   | 3,034   | 3,054   | 3,050   | 20       | 14         | 9        | no (marginal)  |
+| noiseLn    | 68,225 | 68,065  | 68,179  | 67,829  | 67,879  | 350      | 160        | 989      | yes            |
+| novel      | 5,336  | 5,336   | 5,336   | 5,336   | 5,336   | 0        | 0          | 0        | yes            |
+| realLn     | 556,875| 556,875 | 556,875 | 556,875 | 556,875 | 0        | 0          | 0        | yes            |
+| reloc      | 1,671  | 1,643   | 1,653   | 1,726   | 1,675   | 73       | 28         | 24       | **no** (r2)    |
+| relocSt    | 437    | 436     | 436     | 438     | 437     | 2        | 1          | 1        | marginal       |
+| newName    | 4,066  | 4,064   | 4,029   | 4,038   | 4,071   | 42       | 2          | 26       | **no** (r1)    |
+| mints      | 230    | 231     | 239     | 231     | 230     | 9        | 1          | 14       | yes            |
+| treeLn     | 176,009| 175,423 | 175,268 | 176,451 | 175,799 | 1,183    | 586        | 745      | **no** (r2)    |
+| vendorLn   | 10,015 | 10,019  | 10,027  | 10,001  | 9,943   | 84       | 4          | 64       | **no** (r3)    |
+| vendorReal | 14,241 | 14,279  | 14,305  | 14,277  | 14,283  | 28       | 38         | 148      | yes            |
+
+"Fits" = the parallel spread is within max(serial spread, old band).
+
+**Not adopted.** `cargo dev eval bands` writes the WHOLE names slot (every
+KPI) and the self-hop range from the labels it is given; it has no
+per-KPI form, and the slot is generator-only (never hand-edited). Five
+KPIs do not fit: noise (20 vs 14, marginal), reloc (73 vs 28: r2's 1,726),
+newName (42 vs 26: r1's 4,029), treeLn (1,183 vs 745: r2) and vendorLn
+(84 vs 64: r3's 9,943). The generator would also set the names self-hop
+range to 2-2 ln (all three parallel cold self-hops read 2), while the
+serial control read 8 the same night: too narrow to judge anything. So
+noise-bands.json and self-hop-reference.json are unchanged; the dry run's
+output is kept in the lane's scratch notes, not committed.
+
+**Index or parallel mode?** Both serial points on the new index already
+spread wider than the old band on noise (14 vs 9) and reloc (28 vs 24): the
+new index looks somewhat wider than the old one on those two. The parallel
+runs go further on reloc, newName, treeLn and vendorLn, but each excess
+comes from ONE run, a different run each time (r2 reloc and treeLn, r1
+newName, r3 vendorLn), and no KPI's parallel mean sits outside the serial
+values by more than the old band (reloc 1,685 vs 1,657; newName 4,046 vs
+4,065; treeLn 175,839 vs 175,716; vendorLn 9,990 vs 10,017). Three runs
+against two also favour the wider range by construction. **Not proven
+either way**: there is no systematic shift, but the evidence cannot show
+the parallel spread is no wider than serial. Settling it needs a third
+serial repeat on this index (3 vs 3), or more.
+
+## What this lane could NOT prove
+
+- That parallel mode leaves the KPI spread unchanged (above).
+- The speed gain on an 8-replica server, or with `--parallel-rebases 2`.
+- Why exp204's self-hops took 23 min when tonight's took 5.
+- What the connection retries are (the load balancer's logs would tell).
+- What holds the container's ~89 GB page cache (not the index: ~0.5 GB of it).
+
+## Gate
+
+| check | 7a1ee466c | 40512942f | d751229f1 | 40921b9f7 |
+| --- | --- | --- | --- | --- |
+| `cargo dev check` (bare, worktree) | stopped (superseded) | FAIL rust:unit (launch_parity: rebase stats_json uncaptured) | PASS all 11 | PASS all 11 |
+
+census:clones prints REVIEW (advisory) with the same 51 groups as main
+throughout; none is in code this branch touched.
+
+## Proposed CLAUDE.md text (not edited here)
+
+- Eval-time line, replace "(~2.3 hr names mode)" with: "(~95 min names mode
+  with the default five lanes and one rebase at a time; ~119 min with
+  `--parallel-pairs 1`, measured stall-free the same night, exp207)".
+- "Run an eval ALONE": keep, and add: "`eval score` already runs its five
+  pairs in parallel lanes (`--parallel-pairs`, default 5) with ONE rebase
+  at a time (`--parallel-rebases`, default 1): a rebase at 472 saturates
+  the 4-replica LLM server, and five at once made it slower in total
+  (exp207). Peak memory is the lanes' sum, ~27-31 GB."
+- Server line: "the LLM server is 4x gpt-oss-20b behind vllm-lb (half the
+  GPUs; the other half runs glm53-flash), not 8x".
+- References: `ref-names-40921b9f-r1/r2/r3` are valid five-pair names-mode
+  runs on index 4736dcfa (parallel lanes; novel 5,336 / realLn 556,875
+  byte-equal to exp204-75ae9334), but their spread does not fit the serial
+  evidence on noise, reloc, newName, treeLn and vendorLn, so they did NOT
+  re-set the bands; the bands remain 111401fe's (old index) until a serial
+  repeat settles it.
