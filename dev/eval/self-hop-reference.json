@@ -13,17 +13,19 @@
   },
   "byMode": {
     "names": {
-      "_comment": "The names-mode COLD self-hop range: 3 same-commit cold repeats of 111401fe on scratch bases, the same runs that set noise-bands.json's names slot (written by `cargo dev eval bands`, never by hand). A cold leg replays nothing and the LLM re-rolls, so the count is a range; the WARM leg must be byte-identical with 0 writes.",
+      "_comment": "The names-mode COLD self-hop range: 4 same-commit cold repeats of 40921b9f on scratch bases, the same runs that set noise-bands.json's names slot (written by `cargo dev eval bands`, never by hand). A cold leg replays nothing and the LLM re-rolls, so the count is a range; the WARM leg must be byte-identical with 0 writes.",
       "version": "2.1.216",
       "coldDiffLines": {
-        "ref-names-111401fe-r1": 22,
-        "ref-names-111401fe-r2": 2,
-        "ref-names-111401fe-r3": 8
+        "ref-names-40921b9f-r1": 2,
+        "ref-names-40921b9f-r2": 2,
+        "ref-names-40921b9f-r3": 2,
+        "serial-40921b9f-s1": 8
       },
       "commits": {
-        "ref-names-111401fe-r1": "111401fe",
-        "ref-names-111401fe-r2": "111401fe",
-        "ref-names-111401fe-r3": "111401fe"
+        "ref-names-40921b9f-r1": "40921b9f",
+        "ref-names-40921b9f-r2": "40921b9f",
+        "ref-names-40921b9f-r3": "40921b9f",
+        "serial-40921b9f-s1": "40921b9f"
       }
     }
   }

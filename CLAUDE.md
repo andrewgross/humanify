@@ -242,6 +242,12 @@ are refused too: scorer v2 always scores `vendor/` and the layout block when
 both trees have them (rule 8). There is no host-wide lock (exp205): the coordinating agent decides what runs together, from each verb's `footprint` that `cargo dev` prints (memory, LLM use, time, folders written). Two runs never share a folder by accident: a verb claims the folder it writes (`<folder>.live-run`) and a second run on it is refused at once, naming the first. Run an eval ALONE — a parallel heavy job (a gate batch, another
 eval) has OOM-killed a rebase before and silently degraded a label to the
 archive prior (`ts-control-fec64e5` r1; check eval logs for "rebase FAILED").
+`eval score` already runs its five pairs in parallel lanes
+(`--parallel-pairs`, default 5) with ONE rebase at a time
+(`--parallel-rebases`, default 1): a rebase at 472 requests in flight
+saturates the 4-replica LLM server, and five at once made the run slower in
+total (exp207). Peak memory is the lanes' sum, ~27-31 GB. Each run's output
+is the same as it would be alone; only the schedule changed.
 
 **What the eval scores: the Rust binary, always.** `cargo dev eval score
 <label>` BUILDS `target/release/humanify-ag` (`cargo build --release --locked`)
@@ -292,8 +298,8 @@ permits. The summary judges both, and says "not judged" when a leg ran on a
 cache or on another version.
 
 ```bash
-cargo dev eval score <label>    # score current tree on 5 pairs (~2.3 hr names mode)
-cargo dev eval leaderboard ref-names-111401fe-r1 <label>
+cargo dev eval score <label>    # score current tree on 5 pairs (~95 min names mode, parallel lanes; ~119 min with --parallel-pairs 1, exp207)
+cargo dev eval leaderboard ref-names-40921b9f-r1 <label>
 #   ^ the current reference (names mode, five pairs, scratch bases, scorer v2;
 #     the off-mode one is ref-scratch-0f338ffa-r1-s2, four pairs). Comparing against a SEEDED-base label
 #     (everything before 2026-10-03) needs --base-mode seeded on <label>, or the
@@ -376,9 +382,10 @@ hop costs about 1,000 extra vendor noise lines, not about 38,000. On
 Andrew as draw-to-draw noise). With the rebuilt index (`exp204-75ae9334`,
 one cold run) noiseLn reads 68,225 against the reference's 77,578, and
 179→181's vendor "real" lines (library source unchanged) fall from 35,554 to
-4,468; novel/realLn exact, mints 230. The `ref-names-111401fe-*` references
-used the OLD index `cb64c1f5…`, so the leaderboard refuses a new label
-against them unless `--force-mixed` until the references are re-run.
+4,468; novel/realLn exact, mints 230. The references were re-run on this
+index (`ref-names-40921b9f-*`, below); the older `ref-names-111401fe-*` used
+the OLD index `cb64c1f5…`, so the leaderboard refuses a new label against
+them unless `--force-mixed`.
 
 **Which reference to use, and why it is not the one this file used to
 name.** Check a reference's `*-run-status.json` before citing it: absent is
@@ -386,16 +393,34 @@ UNKNOWN, not passing. Labels live under `dev/eval/results/<label>/`; the
 current references are NOT committed (their report pages quote bundle code)
 and live on this host only.
 
-- **`ref-names-111401fe-r1/r2/r3` — the current valid NAMES-mode cold
-  reference, FIVE pairs** (2026-11-08, exp201: the four plus 2.1.179→181,
+- **`ref-names-40921b9f-r1/r2/r3` (+ `serial-40921b9f-s1`) — the current
+  valid NAMES-mode cold reference, FIVE pairs, index `4736dcfa…`**
+  (2026-11-09/10, exp207: r1-r3 ran in parallel lanes, s1 one pair at a
+  time, same commit, same night). In all four, every rebase, scored leg and
+  self-hop leg exits 0, no provider errors, boots OK, warm self-hops
+  byte-identical with 0 writes, cold self-hop 2/2/2/8. novel 5,336 / realLn
+  556,875 byte-equal across the four (and to `exp204-75ae9334`); noiseLn
+  67,829-68,179. The pipeline's matching is identical in all four
+  (functions carried / close-matched / unmatched equal on every pair); only
+  the counts sent to the LLM move by a few, following the cold-built base's
+  names (exp209 investigates). The four set `noise-bands.json`
+  `byScorer.2.byMode.names` and the names self-hop range (2–8): noiseLn
+  ±350, noise ±20, reloc ±83, newName ±42, treeLn ±1,183, vendorLn ±84,
+  mints ±9. The parallel runs spread somewhat wider than the serial one on
+  noise/reloc/newName/treeLn/vendorLn, with no direction between them
+  (exp207 README, "Bands"). Results live on this host only:
+  `/work/ref-names-40921b9f-frozen/dev/eval/results/`.
+
+- **`ref-names-111401fe-r1/r2/r3` — the previous NAMES-mode cold
+  reference, FIVE pairs, OLD index `cb64c1f5…`** (2026-11-08, exp201: the four plus 2.1.179→181,
   the minifier-change hop; scratch bases, scorer v2, full prebuilt index
   `cb64c1f5…`). In each, all 5 rebases, 5 scored legs and both self-hop legs
   exit 0, warm self-hops byte-identical with 0 writes, cold self-hop 22/2/8,
   boots OK (six prompt halves re-recorded after a login expiry, `rerecorded`
   note). novel 5,336 / realLn 556,875 byte-equal across the three, and
   4,191 / 416,386 on the four shared pairs, equal to
-  `ref-names-0357696e-*-s2`. They set `noise-bands.json`
-  `byScorer.2.byMode.names` and the names self-hop range (2–22). **Names
+  `ref-names-0357696e-*-s2`. They set the names bands and self-hop range
+  (2–22) until exp207. **Names
   bands are no longer bimodal: noiseLn ±989, noise ±9, treeLn ±745** (the
   old ±15,709 / ±397 / ±2,116 were the pre-exp178 197→198 pair). The fifth
   pair alone carries ~53,300 vendor noise lines and ~35,600 vendor "real"

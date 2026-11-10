@@ -39,8 +39,8 @@ fn bands_and_self_hop_reference_load_per_mode() {
     assert_eq!(s.value.range("off"), Some((2, 184)));
     assert_eq!(
         s.value.range("names"),
-        Some((2, 22)),
-        "exp201: ref-names-111401fe r1/r2/r3"
+        Some((2, 8)),
+        "exp207: ref-names-40921b9f r1/r2/r3 + serial-40921b9f-s1"
     );
 }
 
