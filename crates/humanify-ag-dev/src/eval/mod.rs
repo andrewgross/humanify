@@ -23,3 +23,6 @@ pub mod surfaces;
 pub mod text;
 pub mod vendor;
 pub mod verbs;
+
+#[cfg(test)]
+mod test_support;

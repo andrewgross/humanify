@@ -149,39 +149,18 @@ fn a_repeat_without_a_cold_self_hop_leaves_the_reference_alone() {
     );
 }
 
-/// Give each frozen label's summary `matchingDiagnostics` (exp208): the
-/// same counts on every pair, except `fn_to_llm` / `mb_llm`.
-fn add_matching(root: &Path, name: &str, fn_to_llm: f64, mb_llm: f64) {
-    let path = root.join(name).join("summary.json");
-    let summary = JsValue::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
-    let diags: Vec<JsValue> = match super::super::card::at(&summary, "pairs") {
-        Some(JsValue::Array(a)) => a
-            .iter()
-            .map(|c| {
-                let pair = super::super::card::at(c, "pair").unwrap().as_str().unwrap();
-                JsValue::parse(&format!(
-                    r#"{{"pair":"{pair}","fnTotal":100,"fnAsked":{fn_to_llm},"mbLLMRenamed":{mb_llm}}}"#
-                ))
-                .unwrap()
-            })
-            .collect(),
-        _ => panic!("summary.json pairs"),
-    };
-    let JsValue::Object(mut o) = summary else {
-        panic!("summary.json is an object")
-    };
-    o.insert("matchingDiagnostics", JsValue::Array(diags));
-    std::fs::write(&path, crate::json::js_text(&JsValue::Object(o), true)).unwrap();
-}
-
-#[test]
-fn the_repeats_matching_spreads_are_written_beside_the_kpi_bands() {
-    let root = std::env::temp_dir().join(format!("dev-bands-match-{}", std::process::id()));
+/// `eval bands` over two frozen names-mode repeats in a scratch results
+/// dir (`tag` names it), the committed bands file copied in, after
+/// `setup` has touched the labels: the verdict and the bands file.
+fn bands_over(
+    tag: &str,
+    setup: impl Fn(&Path, &[&str]),
+) -> (Result<String, String>, std::path::PathBuf) {
+    let root = std::env::temp_dir().join(format!("dev-bands-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let names = ["ref-names-0357696e-r1", "ref-names-0357696e-r2"];
     frozen(&root, &names);
-    add_matching(&root, names[0], 10.0, 4.0);
-    add_matching(&root, names[1], 10.0, 6.0);
+    setup(&root, &names);
     let file = root.join("noise-bands.json");
     std::fs::copy(
         crate::paths::repo_root().join("dev/eval/noise-bands.json"),
@@ -189,10 +168,24 @@ fn the_repeats_matching_spreads_are_written_beside_the_kpi_bands() {
     )
     .unwrap();
     let labels: Vec<String> = names.iter().map(|s| s.to_string()).collect();
-    let said = bands(&root, &labels, &file, &root.join("self-hop-reference.json")).unwrap();
-    assert!(said.contains("matching"), "{said}");
-    let b: crate::committed::eval::NoiseBands =
-        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    let said = bands(&root, &labels, &file, &root.join("self-hop-reference.json"));
+    (said, file)
+}
+
+fn read_bands(file: &Path) -> crate::committed::eval::NoiseBands {
+    serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
+}
+
+use crate::eval::test_support::set_matching;
+
+#[test]
+fn the_repeats_matching_spreads_are_written_beside_the_kpi_bands() {
+    let (said, file) = bands_over("match", |root, names| {
+        set_matching(&root.join(names[0]), 10.0, 4.0);
+        set_matching(&root.join(names[1]), 10.0, 6.0);
+    });
+    assert!(said.unwrap().contains("matching"));
+    let b = read_bands(&file);
     let m = b.matching_bands(1, "names").unwrap();
     // Four pairs: mbLLMRenamed 16 vs 24; fnAsked equal.
     assert_eq!(m.get("mbLLMRenamed"), Some(&8.0));
@@ -201,35 +194,24 @@ fn the_repeats_matching_spreads_are_written_beside_the_kpi_bands() {
 
 #[test]
 fn an_exact_matching_count_that_differs_refuses_the_bands() {
-    let root = std::env::temp_dir().join(format!("dev-bands-match-ne-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    let names = ["ref-names-0357696e-r1", "ref-names-0357696e-r2"];
-    frozen(&root, &names);
-    add_matching(&root, names[0], 10.0, 4.0);
-    add_matching(&root, names[1], 11.0, 4.0);
-    let file = root.join("noise-bands.json");
-    let labels: Vec<String> = names.iter().map(|s| s.to_string()).collect();
-    let err = bands(&root, &labels, &file, &root.join("self-hop-reference.json")).unwrap_err();
+    let (said, file) = bands_over("match-ne", |root, names| {
+        set_matching(&root.join(names[0]), 10.0, 4.0);
+        set_matching(&root.join(names[1]), 11.0, 4.0);
+    });
+    let err = said.unwrap_err();
     assert!(err.contains("MATCHING NOT EQUAL: fnAsked"), "{err}");
-    assert!(!file.exists(), "nothing written");
+    // The copied-in committed file is untouched.
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        std::fs::read_to_string(crate::paths::repo_root().join("dev/eval/noise-bands.json"))
+            .unwrap()
+    );
 }
 
 #[test]
 fn repeats_without_matching_counts_still_get_kpi_bands_and_say_so() {
-    let root = std::env::temp_dir().join(format!("dev-bands-match-none-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    let names = ["ref-names-0357696e-r1", "ref-names-0357696e-r2"];
-    frozen(&root, &names);
-    let file = root.join("noise-bands.json");
-    std::fs::copy(
-        crate::paths::repo_root().join("dev/eval/noise-bands.json"),
-        &file,
-    )
-    .unwrap();
-    let labels: Vec<String> = names.iter().map(|s| s.to_string()).collect();
-    let said = bands(&root, &labels, &file, &root.join("self-hop-reference.json")).unwrap();
+    let (said, file) = bands_over("match-none", |_, _| {});
+    let said = said.unwrap();
     assert!(said.contains("matching counts NOT measured"), "{said}");
-    let b: crate::committed::eval::NoiseBands =
-        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
-    assert!(b.matching_bands(1, "names").is_none());
+    assert!(read_bands(&file).matching_bands(1, "names").is_none());
 }
