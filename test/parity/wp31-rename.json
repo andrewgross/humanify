@@ -1780,8 +1780,8 @@
           "reason": null
         },
         {
-          "applied": true,
-          "reason": null
+          "applied": false,
+          "reason": "shadows-child"
         },
         {
           "applied": true,
@@ -1799,10 +1799,10 @@
         },
         {
           "id": [42, 43],
-          "name": "error"
+          "name": "x"
         }
       ],
-      "emitted": "var err = 0;\ntry {\n  f();\n} catch (error) {\n  var error = error;\n  err = error;\n} finally {\n  err;\n}"
+      "emitted": "var err = 0;\ntry {\n  f();\n} catch (error) {\n  var x = error;\n  err = error;\n} finally {\n  err;\n}"
     },
     {
       "label": "x: function expression name binding — local scope, visible to its body",

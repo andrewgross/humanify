@@ -269,10 +269,14 @@ pub struct BabelBinding {
     /// `default`) and NOT a specifier's local (`export { a as b }` keeps
     /// `b` when `a` is renamed).
     pub exports_own_name: bool,
-    /// The span of `binding.path` when it is a `VariableDeclarator` WITH an
-    /// initializer — the write the capture guard must see when the
-    /// declaration sits inside the renamed scope (16-findings-queue #15).
-    pub initialized_declarator_span: Option<Span>,
+    /// `binding.path` when it is a `VariableDeclarator` WITH an
+    /// initializer: its span and its own scope (`path.scope`). It is a
+    /// write of the binding the reference/violation lists do not hold, and
+    /// for a `var` it can sit in a scope below the owner — a catch body.
+    /// The capture guard reads the span (a catch param renamed onto it,
+    /// 16-findings-queue #15); `shadows-child` reads the scope (the var
+    /// renamed onto the catch param, exp212).
+    pub initialized_declarator: Option<(Span, BScopeId)>,
 }
 
 /// The whole Babel scope view of one program.
@@ -629,7 +633,7 @@ impl<'s, 'a> Builder<'s, 'a> {
             specifier_referenced: false,
             export_declaration_id: self.is_export_declaration_id(event.path_node),
             exports_own_name: self.exports_own_name(event.path_node),
-            initialized_declarator_span: self.initialized_declarator_span(event.path_node),
+            initialized_declarator: self.initialized_declarator(event.path_node),
         });
         if matches!(event.kind, BindingKind::Var | BindingKind::Hoisted)
             && self.is_init_in_loop(event.path_node)
@@ -818,10 +822,12 @@ impl<'s, 'a> Builder<'s, 'a> {
     }
 
     /// `binding.path` is a `VariableDeclarator` with an initializer: its
-    /// span (else None).
-    fn initialized_declarator_span(&self, path_node: NodeId) -> Option<Span> {
+    /// span and scope (else None).
+    fn initialized_declarator(&self, path_node: NodeId) -> Option<(Span, BScopeId)> {
         match self.nodes.kind(path_node) {
-            AstKind::VariableDeclarator(d) if d.init.is_some() => Some(d.span),
+            AstKind::VariableDeclarator(d) if d.init.is_some() => {
+                Some((d.span, self.node_scope[path_node.index()]))
+            }
             _ => None,
         }
     }

@@ -683,7 +683,11 @@ impl RenameState {
 
     /// `wouldRenameShadowInChildScope`: a scope between one of the
     /// binding's reads or writes and `scope` binds `new_name`. The walk
-    /// climbs until it meets `scope` (or runs off the root).
+    /// climbs until it meets `scope` (or runs off the root). The binding's
+    /// own initialized declarator is a write too: `catch (x) { var err =
+    /// e; }` renamed `err` → `x` prints `var x = x`, whose initializer
+    /// assigns the catch param, not the hoisted var (exp212, the mirror of
+    /// #15's capture guard).
     pub fn would_rename_shadow_in_child_scope(
         &self,
         scope: BScopeId,
@@ -697,7 +701,9 @@ impl RenameState {
         b.refs
             .iter()
             .chain(&b.violations)
-            .any(|site| self.binds_between(site.scope, scope, new_name))
+            .map(|site| site.scope)
+            .chain(b.initialized_declarator.map(|(_, s)| s))
+            .any(|site_scope| self.binds_between(site_scope, scope, new_name))
     }
 
     /// Some scope from `from` up to (excluding) `stop` binds `name`.
@@ -778,7 +784,8 @@ impl RenameState {
             .iter()
             .chain(&b.violations)
             .any(|site| inside(site.span))
-            || b.initialized_declarator_span.is_some_and(inside)
+            || b.initialized_declarator
+                .is_some_and(|(span, _)| inside(span))
     }
 
     /// `resolveOuterBinding`: the first ancestor map holding the name.
