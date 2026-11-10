@@ -117,8 +117,15 @@ recipe version (`humanify_ag_index::replay`).
    A work directory that kept its `package-lock.json` and `build/` but
    lost its tree (the builder deletes trees after their shards land; the
    exp152 trees were deleted 2026-11-10) is restored EXACTLY from the lock
-   (`npm ci --prefer-offline`, npm's cache) instead, so its stored builds
-   stay the builds of the tree their maps name (exp213).
+   instead, so its stored builds stay the builds of the tree their maps
+   name (exp213): `npm ci --before=<publish time>` (npm validates the
+   lock's peer ranges against the registry, read as of that date), else an
+   `npm install --before` guided by the kept lock that must leave it
+   byte-identical (a lock without an optional platform binary published
+   later is refused by `npm ci`); either way the tree must hold every
+   non-optional package the lock lists. Anything else falls back to the
+   fresh install above (a re-resolve and re-bundle: not the original
+   tree), and `install <pkg>@<v>: restored|fresh …` says which on stderr.
 4. **Bundle**, per slice: the slice's recipe (§6) builds a `require()` entry
    and an `import()` entry, minified, with a sourcemap. An unresolvable
    specifier is retried as external (up to 4 rounds); top-level await is

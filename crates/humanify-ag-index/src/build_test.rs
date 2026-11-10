@@ -1320,3 +1320,38 @@ fn an_install_that_kept_its_lock_and_builds_is_restorable() {
     assert!(!restorable(&dir), "installed already");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// exp213: a restore is exact only when the tree holds every package the
+/// lock lists (optional ones may be absent: a platform binary for another
+/// OS). `npm ci --legacy-peer-deps` "succeeds" leaving the lock's peer
+/// packages out (react-three/fiber without three.js) — that tree is not
+/// the one the stored builds were made from, so it is refused.
+#[test]
+fn a_restored_tree_missing_a_locked_package_is_incomplete() {
+    use crate::build::lock_complete;
+    let dir = temp("lock-complete");
+    std::fs::write(
+        dir.join("package-lock.json"),
+        r#"{"lockfileVersion":3,"packages":{
+            "":{"name":"ix-app"},
+            "node_modules/fiber":{"version":"7.0.29"},
+            "node_modules/three":{"version":"0.140.2","peer":true},
+            "node_modules/fiber/node_modules/nested":{"version":"1.0.0"},
+            "node_modules/@scope/bin-win32":{"version":"1.0.0","optional":true}
+        }}"#,
+    )
+    .unwrap();
+    let pkg = |rel: &str| {
+        std::fs::create_dir_all(dir.join(rel)).unwrap();
+        std::fs::write(dir.join(rel).join("package.json"), "{}").unwrap();
+    };
+    pkg("node_modules/fiber");
+    pkg("node_modules/fiber/node_modules/nested");
+    assert!(!lock_complete(&dir), "three (a peer) is missing");
+    pkg("node_modules/three");
+    assert!(
+        lock_complete(&dir),
+        "the optional platform binary may be absent"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}

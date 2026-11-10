@@ -745,15 +745,26 @@ fn write_entries(dir: &Path, name: &str) -> Result<(), String> {
 /// version that old for a dependency, once more as of [`grace_cutoff`]
 /// (a sibling of the same release published moments later); the planner
 /// resolves ranges by the same two cutoffs.
-fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<PathBuf, String> {
+fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<(PathBuf, String), String> {
     let dir = work.join(format!("{}@{}", task.name.replace('/', "__"), task.version));
     if dir.join(".installed").exists() {
-        return Ok(dir);
+        return Ok((dir, "installed".into()));
     }
-    if restorable(&dir) && npm_ci(&dir, trace).is_ok() {
-        strip_source_map_comments(&dir.join("node_modules"));
-        std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
-        return Ok(dir);
+    let mut path = "fresh".to_string();
+    if restorable(&dir) {
+        match restore(&dir, task, trace) {
+            Ok(()) => {
+                strip_source_map_comments(&dir.join("node_modules"));
+                std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
+                return Ok((dir, "restored".into()));
+            }
+            Err(e) => {
+                path = format!(
+                    "fresh (restore refused: {})",
+                    e.lines().next().unwrap_or("")
+                )
+            }
+        }
     }
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -770,7 +781,7 @@ fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<PathBuf, String
     }
     strip_source_map_comments(&dir.join("node_modules"));
     std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
-    Ok(dir)
+    Ok((dir, path))
 }
 
 /// Whether `dir` is an earlier install whose tree was removed but whose
@@ -787,26 +798,85 @@ pub(crate) fn restorable(dir: &Path) -> bool {
         && dir.join("build").is_dir()
 }
 
-/// `npm ci` in `dir` (the lockfile's exact tree, npm's cache first),
-/// retried with `--legacy-peer-deps` as [`npm_install`] is.
-fn npm_ci(dir: &Path, trace: Trace<'_>) -> Result<(), String> {
-    let npm = |legacy: bool| -> Result<(), String> {
-        let mut cmd = Command::new("npm");
-        cmd.current_dir(dir).args([
+/// Whether the tree in `dir` holds every package its lockfile lists
+/// (optional ones excepted: a platform binary for another OS): the check
+/// that a restore is EXACT. `npm ci --legacy-peer-deps` would "succeed"
+/// leaving the lock's peer packages out.
+pub(crate) fn lock_complete(dir: &Path) -> bool {
+    let Some(lock) = std::fs::read_to_string(dir.join("package-lock.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+    else {
+        return false;
+    };
+    let Some(packages) = lock.get("packages").and_then(|p| p.as_object()) else {
+        return false;
+    };
+    packages.iter().all(|(path, entry)| {
+        path.is_empty()
+            || entry.get("optional").and_then(|o| o.as_bool()) == Some(true)
+            || entry.get("link").and_then(|l| l.as_bool()) == Some(true)
+            || dir.join(path).join("package.json").is_file()
+    })
+}
+
+/// Restore `dir`'s tree from its kept lockfile: [`npm_ci`] as of the
+/// task's publish time, else an `npm install` guided by the kept lock that
+/// must leave it byte-identical (once more at the grace cutoff when only
+/// the date blocked it, as [`install`] does); the tree must hold the whole
+/// lock ([`lock_complete`]). An Err leaves no tree: the caller installs
+/// fresh.
+fn restore(dir: &Path, task: &Task, trace: Trace<'_>) -> Result<(), String> {
+    let lock = std::fs::read(dir.join("package-lock.json")).map_err(|e| e.to_string())?;
+    let at = |before: &str| {
+        npm_ci(dir, before, trace).or_else(|e| {
+            // `npm ci` refuses a lock that lacks an optional platform
+            // binary published after the cutoff (EUSAGE): an install
+            // GUIDED by the lock keeps every locked version, and is
+            // accepted only when it leaves the lock byte-identical
+            let _ = std::fs::remove_dir_all(dir.join("node_modules"));
+            npm_install(dir, before, trace).map_err(|e2| format!("{e} / {e2}"))?;
+            match std::fs::read(dir.join("package-lock.json")) {
+                Ok(now) if now == lock => Ok(()),
+                _ => Err(format!("{e} / the lock-guided install changed the lock")),
+            }
+        })
+    };
+    let done = at(&task.published).or_else(|e| {
+        match grace_cutoff(&task.published).filter(|_| date_blocked(&e)) {
+            Some(grace) => at(&grace),
+            None => Err(e),
+        }
+    });
+    let done = done.and_then(|()| {
+        lock_complete(dir)
+            .then_some(())
+            .ok_or_else(|| "the tree lacks a package its lock lists".to_string())
+    });
+    if done.is_err() {
+        let _ = std::fs::remove_dir_all(dir.join("node_modules"));
+    }
+    done
+}
+
+/// `npm ci` in `dir` as of `before` (the lockfile's exact tree, npm's
+/// cache first): `--before` because npm validates the lock's peer ranges
+/// against the registry, which must be read as the original install read
+/// it. No `--legacy-peer-deps` retry: it drops the lock's peers.
+fn npm_ci(dir: &Path, before: &str, trace: Trace<'_>) -> Result<(), String> {
+    let mut cmd = Command::new("npm");
+    cmd.current_dir(dir)
+        .args([
             "ci",
             "--ignore-scripts",
             "--no-audit",
             "--no-fund",
             "--prefer-offline",
             "--loglevel=error",
-        ]);
-        if legacy {
-            cmd.arg("--legacy-peer-deps");
-        }
-        let _s = trace.stage("library.index.install");
-        run_cmd(&mut cmd)
-    };
-    npm(false).or_else(|e| npm(true).map_err(|e2| format!("{e} / {e2}")))
+        ])
+        .arg(format!("--before={before}"));
+    let _s = trace.stage("library.index.install");
+    run_cmd(&mut cmd)
 }
 
 /// `npm install` in `dir` as of `before`, retried with
@@ -1683,7 +1753,10 @@ fn module_shard(
 /// Build every missing shard of `task`: the module shards first, since the
 /// literal shard reads their builds (any build not yet made is made).
 pub(crate) fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), String> {
-    let dir = install(&cfg.work, task, trace)?;
+    let (dir, path) = install(&cfg.work, task, trace)?;
+    if !cfg.quiet {
+        eprintln!("install {}@{}: {path}", task.name, task.version);
+    }
     // the entries are the recipe's: rewritten on every build
     write_entries(&dir, &task.name)?;
     let mut missing: Vec<&ShardInputs> = task.missing.iter().collect();
