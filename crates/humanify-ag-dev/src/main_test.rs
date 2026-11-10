@@ -175,8 +175,8 @@ fn every_heavy_verb_declares_its_footprint() {
     let t = table();
     assert!(t.contains("footprint:"), "the table prints each footprint");
     assert!(
-        t.contains("17.4 GB"),
-        "eval score's footprint carries the measured peak"
+        t.contains("30.8 GB"),
+        "eval score's footprint carries the measured peak (exp207: five lanes' summed RSS)"
     );
 }
 

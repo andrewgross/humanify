@@ -541,6 +541,18 @@ fn every_golden_launch_resolves_to_a_captured_launchs_settings() {
         );
         got["libraryIndex"] = Value::Null;
         let got = without_versions(&got);
+        // exp207: every rebase now writes its LLM call ledger
+        // (`--stats-json <v>-rebase.stats.json`), diagnostics only; the
+        // captured rebases wrote none. Compared with that key taken back
+        // out, after asserting it is exactly the rebase's ledger.
+        let mut got = got;
+        if got["outputDir"] == "<TMP>/work/<LABEL>/<V>-rebased" {
+            assert_eq!(
+                got["statsJson"], "<REPO>/dev/eval/results/<LABEL>/<V>-rebase.stats.json",
+                "a rebase writes its call ledger beside its log: {launch:?}"
+            );
+            got["statsJson"] = Value::Null;
+        }
         assert!(
             wanted.contains(&got),
             "a golden launch whose settings no captured launch had:\n{launch:?}\n{got:#}"

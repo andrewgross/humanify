@@ -5,6 +5,7 @@ humanify-config| concurrency = 472
 humanify-config| [split]
 humanify-config| enabled = true
 humanify-config| [diagnostics]
+humanify-config| stats_json = "<REPO>/dev/eval/results/<LABEL>/2.1.85-rebase.stats.json"
 humanify-config| log_file = "<REPO>/dev/eval/results/<LABEL>/2.1.85-rebase.log"
 humanify-config| [library]
 humanify-config| index = "/work/library-index/4736dcfadff79ee2dd921d1d778fd7d92f604a708f3ad5b652c146ed89d67c84"
@@ -15,6 +16,7 @@ humanify-config| concurrency = 472
 humanify-config| [split]
 humanify-config| enabled = true
 humanify-config| [diagnostics]
+humanify-config| stats_json = "<REPO>/dev/eval/results/<LABEL>/2.1.118-rebase.stats.json"
 humanify-config| log_file = "<REPO>/dev/eval/results/<LABEL>/2.1.118-rebase.log"
 humanify-config| [library]
 humanify-config| index = "/work/library-index/4736dcfadff79ee2dd921d1d778fd7d92f604a708f3ad5b652c146ed89d67c84"
@@ -25,6 +27,7 @@ humanify-config| concurrency = 472
 humanify-config| [split]
 humanify-config| enabled = true
 humanify-config| [diagnostics]
+humanify-config| stats_json = "<REPO>/dev/eval/results/<LABEL>/2.1.179-rebase.stats.json"
 humanify-config| log_file = "<REPO>/dev/eval/results/<LABEL>/2.1.179-rebase.log"
 humanify-config| [library]
 humanify-config| index = "/work/library-index/4736dcfadff79ee2dd921d1d778fd7d92f604a708f3ad5b652c146ed89d67c84"
@@ -35,6 +38,7 @@ humanify-config| concurrency = 472
 humanify-config| [split]
 humanify-config| enabled = true
 humanify-config| [diagnostics]
+humanify-config| stats_json = "<REPO>/dev/eval/results/<LABEL>/2.1.197-rebase.stats.json"
 humanify-config| log_file = "<REPO>/dev/eval/results/<LABEL>/2.1.197-rebase.log"
 humanify-config| [library]
 humanify-config| index = "/work/library-index/4736dcfadff79ee2dd921d1d778fd7d92f604a708f3ad5b652c146ed89d67c84"
@@ -45,6 +49,7 @@ humanify-config| concurrency = 472
 humanify-config| [split]
 humanify-config| enabled = true
 humanify-config| [diagnostics]
+humanify-config| stats_json = "<REPO>/dev/eval/results/<LABEL>/2.1.215-rebase.stats.json"
 humanify-config| log_file = "<REPO>/dev/eval/results/<LABEL>/2.1.215-rebase.log"
 humanify-config| [library]
 humanify-config| index = "/work/library-index/4736dcfadff79ee2dd921d1d778fd7d92f604a708f3ad5b652c146ed89d67c84"

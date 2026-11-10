@@ -22,11 +22,13 @@
 //! behaviour (rule 10).
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::Instant;
 
 use humanify_ag_model::js::JsValue;
 
 use super::boot;
+use super::lanes::Lanes;
 use super::leg::{self, LabelBin, LegSpec};
 use super::records::{
     self, StatusSources, js_compact_line, library_refusal, obj, provider_error_refusal,
@@ -75,6 +77,10 @@ pub struct ScoreConfig {
     pub naming_mode: String,
     pub library_index: Option<String>,
     pub boot_model: String,
+    /// How many pairs run at once (`--parallel-pairs`, exp207); 1 = serial.
+    pub parallel_pairs: usize,
+    /// How many of their rebases run at once (`--parallel-rebases`).
+    pub parallel_rebases: usize,
 }
 
 /// The naming mode `sets` select, and the index a names launch is handed:
@@ -166,6 +172,12 @@ pub fn config_from(parsed: &Parsed, pairs: &Pairs, ctx: &Ctx) -> Result<ScoreCon
         boot_model: s
             .text("boot.model")
             .unwrap_or_else(|| "claude-opus-4-1".into()),
+        parallel_pairs: usize::try_from(s.int("eval.parallel_pairs").unwrap_or(1))
+            .unwrap_or(1)
+            .max(1),
+        parallel_rebases: usize::try_from(s.int("eval.parallel_rebases").unwrap_or(1))
+            .unwrap_or(1)
+            .max(1),
     })
 }
 
@@ -312,7 +324,23 @@ struct Run<'a> {
     bin: LabelBin,
 }
 
-impl Run<'_> {
+impl<'a> Run<'a> {
+    /// The same run, saying into `ctx` (one lane's slot).
+    fn with_ctx<'b>(&self, ctx: &'b Ctx) -> Run<'b>
+    where
+        'a: 'b,
+    {
+        Run {
+            ctx,
+            cfg: self.cfg,
+            pairs: self.pairs.clone(),
+            results: self.results.clone(),
+            work: self.work.clone(),
+            endpoint: self.endpoint.clone(),
+            bin: self.bin.clone(),
+        }
+    }
+
     /// One launch's config entries: the base keys, the call's own, the
     /// library key, then the run's `--pipeline-set` entries.
     fn settings(&self, own: &[String]) -> Vec<String> {
@@ -333,19 +361,35 @@ impl Run<'_> {
             .collect()
     }
 
-    /// Launch the binary with its output to `log` (rebase, self-hop).
+    /// Launch the binary with its output to `log` (rebase, self-hop),
+    /// sampling its peak RSS as the scored leg does (exp207: the rebase's
+    /// memory was never recorded); says one line with both.
     fn launch(&self, args: &[String], log: &Path) -> i32 {
         let mut s = self.ctx.spawn(&self.bin.path, args, leg::PIPELINE_DEADLINE);
         s.cwd = Some(self.ctx.repo.clone());
         s.env
             .push(("HUMANIFY_API_KEY".into(), self.pairs.llm.api_key.clone()));
-        match crate::proc::run_to_file(&s, log, Duration::from_secs(3600), &mut |_| {}) {
+        let t0 = Instant::now();
+        let mut peak: Option<u64> = None;
+        let exit = crate::proc::run_to_file(&s, log, leg::RSS_SAMPLE, &mut |pid| {
+            if let Some(mb) = leg::peak_rss_mb_of_tree(&leg::proc_tree(), pid) {
+                peak = Some(peak.map_or(mb, |p| p.max(mb)));
+            }
+        });
+        let code = match exit {
             Ok(e) => e.code,
             Err(e) => {
                 self.ctx.say(format!("  launch: {e}"));
                 -1
             }
-        }
+        };
+        let rss = peak.map_or("?".to_string(), |p| format!("{p} MB"));
+        self.ctx.say(format!(
+            "  launch: exit {code}, {}s, peak RSS {rss} ({})",
+            t0.elapsed().as_secs_f64().round(),
+            text(log)
+        ));
+        code
     }
 }
 
@@ -392,18 +436,7 @@ fn run_inner(ctx: &Ctx, cfg: &ScoreConfig, run_config: &JsValue) -> Result<u8, (
         bin,
     };
     record_label(&run, &cfg_path, &cfg_sha).map_err(|e| (1, e))?;
-    let mut last: Option<(String, String)> = None;
-    let pair_list = run.pairs.pairs.clone();
-    for (i, p) in pair_list.iter().enumerate() {
-        if let Some(attempted) = score_pair(&run, i, &p.from, &p.to) {
-            last = Some(attempted);
-        }
-    }
-    if cfg.self_hop
-        && let Some((to, input)) = &last
-    {
-        self_hop(&run, to, input);
-    }
+    run_lanes(&run);
     ctx.say(format!("=== summarizing model '{}' ===", cfg.label));
     let code = scoring::summarize(ctx, &cfg.label);
     write_identities(ctx, &run.results);
@@ -489,6 +522,14 @@ fn record_label(run: &Run, cfg_path: &Path, cfg_sha: &str) -> Result<(), String>
             ]),
         ),
         ("bootGateModel", JsValue::str(cfg.boot_model.as_str())),
+        // exp207: how many pairs ran at once, and the llm.concurrency
+        // EACH launch kept (the server saw up to their product in flight)
+        ("parallelPairs", records::num(cfg.parallel_pairs as f64)),
+        ("parallelRebases", records::num(cfg.parallel_rebases as f64)),
+        (
+            "llmConcurrencyPerRun",
+            records::num(f64::from(run.pairs.llm.concurrency)),
+        ),
     ]);
     std::fs::create_dir_all(&run.work).map_err(|e| format!("{}: {e}", run.work.display()))?;
     write(
@@ -540,6 +581,12 @@ fn rebase(run: &Run, from: &str, to: &str, archive: &Path) -> Base {
     remove(&out);
     let toml = run.work.join(format!("{from}-rebased.toml"));
     let mut own = run.cache_sets();
+    // the rebase's call ledger (exp207): most of the eval's LLM calls are
+    // a rebase's, so its retries / timeouts / latency are recorded too
+    own.push(format!(
+        "diagnostics.stats_json={}",
+        text(&run.results.join(format!("{from}-rebase.stats.json")))
+    ));
     own.push(format!(
         "diagnostics.log_file={}",
         text(&run.results.join(format!("{from}-rebase.log")))
@@ -580,15 +627,18 @@ fn rebase(run: &Run, from: &str, to: &str, archive: &Path) -> Base {
     base
 }
 
-/// Score one pair; Some((to, input)) when it was attempted (the self-hop
-/// re-runs the LAST attempted pair — never pairs.json's last TO when
-/// `--pairs` skipped it).
-fn score_pair(run: &Run, i: usize, from: &str, to: &str) -> Option<(String, String)> {
-    let (ctx, cfg) = (run.ctx, run.cfg);
+/// What one pair will do, decided from the files before anything
+/// launches (so the self-hop's lane is known up front): its input and
+/// archive prior, or the SKIP line it says instead.
+enum PairPlan {
+    Skip(String),
+    Go { input: String, archive: PathBuf },
+}
+
+fn plan_pair(cfg: &ScoreConfig, from: &str, to: &str) -> PairPlan {
     let pair = format!("{from}->{to}");
     if !selected(&cfg.pairs, from, to) {
-        ctx.say(format!("SKIP {pair} (not in --pairs)"));
-        return None;
+        return PairPlan::Skip(format!("SKIP {pair} (not in --pairs)"));
     }
     let input = input_of(&cfg.inputs_base, to);
     let archive = PathBuf::from(format!(
@@ -596,21 +646,215 @@ fn score_pair(run: &Run, i: usize, from: &str, to: &str) -> Option<(String, Stri
         cfg.priors_base
     ));
     if !Path::new(&input).is_file() {
-        ctx.say(format!("SKIP {pair} (no input {input})"));
-        return None;
+        return PairPlan::Skip(format!("SKIP {pair} (no input {input})"));
     }
     if !archive.is_file() {
-        ctx.say(format!("SKIP {pair} (no prior {})", text(&archive)));
-        return None;
+        return PairPlan::Skip(format!("SKIP {pair} (no prior {})", text(&archive)));
     }
-    let base = rebase(run, from, to, &archive);
+    PairPlan::Go { input, archive }
+}
+
+/// The order lanes are started in: pairs.json's, except that with fewer
+/// lanes than pairs (but more than one) the self-hop's pair goes first —
+/// its chain (rebase, scored leg, cold and warm self-hop) is the critical
+/// path. One lane is the serial run, in pairs.json's order.
+fn work_order(n: usize, hop: Option<usize>, jobs: usize) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..n).collect();
+    if let Some(h) = hop
+        && jobs > 1
+        && jobs < n
+    {
+        order.retain(|&i| i != h);
+        order.insert(0, h);
+    }
+    order
+}
+
+/// Every pair, `parallel_pairs` at a time, each in its own lane; the
+/// self-hop in the lane of the LAST attempted pair (never pairs.json's
+/// last TO when `--pairs` skipped it), right after its scored leg. Each
+/// lane says into its own slot of one ordered transcript (pairs in
+/// pairs.json order, the self-hop after them), and writes only its own
+/// pair's files: completion order reaches nothing (rule 6).
+///
+/// With fewer `parallel_rebases` than lanes (the default: 1 of 5), the
+/// rebases — LLM-bound, one at 472 already saturates the server — are
+/// GATED: they run `parallel_rebases` at a time in [`rebase_order`] on a
+/// driver beside the lanes, and each lane waits for its own base (said as
+/// one `base: waited` line) before its CPU-bound scored leg, which then
+/// overlaps the next rebase. Otherwise each lane rebases inline.
+fn run_lanes(run: &Run) {
+    let (ctx, cfg) = (run.ctx, run.cfg);
+    let list = run.pairs.pairs.clone();
+    let plans: Vec<PairPlan> = list
+        .iter()
+        .map(|p| plan_pair(cfg, &p.from, &p.to))
+        .collect();
+    let hop = cfg
+        .self_hop
+        .then(|| plans.iter().rposition(|p| matches!(p, PairPlan::Go { .. })))
+        .flatten();
+    let n = list.len();
+    let lanes_n = cfg.parallel_pairs.min(n.max(1));
+    let gated = cfg.parallel_rebases < lanes_n;
+    let rebases_n = cfg.parallel_rebases.min(lanes_n);
     ctx.say(format!(
+        "PARALLEL PAIRS: {lanes_n} lane(s) for {n} pair(s), {rebases_n} rebase(s) at a time; every launch at llm.concurrency {} (the server sees up to {} from rebases in flight)",
+        run.pairs.llm.concurrency,
+        rebases_n as u64 * u64::from(run.pairs.llm.concurrency)
+    ));
+    let lanes = Arc::new(Lanes::new(n + 1, ctx.echo));
+    let lane = Lane {
+        run,
+        list: &list,
+        plans: &plans,
+        hop,
+        lanes: &lanes,
+    };
+    if gated {
+        lane.run_gated(cfg.parallel_pairs, cfg.parallel_rebases);
+    } else {
+        let order = work_order(n, hop, cfg.parallel_pairs);
+        super::each(&order, cfg.parallel_pairs, |&i| {
+            lane.run_one(i, |run, from, to, archive| {
+                Some(rebase(run, from, to, archive))
+            });
+        });
+    }
+    ctx.absorb(lanes.close());
+}
+
+/// The planned pairs' rebase order: the self-hop's pair first (its chain
+/// — scored leg, cold and warm self-hop — is the critical path), then the
+/// others in pairs.json order.
+fn rebase_order(plans: &[PairPlan], hop: Option<usize>) -> Vec<usize> {
+    let mut order: Vec<usize> = hop.into_iter().collect();
+    order.extend(
+        (0..plans.len()).filter(|&i| Some(i) != hop && matches!(plans[i], PairPlan::Go { .. })),
+    );
+    order
+}
+
+/// What every lane of one run shares.
+struct Lane<'r, 'a> {
+    run: &'r Run<'a>,
+    list: &'r [crate::committed::eval::Pair],
+    plans: &'r [PairPlan],
+    hop: Option<usize>,
+    lanes: &'r Arc<Lanes>,
+}
+
+impl Lane<'_, '_> {
+    /// Pair `i`'s lane: its base from `base_of`, its scored leg, then the
+    /// self-hop when it is the hop's pair.
+    fn run_one(&self, i: usize, base_of: impl FnOnce(&Run, &str, &str, &Path) -> Option<Base>) {
+        let ctx = self.run.ctx;
+        let lane_ctx = ctx.for_lane(self.lanes, i);
+        let run = self.run.with_ctx(&lane_ctx);
+        let p = &self.list[i];
+        match &self.plans[i] {
+            PairPlan::Skip(line) => lane_ctx.say(line.as_str()),
+            PairPlan::Go { input, archive } => {
+                if let Some(base) = base_of(&run, &p.from, &p.to, archive) {
+                    score_on_base(&run, i, &p.from, &p.to, input, &base);
+                }
+            }
+        }
+        self.lanes.finish(i);
+        if self.hop == Some(i)
+            && let PairPlan::Go { input, .. } = &self.plans[i]
+        {
+            let hop_ctx = ctx.for_lane(self.lanes, self.list.len());
+            self_hop(&self.run.with_ctx(&hop_ctx), &p.to, input);
+        }
+    }
+
+    /// The gated schedule: a driver runs the rebases `rebases` at a time
+    /// in [`rebase_order`] and hands each base to its lane through that
+    /// lane's bounded channel; the lanes (`jobs` at a time, in the same
+    /// order, skipped pairs last) wait for theirs under a deadline.
+    fn run_gated(&self, jobs: usize, rebases: usize) {
+        let order = rebase_order(self.plans, self.hop);
+        let n = self.list.len();
+        // concurrency: one bounded (1) channel per pair, carrying its ONE
+        // base from the rebase driver to the lane; the lane waits with
+        // recv_timeout, never a sleep-and-poll.
+        let (senders, receivers): (Vec<_>, Vec<_>) = (0..n)
+            .map(|_| std::sync::mpsc::sync_channel::<Base>(1))
+            .unzip();
+        // concurrency: each receiver taken once by its own lane (a short
+        // lock around one Option::take).
+        let receivers: Vec<std::sync::Mutex<Option<std::sync::mpsc::Receiver<Base>>>> = receivers
+            .into_iter()
+            .map(|r| std::sync::Mutex::new(Some(r)))
+            .collect();
+        let mut lane_order = order.clone();
+        lane_order.extend((0..n).filter(|i| !order.contains(i)));
+        // concurrency: the rebase driver beside the lanes, a scoped thread
+        // joined before return; each rebase is one child through the one
+        // subprocess owner (its own deadline).
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                super::each(&order, rebases, |&i| {
+                    let lane_ctx = self.run.ctx.for_lane(self.lanes, i);
+                    let run = self.run.with_ctx(&lane_ctx);
+                    let p = &self.list[i];
+                    if let PairPlan::Go { archive, .. } = &self.plans[i] {
+                        let base = rebase(&run, &p.from, &p.to, archive);
+                        let _ = senders[i].send(base);
+                    }
+                });
+            });
+            super::each(&lane_order, jobs, |&i| {
+                let rx = receivers[i].lock().expect("a lane's receiver").take();
+                let place = order.iter().position(|&o| o == i).unwrap_or(0);
+                self.run_one(i, |run, _, _, _| wait_for_base(run, rx, place, order.len()));
+            });
+        });
+    }
+}
+
+/// A gated lane's wait for its base: at most one pipeline deadline per
+/// rebase ahead of it and its own; says how long it waited.
+fn wait_for_base(
+    run: &Run,
+    rx: Option<std::sync::mpsc::Receiver<Base>>,
+    place: usize,
+    of: usize,
+) -> Option<Base> {
+    let t0 = Instant::now();
+    let deadline = leg::PIPELINE_DEADLINE * u32::try_from(place + 1).unwrap_or(u32::MAX);
+    let got = rx
+        .ok_or_else(|| "no channel".to_string())
+        .and_then(|rx| rx.recv_timeout(deadline).map_err(|e| e.to_string()));
+    match got {
+        Ok(base) => {
+            run.ctx.say(format!(
+                "  base: waited {}s for its rebase ({}/{of} in rebase order)",
+                t0.elapsed().as_secs_f64().round(),
+                place + 1
+            ));
+            Some(base)
+        }
+        Err(e) => {
+            run.ctx.say(format!(
+                "  base: NEVER ARRIVED ({e}) after {}s — this pair is NOT scored",
+                t0.elapsed().as_secs_f64().round()
+            ));
+            None
+        }
+    }
+}
+
+/// Score one planned pair on its base: its scored leg.
+fn score_on_base(run: &Run, i: usize, from: &str, to: &str, input: &str, base: &Base) {
+    let pair = format!("{from}->{to}");
+    run.ctx.say(format!(
         "=== [{}/{}] {pair}: pipeline ===",
         i + 1,
         run.pairs.pairs.len()
     ));
-    scored_leg(run, &pair, to, &input, &base);
-    Some((to.to_string(), input))
+    scored_leg(run, &pair, to, input, base);
 }
 
 fn scored_leg(run: &Run, pair: &str, to: &str, input: &str, base: &Base) {
