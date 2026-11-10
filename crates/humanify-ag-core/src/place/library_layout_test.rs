@@ -4,12 +4,31 @@
 use std::collections::BTreeMap;
 
 use super::library_layout::{INNER_CONTESTED, LayoutInput, ModuleAnswer, RegionInput, plan};
+use crate::libindex::families::PackageFamilies;
 
+/// One answer: every owner holds the same `files` (the common case in
+/// these fixtures; [`shared`] gives each owner its own files).
 fn answer(owners: &[&str], files: &[&str]) -> ModuleAnswer {
     ModuleAnswer {
-        owners: owners.iter().map(|s| s.to_string()).collect(),
-        files: files.iter().map(|s| s.to_string()).collect(),
+        owners: owners
+            .iter()
+            .map(|o| (o.to_string(), files.iter().map(|s| s.to_string()).collect()))
+            .collect(),
     }
+}
+
+/// An answer whose owners hold the key under files of their own.
+fn shared(holders: &[(&str, &[&str])]) -> ModuleAnswer {
+    ModuleAnswer {
+        owners: holders
+            .iter()
+            .map(|(o, files)| (o.to_string(), files.iter().map(|s| s.to_string()).collect()))
+            .collect(),
+    }
+}
+
+fn families() -> PackageFamilies {
+    PackageFamilies::shipped()
 }
 
 fn claimed(region_claims: &[Option<&str>]) -> RegionInput {
@@ -20,6 +39,7 @@ fn claimed(region_claims: &[Option<&str>]) -> RegionInput {
             .collect(),
         module: None,
         sort_key: String::new(),
+        carried: None,
     }
 }
 
@@ -28,6 +48,7 @@ fn module_region(claims: &[Option<&str>], key: &str, sort: &str) -> RegionInput 
         claims: claims.iter().map(|c| c.map(|s| s.to_string())).collect(),
         module: Some(key.to_string()),
         sort_key: sort.to_string(),
+        carried: None,
     }
 }
 
@@ -41,6 +62,7 @@ fn a_wholesale_claimed_region_with_one_index_file_moves() {
             "sort-a",
         )],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(out.regions.len(), 1);
@@ -62,6 +84,7 @@ fn an_interleaved_region_stays_in_place() {
             "sort-a",
         )],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(
@@ -82,6 +105,7 @@ fn two_packages_in_one_module_group_stay_in_place() {
             "sort-a",
         )],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(
@@ -96,6 +120,7 @@ fn an_unclaimed_region_stays() {
     let input = LayoutInput {
         regions: vec![claimed(&[None, None])],
         module_answers: &BTreeMap::new(),
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(out.regions[0].leave_reason(), Some("unclaimed"));
@@ -115,6 +140,7 @@ fn an_unclaimed_region_with_a_clean_index_answer_moves_on_the_index() {
     let input = LayoutInput {
         regions: vec![module_region(&[None, None, None], "key1", "sort-a")],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(
@@ -131,6 +157,7 @@ fn an_unclaimed_region_with_a_multi_owner_answer_stays() {
     let input = LayoutInput {
         regions: vec![module_region(&[None, None], "key1", "sort-a")],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(
@@ -149,6 +176,7 @@ fn an_unclaimed_region_with_a_clean_owner_but_many_files_takes_a_synthetic_name(
     let input = LayoutInput {
         regions: vec![module_region(&[None, None], "key1", "sort-a")],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(
@@ -165,6 +193,7 @@ fn an_unclaimed_region_with_a_no_row_key_stays() {
     let input = LayoutInput {
         regions: vec![module_region(&[None, None], "key1", "sort-a")],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(
@@ -190,10 +219,12 @@ fn the_same_input_twice_gives_the_identical_plan() {
     let a = plan(&LayoutInput {
         regions: regions.clone(),
         module_answers: &answers,
+        families: &families(),
     });
     let b = plan(&LayoutInput {
         regions,
         module_answers: &answers,
+        families: &families(),
     });
     assert_eq!(a.regions, b.regions);
 }
@@ -211,14 +242,17 @@ fn synthetic_names_come_from_the_region_s_own_content_not_the_bundle() {
         claims: vec![Some("ms".to_string())],
         module: None,
         sort_key: sort.to_string(),
+        carried: None,
     };
     let forward = plan(&LayoutInput {
         regions: vec![mk("aaaaaaaa11111111"), mk("bbbbbbbb22222222")],
         module_answers: &answers,
+        families: &families(),
     });
     let backwards = plan(&LayoutInput {
         regions: vec![mk("bbbbbbbb22222222"), mk("aaaaaaaa11111111")],
         module_answers: &answers,
+        families: &families(),
     });
     assert_eq!(
         forward.regions[0].move_path(),
@@ -252,10 +286,12 @@ fn a_composition_change_elsewhere_in_the_package_leaves_the_shared_names() {
         claims: vec![Some("ms".to_string())],
         module: None,
         sort_key: sort.to_string(),
+        carried: None,
     };
     let two = plan(&LayoutInput {
         regions: vec![mk("aaaaaaaa11111111"), mk("cccccccc33333333")],
         module_answers: &answers,
+        families: &families(),
     });
     // The next version discovers one more ms region, sorting FIRST.
     let three = plan(&LayoutInput {
@@ -265,6 +301,7 @@ fn a_composition_change_elsewhere_in_the_package_leaves_the_shared_names() {
             mk("cccccccc33333333"),
         ],
         module_answers: &answers,
+        families: &families(),
     });
     assert_eq!(two.regions[0].move_path(), three.regions[1].move_path());
     assert_eq!(two.regions[1].move_path(), three.regions[2].move_path());
@@ -284,10 +321,12 @@ fn a_synthetic_name_tie_keeps_its_members_distinct_by_arrival_order() {
         claims: vec![Some("ms".to_string())],
         module: None,
         sort_key: sort.to_string(),
+        carried: None,
     };
     let out = plan(&LayoutInput {
         regions: vec![mk("aaaaaaaa11111111"), mk("aaaaaaaa11111111")],
         module_answers: &answers,
+        families: &families(),
     });
     let paths: Vec<_> = out.regions.iter().map(|r| r.move_path()).collect();
     assert_eq!(
@@ -316,6 +355,7 @@ fn a_duplicate_file_s_loser_repaths_inside_the_package() {
             module_region(&[Some("ms")], "key2", "sort-b"),
         ],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(out.regions[0].move_path(), Some("vendor/ms/index.js"));
@@ -342,6 +382,7 @@ fn an_equal_key_duplicate_takes_the_tie_suffix() {
             module_region(&[Some("ms")], "key2", "sort-a"),
         ],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     let paths: Vec<_> = out.regions.iter().map(|r| r.move_path()).collect();
@@ -368,6 +409,7 @@ fn a_three_way_race_sets_every_loser_behind_the_winner() {
             module_region(&[Some("ms")], "key3", "sort-a"),
         ],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     let paths: Vec<_> = out.regions.iter().map(|r| r.move_path()).collect();
@@ -387,6 +429,7 @@ fn an_index_answer_for_another_package_leaves_the_region() {
     let input = LayoutInput {
         regions: vec![module_region(&[Some("ms")], "key1", "sort-a")],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(
@@ -412,6 +455,7 @@ fn a_package_level_answer_prefers_the_index_s_main_file() {
     let input = LayoutInput {
         regions: vec![module_region(&[None, None], "key1", "sort-a")],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(
@@ -427,6 +471,7 @@ fn a_multi_file_index_answer_takes_a_synthetic_name() {
     let input = LayoutInput {
         regions: vec![module_region(&[Some("ms")], "key1", "sort-a")],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(
@@ -451,6 +496,7 @@ fn an_inner_contest_never_moves_whatever_else_agrees() {
             claimed(&[Some(INNER_CONTESTED), None]),
         ],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     for (i, region) in out.regions.iter().enumerate() {
@@ -471,10 +517,245 @@ fn a_scoped_package_lays_out_under_its_scope() {
     let input = LayoutInput {
         regions: vec![module_region(&[Some("@smithy/core")], "key1", "sort-a")],
         module_answers: &answers,
+        families: &families(),
     };
     let out = plan(&input);
     assert_eq!(
         out.regions[0].move_path(),
         Some("vendor/@smithy/core/dist-cjs/index.js")
+    );
+}
+
+// exp211 case (c): the index holds the whole-module key under the
+// claiming package AND another one (aws-sdk's nested-clients re-ships
+// client-sts's modules under `dist-cjs/submodules/sts/`). The index does
+// not give the key to SOMEONE ELSE — it gives it to the claim too — so
+// the region moves to the claiming package's own file.
+#[test]
+fn a_claim_among_several_index_owners_moves_to_the_claim_s_own_file() {
+    let answers = BTreeMap::from([(
+        "key1".to_string(),
+        shared(&[
+            (
+                "@aws-sdk/client-sts",
+                &["dist-cjs/endpoint/EndpointParameters.js"],
+            ),
+            (
+                "@aws-sdk/nested-clients",
+                &["dist-cjs/submodules/sts/endpoint/EndpointParameters.js"],
+            ),
+        ]),
+    )]);
+    let input = LayoutInput {
+        regions: vec![module_region(
+            &[Some("@aws-sdk/nested-clients")],
+            "key1",
+            "sort-a",
+        )],
+        module_answers: &answers,
+        families: &families(),
+    };
+    let out = plan(&input);
+    assert_eq!(
+        out.regions[0].move_path(),
+        Some(
+            "vendor/@aws-sdk/nested-clients/dist-cjs/submodules/sts/endpoint/EndpointParameters.js"
+        ),
+        "the claim is one of the key's owners: its own file, not a leave"
+    );
+}
+
+#[test]
+fn a_claim_outside_several_index_owners_still_leaves() {
+    let answers = BTreeMap::from([(
+        "key1".to_string(),
+        shared(&[("aa", &["index.js"]), ("bb", &["index.js"])]),
+    )]);
+    let input = LayoutInput {
+        regions: vec![module_region(&[Some("cc")], "key1", "sort-a")],
+        module_answers: &answers,
+        families: &families(),
+    };
+    let out = plan(&input);
+    assert_eq!(out.regions[0].leave_reason(), Some("index-disagrees"));
+}
+
+fn carried(claims: &[Option<&str>], sort: &str, prior: &str) -> RegionInput {
+    RegionInput {
+        claims: claims.iter().map(|c| c.map(|s| s.to_string())).collect(),
+        module: None,
+        sort_key: sort.to_string(),
+        carried: Some(prior.to_string()),
+    }
+}
+
+// exp211 case (a): lodash and lodash-es ship the same function bodies, and
+// discovery's propagation claims an ESM-inlined module for one or the other
+// depending on which neighbour reached it first. The prior release filed
+// this exact content under `lodash-es`; a claim for its family twin keeps
+// the prior's folder, so the same body lands at the same path every version.
+#[test]
+fn a_family_twin_claim_keeps_the_prior_release_s_package() {
+    let input = LayoutInput {
+        regions: vec![carried(
+            &[Some("lodash"), Some("lodash")],
+            "0581b523ffff",
+            "lodash-es",
+        )],
+        module_answers: &BTreeMap::new(),
+        families: &families(),
+    };
+    let out = plan(&input);
+    assert_eq!(
+        out.regions[0].move_path(),
+        Some("vendor/lodash-es/module-0581b523.js"),
+        "the prior's package for the same content, within the claim's family"
+    );
+}
+
+#[test]
+fn a_carried_package_of_another_family_is_ignored() {
+    let input = LayoutInput {
+        regions: vec![carried(&[Some("ms")], "0581b523ffff", "lodash-es")],
+        module_answers: &BTreeMap::new(),
+        families: &families(),
+    };
+    let out = plan(&input);
+    assert_eq!(
+        out.regions[0].move_path(),
+        Some("vendor/ms/module-0581b523.js"),
+        "the carry only chooses among the claim's family: another package \
+         is a disagreement, and the claim stands"
+    );
+}
+
+#[test]
+fn a_carry_never_moves_a_region_that_would_stay() {
+    let input = LayoutInput {
+        regions: vec![
+            carried(&[None, None], "aaaa0000", "lodash-es"),
+            carried(&[Some("lodash"), None], "bbbb0000", "lodash-es"),
+            carried(&[Some("lodash"), Some("ms")], "cccc0000", "lodash-es"),
+        ],
+        module_answers: &BTreeMap::new(),
+        families: &families(),
+    };
+    let out = plan(&input);
+    let reasons: Vec<_> = out.regions.iter().map(|r| r.leave_reason()).collect();
+    assert_eq!(
+        reasons,
+        vec![Some("unclaimed"), Some("partial"), Some("contested")],
+        "the carry chooses a package for a region that moves; it is never \
+         evidence that a region is library code"
+    );
+}
+
+#[test]
+fn a_carried_package_must_hold_the_key_when_the_index_answers() {
+    let answers = BTreeMap::from([(
+        "key1".to_string(),
+        shared(&[
+            ("lodash", &["_listCacheGet.js"]),
+            ("lodash-es", &["_listCacheGet.js"]),
+        ]),
+    )]);
+    let mut keep = module_region(&[Some("lodash")], "key1", "sort-a");
+    keep.carried = Some("lodash-es".to_string());
+    let mut refused = module_region(&[Some("lodash")], "key1", "sort-b");
+    refused.carried = Some("lodash.debounce".to_string());
+    let input = LayoutInput {
+        regions: vec![keep, refused],
+        module_answers: &answers,
+        families: &families(),
+    };
+    let out = plan(&input);
+    assert_eq!(
+        out.regions[0].move_path(),
+        Some("vendor/lodash-es/_listCacheGet.js"),
+        "the prior's package holds the key: its file"
+    );
+    assert_eq!(
+        out.regions[1].move_path(),
+        Some("vendor/lodash/_listCacheGet.js"),
+        "a family member the index does not record for this key is no \
+         choice at all: the claim stands"
+    );
+}
+
+// exp211, the dependency evidence: discovery claims one ajv module for the
+// fork `@redocly/ajv` (whose files hold the same key) while the bundle's
+// other ajv modules answer ONLY to `ajv`. The package the bundle evidently
+// carries — the most regions placed on a key no one else holds — is the
+// choice among the key's owners; the claim stands on a tie.
+#[test]
+fn a_shared_key_goes_to_the_owner_the_bundle_evidently_carries() {
+    let answers = BTreeMap::from([
+        (
+            "k-own-1".to_string(),
+            answer(&["ajv"], &["dist/compile/rules.js"]),
+        ),
+        ("k-own-2".to_string(), answer(&["ajv"], &["dist/ajv.js"])),
+        (
+            "k-shared".to_string(),
+            answer(&["@redocly/ajv", "ajv"], &["dist/compile/util.js"]),
+        ),
+    ]);
+    let input = LayoutInput {
+        regions: vec![
+            module_region(&[Some("ajv")], "k-own-1", "sort-a"),
+            module_region(&[None], "k-own-2", "sort-b"),
+            module_region(&[Some("@redocly/ajv")], "k-shared", "sort-c"),
+        ],
+        module_answers: &answers,
+        families: &families(),
+    };
+    let out = plan(&input);
+    assert_eq!(
+        out.regions[2].move_path(),
+        Some("vendor/ajv/dist/compile/util.js"),
+        "two regions answer to ajv alone, none to the fork: ajv's file"
+    );
+}
+
+#[test]
+fn a_shared_key_keeps_the_claim_when_the_evidence_ties() {
+    let answers = BTreeMap::from([
+        ("k-a".to_string(), answer(&["aa"], &["a.js"])),
+        ("k-b".to_string(), answer(&["bb"], &["b.js"])),
+        ("k-shared".to_string(), answer(&["aa", "bb"], &["s.js"])),
+    ]);
+    let input = LayoutInput {
+        regions: vec![
+            module_region(&[Some("aa")], "k-a", "sort-a"),
+            module_region(&[Some("bb")], "k-b", "sort-b"),
+            module_region(&[Some("bb")], "k-shared", "sort-c"),
+        ],
+        module_answers: &answers,
+        families: &families(),
+    };
+    let out = plan(&input);
+    assert_eq!(out.regions[2].move_path(), Some("vendor/bb/s.js"));
+}
+
+#[test]
+fn the_evidence_never_moves_an_unclaimed_shared_key() {
+    let answers = BTreeMap::from([
+        ("k-a".to_string(), answer(&["aa"], &["a.js"])),
+        ("k-shared".to_string(), answer(&["aa", "bb"], &["s.js"])),
+    ]);
+    let input = LayoutInput {
+        regions: vec![
+            module_region(&[Some("aa")], "k-a", "sort-a"),
+            module_region(&[None], "k-shared", "sort-b"),
+        ],
+        module_answers: &answers,
+        families: &families(),
+    };
+    let out = plan(&input);
+    assert_eq!(
+        out.regions[1].leave_reason(),
+        Some("unclaimed"),
+        "no claim and several owners stays as before: the evidence chooses \
+         between owners, it does not make a region library code"
     );
 }

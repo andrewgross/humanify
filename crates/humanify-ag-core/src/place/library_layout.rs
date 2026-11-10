@@ -39,6 +39,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::libindex::families::PackageFamilies;
 use crate::modules::vendor_names::{sanitize_fs_path, strip_js_extension};
 
 /// One region (module group) as the planner sees it: the claiming package
@@ -50,6 +51,10 @@ pub struct RegionInput {
     pub claims: Vec<Option<String>>,
     pub module: Option<String>,
     pub sort_key: String,
+    /// The package the PRIOR release filed this exact content under
+    /// (exp211), when it filed every copy under one package; `None`
+    /// without a prior or when the prior did not place it.
+    pub carried: Option<String>,
 }
 
 /// The fold marker for one slot whose own contents disagree — a wrapper
@@ -77,18 +82,22 @@ where
     package.map(str::to_string)
 }
 
-/// The index's answer for a whole vendored module: owning packages and
-/// source files, sorted by the caller (`LibraryIndex` rows arrive sorted).
+/// The index's answer for a whole vendored module: every owning package
+/// with ITS source files (sorted by the caller — `LibraryIndex` rows
+/// arrive sorted). A key two packages hold keeps both owners' files
+/// (exp211): which owner the region is, is the planner's question.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModuleAnswer {
-    pub owners: Vec<String>,
-    pub files: Vec<String>,
+    pub owners: BTreeMap<String, Vec<String>>,
 }
 
 /// The planner's whole input; `module_answers` is keyed by module key.
+/// `families` says which packages are one family (the carry chooses only
+/// within the claim's family, exp211).
 pub struct LayoutInput<'a> {
     pub regions: Vec<RegionInput>,
     pub module_answers: &'a BTreeMap<String, ModuleAnswer>,
+    pub families: &'a PackageFamilies,
 }
 
 /// One region's decision: the exact vendor path to move to, or the
@@ -136,10 +145,16 @@ enum Want {
 
 /// Plan every region. Pure: the same input yields the identical output.
 pub fn plan(input: &LayoutInput) -> LayoutPlan {
+    let evidence = bundle_evidence(input);
+    let choice = Choice {
+        answers: input.module_answers,
+        families: input.families,
+        evidence: &evidence,
+    };
     let wants: Vec<Want> = input
         .regions
         .iter()
-        .map(|region| region_want(region, input.module_answers))
+        .map(|region| region_want(region, &choice))
         .collect();
     let paths = resolve_paths(input, &wants);
     LayoutPlan {
@@ -149,23 +164,29 @@ pub fn plan(input: &LayoutInput) -> LayoutPlan {
 
 /// One region's claim verdict: the single claiming package and the file it
 /// wants, else the reason it cannot move.
-fn region_want(region: &RegionInput, answers: &BTreeMap<String, ModuleAnswer>) -> Want {
-    let answer = answer_for(region, answers);
+fn region_want(region: &RegionInput, choice: &Choice) -> Want {
+    let answer = answer_for(region, choice.answers);
     match claim_verdict(region) {
-        Ok(package) => {
-            if answer_is_foreign(answer, package) {
-                // A whole-module key the index gives to someone else: the
-                // claim and the index cannot both be right, so nothing moves.
-                return Want::Leave {
+        Ok(claim) => {
+            let package = shared_key_choice(claim, region.carried.as_deref(), answer, choice);
+            match answer {
+                // A whole-module key the index gives only to OTHER
+                // packages: the claim and the index cannot both be right,
+                // so nothing moves. A key the claim's package holds beside
+                // others is no disagreement (exp211): the region takes
+                // that package's own files.
+                Some(answer) if !answer.owners.contains_key(package) => Want::Leave {
                     reason: "index-disagrees",
-                };
-            }
-            // An agreed answer with exactly one file is the real npm spelling;
-            // no answer (or no single file) falls to a synthetic name below.
-            let file = answer.and_then(chosen_file);
-            Want::Move {
-                package: package.to_string(),
-                file,
+                },
+                // An agreed answer with exactly one file is the real npm
+                // spelling; no answer (or no single file) falls to a
+                // synthetic name below.
+                _ => Want::Move {
+                    package: package.to_string(),
+                    file: answer
+                        .and_then(|a| a.owners.get(package))
+                        .and_then(|files| chosen_file(files)),
+                },
             }
         }
         // No claim on any unit — the index may still answer cleanly (exp157):
@@ -176,14 +197,104 @@ fn region_want(region: &RegionInput, answers: &BTreeMap<String, ModuleAnswer>) -
         // conflict is evidence, silence is not.
         Err(reason) => match reason {
             "unclaimed" => match answer {
-                Some(answer) if answer.owners.len() == 1 => Want::Move {
-                    package: answer.owners[0].clone(),
-                    file: chosen_file(answer),
-                },
+                Some(answer) if answer.owners.len() == 1 => {
+                    let (owner, files) = answer.owners.iter().next().expect("one owner");
+                    Want::Move {
+                        package: owner.clone(),
+                        file: chosen_file(files),
+                    }
+                }
                 _ => Want::Leave { reason },
             },
             _ => Want::Leave { reason },
         },
+    }
+}
+
+/// What the shared-key choice reads besides the region (exp211).
+struct Choice<'a> {
+    answers: &'a BTreeMap<String, ModuleAnswer>,
+    families: &'a PackageFamilies,
+    /// Per package, how many regions move on a whole-module key ONLY that
+    /// package holds — the bundle's own evidence of which packages it
+    /// carries ([`bundle_evidence`]).
+    evidence: &'a BTreeMap<String, usize>,
+}
+
+/// The bundle's dependency evidence (exp211): per package, the regions
+/// whose whole-module key the index gives to that package ALONE and that
+/// move on it (the claim agrees, or no claim at all — exp157's clean
+/// answer). Order-free: a count over the input, whatever the bundle order.
+fn bundle_evidence(input: &LayoutInput) -> BTreeMap<String, usize> {
+    let mut evidence: BTreeMap<String, usize> = BTreeMap::new();
+    for region in &input.regions {
+        let Some(answer) = answer_for(region, input.module_answers) else {
+            continue;
+        };
+        let mut owners = answer.owners.keys();
+        let (Some(owner), None) = (owners.next(), owners.next()) else {
+            continue;
+        };
+        let agrees = match claim_verdict(region) {
+            Ok(claim) => claim == owner,
+            Err(reason) => reason == "unclaimed",
+        };
+        if agrees {
+            *evidence.entry(owner.clone()).or_default() += 1;
+        }
+    }
+    evidence
+}
+
+/// The package a claimed region is filed under when the same code is held
+/// by more than one package (exp211), else the claim:
+///
+/// 1. the PRIOR release's package for this exact content, when it is one
+///    family with the claim (lodash and lodash-es ship the same bodies,
+///    and which twin discovery claims depends on which neighbour reached
+///    the module first) and — when the index answers the whole-module key
+///    — the index records it as an owner too;
+/// 2. when the index gives the key to the claim AND other packages, the
+///    owner the bundle evidently carries: strictly the most regions placed
+///    on keys only it holds ([`bundle_evidence`]; ajv over its fork
+///    `@redocly/ajv`, aws-sdk's `nested-clients` over the client it
+///    re-ships). A tie keeps the claim.
+///
+/// Every choice is a package that holds the code by the evidence already
+/// in hand; the choice never makes a region move.
+fn shared_key_choice<'r>(
+    claim: &'r str,
+    carried: Option<&'r str>,
+    answer: Option<&'r ModuleAnswer>,
+    choice: &Choice,
+) -> &'r str {
+    if let Some(prior) = carried
+        && prior != claim
+        && choice.families.same(prior, claim)
+        && answer.is_none_or(|a| a.owners.contains_key(prior))
+    {
+        return prior;
+    }
+    match answer {
+        Some(answer) if answer.owners.len() > 1 && answer.owners.contains_key(claim) => {
+            evident_owner(answer, choice.evidence).unwrap_or(claim)
+        }
+        _ => claim,
+    }
+}
+
+/// The key's one owner with strictly the most bundle evidence, if any
+/// owner has evidence at all; `None` on a tie.
+fn evident_owner<'a>(
+    answer: &'a ModuleAnswer,
+    evidence: &BTreeMap<String, usize>,
+) -> Option<&'a str> {
+    let count = |owner: &str| evidence.get(owner).copied().unwrap_or(0);
+    let best = answer.owners.keys().map(|o| count(o)).max()?;
+    let mut leaders = answer.owners.keys().filter(|o| count(o) == best);
+    match (leaders.next(), leaders.next()) {
+        (Some(owner), None) if best > 0 => Some(owner.as_str()),
+        _ => None,
     }
 }
 
@@ -214,27 +325,17 @@ fn claim_verdict(region: &RegionInput) -> Result<&str, &'static str> {
     }
 }
 
-/// Whether the index's answer, when there is one, names a DIFFERENT
-/// owner than the claim. No answer is not a disagreement.
-fn answer_is_foreign(answer: Option<&ModuleAnswer>, package: &str) -> bool {
-    match answer {
-        Some(answer) => !(answer.owners.len() == 1 && answer.owners[0] == package),
-        None => false,
-    }
-}
-
 /// The region's file from an index answer: ONE file is it; several files
 /// take the index's MAIN file — the one whose basename is `index`, in the
 /// caller's sorted order — when the answer has one (D1, plan step 7: a
 /// package-level answer still lands the region inside the package, under a
 /// sensible name). None, and the region falls to the content-hash
 /// synthetic form below.
-fn chosen_file(answer: &ModuleAnswer) -> Option<String> {
-    if answer.files.len() == 1 {
-        return Some(answer.files[0].clone());
+fn chosen_file(files: &[String]) -> Option<String> {
+    if files.len() == 1 {
+        return Some(files[0].clone());
     }
-    answer
-        .files
+    files
         .iter()
         .find(|file| strip_js_extension(basename(file)) == "index")
         .cloned()

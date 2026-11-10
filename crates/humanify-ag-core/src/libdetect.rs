@@ -462,10 +462,6 @@ fn detect_default(files: &[UnpackedFile]) -> Result<LibraryDetectionResult, Stri
 // serves the esbuild adapter — exp075's second bundler)
 // ---------------------------------------------------------------------------
 
-/// Deepest a factory file sits below the output root:
-/// vendor/@scope/pkg/file.js — three directory levels.
-const MAX_VENDOR_DEPTH: usize = 3;
-
 /// The manifest fields the detector reads.
 struct Manifest {
     runtime_file: Option<String>,
@@ -500,24 +496,21 @@ fn parse_manifest(raw: &str) -> Option<Result<Manifest, String>> {
     }))
 }
 
-/// `loadManifest`: walk up from the first file's directory (at most
-/// `MAX_VENDOR_DEPTH` levels) until `<dir>/vendor/_bun-modules.json`
-/// reads and parses.
+/// `loadManifest`: walk up from the first file's directory until
+/// `<dir>/vendor/_bun-modules.json` reads and parses. Uncapped (exp211): a
+/// names-mode placement files a module at its real npm path, as deep as
+/// the package nests it (`vendor/ajv/dist/compile/codegen/code.js`), and the
+/// old three-level cap missed the root whenever such a file came first —
+/// every factory then went to the formatter as app code. Every unpacked
+/// file sits under the output root, so the first manifest up the chain is
+/// the run's own.
 fn load_manifest(files: &[UnpackedFile]) -> Option<Result<(Manifest, PathBuf), String>> {
-    let mut dir = files.first()?.path.parent()?.to_path_buf();
-    for _ in 0..=MAX_VENDOR_DEPTH {
-        if let Ok(raw) = read_utf8(&bun_manifest_path(&dir))
-            && let Some(parsed) = parse_manifest(&raw)
-        {
-            return Some(parsed.map(|m| (m, dir)));
-        }
-        let parent = dir.parent()?.to_path_buf();
-        if parent == dir {
-            break;
-        }
-        dir = parent;
-    }
-    None
+    let start = files.first()?.path.parent()?;
+    start.ancestors().find_map(|dir| {
+        let raw = read_utf8(&bun_manifest_path(dir)).ok()?;
+        let parsed = parse_manifest(&raw)?;
+        Some(parsed.map(|m| (m, dir.to_path_buf())))
+    })
 }
 
 /// Node's `path.relative(from, to)` over absolute or same-rooted paths,

@@ -218,6 +218,21 @@ pub fn index_folder_of(path: &str) -> Option<&str> {
     rest.rsplit_once('/').map(|(folder, _)| folder)
 }
 
+/// The package a names-mode placement path files a module under
+/// (`vendor/<package>/…`, `vendor/@scope/name/…`) — the unpack's
+/// placement counts and the prior placement carry (exp211) both read it.
+pub fn package_of_vendor_path(path: &str) -> Option<String> {
+    let mut parts = path.strip_prefix(VENDOR_DIR)?.strip_prefix('/')?.split('/');
+    let first = parts.next()?;
+    let package = if first.starts_with('@') {
+        format!("{first}/{}", parts.next()?)
+    } else {
+        first.to_string()
+    };
+    // A file directly under vendor/ names no package.
+    parts.next().map(|_| package)
+}
+
 /// The placement answer split into (folder, stem) for the file-name
 /// chooser — the stem is the index's real npm file (`index`),
 /// `module-<N>` for a synthetic one.

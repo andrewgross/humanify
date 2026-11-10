@@ -348,7 +348,11 @@ pub struct LibraryLayout {
 /// not replicate across versions (the claims flip packages wholesale,
 /// matching's territory). The strict join stays; what changed is the
 /// NAME ([`module_content_key`]) and the guard.
-pub fn plan_library_modules(source: &ModuleSource<'_>, regions: &[ClaimedRegion]) -> LibraryLayout {
+pub fn plan_library_modules(
+    source: &ModuleSource<'_>,
+    regions: &[ClaimedRegion],
+    prior_packages: &std::collections::BTreeMap<String, String>,
+) -> LibraryLayout {
     use crate::place::library_layout::{LayoutInput, RegionInput, plan};
     let mut layout = LibraryLayout::default();
     if regions.is_empty() {
@@ -369,6 +373,7 @@ pub fn plan_library_modules(source: &ModuleSource<'_>, regions: &[ClaimedRegion]
     let mut joined: Vec<(usize, RegionInput)> = Vec::new();
     for (region, module) in regions.iter().zip(&join_of) {
         let Some(module) = module else { continue };
+        let sort_key = module_content_key(&extract.modules[*module], body);
         joined.push((
             *module,
             RegionInput {
@@ -378,7 +383,11 @@ pub fn plan_library_modules(source: &ModuleSource<'_>, regions: &[ClaimedRegion]
                 // takes the planner's synthetic spelling — stable by the
                 // module's own statement-set content key.
                 module: None,
-                sort_key: module_content_key(&extract.modules[*module], body),
+                // exp211: the package the prior filed this exact content
+                // under — the planner keeps it when it is the claim's
+                // family twin (lodash / lodash-es).
+                carried: prior_packages.get(&sort_key).cloned(),
+                sort_key,
             },
         ));
     }
@@ -386,9 +395,11 @@ pub fn plan_library_modules(source: &ModuleSource<'_>, regions: &[ClaimedRegion]
         return layout;
     }
     let answers = std::collections::BTreeMap::new();
+    let families = crate::libindex::families::PackageFamilies::shipped();
     let planned = plan(&LayoutInput {
         regions: joined.iter().map(|(_, region)| region.clone()).collect(),
         module_answers: &answers,
+        families: &families,
     });
     for ((module, _), placement) in joined.iter().zip(&planned.regions) {
         if let crate::place::library_layout::Placement::Move { path } = placement {
@@ -488,18 +499,62 @@ fn packages_conflict(
 /// same blurred shape drew one name in arrival order), so a version that
 /// discovered one more region renamed the survivors.
 fn module_content_key(module: &FossilModule, body: &[Value]) -> String {
-    let mut hashes: Vec<String> = module
+    let hashes: Vec<String> = module
         .statements
         .iter()
         .map(|&s| crate::hash::statement_hash::statement_hash(&body[s]))
         .collect();
-    hashes.sort_unstable();
+    content_key_of_hashes(&hashes)
+}
+
+/// The module content key over a module's statement hashes (exp158): the
+/// hashes SORTED, each followed by `|`, SHA-256'd. The ONE spelling of the
+/// key — the era's [`module_content_key`] and the prior ledger's carry
+/// ([`prior_library_packages`]) both compute it here, so a module the
+/// prior filed is found by the same key this run names it by.
+pub fn content_key_of_hashes(hashes: &[String]) -> String {
+    let mut sorted: Vec<&str> = hashes.iter().map(String::as_str).collect();
+    sorted.sort_unstable();
     let mut hasher = Sha256::default();
-    for hash in &hashes {
+    for hash in sorted {
         hasher.update(hash.as_bytes());
         hasher.update(b"|");
     }
     format!("{:x}", hasher.finalize())
+}
+
+/// The prior release's library placement by module content key (exp211):
+/// for every module the prior's split ledger records under
+/// `vendor/<package>/…`, its content key → that package. A key whose
+/// copies the prior filed under two packages is dropped (the prior made no
+/// single choice), and a ledger of another hash era carries nothing (its
+/// statement hashes are not this run's keys). The planner reads it only
+/// to CHOOSE between packages the claims already allow
+/// ([`crate::place::library_layout`]).
+pub fn prior_library_packages(
+    ledger: &crate::place::ledger::StableSplitLedger,
+) -> std::collections::BTreeMap<String, String> {
+    use std::collections::BTreeMap;
+    if !ledger.hashes_current() {
+        return BTreeMap::new();
+    }
+    let mut seen: BTreeMap<String, Option<String>> = BTreeMap::new();
+    for module in ledger.fossil_modules.iter().flatten() {
+        let Some(package) = crate::modules::vendor_names::package_of_vendor_path(&module.file)
+        else {
+            continue;
+        };
+        seen.entry(content_key_of_hashes(&module.hashes))
+            .and_modify(|held| {
+                if held.as_deref() != Some(package.as_str()) {
+                    *held = None;
+                }
+            })
+            .or_insert(Some(package));
+    }
+    seen.into_iter()
+        .filter_map(|(key, package)| package.map(|p| (key, p)))
+        .collect()
 }
 
 /// The lifecycle reason a marked wrapper is skipped by the waves under.

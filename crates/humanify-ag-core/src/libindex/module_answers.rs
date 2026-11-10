@@ -9,8 +9,9 @@
 //! manifest was already stamp-checked when [`super::lookup::LibraryIndex`]
 //! was loaded, so the rows here are this fingerprint era's. A key held by
 //! two packages is TWO rows (build-time collisions are evidence, never
-//! dropped): the reader answers it with both owners and no files, which
-//! the planner reads as a disagreement and leaves in place.
+//! dropped): the reader answers it with both owners, each with its own
+//! files, and the planner decides whether the claim is one of them
+//! (exp211; before, both owners and no file, always a disagreement).
 //!
 //! A missing `modules.<slice>.jsonl` when a key was asked for is a
 //! REFUSAL, never an empty answer — a broken or half-written index must
@@ -61,25 +62,19 @@ pub fn read_module_answers(
         .collect())
 }
 
-/// One key's rows into one answer: a single holding package answers with
-/// its files (sorted — the builder sorts, this re-sorts so the planner's
-/// contract holds whatever the file says); two or more holders answer
-/// with every owner and NO file, the planner's foreign case.
-fn answer_of(mut rows: Vec<ModuleRow>) -> ModuleAnswer {
-    if rows.len() == 1 {
-        let row = rows.pop().expect("answer_of called with one row");
-        let mut files = row.files;
+/// One key's rows into one answer: every holding package with ITS files
+/// (sorted and de-duplicated — the builder sorts, this re-sorts so the
+/// planner's contract holds whatever the file says). Two or more holders
+/// keep every owner's files (exp211): whether the claim is one of them is
+/// the planner's question, not the reader's.
+fn answer_of(rows: Vec<ModuleRow>) -> ModuleAnswer {
+    let mut owners: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for row in rows {
+        owners.entry(row.owner).or_default().extend(row.files);
+    }
+    for files in owners.values_mut() {
         files.sort();
-        return ModuleAnswer {
-            owners: vec![row.owner],
-            files,
-        };
+        files.dedup();
     }
-    let mut owners: Vec<String> = rows.into_iter().map(|r| r.owner).collect();
-    owners.sort();
-    owners.dedup();
-    ModuleAnswer {
-        owners,
-        files: Vec::new(),
-    }
+    ModuleAnswer { owners }
 }

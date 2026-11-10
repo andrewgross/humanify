@@ -93,19 +93,27 @@ pub struct SplitStageInput<'a> {
     pub library: &'a [(usize, String)],
 }
 
+/// Which prior split ledger the run reads: `--split-ledger` wins, else the
+/// ledger beside `--prior-version`. The ONE resolution — the split stage
+/// and the names-mode placement carry (exp211) both ask it.
+pub fn prior_split_ledger_path(
+    prior_version: Option<&Path>,
+    split_ledger: Option<&str>,
+) -> Option<std::path::PathBuf> {
+    match split_ledger {
+        Some(p) => Some(std::path::PathBuf::from(p)),
+        None => prior_version.and_then(find_split_ledger_path),
+    }
+}
+
 /// `loadPriorSplitLedger`: `--split-ledger` wins, else the ledger beside
 /// `--prior-version`.
 fn load_prior_split_ledger(
     input: &mut SplitStageInput<'_>,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Option<StableSplitLedger>, String> {
-    let discovered = input.prior_version.and_then(find_split_ledger_path);
-    let path = match input.split_ledger {
-        Some(p) => std::path::PathBuf::from(p),
-        None => match discovered {
-            Some(p) => p,
-            None => return Ok(None),
-        },
+    let Some(path) = prior_split_ledger_path(input.prior_version, input.split_ledger) else {
+        return Ok(None);
     };
     let mut ledger = read_ledger(&path)?;
     renderer.message(&format!(
