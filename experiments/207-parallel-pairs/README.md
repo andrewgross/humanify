@@ -347,12 +347,13 @@ serial repeat on this index (3 vs 3), or more.
 
 ## Gate
 
-| check | 7a1ee466c | 40512942f | d751229f1 | 40921b9f7 | 0f184aeb7 | final |
+| check | 7a1ee466c | 40512942f | d751229f1 | 40921b9f7 | 0f184aeb7 | b9dcee289 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `cargo dev check` (bare, worktree) | stopped (superseded) | FAIL rust:unit (launch_parity: rebase stats_json uncaptured) | PASS all 11 | PASS all 11 | PASS all 11 | see report |
-| `cargo dev check` (bare, clean checkout) | | | | | FAIL rust:unit: `parallel_rebases_lets_that_many_overlap` raced (an instant recorder rebase ended before the last started); fixed by making every rebase slow in that test | see report |
+| `cargo dev check` (bare, worktree) | stopped (superseded) | FAIL rust:unit (launch_parity: rebase stats_json uncaptured) | PASS all 11 | PASS all 11 | PASS all 11 | PASS all 11 |
+| `cargo dev check` (bare, clean checkout) | | | | | FAIL rust:unit: `parallel_rebases_lets_that_many_overlap` raced (an instant recorder rebase ended before the last started); fixed by making every rebase slow in that test | PASS all 11 |
 
-census:clones prints REVIEW (advisory) with the same 51 groups as main
+b9dcee289 is the last code commit; the commit after it changes only this
+table. census:clones prints REVIEW (advisory) with the same 51 groups as main
 throughout; none is in code this branch touched.
 
 ## Proposed CLAUDE.md text (not edited here)
