@@ -22,6 +22,7 @@ use super::families::{self, Families};
 use super::index::{self, Index, Print, TruthFacts, Unit};
 use super::py::{dict, exact, flt, from_json, int, kv, round_int, s, share};
 use super::truth::{self, Audit, Label, Truth, is_library};
+use super::wrong_families::{self, EntryWrongs, WrongClaim};
 use crate::committed::library::{CorpusEntry, LayerKind};
 use crate::json::py::PyValue;
 
@@ -603,7 +604,7 @@ impl Scorer<'_> {
         truth: &Truth,
         origins: Option<&truth::Origins>,
         audit: &Audit,
-    ) -> Result<Vec<(String, PyValue)>, String> {
+    ) -> Result<(Vec<(String, PyValue)>, EntryWrongs), String> {
         let units = run_units(report)?;
         let st = statement_units(&units);
         let mut scope_of: HashMap<usize, usize> = st.iter().map(|u| (u.i, 0)).collect();
@@ -635,8 +636,15 @@ impl Scorer<'_> {
             }
         }
         let by_i: HashMap<usize, &Unit> = units.iter().map(|u| (u.i, u)).collect();
-        let (seeds, names) =
-            self.count_claims(&claims, &labels, &by_i, &judge, &scope_of, &mut by_scope);
+        let mut wrongs = EntryWrongs::default();
+        let (seeds, names) = self.count_claims(
+            &claims,
+            &labels,
+            &by_i,
+            &judge,
+            &scope_of,
+            (&mut by_scope, &mut wrongs),
+        );
         let struct_claims = if self.rule == "agreement" {
             index::claim_all(self.ix, &st)
         } else {
@@ -655,7 +663,7 @@ impl Scorer<'_> {
                 by_scope[scope_of[&u.i]].misses.add(cls.into(), u.b);
             }
         }
-        Ok(map_body(&by_scope, &seeds, &names))
+        Ok((map_body(&by_scope, &seeds, &names), wrongs))
     }
 
     /// The claims' verdicts into the scope counters; (index seeds, names).
@@ -666,7 +674,7 @@ impl Scorer<'_> {
         by_i: &HashMap<usize, &Unit>,
         judge: &Judge,
         scope_of: &HashMap<usize, usize>,
-        by_scope: &mut [ScopeCounts; 2],
+        (by_scope, wrongs): (&mut [ScopeCounts; 2], &mut EntryWrongs),
     ) -> (Ctr, Names) {
         let mut seeds: Ctr = Counter::new();
         let mut names = Names::default();
@@ -674,6 +682,15 @@ impl Scorer<'_> {
             let (v, vo) = judge.judge_origin(&c.package, &labels[i]);
             let b = by_i[i].b;
             let sc = &mut by_scope[scope_of[i]];
+            if v == "wrongFamily" {
+                wrongs.add(WrongClaim {
+                    claimed: &c.package,
+                    truth: &labels[i].label,
+                    file: labels[i].file.as_deref(),
+                    rule: c.rule.as_deref(),
+                    bytes: b,
+                });
+            }
             sc.claimed.add(v.clone(), b);
             sc.old.add(vo, b);
             let kind = c
@@ -1011,6 +1028,9 @@ fn score_floor(entry: &CorpusEntry, truth: &Truth) -> Result<Vec<(String, PyValu
 
 // ---------------------------------------------------------------- the label
 
+/// A card's body entries (after its header).
+type CardBody = Vec<(String, PyValue)>;
+
 /// One scope block's ints and its miss bytes (in file order).
 type ScopeSum = (HashMap<String, i64>, Vec<(String, i64)>);
 
@@ -1319,16 +1339,17 @@ impl Run<'_> {
         Ok(())
     }
 
-    /// One entry's card body.
+    /// One entry's card body, and its wrong-family breakdown (None on
+    /// sample truth: no per-claim bytes there).
     fn body(
         &mut self,
         entry: &CorpusEntry,
         doc: &ReportDoc,
         truth: &Truth,
         origins: Option<&truth::Origins>,
-    ) -> Result<Vec<(String, PyValue)>, String> {
+    ) -> Result<(CardBody, Option<EntryWrongs>), String> {
         let Some(report) = &doc.library_discovery else {
-            return score_floor(entry, truth);
+            return Ok((score_floor(entry, truth)?, Some(EntryWrongs::default())));
         };
         if report.index_id.as_deref() != Some(self.pipeline.index_id.as_str()) {
             return Err(format!(
@@ -1349,20 +1370,21 @@ impl Run<'_> {
             rule: &self.pipeline.rule,
         };
         if truth.method == "sample" {
-            scorer.score_sample(report, truth)
+            Ok((scorer.score_sample(report, truth)?, None))
         } else {
             let audit = Audit::new(self.corpus, entry, truth)?;
-            scorer.score_map(report, truth, origins, &audit)
+            let (body, wrongs) = scorer.score_map(report, truth, origins, &audit)?;
+            Ok((body, Some(wrongs)))
         }
     }
 
-    /// One entry's card (score.py's `card` dict).
+    /// One entry's card (score.py's `card` dict) and its breakdown.
     fn card(
         &mut self,
         label: &str,
         entry: &CorpusEntry,
         run_dir: &Path,
-    ) -> Result<PyValue, String> {
+    ) -> Result<(PyValue, Option<EntryWrongs>), String> {
         let rp = run_dir.join("reports").join(format!("{}.json", entry.id));
         let bytes = std::fs::read(&rp).map_err(|e| format!("{}: {e}", rp.display()))?;
         let doc: ReportDoc =
@@ -1373,7 +1395,7 @@ impl Run<'_> {
             let o = truth::load_origins(self.corpus, entry)?;
             origins = truth::redecode(self.corpus, entry, &mut truth, Some(o))?;
         }
-        let body = self.body(entry, &doc, &truth, origins.as_ref())?;
+        let (body, wrongs) = self.body(entry, &doc, &truth, origins.as_ref())?;
         let p = self.pipeline;
         let mut card = vec![
             kv("schema", s(SCORER_VERSION)),
@@ -1399,7 +1421,7 @@ impl Run<'_> {
             kv("reportSha256", s(&crate::committed::sha256_hex(&bytes))),
         ];
         card.extend(body);
-        Ok(dict(card))
+        Ok((dict(card), wrongs))
     }
 }
 
@@ -1500,6 +1522,9 @@ pub fn rescore(
     };
     let mut sets: std::collections::BTreeMap<String, Vec<(CardSum, PyValue)>> = Default::default();
     let mut timing: Vec<(String, PyValue)> = Vec::new();
+    let mut wrongs: std::collections::BTreeMap<String, Vec<(String, EntryWrongs)>> =
+        Default::default();
+    let mut sample_sets: Vec<String> = Vec::new();
     let mut log = String::new();
     let only = pipeline.sets.as_ref().filter(|s| !s.is_empty());
     for entry in corpus
@@ -1507,7 +1532,15 @@ pub fn rescore(
         .iter()
         .filter(|e| only.is_none_or(|o| o.contains(&e.set)))
     {
-        let card = run.card(label, entry, &run_dir)?;
+        let (card, entry_wrongs) = run.card(label, entry, &run_dir)?;
+        match entry_wrongs {
+            Some(w) => wrongs
+                .entry(entry.set.clone())
+                .or_default()
+                .push((entry.id.clone(), w)),
+            None if !sample_sets.contains(&entry.set) => sample_sets.push(entry.set.clone()),
+            None => {}
+        }
         write(
             &cards_dir.join(format!("{}.json", entry.id)),
             &crate::json::py_text(&card, true),
@@ -1530,6 +1563,7 @@ pub fn rescore(
             .push((card_sum(&card), card));
     }
     let agg = aggregate(&sets);
+    write_wrong_families(&cards_dir, label, &agg, &wrongs, &sample_sets, &run.fam)?;
     let bars = bars(&agg);
     let summary = dict(vec![
         kv("schema", s(SCORER_VERSION)),
@@ -1551,6 +1585,31 @@ pub fn rescore(
     )?;
     log.push_str(&crate::json::py_text(&bars, true));
     Ok(log)
+}
+
+/// `wrong-families.json` beside the cards (a private corpus's stays in its
+/// data dir with them), held equal to each set's charged wrong bytes.
+fn write_wrong_families(
+    cards_dir: &Path,
+    label: &str,
+    agg: &[(String, PyValue, f64)],
+    wrongs: &std::collections::BTreeMap<String, Vec<(String, EntryWrongs)>>,
+    sample_sets: &[String],
+    fam: &Families,
+) -> Result<(), String> {
+    for (set, row, _) in agg {
+        let Some(entries) = wrongs.get(set).filter(|_| !sample_sets.contains(set)) else {
+            continue;
+        };
+        let want = ints_of(row).get("wrongFamilyBytes").copied().unwrap_or(0);
+        wrong_families::check_total(set, entries, want)?;
+    }
+    let doc = wrong_families::doc(label, wrongs, sample_sets, &fam.libix);
+    let dir = cards_dir.parent().unwrap_or(cards_dir);
+    write(
+        &dir.join("wrong-families.json"),
+        &crate::json::py_text(&doc, true),
+    )
 }
 
 fn truthy(v: &Value) -> bool {
