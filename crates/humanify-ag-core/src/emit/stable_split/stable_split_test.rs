@@ -665,3 +665,69 @@ fn the_apps_own_factory_statements_are_grouped_with_the_app() {
         holder("APP-MARK")
     );
 }
+
+// ---- a split module keeps its prior file through the runnable emit (exp215)
+
+/// An all-lazy bundle whose first module, in v1, glues an init-less group
+/// to the line module; v2 gives the group its own init. `readNN` modules
+/// pad the marker coverage.
+fn split_module_bundle(group_init: bool) -> String {
+    let mut decls = String::from(LAZY_HELPER);
+    decls.push_str("  function groupRead(a) { return a.read(); }\n");
+    decls.push_str("  function groupWrite(a, b) { return a.write(b); }\n");
+    if group_init {
+        decls.push_str("  function groupQuery(q) { return Object.keys(q).join(\"&\"); }\n");
+        decls.push_str("  var initGroup = __esm(() => { groupQuery({}); });\n");
+    }
+    decls.push_str("  class LineCore { decode(x) { return x.split(\"\\n\"); } }\n");
+    decls.push_str("  var lineState;\n");
+    decls.push_str(
+        "  var initLine = __esm(() => { lineState = new WeakMap(); LineCore.CHARS = 2; });\n",
+    );
+    for i in 0..30 {
+        decls.push_str(&format!(
+            "  function read{i:02}() {{ return value{i:02} + {i}; }}\n\
+             \x20 var value{i:02};\n\
+             \x20 var init{i:02} = __esm(() => {{ initLine(); value{i:02} = readConfig({i}); }});\n"
+        ));
+    }
+    format!("(function () {{\n{decls}  init00();\n}})();\n")
+}
+
+fn ledger_of(outcome: &super::SplitOutcome) -> StableSplitLedger {
+    let text = humanify_ag_model::js::stringify(&outcome.ledger);
+    serde_json::from_str(&text).expect("a ledger")
+}
+
+fn file_holding<'o>(outcome: &'o super::SplitOutcome, marker: &str) -> &'o str {
+    outcome
+        .files
+        .iter()
+        .find(|(_, text)| text.contains(marker))
+        .map(|(p, _)| p.as_str())
+        .unwrap_or_else(|| panic!("no file holds {marker}"))
+}
+
+#[test]
+fn an_unchanged_module_split_out_of_its_prior_module_keeps_the_file_in_the_runnable_tree() {
+    let v1 = stable_split(&split_module_bundle(false), offered_options()).expect("v1 splits");
+    assert_eq!(v1.method.regime, Regime::Fossil);
+    let prior = ledger_of(&v1);
+    let line_file = file_holding(&v1, "class LineCore").to_string();
+    assert_eq!(file_holding(&v1, "function groupRead"), line_file);
+
+    let v2 = stable_split(
+        &split_module_bundle(true),
+        SplitOptions {
+            prior: Some(&prior),
+            ..offered_options()
+        },
+    )
+    .expect("v2 splits");
+    assert!(v2.declined.is_none(), "{:?}", v2.declined);
+    assert!(v2.runnable.is_some(), "the runnable tree is written");
+    assert_eq!(file_holding(&v2, "class LineCore"), line_file);
+    assert_eq!(file_holding(&v2, "function groupRead"), line_file);
+    assert_eq!(file_holding(&v2, "function groupQuery"), line_file);
+    assert!(v2.summary.contains("1 kept by content"), "{}", v2.summary);
+}

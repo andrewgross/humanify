@@ -476,3 +476,132 @@ fn a_library_import_never_names_a_module() {
     // Every declaration but the init a library import: the init names it.
     assert_eq!(base(&a[5]), "init-fs.js", "{a:?}");
 }
+
+// ---- an unchanged module keeps its prior file when upstream splits it (exp215)
+
+/// v1: an init-less group (`groupRead`, `groupWrite`) is glued to the
+/// line module that follows it — the markers record ONE module.
+fn glued_v1() -> Body {
+    body_of(&[
+        ESM,
+        "function groupRead(a) { return a.read(); }",
+        "function groupWrite(a, b) { return a.write(b); }",
+        "class LineCore { decode(x) { return x.split(\"\\n\"); } }",
+        "var lineState;",
+        "var init_line = __esm(() => { lineState = new WeakMap(); LineCore.CHARS = 2; });",
+        "function betaRender(y) { return lineState + y; }",
+        "var betaCache;",
+        "var init_beta = __esm(() => { init_line(); betaCache = betaRender(2); });",
+        "console.log(init_beta);",
+    ])
+}
+
+/// v2: upstream gave the group its own init (and one new function): the
+/// markers now record two modules where the prior had one. Every
+/// statement of the line module is byte-for-byte the prior's.
+fn glued_v2() -> Body {
+    body_of(&[
+        ESM,
+        "function groupRead(a) { return a.read(); }",
+        "function groupWrite(a, b) { return a.write(b); }",
+        "function groupQuery(q) { return Object.keys(q).join(\"&\"); }",
+        "var init_group = __esm(() => { groupQuery({}); });",
+        "class LineCore { decode(x) { return x.split(\"\\n\"); } }",
+        "var lineState;",
+        "var init_line = __esm(() => { lineState = new WeakMap(); LineCore.CHARS = 2; });",
+        "function betaRender(y) { return lineState + y; }",
+        "var betaCache;",
+        "var init_beta = __esm(() => { init_line(); betaCache = betaRender(2); });",
+        "console.log(init_beta);",
+    ])
+}
+
+fn glued_prior() -> StableSplitLedger {
+    let first = assign(&glued_v1(), None);
+    assert_eq!(first.fossil_modules.len(), 2, "v1 records the glued module");
+    let mut glued = first.fossil_modules[0].clone();
+    glued.file = "src/legacy/runtime.js".into();
+    let mut beta = first.fossil_modules[1].clone();
+    beta.file = "src/legacy/beta.js".into();
+    ledger(vec![glued, beta])
+}
+
+#[test]
+fn a_module_split_out_of_a_prior_module_keeps_the_prior_file() {
+    let out = assign(&glued_v2(), Some(&glued_prior()));
+    let a = &out.assignment;
+    // Both halves of the prior module stay where the prior put them: the
+    // group with its new function and init, and the unchanged line module.
+    for i in [1, 2, 3, 4, 5, 6, 7] {
+        assert_eq!(a[i], "src/legacy/runtime.js", "statement {i}: {a:?}");
+    }
+    assert_eq!(a[8], "src/legacy/beta.js");
+    assert_eq!(out.stats.fresh_named_files, 0, "{:?}", out.stats);
+    // The ledger records both modules at the one file, so the next hop
+    // matches each to itself.
+    let files: Vec<&str> = out.fossil_modules.iter().map(|m| m.file.as_str()).collect();
+    assert_eq!(
+        files,
+        vec![
+            "src/legacy/runtime.js",
+            "src/legacy/runtime.js",
+            "src/legacy/beta.js"
+        ]
+    );
+}
+
+#[test]
+fn the_kept_file_holds_on_the_next_hop() {
+    let second = assign(&glued_v2(), Some(&glued_prior()));
+    let third = assign(&glued_v2(), Some(&ledger(second.fossil_modules.clone())));
+    assert_eq!(third.assignment, second.assignment);
+}
+
+#[test]
+fn a_module_whose_carried_statements_came_from_two_prior_files_is_named_fresh() {
+    // The prior held groupRead in one file and groupWrite in another: the
+    // carried statements disagree, so no prior file is the module's.
+    let b = glued_v2();
+    let mut prior = glued_prior();
+    let moved = b.hashes[2].clone();
+    let modules = prior.fossil_modules.as_mut().expect("modules");
+    modules[0].hashes.retain(|h| *h != moved);
+    modules[1].hashes.push(moved);
+    let out = assign(&b, Some(&prior));
+    assert_ne!(
+        out.assignment[1], "src/legacy/runtime.js",
+        "{:?}",
+        out.assignment
+    );
+    assert_ne!(
+        out.assignment[1], "src/legacy/beta.js",
+        "{:?}",
+        out.assignment
+    );
+}
+
+#[test]
+fn a_mostly_new_module_is_named_fresh() {
+    // One carried statement among four is not the module's file.
+    let b = body_of(&[
+        ESM,
+        "function groupRead(a) { return a.read(); }",
+        "function freshOne(q) { return q + 1; }",
+        "function freshTwo(q) { return q * 2; }",
+        "var init_group = __esm(() => { freshOne(1); });",
+        "class LineCore { decode(x) { return x.split(\"\\n\"); } }",
+        "var lineState;",
+        "var init_line = __esm(() => { lineState = new WeakMap(); LineCore.CHARS = 2; });",
+        "function betaRender(y) { return lineState + y; }",
+        "var betaCache;",
+        "var init_beta = __esm(() => { init_line(); betaCache = betaRender(2); });",
+        "console.log(init_beta);",
+    ]);
+    let out = assign(&b, Some(&glued_prior()));
+    assert_ne!(
+        out.assignment[1], "src/legacy/runtime.js",
+        "{:?}",
+        out.assignment
+    );
+    assert_eq!(out.assignment[5], "src/legacy/runtime.js");
+}
