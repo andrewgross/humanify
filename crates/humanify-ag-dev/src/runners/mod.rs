@@ -232,9 +232,19 @@ pub fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// The input bundle of a walked Claude Code version.
+/// The input bundle of a walked Claude Code version: the decompile's
+/// `src/entrypoints/index.js`, or, from 2.1.229 (where the decompile writes
+/// the bundle at its root), `binary-decompiled/index.js`. The older path is
+/// the answer whenever the root one is absent, so a version with neither is
+/// reported at the path every version before 2.1.229 uses.
 pub fn input_of(inputs_base: &str, version: &str) -> String {
-    format!("{inputs_base}/claude-code-{version}/binary-decompiled/src/entrypoints/index.js")
+    let dir = format!("{inputs_base}/claude-code-{version}/binary-decompiled");
+    let entry = format!("{dir}/src/entrypoints/index.js");
+    let root = format!("{dir}/index.js");
+    if !Path::new(&entry).is_file() && Path::new(&root).is_file() {
+        return root;
+    }
+    entry
 }
 
 /// The full sha (or short, with `short`) of a checkout's HEAD; "" when

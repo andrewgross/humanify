@@ -86,6 +86,31 @@ fn a_range_selects_the_versions_with_inputs_in_semver_order() {
 }
 
 #[test]
+fn a_version_with_the_bundle_at_the_decompile_root_is_walked() {
+    // From 2.1.229 the decompile writes the bundle at binary-decompiled/index.js
+    // (no src/entrypoints/); a range must not silently skip those versions.
+    let (rec, _) = setup();
+    let inputs = rec.root.join("inputs");
+    let root = inputs.join("claude-code-2.1.102/binary-decompiled");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("index.js"), "var a=1;\n").unwrap();
+    let inputs = inputs.display().to_string();
+    assert_eq!(
+        select_versions("2.1.99..2.1.102", &inputs).unwrap(),
+        ["2.1.99", "2.1.100", "2.1.101", "2.1.102"]
+    );
+    assert_eq!(
+        crate::runners::input_of(&inputs, "2.1.102"),
+        format!("{inputs}/claude-code-2.1.102/binary-decompiled/index.js")
+    );
+    assert_eq!(
+        crate::runners::input_of(&inputs, "2.1.99"),
+        format!("{inputs}/claude-code-2.1.99/binary-decompiled/src/entrypoints/index.js"),
+        "the older layout keeps its path"
+    );
+}
+
+#[test]
 fn each_hop_runs_on_the_previous_hops_own_output() {
     let (rec, repo) = setup();
     let ctx = rec.ctx(&repo);
