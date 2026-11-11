@@ -66,6 +66,9 @@ pub struct FossilPlacement {
 pub struct FossilStats {
     pub modules: usize,
     pub inherited_files: usize,
+    /// Unmatched modules that kept the one prior file their carried
+    /// statements lived in ([`kept_prior_file`], exp215).
+    pub kept_files: usize,
     pub fresh_named_files: usize,
     /// Fresh files named by their module name (read back from the
     /// wrapper), not the mechanical stem.
@@ -809,6 +812,25 @@ definitions) — fix detection or run with --disable fossil-split"
         used.add(&file);
         file_of_module[fresh_idx] = Some(file);
     }
+    // A module the matcher left unpaired whose carried statements all
+    // lived in ONE prior file keeps that file (exp215): upstream split a
+    // prior module in two (an init-less group, glued to the next module,
+    // got its own init), the matcher pairs the prior with one half, and
+    // the other half — unchanged code — would otherwise move to a new file.
+    let prior_files = prior_hash_files(prior_modules);
+    let mut kept_tiers = matched.pair_tiers.clone();
+    let mut kept_files = 0;
+    for (i, module) in extract.modules.iter().enumerate() {
+        if file_of_module[i].is_some() {
+            continue;
+        }
+        if let Some(file) = kept_prior_file(module, hashes, &prior_files) {
+            used.add(file);
+            file_of_module[i] = Some(file.to_string());
+            kept_tiers.insert(i, KEPT_BY_CONTENT);
+            kept_files += 1;
+        }
+    }
     let mut placements = infer_fossil_placements(
         &extract.modules,
         body,
@@ -858,7 +880,7 @@ definitions) — fix detection or run with --disable fossil-split"
                 spans,
                 hashes,
                 prior_modules,
-                matched: &matched.pair_tiers,
+                matched: &kept_tiers,
                 library: options.library,
                 final_file: &final_file,
             },
@@ -884,6 +906,7 @@ definitions) — fix detection or run with --disable fossil-split"
         stats: FossilStats {
             modules: extract.modules.len(),
             inherited_files: matched.matches.len(),
+            kept_files,
             fresh_named_files: fresh_named,
             module_named_files,
             eager_statements: extract.eager_zone.len(),
@@ -891,6 +914,56 @@ definitions) — fix detection or run with --disable fossil-split"
             hoisted_singletons: hoisted,
         },
     })
+}
+
+/// The trail tier of a module placed by [`kept_prior_file`].
+const KEPT_BY_CONTENT: &str = "kept-by-content";
+
+/// Statement hash → `Some(the one prior module file holding it)`, or
+/// `None` when prior modules in different files hold it (no evidence).
+/// The ONE reading of "which prior file did this statement live in" in
+/// the marker split: the trail's `priorFile` and the keep step share it.
+fn prior_hash_files(prior_modules: &[FossilLedgerModule]) -> HashMap<&str, Option<&str>> {
+    let mut out: HashMap<&str, Option<&str>> = HashMap::new();
+    for m in prior_modules {
+        for h in &m.hashes {
+            match out.get(h.as_str()) {
+                None => {
+                    out.insert(h, Some(&m.file));
+                }
+                Some(Some(cur)) if *cur != m.file => {
+                    out.insert(h, None);
+                }
+                Some(_) => {}
+            }
+        }
+    }
+    out
+}
+
+/// The prior file an unmatched module keeps: every one of its statements
+/// that the prior holds in exactly one file names the SAME file, and those
+/// carried statements are more than half the module. New statements (no
+/// prior file) and ambiguous ones (several) do not vote. None otherwise —
+/// the module is named fresh.
+fn kept_prior_file<'p>(
+    module: &FossilModule,
+    hashes: &[String],
+    prior_files: &HashMap<&str, Option<&'p str>>,
+) -> Option<&'p str> {
+    let mut file: Option<&'p str> = None;
+    let mut carried = 0usize;
+    for &s in &module.statements {
+        let Some(Some(f)) = prior_files.get(hashes[s].as_str()) else {
+            continue;
+        };
+        if file.is_some_and(|g| g != *f) {
+            return None;
+        }
+        file = Some(f);
+        carried += 1;
+    }
+    file.filter(|_| carried * 2 > module.statements.len())
 }
 
 struct FossilTrailInput<'a> {
@@ -910,21 +983,7 @@ struct FossilTrailInput<'a> {
 /// `priorFile` is hash-keyed: the ONE prior module file holding this
 /// statement's hash (ambiguous = no evidence).
 fn record_fossil_trail(trail: &mut PlacementTrail, input: &FossilTrailInput) {
-    // hash → Some(the one prior file) | None (ambiguous).
-    let mut prior_hash_file: HashMap<&str, Option<&str>> = HashMap::new();
-    for m in input.prior_modules {
-        for h in &m.hashes {
-            match prior_hash_file.get(h.as_str()) {
-                None => {
-                    prior_hash_file.insert(h, Some(&m.file));
-                }
-                Some(Some(cur)) if *cur != m.file => {
-                    prior_hash_file.insert(h, None);
-                }
-                Some(_) => {}
-            }
-        }
-    }
+    let prior_hash_file = prior_hash_files(input.prior_modules);
     for (i, module) in input.extract.modules.iter().enumerate() {
         let placed_by = if input.library.iter().any(|&(lib, _)| lib == i) {
             "library-index".to_string()

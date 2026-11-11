@@ -121,9 +121,10 @@ pub fn assign_regime(
             )?;
             let s = &assigned.stats;
             summary = format!(
-                "{} modules ({} inherited, {} fresh-named, {} module-named), {} eager",
+                "{} modules ({} inherited, {} kept by content, {} fresh-named, {} module-named), {} eager",
                 s.modules,
                 s.inherited_files,
+                s.kept_files,
                 s.fresh_named_files,
                 s.module_named_files,
                 s.eager_statements
