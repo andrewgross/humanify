@@ -1,12 +1,85 @@
 # exp215 — an unchanged module keeps its prior file when upstream splits a module
 
-STATUS: BUILT, STUB-MEASURED, GATED (all 11 stages, twice), NOT EVALUATED, NOT
-MERGED (2026-11-10).
-Branch `exp215-split-keep-file` from main `73d01430b`. No live-LLM run:
-two version walks held the LLM server, so `eval score` waits until they
-finish. Every number below is from the stub LLM (`cargo dev run stub`).
+STATUS: BUILT, STUB-MEASURED, GATED (all 11 stages, twice), EVALUATED (one
+cold names-mode run, `exp215-5f09fad2-r1`, 2026-11-11), NOT MERGED.
+Branch `exp215-split-keep-file` from main `73d01430b`. The eval ran alone on
+the host after the walks finished. The 2.1.90 -> 2.1.91 numbers are from
+the stub LLM (`cargo dev run stub`); that hop is not one of the eval's pairs.
 
 ## Totals
+
+### Eval (cold, names mode, scratch bases, five pairs, index 4736dcfa)
+
+`cargo dev eval score exp215-5f09fad2-r1` against the reference
+`ref-names-40921b9f-r1`. The results live on this host only (they quote
+bundle code): `dev/eval/results/exp215-5f09fad2-r1/` in the worktree,
+trees in `/work/eval-work/exp215-5f09fad2-r1/`.
+
+- **Run validity:** all 5 rebases and 5 scored legs exit 0, no provider
+  errors, no rebase failures, all 5 boots OK. Cold self-hop 8 lines (the
+  reference range is 2-8). Warm self-hop byte-identical with 0 cache writes.
+- **MATCHING:** every exact column is EQUAL to the reference: fnTotal
+  254,797, fnClose 3,595, fnAsked 5,928, fnUnmatched 4,749, fnAmbiguous
+  4,756. fnCarried 220,762 and mbCarried 95,920 are equal too. Only the
+  LLM's draws moved (idAsked -29, mbLLMRenamed +1). The change acts after
+  naming, so this is what it should look like.
+- **Real change is exact:** novel 5,336 (=), realLn 556,875 (=). app:novel,
+  app:realLn, vendor:novel, vendor:realLn, cross:treeLn and cross:stmts are
+  all equal too. cleanReal is inside its band (-330, band +-848).
+- **The step fired on ONE pair, once:** 2.1.85 -> 2.1.86, one module of 6
+  statements (an OAuth port finder: `buildCallbackUrl`,
+  `findAvailableOAuthPort`, ...). It kept `src/oauth-client.js`. In the
+  reference the same module moved to a new 74-line file
+  (`src/oauth-flow-manager/oauth-port-finder.js`). It did not fire on the
+  other four pairs (0 trail rows, 0 shared files in their ledgers).
+- **Noise and relocation, per surface:**
+
+| column          | ref r1 | exp215 | change  | band  |
+| --------------- | -----: | -----: | ------: | ----: |
+| treeLn          | 175,268 | 175,054 | -214 | +-1,183 |
+| noise           | 3,034  | 3,033  | -1      | +-20  |
+| noiseLn         | 68,179 | 67,124 | -1,055  | +-350 |
+| reloc           | 1,653  | 1,627  | -26     | +-83  |
+| relocSt         | 436    | 428    | -8      | none  |
+| newName         | 4,029  | 4,051  | +22     | +-42  |
+| app:noiseLn     | 67,670 | 66,621 | -1,049  |       |
+| app:relocSt     | 382    | 378    | -4      |       |
+| vendor:treeLn   | 24,169 | 24,044 | -125    |       |
+| vendor:vendorLn | 10,027 | 9,923  | -104    | +-84  |
+| vendor:reloc    | 113    | 101    | -12     |       |
+| cross:reloc     | 58     | 60     | +2      | +-7   |
+
+Per pair (ref / exp215):
+
+| pair            | noiseLn         | treeLn          | relocSt | files added | files removed |
+| --------------- | --------------- | --------------- | ------- | ----------- | ------------- |
+| 2.1.85->2.1.86  | 33,070 / 33,136 | 32,424 / 32,281 | 181 / 173 | 29 / 21 | 17 / 10 |
+| 2.1.118->2.1.119 | 4,373 / 4,464  | 36,759 / 36,726 | 5 / 5   | 93 / 93     | 22 / 22       |
+| 2.1.179->2.1.181 | 17,874 / 17,604 | 30,875 / 30,861 | 75 / 75 | 46 / 48    | 22 / 24       |
+| 2.1.197->2.1.198 | 7,949 / 7,028  | 49,589 / 49,699 | 66 / 66 | 51 / 52     | 36 / 37       |
+| 2.1.215->2.1.216 | 4,913 / 4,892  | 25,621 / 25,487 | 109 / 109 | 32 / 32   | 2 / 2         |
+
+How to read it:
+
+- **noiseLn -1,055 (outside the +-350 band) is not this change.** noiseLn
+  scores the BUNDLE, and a split-only change cannot move it (the
+  leaderboard's own note). 921 of the 1,055 lines come from 2.1.197 ->
+  2.1.198, where the step never fired. It is the model's draws (one cold
+  run against one cold reference; the band was measured at 40921b9f, not
+  here). vendor:vendorLn -104 (band +-84) is the same: no vendor module
+  was kept.
+- **The one pair where the step fired reads the right way:** on 2.1.85 ->
+  2.1.86, relocSt 181 -> 173, files added 29 -> 21 and files removed
+  17 -> 10. Part of that is the kept module, part is the cold bases
+  differing. One run cannot separate the two.
+- The kept file shows a small cost: its `http` binding prints as
+  `httpModule` (3 lines) now that the moved module's `require("http")`
+  sits in the same file. That is the per-file library-import naming
+  (`finish::library_names`) choosing a name in a file with more code.
+- **LLM diagnostics:** 20 connection retries (0 on the reference), all
+  recovered, 0 failed asks. Server-side; no answers lost.
+
+### Stub, 2.1.90 -> 2.1.91
 
 On Claude Code 2.1.90 -> 2.1.91, stub LLM, same 2.1.90 prior tree for both
 legs:
@@ -148,11 +221,14 @@ the branch at `117291e46` (`/work/exp215-clean`).
 
 ## What this cannot prove
 
-- The stub names every identifier the same mechanical way. It shows where
-  code is placed, not what the model would name it. The eval (`eval score`
-  against `ref-names-40921b9f-r1`) is still to run, after the walks.
-- One hop was measured. How often the step fires across a walk is unknown;
-  on 90 -> 91 it fired once in 3,331 modules.
+- One cold run. The step fired on one of the five eval pairs, so the eval
+  cannot size the effect: its move is inside the pair-to-pair draw. The
+  sized effect is the stub hop (-111 GNU diff lines on 90 -> 91) and the
+  one kept module on 85 -> 86 (the reference moved it to a 74-line new
+  file).
+- How often the step fires across a whole walk is unknown: once in about
+  3,300 modules on 85 -> 86 and on 90 -> 91, never on the other four eval
+  pairs.
 - The rule can also keep code in an old file when upstream really moved it
   into a new source file. A minified bundle does not show upstream file
   names, so the split cannot tell the two apart. Keeping the file is the
