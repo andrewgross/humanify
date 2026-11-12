@@ -260,13 +260,15 @@ fn import_meta_becomes_the_commonjs_bindings() {
             "chunk-m.js",
             &format!(
                 "{HEAD}var r=import.meta.require;function m(){{console.log(import.meta.dirname===__dirname,\
-                 import.meta.url===require(\"url\").pathToFileURL(__filename).href,r(\"path\").sep)}}export{{m}};\n"
+                 import.meta.url===require(\"url\").pathToFileURL(__filename).href,r(\"path\").sep,\
+                 import.meta.dir===__dirname,import.meta.path===__filename,import.meta.filename===__filename,\
+                 import.meta.file===require(\"path\").basename(__filename),typeof import.meta.main)}}export{{m}};\n"
             ),
         ),
     ]);
     let (text, _) = linked(&entry);
     assert!(!text.contains("import.meta"), "{text}");
-    assert_eq!(run(&text), "true true /\n");
+    assert_eq!(run(&text), "true true / true true true true boolean\n");
 }
 
 #[test]

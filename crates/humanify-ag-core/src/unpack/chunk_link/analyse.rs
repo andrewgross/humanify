@@ -661,8 +661,14 @@ impl Ctx<'_, '_> {
                 "require(\"url\").pathToFileURL(__filename).href",
                 ["require", "__filename"].as_slice(),
             ),
-            "dirname" => ("__dirname", ["__dirname"].as_slice()),
-            "filename" => ("__filename", ["__filename"].as_slice()),
+            // `dir`, `path`, `file` and `main` are Bun's own properties.
+            "dirname" | "dir" => ("__dirname", ["__dirname"].as_slice()),
+            "filename" | "path" => ("__filename", ["__filename"].as_slice()),
+            "file" => (
+                "require(\"path\").basename(__filename)",
+                ["require", "__filename"].as_slice(),
+            ),
+            "main" => ("(require.main===module)", ["require", "module"].as_slice()),
             "require" => ("require", ["require"].as_slice()),
             "env" => ("process.env", ["process"].as_slice()),
             other => {
