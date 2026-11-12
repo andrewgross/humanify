@@ -47,6 +47,9 @@ pub(super) struct Names {
     /// Bun's `__export` (defines a namespace object's getters).
     pub export_helper: String,
     pub renamed: usize,
+    /// `var x = import.meta.require` declarators dropped: every reference
+    /// to x, in every chunk, reads the wrapper's `require` instead.
+    pub require_aliases: BTreeSet<(usize, oxc_semantic::SymbolId)>,
     taken: BTreeSet<String>,
     claimed: BTreeSet<String>,
 }
@@ -104,6 +107,7 @@ pub(super) fn assign(
         esm_helper: String::new(),
         export_helper: String::new(),
         renamed: 0,
+        require_aliases: require_aliases(chunks)?,
         taken,
         claimed: BTreeSet::new(),
     };
@@ -112,6 +116,10 @@ pub(super) fn assign(
             let target = resolve_sym(chunks, c, s.id)?;
             if s.is_import || target != Target::Sym(c, s.id) {
                 continue; // an import: named where it is defined, or below
+            }
+            if names.require_aliases.contains(&(c, s.id)) {
+                names.of.insert(target, "require".to_string());
+                continue;
             }
             let free = !names.claimed.contains(&s.name)
                 && !globals.contains(&s.name)
@@ -246,4 +254,40 @@ fn member(name: &str) -> String {
     } else {
         format!("[{}]", serde_json::to_string(name).unwrap_or_default())
     }
+}
+
+/// The `var x = import.meta.require` bindings that may become the
+/// wrapper's `require`: every reference to them, in the declaring chunk
+/// and in every chunk that imports them, reads `require` unshadowed.
+fn require_aliases(chunks: &[Chunk]) -> Result<BTreeSet<(usize, oxc_semantic::SymbolId)>, String> {
+    let mut candidates: BTreeMap<Target, bool> = BTreeMap::new();
+    for (c, chunk) in chunks.iter().enumerate() {
+        for st in &chunk.stmts {
+            let super::analyse::StmtKind::Var(ds) = &st.kind else {
+                continue;
+            };
+            for sym in ds
+                .iter()
+                .filter(|d| d.require_alias)
+                .flat_map(|d| d.names.iter())
+            {
+                let safe = chunk.syms.iter().any(|s| s.id == *sym && s.require_safe);
+                candidates.insert(Target::Sym(c, *sym), safe);
+            }
+        }
+    }
+    for (c, chunk) in chunks.iter().enumerate() {
+        for s in chunk.syms.iter().filter(|s| s.is_import) {
+            if let Some(safe) = candidates.get_mut(&resolve_sym(chunks, c, s.id)?) {
+                *safe &= s.require_safe;
+            }
+        }
+    }
+    Ok(candidates
+        .into_iter()
+        .filter_map(|(t, safe)| match t {
+            Target::Sym(c, s) if safe => Some((c, s)),
+            _ => None,
+        })
+        .collect())
 }

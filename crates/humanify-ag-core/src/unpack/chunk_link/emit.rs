@@ -131,6 +131,7 @@ fn edits(plan: &Plan<'_>, c: usize) -> Result<Vec<Edit>, String> {
     }
     out.sort();
     out.dedup();
+    let out = drop_require_aliases(plan, c, out);
     if let Some(w) = out.windows(2).find(|w| w[0].end > w[1].start) {
         return Err(format!(
             "{}: overlapping edits at {}",
@@ -139,6 +140,50 @@ fn edits(plan: &Plan<'_>, c: usize) -> Result<Vec<Edit>, String> {
         ));
     }
     Ok(out)
+}
+
+fn is_dropped(plan: &Plan<'_>, c: usize, d: &Declarator) -> bool {
+    d.require_alias
+        && d.names
+            .first()
+            .is_some_and(|s| plan.names.require_aliases.contains(&(c, *s)))
+}
+
+/// A kept `var` statement with dropped `import.meta.require` aliases is
+/// rewritten to its other declarators (or removed when none is left).
+/// Moved statements drop theirs in [`statement`].
+fn drop_require_aliases(plan: &Plan<'_>, c: usize, mut edits: Vec<Edit>) -> Vec<Edit> {
+    let chunk = &plan.chunks[c];
+    for (i, st) in chunk.stmts.iter().enumerate() {
+        let StmtKind::Var(ds) = &st.kind else {
+            continue;
+        };
+        if plan.moved[c][i] || !ds.iter().any(|d| is_dropped(plan, c, d)) {
+            continue;
+        }
+        let (Some(first), Some(last)) = (ds.first(), ds.last()) else {
+            continue;
+        };
+        let end_of = |d: &Declarator| d.init.map_or(d.pattern.end, |s| s.end) as usize;
+        let kept: Vec<String> = ds
+            .iter()
+            .filter(|d| !is_dropped(plan, c, d))
+            .map(|d| render(&chunk.text, (d.pattern.start as usize, end_of(d)), &edits))
+            .collect();
+        let (lo, hi, text) = if kept.is_empty() {
+            (st.span.start as usize, st.span.end as usize, String::new())
+        } else {
+            (first.pattern.start as usize, end_of(last), kept.join(","))
+        };
+        edits.retain(|e| e.end <= lo || e.start >= hi);
+        edits.push(Edit {
+            start: lo,
+            end: hi,
+            text,
+        });
+    }
+    edits.sort();
+    edits
 }
 
 /// `import(<chunk>)` → `Promise.resolve().then(() => (init(), ns))`, what
@@ -239,6 +284,10 @@ fn statement(
         }
         _ if !moved => top.push_str(&out.all()),
         StmtKind::Var(ds) => {
+            let ds: Vec<&Declarator> = ds.iter().filter(|d| !is_dropped(plan, c, d)).collect();
+            if ds.is_empty() {
+                return Ok(());
+            }
             let names: Vec<String> = ds
                 .iter()
                 .flat_map(|d| d.names.iter())

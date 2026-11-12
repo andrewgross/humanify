@@ -442,3 +442,48 @@ fn a_lazy_chunk_is_written_beside_the_chunk_that_loads_it() {
         "{text}"
     );
 }
+
+#[test]
+fn an_alias_of_import_meta_require_becomes_require_itself() {
+    // Bun's ESM runtime chunk binds `var k=import.meta.require` and the
+    // CommonJS factories call it; Bun's single-file output calls the
+    // wrapper's `require` directly — the shape the prior was matched in.
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!(
+                "{HEAD}import{{c as r}}from\"/$bunfs/root/chunk-rt.js\";var a=1,p=r(\"path\");console.log(p.sep,a);\n"
+            ),
+        ),
+        (
+            "chunk-rt.js",
+            &format!("{HEAD}var x=2,k=import.meta.require,y=3;export{{k as c,x,y}};\n"),
+        ),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(run(&text), "/ 1\n");
+    assert!(text.contains("p=require(\"path\")"), "{text}");
+    assert!(
+        !text.contains("=require;") && !text.contains("=require,"),
+        "{text}"
+    );
+}
+
+#[test]
+fn an_alias_of_import_meta_require_read_under_a_shadowing_require_stays_a_binding() {
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!(
+                "{HEAD}import{{c as r}}from\"/$bunfs/root/chunk-rt.js\";\
+                 function f(require){{return r(\"path\").sep+require}}console.log(f(\"!\"));\n"
+            ),
+        ),
+        (
+            "chunk-rt.js",
+            &format!("{HEAD}var k=import.meta.require;export{{k as c}};\n"),
+        ),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(run(&text), "/!\n");
+}

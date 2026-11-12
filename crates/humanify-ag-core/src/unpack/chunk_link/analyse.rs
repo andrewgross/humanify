@@ -74,6 +74,10 @@ pub(super) struct Declarator {
     pub simple: bool,
     pub names: Vec<SymbolId>,
     pub purity: Purity,
+    /// `var x = import.meta.require` (x never written): Bun's ESM runtime
+    /// alias of `require`, which the linked program can drop for the
+    /// wrapper's own `require` (see `names`).
+    pub require_alias: bool,
 }
 
 pub(super) enum StmtKind {
@@ -116,6 +120,9 @@ pub(super) struct Sym {
     pub is_import: bool,
     pub decls: Vec<Site>,
     pub refs: Vec<Site>,
+    /// No reference sits where a nested scope binds `require`: the
+    /// binding could be read as the wrapper's `require`.
+    pub require_safe: bool,
 }
 
 pub(super) struct Chunk {
@@ -310,6 +317,16 @@ fn class_is_pure(c: &Class<'_>) -> bool {
             ClassElement::AccessorProperty(a) => !a.computed && !a.r#static,
             _ => false,
         })
+}
+
+/// `import.meta.require`.
+fn is_import_meta_require(e: &Expression<'_>) -> bool {
+    match unparen(e) {
+        Expression::StaticMemberExpression(m) => {
+            m.property.name == "require" && matches!(m.object, Expression::ImportMeta(_))
+        }
+        _ => false,
+    }
 }
 
 fn is_function_value(e: &Expression<'_>) -> bool {
@@ -561,12 +578,20 @@ impl Ctx<'_, '_> {
             .map(|dc| {
                 let mut names = Vec::new();
                 binding_names(&dc.id, &mut names);
+                let require_alias = match (&dc.id, &dc.init) {
+                    (BindingPattern::BindingIdentifier(b), Some(init)) => {
+                        is_import_meta_require(init)
+                            && !self.scoping.symbol_is_mutated(b.symbol_id())
+                    }
+                    _ => false,
+                };
                 Declarator {
                     pattern: dc.id.span(),
                     init: dc.init.as_ref().map(GetSpan::span),
                     simple: matches!(dc.id, BindingPattern::BindingIdentifier(_)),
                     names,
                     purity: self.purity_of(dc.init.as_ref()),
+                    require_alias,
                 }
             })
             .collect()
@@ -724,6 +749,10 @@ impl Ctx<'_, '_> {
                 .get_resolved_references(id)
                 .filter_map(|r| self.reference_site(r.node_id()))
                 .collect();
+            let require_safe = self
+                .scoping
+                .get_resolved_references(id)
+                .all(|r| self.require_unshadowed(r.node_id()));
             chunk.sym_index.insert(id, chunk.syms.len());
             chunk.syms.push(Sym {
                 id,
@@ -731,6 +760,7 @@ impl Ctx<'_, '_> {
                 is_import: self.scoping.symbol_flags(id).contains(SymbolFlags::Import),
                 decls,
                 refs,
+                require_safe,
             });
         }
         for id in self.scoping.symbol_ids() {
@@ -746,6 +776,15 @@ impl Ctx<'_, '_> {
             .keys()
             .map(|k| k.to_string())
             .collect();
+    }
+
+    /// Does `require` at this node mean the program's top-level
+    /// `require` (no nested scope binds the name)?
+    fn require_unshadowed(&self, node: oxc_semantic::NodeId) -> bool {
+        let scope = self.nodes.get_node(node).scope_id();
+        self.scoping
+            .find_binding(scope, "require".into())
+            .is_none_or(|s| self.scoping.symbol_scope_id(s) == self.root)
     }
 
     fn reference_site(&self, node: oxc_semantic::NodeId) -> Option<Site> {
