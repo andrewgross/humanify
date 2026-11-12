@@ -297,7 +297,7 @@ fn external_imports_become_requires() {
     let entry = layout(&[(
         "index.js",
         &format!(
-            "{HEAD}import p from\"path\";import{{join as j}}from\"path\";import*as q from\"path\";console.log(p.sep,j(\"a\",\"b\"),q.sep);\n"
+            "{HEAD}import\"path\";import p from\"path\";import{{join as j}}from\"path\";import*as q from\"path\";console.log(p.sep,j(\"a\",\"b\"),q.sep);\n"
         ),
     )]);
     // A lone entry with only externals is not a chunked layout ...
@@ -486,4 +486,34 @@ fn an_alias_of_import_meta_require_read_under_a_shadowing_require_stays_a_bindin
     ]);
     let (text, _) = linked(&entry);
     assert_eq!(run(&text), "/!\n");
+}
+
+#[test]
+fn a_lazy_chunks_external_imports_load_only_with_the_chunk() {
+    // Bun resolves some packages itself (`ws`); under Node an eager
+    // `require` of one would fail the whole program at load. As in Bun's
+    // single-file output, a lazy chunk's externals load in its init.
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!(
+                "{HEAD}function never(){{return import(\"/$bunfs/root/chunk-x.js\")}}\
+                 import(\"/$bunfs/root/chunk-p.js\").then((m)=>console.log(m.sep()));\n"
+            ),
+        ),
+        (
+            "chunk-x.js",
+            &format!(
+                "{HEAD}import w from\"not-installed-anywhere\";function f(){{return w}}export{{f}};\n"
+            ),
+        ),
+        (
+            "chunk-p.js",
+            &format!(
+                "{HEAD}import{{sep as s}}from\"path\";function sep(){{return s}}export{{sep}};\n"
+            ),
+        ),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(run(&text), "/\n");
 }

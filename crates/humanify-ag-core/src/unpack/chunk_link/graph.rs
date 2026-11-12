@@ -209,10 +209,25 @@ fn moves(chunks: &[Chunk], order: &Order, c: usize, kind: &StmtKind) -> bool {
     }
 }
 
+/// Does the chunk import anything that is not a chunk? A lazy chunk loads
+/// those in its init (Bun resolves some packages itself, `ws`; loaded
+/// eagerly under Node they would fail the whole program).
+fn has_externals(chunk: &Chunk) -> bool {
+    chunk
+        .imports
+        .iter()
+        .any(|d| matches!(d.spec, Spec::External(_)))
+}
+
 /// A lazy chunk needs an init when it moved a statement or any lazy chunk
 /// it imports needs one (its init runs theirs first).
 pub(super) fn needs_init(chunks: &[Chunk], order: &Order, moved: &[Vec<bool>]) -> Vec<bool> {
-    let mut init: Vec<bool> = moved.iter().map(|m| m.iter().any(|x| *x)).collect();
+    let mut init: Vec<bool> = moved
+        .iter()
+        .zip(chunks)
+        .enumerate()
+        .map(|(c, (m, chunk))| m.iter().any(|x| *x) || (!order.eager[c] && has_externals(chunk)))
+        .collect();
     loop {
         let mut changed = false;
         for c in 0..chunks.len() {

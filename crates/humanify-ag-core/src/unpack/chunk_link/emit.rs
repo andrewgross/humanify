@@ -214,11 +214,19 @@ fn chunk(plan: &Plan<'_>, c: usize) -> Result<String, String> {
         top.push_str(comment);
         top.push('\n');
     }
-    top.push_str(&externals(plan, c));
+    let (declared, loads) = externals(plan, c);
+    if plan.order.eager[c] {
+        top.push_str(&eager_loads(&declared, &loads));
+    } else if !declared.is_empty() {
+        top.push_str(&format!("var {};", declared.join(",")));
+    }
     if let Some(ns) = plan.names.of.get(&Target::Ns(c)) {
         top.push_str(&namespace(plan, c, ns)?);
     }
     if plan.names.init.contains_key(&c) {
+        if !plan.order.eager[c] {
+            init.push_str(&lazy_loads(&declared, &loads));
+        }
         for d in &ch.static_deps {
             if let Some(name) = plan.names.init.get(d).filter(|_| !plan.order.eager[*d]) {
                 init.push_str(&format!("{name}();"));
@@ -322,28 +330,66 @@ fn assignment(d: &Declarator, out: &Out<'_>) -> Option<String> {
 
 /// A chunk's imports of anything that is not a chunk, as `require`s at
 /// its top (what Bun's CommonJS output does with a Node built-in).
-fn externals(plan: &Plan<'_>, c: usize) -> String {
-    let mut out = String::new();
+///
+/// Returns the bindings and, beside each, the expression that loads it
+/// (an empty binding: a bare `require(m)` for a side-effect import). An
+/// eager chunk declares them at its top; a lazy one hoists the names and
+/// loads them in its init.
+fn externals(plan: &Plan<'_>, c: usize) -> (Vec<String>, Vec<String>) {
+    let (mut declared, mut loads) = (Vec::new(), Vec::new());
     for (k, d) in plan.chunks[c].imports.iter().enumerate() {
         let Spec::External(spec) = &d.spec else {
             continue;
         };
         let q = serde_json::to_string(spec).unwrap_or_default();
         let Some(ext) = plan.names.external.get(&(c, k)) else {
-            out.push_str(&format!("require({q});"));
+            declared.push(String::new());
+            loads.push(format!("require({q})"));
             continue;
         };
         if let Some(d) = &ext.default {
-            match &ext.to_esm {
-                Some(h) => out.push_str(&format!("var {d}={h}(require({q}));")),
-                None => out.push_str(&format!("var {d}={{default:require({q})}};")),
-            }
+            declared.push(d.clone());
+            loads.push(match &ext.to_esm {
+                Some(h) => format!("{h}(require({q}))"),
+                None => format!("{{default:require({q})}}"),
+            });
         }
         if let Some(ns) = &ext.ns {
-            out.push_str(&format!("var {ns}=require({q});"));
+            declared.push(ns.clone());
+            loads.push(format!("require({q})"));
         }
     }
-    out
+    (declared, loads)
+}
+
+/// An eager chunk's external loads, as declarations at its top.
+fn eager_loads(declared: &[String], loads: &[String]) -> String {
+    declared
+        .iter()
+        .zip(loads)
+        .map(|(d, l)| {
+            if d.is_empty() {
+                format!("{l};")
+            } else {
+                format!("var {d}={l};")
+            }
+        })
+        .collect()
+}
+
+/// A lazy chunk's external loads, as its init's first statements.
+fn lazy_loads(declared: &[String], loads: &[String]) -> String {
+    declared
+        .iter()
+        .zip(loads)
+        .map(|(d, l)| {
+            if d.is_empty() {
+                format!("{l};")
+            } else {
+                format!("{d}={l};")
+            }
+        })
+        .collect()
 }
 
 /// A chunk's namespace object, Bun's way: `var ns={};__export(ns,{name:
