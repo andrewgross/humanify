@@ -11,6 +11,9 @@ pub(super) struct Plan<'a> {
     pub order: &'a Order,
     pub moved: &'a [Vec<bool>],
     pub names: &'a Names,
+    /// Per chunk, the edits that replace its embedded-file uses
+    /// (`embedded::resolve`).
+    pub embedded: &'a [Vec<Edit>],
 }
 
 fn is_ident(s: &str) -> bool {
@@ -120,6 +123,11 @@ fn edits(plan: &Plan<'_>, c: usize) -> Result<Vec<Edit>, String> {
         });
     }
     out.extend(chunk.meta_edits.iter().cloned());
+    for e in &plan.embedded[c] {
+        // A text read replaces its whole call: the callee's edits go.
+        out.retain(|x| x.start < e.start || x.end > e.end);
+        out.push(e.clone());
+    }
     for st in &chunk.stmts {
         if let StmtKind::ExportPrefix(decl) = st.kind {
             out.push(Edit {

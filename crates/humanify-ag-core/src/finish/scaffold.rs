@@ -206,15 +206,17 @@ pub fn external_packages_from<'a>(contents: impl IntoIterator<Item = &'a str>) -
 }
 
 /// `jsFilesUnder(dir)`: every `.js` / `.cjs` file, skipping
-/// `node_modules` and the metadata dir (readdir order; every consumer is
-/// per-file or order-free).
+/// `node_modules`, the metadata dir and the root's `embedded/` (readdir
+/// order; every consumer is per-file or order-free).
 pub fn js_files_under(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut out = Vec::new();
-    walk(dir, &mut out)?;
+    walk(dir, &mut out, true)?;
     Ok(out)
 }
 
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+/// `root`: `dir` is the tree root, whose `embedded/` holds a Bun app's
+/// embedded files (data, even when named `.js` — exp217), not code.
+fn walk(dir: &Path, out: &mut Vec<PathBuf>, root: bool) -> Result<(), String> {
     let entries = fs::read_dir(dir).map_err(|e| format!("readdir {}: {e}", dir.display()))?;
     for entry in entries {
         let entry = entry.map_err(|e| format!("readdir {}: {e}", dir.display()))?;
@@ -224,10 +226,13 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
             .file_type()
             .map_err(|e| format!("stat {}: {e}", full.display()))?;
         if ty.is_dir() {
-            if name == "node_modules" || name == METADATA_DIR {
+            if name == "node_modules"
+                || name == METADATA_DIR
+                || (root && name == crate::unpack::chunk_link::EMBEDDED_DIR)
+            {
                 continue;
             }
-            walk(&full, out)?;
+            walk(&full, out, false)?;
         } else if name.ends_with(".js") || name.ends_with(".cjs") {
             out.push(full);
         }
@@ -382,5 +387,33 @@ pub fn write_runnable_scaffold(
     write(SCAFFOLD_README, readme_source(entry_file, &dependencies))
 }
 
+/// Copy the embedded files a linked Bun app reads by path
+/// (`unpack::chunk_link::EmbeddedFile`, exp217) into the tree, each at
+/// `embedded/<its bunfs name>` — where the linked program's
+/// `__dirname+"/embedded/<name>"` points. Returns how many were copied; a
+/// file that cannot be copied fails the write (the tree would not run).
+pub fn write_embedded_files(
+    output_dir: &Path,
+    files: &[crate::unpack::chunk_link::EmbeddedFile],
+) -> Result<usize, String> {
+    let root = output_dir.join(crate::unpack::chunk_link::EMBEDDED_DIR);
+    for f in files {
+        let to = root.join(&f.rel);
+        if let Some(dir) = to.parent() {
+            fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+        }
+        fs::copy(&f.source, &to).map_err(|e| {
+            format!(
+                "copy the embedded file {} to {}: {e}",
+                f.source.display(),
+                to.display()
+            )
+        })?;
+    }
+    Ok(files.len())
+}
+
+#[cfg(test)]
+mod embedded_test;
 #[cfg(test)]
 mod scaffold_test;

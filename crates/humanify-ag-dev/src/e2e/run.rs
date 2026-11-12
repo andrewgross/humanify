@@ -18,7 +18,9 @@
 //!    fixture holds every export form). A BUNDLE fixture (`"bundle":
 //!    true`) runs split, and its boot compares BEHAVIOUR (stdout + exit of
 //!    `node <input>` vs `node run.cjs`; a Bun CJS build runs through
-//!    Bun's loader, [`BUN_CJS_LOADER`]); a layout the split does not read
+//!    Bun's loader, [`BUN_CJS_LOADER`]; a `"recordedBehavior": true`
+//!    fixture's input behaviour is its compiled executable's recorded
+//!    stdout, [`recorded_behavior`]); a layout the split does not read
 //!    is written unsplit and must hold no runnable tree.
 //! 5. SEQUENTIAL — `naming.schedule = "sequential"` + `naming.batch_size
 //!    = 10`, fresh and prior each twice, byte-identical, and equal to the
@@ -117,6 +119,24 @@ import{registerHooks}from\"node:module\";import{pathToFileURL}from\"node:url\";\
 const root=process.cwd();registerHooks({resolve(s,c,next){\
 return next(s.startsWith(\"/$bunfs/root/\")?pathToFileURL(root+\"/\"+s.slice(13)).href:s,c)}});";
 
+/// A compiled app's behaviour as its build recorded it: the executable's
+/// stdout, `compiled.stdout` beside the unpacked `build/` that holds
+/// `input` (its exit was 0 — the build script stops on anything else).
+fn recorded_behavior(input: &Path) -> Result<(String, i32), String> {
+    let record = input
+        .parent()
+        .and_then(Path::parent)
+        .unwrap_or(Path::new("/"))
+        .join("compiled.stdout");
+    let stdout = std::fs::read_to_string(&record).map_err(|e| {
+        format!(
+            "{}: the input's recorded behaviour is missing: {e}",
+            record.display()
+        )
+    })?;
+    Ok((stdout, 0))
+}
+
 /// The node arguments that run a built file AS-IS from its directory
 /// (`base` is its file name): Bun's CommonJS output through Bun's loader,
 /// a Bun code-split entry with its chunks resolved, anything else plain.
@@ -166,6 +186,8 @@ struct FixturePair {
     name: String,
     pair: VersionPair,
     bundle: bool,
+    /// The input's behaviour is recorded ([`recorded_behavior`]).
+    recorded_behavior: bool,
     expect: Option<Expect>,
 }
 
@@ -664,7 +686,11 @@ impl Stage {
             .zip(versions)
         {
             let input = self.input_of(&fp.name, version)?;
-            let want = self.behavior_of(&input, &format!("{label} input v{version}"))?;
+            let want = if fp.recorded_behavior {
+                recorded_behavior(&input).map_err(Stop::Failure)?
+            } else {
+                self.behavior_of(&input, &format!("{label} input v{version}"))?
+            };
             let got = self.behavior_of(
                 &out.join("run.cjs"),
                 &format!("{label} {tag} output v{version}"),
@@ -923,6 +949,7 @@ fn fixture_pairs(repo: &Path) -> Result<Vec<FixturePair>, String> {
                 name: name.clone(),
                 pair: pair.clone(),
                 bundle: cfg.bundle == Some(true),
+                recorded_behavior: cfg.recorded_behavior == Some(true),
                 expect: cfg.expect.clone(),
             });
         }

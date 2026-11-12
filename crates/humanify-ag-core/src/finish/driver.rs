@@ -75,6 +75,10 @@ pub struct FinishInput<'a> {
     /// Every path the split wrote (the tree), so a vendor-folder file the
     /// split placed is never mistaken for an earlier run's leftover.
     pub split_files: Vec<&'a str>,
+    /// The embedded files the linked input reads by path (a Bun
+    /// code-split app's `file` imports, exp217): a runnable tree carries
+    /// each under `embedded/`. Empty for every other input.
+    pub embedded_files: &'a [crate::unpack::chunk_link::EmbeddedFile],
 }
 
 /// The vendor record as the finish reads it (`BunModulesManifest`).
@@ -312,6 +316,13 @@ pub fn finish_split_output(
             write_runnable_scaffold(output_dir, &entry, &externals, input.input_file.parent())?;
             externals
         };
+        if !input.embedded_files.is_empty() {
+            let copied = super::scaffold::write_embedded_files(output_dir, input.embedded_files)?;
+            report.messages.push(format!(
+                "Embedded files: {copied} copied to {}/ (the linked program reads them by path)",
+                crate::unpack::chunk_link::EMBEDDED_DIR
+            ));
+        }
         let deps = if externals.is_empty() {
             "no external deps".to_string()
         } else {

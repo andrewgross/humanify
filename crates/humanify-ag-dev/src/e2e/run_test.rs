@@ -186,3 +186,30 @@ fn every_committed_fixture_pair_is_read() {
     assert!(pairs.iter().any(|p| p.name == "bun-bundle" && p.bundle));
     assert!(pairs.iter().any(|p| p.name == "bun-chunks" && p.bundle));
 }
+
+#[test]
+fn a_fixture_with_embedded_files_is_judged_against_the_compiled_apps_stdout() {
+    // bun-chunk-assets reads its embedded text through Bun's runtime
+    // (`import.meta.require`), which Node does not have: its input's
+    // behaviour is what the compiled executable printed (exp217).
+    let pairs = fixture_pairs(&crate::e2e::repo()).unwrap();
+    let pair = pairs
+        .iter()
+        .find(|p| p.name == "bun-chunk-assets")
+        .expect("the bun-chunk-assets fixture is read");
+    assert!(pair.bundle && pair.recorded_behavior);
+    assert!(
+        pairs
+            .iter()
+            .all(|p| p.recorded_behavior == (p.name == "bun-chunk-assets"))
+    );
+    let entry =
+        crate::e2e::repo().join("test/e2e/fixtures/bun-chunk-assets/build/v1.0.0/build/index.js");
+    let (stdout, status) = recorded_behavior(&entry).unwrap();
+    assert_eq!(status, 0);
+    assert!(stdout.contains("notes: NOTES#"), "{stdout}");
+    let d = scratch("norecord");
+    let err = recorded_behavior(&d.join("build/index.js")).unwrap_err();
+    assert!(err.contains("compiled.stdout"), "{err}");
+    std::fs::remove_dir_all(&d).unwrap();
+}

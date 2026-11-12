@@ -1,0 +1,2 @@
+// @bun
+import{e}from"/$bunfs/root/main-tbbj69a9.js";import{readFileSync as a}from"fs";var t=e("/$bunfs/root/intro-gfkgamy4.md");var o=e("/$bunfs/root/rules-mntrhk0m.txt");var i=e("/$bunfs/root/page-xrggf6wd.html");var r="/$bunfs/root/blob-40amdv8m.bin";function N(){let n=a(r).toString("hex");return["NOTES#"+JSON.stringify(t),JSON.stringify(o),JSON.stringify(i),"blob "+n].join(" | ")}export{N as notesReport};

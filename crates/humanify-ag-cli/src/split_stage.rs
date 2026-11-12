@@ -42,6 +42,9 @@ use crate::writers::{
 /// What the split stage is given.
 pub struct SplitStageInput<'a> {
     pub output_dir: &'a Path,
+    /// The embedded files the linked input reads by path (exp217): the
+    /// runnable tree's `embedded/`.
+    pub embedded_files: &'a [humanify_ag_core::unpack::chunk_link::EmbeddedFile],
     /// The run's input bundle (`filename`).
     pub input_file: &'a Path,
     /// The unpacked file the naming stage processed (removed once the tree
@@ -524,6 +527,7 @@ fn commit_and_finish(
         layout: input.toolchain.layout.piece,
         vendor_record: input.vendor_record,
         split_files: outcome.files.iter().map(|(p, _)| p.as_str()).collect(),
+        embedded_files: input.embedded_files,
     };
     drop(ph);
     let mut report = FinishReport::default();

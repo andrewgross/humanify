@@ -18,6 +18,7 @@ use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolFlags;
 
 use super::ROOT;
+use super::embedded::{Callee, FileRef, is_bun_module};
 
 /// A text edit: replace `[start, end)` with `text`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -150,6 +151,8 @@ pub(super) struct Chunk {
     /// `import.meta.*` rewritten to the CommonJS bindings.
     pub meta_edits: Vec<Edit>,
     pub static_deps: Vec<usize>,
+    /// Every use of an embedded (non-chunk) bunfs file (`embedded`).
+    pub file_refs: Vec<FileRef>,
 }
 
 /// The load queue: every chunk path gets an index the first time any
@@ -232,6 +235,7 @@ pub(super) fn analyse(path: &Path, loader: &mut Loader) -> Result<Chunk, String>
         leading_comments: Vec::new(),
         meta_edits: Vec::new(),
         static_deps: Vec::new(),
+        file_refs: Vec::new(),
     };
     for st in &program.body {
         let kind = ctx.statement(st, loader, &mut chunk)?;
@@ -624,6 +628,11 @@ impl Ctx<'_, '_> {
                     }
                 }
                 AstKind::ImportMeta(m) => self.import_meta(node.id(), m.span, loader, chunk)?,
+                AstKind::StringLiteral(s)
+                    if s.value.len() > ROOT.len() && s.value.starts_with(ROOT) =>
+                {
+                    self.file_ref(node.id(), s, loader, chunk);
+                }
                 AstKind::AwaitExpression(_) => self.refuse_top_level_await(node.id())?,
                 AstKind::ForOfStatement(f) if f.r#await => {
                     self.refuse_top_level_await(node.id())?
@@ -671,7 +680,7 @@ impl Ctx<'_, '_> {
             && let AstKind::CallExpression(call) = self.nodes.parent_kind(parent)
             && let Some(Expression::StringLiteral(s)) =
                 call.arguments.first().and_then(|a| a.as_expression())
-            && s.value.starts_with(ROOT)
+            && is_chunk_specifier(loader, &s.value)
             && let Spec::Chunk(target) = loader.spec(&s.value)?
         {
             chunk.lazy.push(LazyEdge {
@@ -720,6 +729,63 @@ impl Ctx<'_, '_> {
         });
         let _ = span;
         Ok(())
+    }
+
+    /// A `"/$bunfs/root/<rest>"` string in expression position that is not
+    /// a chunk specifier: a use of an embedded file (`embedded`).
+    fn file_ref(
+        &self,
+        id: oxc_semantic::NodeId,
+        s: &oxc_ast::ast::StringLiteral<'_>,
+        loader: &Loader,
+        chunk: &mut Chunk,
+    ) {
+        let mut call = None;
+        let mut extra_args = false;
+        match self.nodes.parent_kind(id) {
+            AstKind::ImportDeclaration(_)
+            | AstKind::ExportNamedDeclaration(_)
+            | AstKind::ExportFromDeclaration(_)
+            | AstKind::ExportAllDeclaration(_)
+            | AstKind::ImportExpression(_)
+            | AstKind::ImportSpecifier(_)
+            | AstKind::ExportSpecifier(_)
+            | AstKind::ImportAttribute(_)
+            | AstKind::Directive(_) => return,
+            AstKind::ObjectProperty(p) if p.key.span() == s.span => return,
+            AstKind::BindingProperty(p) if p.key.span() == s.span => return,
+            AstKind::MethodDefinition(p) if p.key.span() == s.span => return,
+            AstKind::PropertyDefinition(p) if p.key.span() == s.span => return,
+            AstKind::AccessorProperty(p) if p.key.span() == s.span => return,
+            AstKind::CallExpression(c)
+                if c.arguments.first().is_some_and(|a| a.span() == s.span) =>
+            {
+                extra_args = c.arguments.len() > 1;
+                if is_import_meta_require(&c.callee) {
+                    if is_chunk_specifier(loader, &s.value) {
+                        return; // a synchronous chunk load (`lazy`)
+                    }
+                    call = Some((c.span, Callee::MetaRequire));
+                } else if let Expression::Identifier(r) = unparen(&c.callee)
+                    && let Some(sym) = self.symbol_of_ref(r)
+                    && self.scoping.symbol_scope_id(sym) == self.root
+                {
+                    call = Some((c.span, Callee::Sym(sym)));
+                }
+            }
+            _ => {}
+        }
+        let scope = self.nodes.get_node(id).scope_id();
+        chunk.file_refs.push(FileRef {
+            literal: s.span,
+            rest: s.value[ROOT.len()..].to_string(),
+            call,
+            extra_args,
+            dirname_free: self
+                .scoping
+                .find_binding(scope, "__dirname".into())
+                .is_none(),
+        });
     }
 
     /// Every top-level binding with its declaration and reference sites;
@@ -801,6 +867,13 @@ impl Ctx<'_, '_> {
             shorthand,
         })
     }
+}
+
+/// Does `import.meta.require(spec)` load a chunk (a Bun-built module
+/// beside the entry), not an embedded file?
+fn is_chunk_specifier(loader: &Loader, spec: &str) -> bool {
+    spec.strip_prefix(ROOT)
+        .is_some_and(|rest| is_bun_module(&loader.dir.join(rest)))
 }
 
 fn import_specifier(s: &ImportDeclarationSpecifier<'_>) -> (Imported, SymbolId) {

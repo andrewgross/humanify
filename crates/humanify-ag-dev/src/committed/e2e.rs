@@ -18,6 +18,11 @@ pub struct FixtureConfig {
     pub entry_points: Vec<String>,
     /// A bundled build (absent: the plain fixtures).
     pub bundle: Option<bool>,
+    /// The input's behaviour is the compiled executable's, recorded beside
+    /// each build (`build/v<ver>/compiled.stdout`): an unpacked Bun app that
+    /// Node cannot run as-is (it reads embedded files through Bun's
+    /// runtime, exp217).
+    pub recorded_behavior: Option<bool>,
     pub expect: Option<Expect>,
     pub version_pairs: Vec<VersionPair>,
 }

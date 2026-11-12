@@ -333,8 +333,11 @@ fn pipeline_body(
     let input_link = input_bundle.link.clone();
     if let Some(link) = &input_link {
         renderer.message(&format!(
-            "Input: a Bun code-split layout, {} chunks linked into one program",
-            link.chunks_linked
+            "Input: a Bun code-split layout, {} chunks linked into one program \
+({} embedded text read(s) written as the text, {} embedded file(s) read by path)",
+            link.chunks_linked,
+            link.embedded_text,
+            link.embedded.len()
         ));
     }
     let bundled_code = input_bundle.text;
@@ -554,6 +557,7 @@ fn pipeline_body(
             .collect();
         let mut split = crate::split_stage::SplitStageInput {
             output_dir: Path::new(out_dir),
+            embedded_files: input_link.as_ref().map_or(&[], |l| l.embedded.as_slice()),
             input_file: Path::new(input),
             processed_source: Some(source),
             toolchain,

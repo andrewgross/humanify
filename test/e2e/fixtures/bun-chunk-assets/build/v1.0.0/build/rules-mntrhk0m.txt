@@ -1,0 +1,2 @@
+rule 1: say `hi` and ${not} a template\n
+rule 2: 'quotes' "too"

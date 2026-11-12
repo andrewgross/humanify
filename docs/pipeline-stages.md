@@ -54,6 +54,12 @@ recipe, the run-time index, the split's markers and the bun adapter all
 read the input text: placed after detection, five of them would read the
 20 KB loader. The linked program then takes the bun adapter like any Bun
 bundle. The stats file's `inputLink` block records what was linked.
+From 2.1.246 the app also carries EMBEDDED FILES beside its chunks
+(exp217, `chunk_link::embedded`): a text import read through
+`import.meta.require` is written as the text; any other
+`"/$bunfs/root/<name>"` string (Bun's `file` loader, a `.node` addon)
+points at the output tree's copy, `embedded/<name>`, which the finish
+stage writes beside the scaffold (`finish::scaffold::write_embedded_files`).
 
 Stage 9 has a step that decides stage 11's FILE names (2026-10-06,
 docs/design/module-naming.md): when the bundle's module markers describe
