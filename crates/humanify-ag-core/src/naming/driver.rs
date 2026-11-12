@@ -971,6 +971,7 @@ impl NamingOutcome {
             config: None,
             library_matching: None,
             llm_calls: None,
+            input_link: None,
             prompt_guard: Some(prompt_guard_stats(
                 &self.processor,
                 self.pre_sweep.as_ref(),

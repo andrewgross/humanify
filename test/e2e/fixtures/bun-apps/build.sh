@@ -6,6 +6,11 @@
 #               require(), the other four eager
 #   bun-lazy/   the same app with ALL six modules loaded lazily, a
 #               two-statement entry (the shape the module markers describe)
+#   bun-chunks/ the same app as a COMPILED, code-split ESM executable
+#               (`bun build --compile --splitting --format esm --minify`),
+#               unpacked with bun-decompile: an entry that imports
+#               `/$bunfs/root/<chunk>.js` siblings — Claude Code's layout
+#               from 2.1.242 (exp216). Four modules load through import().
 #
 # both built with `bun build src/main.js --target=bun --format=cjs`
 # (unminified) — Bun's CommonJS output, the `// @bun @bun-cjs` wrapper.
@@ -16,6 +21,9 @@
 # refuses anything but 1.3.14.
 #
 #   bash test/e2e/fixtures/bun-apps/build.sh
+#
+# bun-chunks also needs bun-decompile (BUN_DECOMPILE, default
+# `bun-decompile` on PATH) to unpack the compiled executable.
 #
 # Prints each build's sha256; the fixtures' READMEs record them.
 set -euo pipefail
@@ -45,8 +53,23 @@ for app in plain mixed lazy; do
   done
 done
 
+decompile="${BUN_DECOMPILE:-bun-decompile}"
+for ver in 1.0.0 1.1.0; do
+  src="$scratch/chunks-v$ver"
+  node "$here/source/gen.mjs" chunks "$ver" "$src"
+  (cd "$src" && npm install --no-audit --no-fund --ignore-scripts --silent)
+  (cd "$src" && "$bun_bin" build src/main.js --compile --splitting --format esm --minify \
+    --outfile="$src/app" >/dev/null)
+  out="$fixtures/bun-chunks/build/v$ver/build"
+  rm -rf "$out"
+  "$decompile" "$src/app" -o "$out" >/dev/null
+done
+
 for app in plain mixed lazy; do
   for ver in 1.0.0 1.1.0; do
     sha256sum "$fixtures/bun-$app/build/v$ver/build/index.js" | sed "s|$fixtures/||"
   done
+done
+for ver in 1.0.0 1.1.0; do
+  (cd "$fixtures" && sha256sum bun-chunks/build/v$ver/build/*.js)
 done

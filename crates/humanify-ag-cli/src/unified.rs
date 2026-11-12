@@ -325,7 +325,19 @@ fn pipeline_body(
     let switches = &config.switches;
     let outputs = &config.diagnostics;
     let ph = phase("read+detect");
-    let bundled_code = read_utf8(input)?;
+    // The one reader of the input file: a Bun code-split entry comes back
+    // linked into one program (exp216), anything else as read.
+    let input_bundle =
+        humanify_ag_core::unpack::chunk_link::input_from_text(Path::new(input), read_utf8(input)?)
+            .map_err(|e| Crash(format!("cannot link the input {input}: {e}")))?;
+    let input_link = input_bundle.link.clone();
+    if let Some(link) = &input_link {
+        renderer.message(&format!(
+            "Input: a Bun code-split layout, {} chunks linked into one program",
+            link.chunks_linked
+        ));
+    }
+    let bundled_code = input_bundle.text;
     let (toolchain, markers) = detect_stage(&bundled_code, config, profiler);
     // The run-time index machinery (exp154, `runtime_index`): the moment
     // detection resolves the bundler the store search — and, on a miss, the
@@ -628,6 +640,7 @@ fn pipeline_body(
                     ledger,
                     config,
                     library: &library,
+                    input_link: input_link.as_ref(),
                 },
                 renderer,
             )?;
@@ -1627,6 +1640,9 @@ struct RunLevelStats<'a> {
     config: &'a Config,
     /// What the library decision came to: the `libraryMatching` block.
     library: &'a LibraryLoad,
+    /// The chunk link, when the input was a Bun code-split layout: the
+    /// `inputLink` block (exp216).
+    input_link: Option<&'a humanify_ag_core::unpack::chunk_link::LinkReport>,
 }
 
 /// `--stats-json` (writeEvalStats): the naming stage's record + the vendor
@@ -1680,6 +1696,10 @@ fn write_stats_json(
         )
         .expect("serde_json writes JSON"),
     );
+    stats.input_link = run.input_link.map(|link| {
+        humanify_ag_model::js::JsValue::parse(&link.to_json().to_string())
+            .expect("serde_json writes JSON")
+    });
     crate::writers::write_eval_stats(Path::new(dest), &stats)
         .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
     renderer.message(&format!("Eval stats written to {dest}"));

@@ -34,6 +34,23 @@ editing the caller.
 | 11  | Split (one path)         | `emit::stable_split`                                                      | **no** — prior present → inherit layout; no prior → clustered fresh grouping                                                                                |
 | 12  | Emit + finish on disk    | `emit::cjs`, `finish` (scaffold, relink, ledgers)                         | **no**                                                                                                                                                      |
 
+Stage 2 has an INPUT side (exp216, 2026-11-12): before detection, the one
+reader of the input file (`unpack::chunk_link::read_input`) recognises a Bun
+code-split layout — an ESM entry under `// @bun` (not `@bun-cjs`) that
+imports `/$bunfs/root/<chunk>.js` siblings present beside it, Claude Code's
+shape from 2.1.242 — and LINKS the chunks into one program shaped like the
+single-file `@bun-cjs` bundle before it: imports become direct references
+to the exporting chunk's binding, colliding top-level names are renamed
+apart, the entry's static closure runs in ESM order, a lazily loaded
+chunk's effects move into an `__esm`-shaped init, and `import(chunk)`
+becomes `Promise.resolve().then(() => (init(), ns))` (Bun's own single-file
+form). Every other input is returned byte-for-byte. It sits before
+detection, not in the adapter registry, because detection, the library
+recipe, the run-time index, the split's markers and the bun adapter all
+read the input text: placed after detection, five of them would read the
+20 KB loader. The linked program then takes the bun adapter like any Bun
+bundle. The stats file's `inputLink` block records what was linked.
+
 Stage 9 has a step that decides stage 11's FILE names (2026-10-06,
 docs/design/module-naming.md): when the bundle's module markers describe
 it (the rule the split method reads, `place::method::markers_describe_bundle`),

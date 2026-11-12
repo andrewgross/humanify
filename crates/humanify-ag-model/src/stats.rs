@@ -557,6 +557,11 @@ js_record! {
         /// written on runs from this writer; ABSENT on every earlier
         /// recorded scorecard — the `reask` precedent, verbatim.
         llm_calls: Option<JsValue> = "llmCalls",
+        /// The `inputLink` block (2026-11-12, exp216): how a Bun
+        /// code-split input was linked into one program (chunks linked,
+        /// eager / lazy, inits, lazy loads, names renamed apart). Written
+        /// ONLY when the input was such a layout; absent otherwise.
+        input_link: Option<JsValue> = "inputLink",
     }
 }
 

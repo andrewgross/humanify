@@ -113,7 +113,8 @@ pub struct MatchVerbArgs<'a> {
 /// matched. Deterministic: inventory rows are in build order and pair
 /// rows are sorted by prior span (matches_dump's dump order).
 pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
-    let code = read_text(args.input)?;
+    let code =
+        humanify_ag_core::unpack::chunk_link::read_input(std::path::Path::new(args.input))?.text;
     let prior = read_text(args.prior_version)?;
     if humanify_ag_model::js::trim(&prior).is_empty() {
         return Err(format!(

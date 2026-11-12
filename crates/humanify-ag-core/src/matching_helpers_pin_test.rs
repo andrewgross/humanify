@@ -38,8 +38,9 @@ pub(crate) fn fixture_pairs() -> Vec<(String, String, String)> {
     // Fixtures committed AFTER the pins were recorded: the digests pin the
     // consumers' views over the fixtures they were recorded on, and a new
     // fixture adds lines without moving any old one (checked when each was
-    // added: the pins hold with it left out). exp172's CommonJS app.
-    const ADDED_AFTER_THE_PINS: [&str; 1] = ["bun-cjs-app"];
+    // added: the pins hold with it left out). exp172's CommonJS app;
+    // exp216's code-split app (whose index.js is only the loader).
+    const ADDED_AFTER_THE_PINS: [&str; 2] = ["bun-cjs-app", "bun-chunks"];
     names.retain(|n| !ADDED_AFTER_THE_PINS.contains(&n.as_str()));
     let mut out = Vec::new();
     for name in names {

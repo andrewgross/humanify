@@ -82,6 +82,23 @@ fn a_bun_cjs_build_is_known_by_its_first_line() {
 }
 
 #[test]
+fn a_bun_code_split_entry_runs_with_bunfs_resolved_beside_it() {
+    // The committed bun-chunks build: its entry imports
+    // `/$bunfs/root/<chunk>.js`, which Node resolves only through the hook.
+    let entry = crate::e2e::repo().join("test/e2e/fixtures/bun-chunks/build/v1.0.0/build/index.js");
+    let args = node_run_args(&entry, "index.js");
+    assert_eq!(args.first().map(String::as_str), Some("--import"));
+    assert_eq!(args.last().map(String::as_str), Some("index.js"));
+    let d = scratch("plainnode");
+    let f = d.join("index.js");
+    std::fs::write(&f, "console.log(1)").unwrap();
+    assert_eq!(node_run_args(&f, "index.js"), vec!["index.js".to_string()]);
+    std::fs::write(&f, "// @bun @bun-cjs\n(function(){})").unwrap();
+    assert_eq!(node_run_args(&f, "index.js")[0], "-e");
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
 fn the_next_release_prior_is_read_off_its_line() {
     let stderr = "x\nNext release: --prior-version /t/fresh\ny\n";
     assert!(matches!(next_release_prior(stderr, "L"), Ok(p) if p == "/t/fresh"));
@@ -167,4 +184,5 @@ fn every_committed_fixture_pair_is_read() {
     assert!(pairs.len() >= 19, "{}", pairs.len());
     assert!(pairs.iter().any(|p| p.name == "esm-exports" && !p.bundle));
     assert!(pairs.iter().any(|p| p.name == "bun-bundle" && p.bundle));
+    assert!(pairs.iter().any(|p| p.name == "bun-chunks" && p.bundle));
 }
