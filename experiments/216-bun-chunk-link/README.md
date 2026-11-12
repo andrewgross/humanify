@@ -1,9 +1,9 @@
 # exp216 — link a Bun code-split input back into one program
 
 STATUS: BUILT (TDD), STUB-MEASURED (241 -> 242 -> 243, both trees boot),
-GATED (all 11 stages), TWO REAL RUNS of 2.1.241 -> 2.1.242 (each exposed a
-linker bug, both fixed; the fixed binary was not rerun on the real model),
-NOT MERGED. Branch `exp216-bun-chunk-link` from main `16b15d005`. (Commit
+GATED (all 11 stages), THREE REAL RUNS of 2.1.241 -> 2.1.242 (runs 1-2
+each exposed a linker bug; run 3 on the fixed binary exits 0 and its tree
+boots), NOT MERGED. Branch `exp216-bun-chunk-link` from main `16b15d005`. (Commit
 hashes are after a history rewrite that removed one quoted Claude Code
 import line from a doc comment; the code of each named commit is
 unchanged.) No eval
@@ -198,9 +198,33 @@ hop):
   under Node. Fixed in `b96d6e483`: a lazy chunk loads its externals in
   its init, as Bun's single-file output does.
 
+### Run 3 — the fixed binary (`e10432eea`, the input-layout registry)
+
+Same launch, output `/work/exp216-runs/run3-tree/2.1.242`, stats
+`/work/exp216-runs/run3.2.1.242.stats.json`.
+
+| | run 2 (`c40170a38`) | run 3 (`e10432eea`) |
+| --- | ---: | ---: |
+| exit / provider errors | 0 / 0 | 0 / 0 |
+| wall | 33.0 min | 31.4 min |
+| prior functions unmatched / still ambiguous | 7,673 / 4,195 | 7,653 / 4,202 |
+| fresh functions / carried / already named | 107,912 / 73,332 / 6,771 | 107,937 / 73,345 / 6,771 |
+| close-matched / asked | 3,958 / 13,677 | 3,955 / 13,676 |
+| module bindings carried / asked | 24,359 / 4,878 | 24,368 / 4,869 |
+| split method | markers, 6,612, 99.76% | markers, 6,637, 99.92% |
+| src files / 2.1.241 paths kept / folders | 6,060 / 4,211 / 819 | 6,078 / 4,204 / 838 |
+| vendor files / packages (shared with 241) | 2,427 / 301 (280) | 2,446 / 302 (280) |
+| runnable scaffold | yes | yes |
+| `node run.cjs --version` | `Cannot find module 'ws'` | `2.1.242 (Claude Code)` |
+
+The matching moved a little between runs 2 and 3 (unmatched -20,
+ambiguous +7) from the two linker fixes (the `require` alias and lazy
+externals change a few hundred statements' shape); it equals the stub
+run on the same code exactly.
+
 ## Gate
 
-`cargo dev check` in the worktree at `b96d6e483` (also green at `c40170a38` and `c6a2cf6e9`):
+`cargo dev check` in the worktree at `e10432eea` (also green at `b96d6e483`, `c40170a38` and `c6a2cf6e9`):
 
 | stage | result |
 | --- | --- |
@@ -211,7 +235,7 @@ hop):
 | census:clones | REVIEW — the same 50 findings as main, none in the new code |
 | census:concurrency | PASS (the linker adds no concurrency site) |
 | census:slop | PASS (humanify-ag-core erosion 32.3% -> 32.4%) |
-| rust:unit | PASS (21 new linker tests, written before the code and seen red — except the shadowed-alias guard, green on arrival because the old code already kept the binding; most run the linked program in Node. 1 new e2e-runner test) |
+| rust:unit | PASS (21 new linker tests + 3 input-layout registry tests, written before the code and seen red — except the shadowed-alias guard, green on arrival because the old code already kept the binding; most run the linked program in Node. 1 new e2e-runner test) |
 | rust:build | PASS |
 | format-golden | PASS |
 | e2e | PASS — every fixture as before, plus `bun-chunks` |
