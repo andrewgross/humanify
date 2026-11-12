@@ -108,6 +108,33 @@ const wrapper = vm.runInThisContext(fs.readFileSync(file, "utf8"), { filename: f
 wrapper.call(mod.exports, mod.exports, Module.createRequire(file), mod, file, path.dirname(file));
 "#;
 
+/// A Bun code-split entry (`bun build --compile --splitting`, unpacked)
+/// imports its chunks as `/$bunfs/root/<chunk>.js`, the compiled app's
+/// virtual root; run as-is, Node resolves those beside the entry (Node's
+/// working directory is the entry's directory).
+const BUNFS_RESOLVE_HOOK: &str = "data:text/javascript,\
+import{registerHooks}from\"node:module\";import{pathToFileURL}from\"node:url\";\
+const root=process.cwd();registerHooks({resolve(s,c,next){\
+return next(s.startsWith(\"/$bunfs/root/\")?pathToFileURL(root+\"/\"+s.slice(13)).href:s,c)}});";
+
+/// The node arguments that run a built file AS-IS from its directory
+/// (`base` is its file name): Bun's CommonJS output through Bun's loader,
+/// a Bun code-split entry with its chunks resolved, anything else plain.
+fn node_run_args(file: &Path, base: &str) -> Vec<String> {
+    let text = read_text(file);
+    let mut args: Vec<String> = if is_bun_cjs(file) {
+        vec!["-e".into(), BUN_CJS_LOADER.into()]
+    } else if humanify_ag_core::unpack::input::choose_input_layout(file, &text)
+        == humanify_ag_core::unpack::input::InputLayout::BunChunks
+    {
+        vec!["--import".into(), BUNFS_RESOLVE_HOOK.into()]
+    } else {
+        Vec::new()
+    };
+    args.push(base.to_string());
+    args
+}
+
 /// Why the stage stopped: a check failed (judged against the known gaps),
 /// or the harness itself broke (never a known gap).
 enum Stop {
@@ -585,11 +612,8 @@ impl Stage {
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
-        let args: Vec<&str> = if is_bun_cjs(file) {
-            vec!["-e", BUN_CJS_LOADER, &base]
-        } else {
-            vec![&base]
-        };
+        let owned = node_run_args(file, &base);
+        let args: Vec<&str> = owned.iter().map(String::as_str).collect();
         let done = self.node(&args, dir).map_err(|e| {
             Stop::Failure(format!(
                 "{label}: {} could not be run by Node:\n{e}",

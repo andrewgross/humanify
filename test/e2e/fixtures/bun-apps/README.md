@@ -9,6 +9,7 @@ Bun's CommonJS output, the `// @bun @bun-cjs` wrapper):
 | `bun-plain` | all imported statically — what a normal app does                   | 0                 | fresh grouping            |
 | `bun-mixed` | 2 reached only through `require()` from a CommonJS loader, 4 eager | 2 (~45% of code)  | fresh grouping            |
 | `bun-lazy`  | all 6 reached only through the loader; a two-statement entry       | 6 (>99% of code)  | module markers            |
+| `bun-chunks` | `--compile --splitting --format esm --minify`: 2 static, 4 through `import()`, a shared helper chunk; unpacked with bun-decompile (exp216) | linked by the input reader | fresh grouping |
 
 Bun writes a lazy-init module (`var init_x = __esm(…)`) only for an ES
 module that is `require()`d or loaded by `import()`. Claude Code loads
@@ -54,6 +55,25 @@ e23674d3e73ba7b3a31379f98e8bba67dda8f24c28e3337af174c09043c5dca5  bun-mixed/buil
 58dda122ca713e5c8b5514bdfdfe8ae6a64b46906c949b30dafb42f9f98f6297  bun-mixed/build/v1.1.0/build/index.js
 7901df80208a95bb71e96f7ec0186b06d07fac21e87891ea997b794e4d714ab8  bun-lazy/build/v1.0.0/build/index.js
 419b260d20e7b205316fed35eeb125c92dedf7a8ed511f84c13dcf6536be41b9  bun-lazy/build/v1.1.0/build/index.js
+```
+
+bun-chunks (`BUN_DECOMPILE=/path/to/bun-decompile`, 2026-11-12):
+
+```
+54d13ebcaac60323ee9a275f734efb5b27cfcf9093c21457e1c8f1e4d54415c3  bun-chunks/build/v1.0.0/build/archive-vzmk2z62.js
+b20c89aca09563e6b8bca476a2430dc1c0a0afd573d355483e42e610d4399d7a  bun-chunks/build/v1.0.0/build/codec-bwccj2e3.js
+e6967cb6f2349baef581137fc8efb61de3e9e7f0381b9dc3f069f0b3a2d82839  bun-chunks/build/v1.0.0/build/index.js
+6960bb4154f09fbb41bfd6c6f16abd1193e62e2328293d5aa0f5513e318702a6  bun-chunks/build/v1.0.0/build/ledger-3ydwnwaf.js
+db3826aac2ba5fe5084e3d8540dcc1f634eec343d2632a45961d42c6cf8c7349  bun-chunks/build/v1.0.0/build/main-2cnz8tmv.js
+96bbee0af4c8e9c8bfabe89a5a0ab5e0f11cdc15ca8e7c6a1dd12ab509ef2ec0  bun-chunks/build/v1.0.0/build/main-99a6wprd.js
+e88200301f4ec84b0c5d9c1dfd34ce783ad0056b4f9cfe83e3edd76cb799494d  bun-chunks/build/v1.0.0/build/router-33m0pj40.js
+f918c3f837f09643e9f1b4cdd5e3d9dc842ac5f611064cfabb079e55075da1f8  bun-chunks/build/v1.1.0/build/archive-92xt92zr.js
+b20c89aca09563e6b8bca476a2430dc1c0a0afd573d355483e42e610d4399d7a  bun-chunks/build/v1.1.0/build/codec-bwccj2e3.js
+9ad6347d1babcdf6591215105891240d33290541c3097c37ff76672b868ab2df  bun-chunks/build/v1.1.0/build/index.js
+6960bb4154f09fbb41bfd6c6f16abd1193e62e2328293d5aa0f5513e318702a6  bun-chunks/build/v1.1.0/build/ledger-3ydwnwaf.js
+db3826aac2ba5fe5084e3d8540dcc1f634eec343d2632a45961d42c6cf8c7349  bun-chunks/build/v1.1.0/build/main-2cnz8tmv.js
+96bbee0af4c8e9c8bfabe89a5a0ab5e0f11cdc15ca8e7c6a1dd12ab509ef2ec0  bun-chunks/build/v1.1.0/build/main-99a6wprd.js
+e88200301f4ec84b0c5d9c1dfd34ce783ad0056b4f9cfe83e3edd76cb799494d  bun-chunks/build/v1.1.0/build/router-33m0pj40.js
 ```
 
 This directory has no `fixture.config.json`, so the e2e stage does not run

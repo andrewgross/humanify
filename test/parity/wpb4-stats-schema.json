@@ -2519,6 +2519,14 @@
       "type": {
         "kind": "any"
       }
+    },
+    {
+      "name": "inputLink",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "any"
+      }
     }
   ]
 }

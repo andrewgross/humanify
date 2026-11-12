@@ -17,7 +17,9 @@
 //! it writes, and the files it hands downstream.
 
 pub mod bun;
+pub mod chunk_link;
 pub mod gate;
+pub mod input;
 pub mod webcrack;
 
 use std::fs;
