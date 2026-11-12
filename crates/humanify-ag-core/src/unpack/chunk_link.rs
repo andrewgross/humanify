@@ -32,10 +32,16 @@
 //!   the lazy chunks it imports;
 //! - `import(chunk)` becomes `Promise.resolve().then(() => (init(), ns))`
 //!   — exactly what Bun writes for an `import()` within one file — and
-//!   `import.meta.require(chunk)` becomes `(init(), ns)`, where `ns` is a
-//!   namespace object of live getters; other `import.meta` properties
-//!   become their CommonJS bindings, and imports of Node built-ins
-//!   become `require`s.
+//!   `import.meta.require(chunk)` becomes `(init(), ns)`, where `ns` is
+//!   the chunk's namespace object in Bun's form (`var ns={};__export(ns,
+//!   {name:()=>binding})`); other `import.meta` properties become their
+//!   CommonJS bindings, and imports of Node built-ins take Bun's CommonJS
+//!   shape (`ns=require(m)` read as `ns.name`; a default import as
+//!   `.default` of `__toESM(require(m))`) — the shapes the prior release
+//!   was matched in;
+//! - the chunks are written in one depth-first walk from the entry
+//!   ([`graph::Order`]), which keeps the eager chunks' ESM order and puts
+//!   a lazily loaded chunk beside the chunk that loads it.
 //!
 //! What it refuses (an error, never a silent partial read): a bunfs
 //! import whose file is missing, top-level await, `export *`, a bare or

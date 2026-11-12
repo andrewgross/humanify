@@ -44,6 +44,8 @@ pub(super) struct Names {
     /// Per chunk (written position), its init's name.
     pub init: BTreeMap<usize, String>,
     pub esm_helper: String,
+    /// Bun's `__export` (defines a namespace object's getters).
+    pub export_helper: String,
     pub renamed: usize,
     taken: BTreeSet<String>,
     claimed: BTreeSet<String>,
@@ -100,6 +102,7 @@ pub(super) fn assign(
         external: BTreeMap::new(),
         init: BTreeMap::new(),
         esm_helper: String::new(),
+        export_helper: String::new(),
         renamed: 0,
         taken,
         claimed: BTreeSet::new(),
@@ -129,6 +132,7 @@ pub(super) fn assign(
     }
     externals(chunks, order, &mut names);
     names.esm_helper = names.fresh("__esm");
+    names.export_helper = names.fresh("__export");
     for (k, &c) in order.chunks.iter().enumerate() {
         if needs_init[c] {
             let n = names.fresh(&format!("__chunkInit{k}"));

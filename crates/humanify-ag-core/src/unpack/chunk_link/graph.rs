@@ -100,13 +100,35 @@ fn postorder(chunks: &[Chunk], start: usize, placed: &mut [bool], out: &mut Vec<
 
 /// The written order and which chunks load eagerly.
 pub(super) struct Order {
-    /// Eager chunks (the entry's static closure) in evaluation order
-    /// without the entry, then every lazily loaded chunk (each lazy
-    /// load's static closure, in the order the loads are met), then the
-    /// entry — Bun's single-file layout, whose entry code comes last.
+    /// One depth-first walk from the entry, each chunk after the chunks
+    /// it reaches (postorder): an eager chunk walks its static imports
+    /// first (so the eager chunks keep their ESM evaluation order), then
+    /// its lazy loads; a lazy chunk walks its lazy loads, then its static
+    /// imports; a lazy chunk never walks into an eager one (that one is
+    /// written at its own turn). A lazily loaded chunk so lands beside the
+    /// chunk that loads it, and the entry comes last — closer to Bun's
+    /// single-file layout than "every eager chunk, then every lazy one"
+    /// (2.1.242's unpacked app text against
+    /// 2.1.241's: 55% of the shared unique string anchors in order, against
+    /// 38%; a normal hop reads 100%).
     pub chunks: Vec<usize>,
     pub eager: Vec<bool>,
     pub position: Vec<usize>,
+}
+
+/// The chunks a chunk's walk visits, in order (see [`Order`]).
+fn walk_edges(chunks: &[Chunk], eager: &[bool], c: usize) -> Vec<usize> {
+    let lazy = chunks[c].lazy.iter().map(|e| e.target);
+    let statics = chunks[c].static_deps.iter().copied();
+    let edges: Vec<usize> = if eager[c] {
+        statics.chain(lazy).collect()
+    } else {
+        lazy.chain(statics).collect()
+    };
+    edges
+        .into_iter()
+        .filter(|&d| eager[c] || !eager[d])
+        .collect()
 }
 
 pub(super) fn order(chunks: &[Chunk]) -> Order {
@@ -116,19 +138,21 @@ pub(super) fn order(chunks: &[Chunk]) -> Order {
     postorder(chunks, 0, &mut placed, &mut eager_order);
     let mut eager = vec![false; n];
     eager_order.iter().for_each(|&c| eager[c] = true);
-    let mut scan = eager_order.clone();
-    let mut written: Vec<usize> = eager_order.iter().copied().filter(|&c| c != 0).collect();
-    let mut k = 0;
-    while let Some(&c) = scan.get(k) {
-        k += 1;
-        for edge in &chunks[c].lazy {
-            let mut added = Vec::new();
-            postorder(chunks, edge.target, &mut placed, &mut added);
-            scan.extend(&added);
-            written.extend(added);
+    let mut visited = vec![false; n];
+    visited[0] = true;
+    let mut written = Vec::with_capacity(n);
+    let mut stack = vec![(0usize, walk_edges(chunks, &eager, 0), 0usize)];
+    while let Some((c, edges, i)) = stack.pop() {
+        let Some(&d) = edges.get(i) else {
+            written.push(c);
+            continue;
+        };
+        stack.push((c, edges, i + 1));
+        if !visited[d] {
+            visited[d] = true;
+            stack.push((d, walk_edges(chunks, &eager, d), 0));
         }
     }
-    written.push(0);
     let mut position = vec![usize::MAX; n];
     written
         .iter()

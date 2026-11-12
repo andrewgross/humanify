@@ -222,9 +222,13 @@ fn a_lazy_chunks_pure_declarations_stay_at_the_top_level() {
     assert_eq!(run(&text), "5\n");
     // The function is a top-level statement; only the call moves into the
     // chunk's init.
-    assert!(text.contains("\nfunction pureFn(){return 5}"), "{text}");
+    assert!(text.contains("function pureFn(){return 5}var k;"), "{text}");
     assert!(text.contains("k=pureFn();"), "{text}");
     assert_eq!(report.inits, 1);
+    // The namespace object is Bun's: `var ns={};__export(ns,{g:()=>…})`,
+    // whose arrows are not functions with names to transfer.
+    assert!(text.contains("={};__export("), "{text}");
+    assert!(text.contains("g:()=>pureFn"), "{text}");
 }
 
 #[test]
@@ -404,4 +408,35 @@ fn linking_is_deterministic() {
     let one = linked(&layout(&files)).0;
     let two = linked(&layout(&files)).0;
     assert_eq!(one, two);
+}
+
+#[test]
+fn a_lazy_chunk_is_written_beside_the_chunk_that_loads_it() {
+    // Bun's single-file layout keeps a lazily loaded module near its
+    // importer: the entry's static imports A then B, A loads L lazily —
+    // written L, A, B, entry (each chunk after what it reaches).
+    // Evaluation order is unchanged (L runs only when loaded).
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!(
+                "{HEAD}import\"/$bunfs/root/chunk-a.js\";import\"/$bunfs/root/chunk-b.js\";console.log(\"ENTRY\");\n"
+            ),
+        ),
+        (
+            "chunk-a.js",
+            &format!(
+                "{HEAD}console.log(\"A\");export function la(){{return import(\"/$bunfs/root/chunk-l.js\")}}\n"
+            ),
+        ),
+        ("chunk-b.js", &format!("{HEAD}console.log(\"B\");\n")),
+        ("chunk-l.js", &format!("{HEAD}console.log(\"L\");\n")),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(run(&text), "A\nB\nENTRY\n");
+    let at = |s: &str| text.find(s).unwrap();
+    assert!(
+        at("\"L\"") < at("\"A\"") && at("\"A\"") < at("\"B\"") && at("\"B\"") < at("\"ENTRY\""),
+        "{text}"
+    );
 }

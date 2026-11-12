@@ -57,6 +57,12 @@ pub(super) fn program(plan: &Plan<'_>) -> Result<String, String> {
         first_line.trim_end()
     );
     out.push_str(entry.text[first_line.len()..first_stmt].trim_start_matches('\n'));
+    if plan.names.of.keys().any(|t| matches!(t, Target::Ns(_))) {
+        out.push_str(&format!(
+            "var {}=(target,all)=>{{for(var name in all)Object.defineProperty(target,name,{{get:all[name],enumerable:!0,configurable:!0}})}};\n",
+            plan.names.export_helper
+        ));
+    }
     if !plan.names.init.is_empty() {
         out.push_str(&format!(
             "var {}=(fn,res)=>()=>(fn&&(res=fn(fn=0)),res);\n",
@@ -164,6 +170,9 @@ fn chunk(plan: &Plan<'_>, c: usize) -> Result<String, String> {
         top.push('\n');
     }
     top.push_str(&externals(plan, c));
+    if let Some(ns) = plan.names.of.get(&Target::Ns(c)) {
+        top.push_str(&namespace(plan, c, ns)?);
+    }
     if plan.names.init.contains_key(&c) {
         for d in &ch.static_deps {
             if let Some(name) = plan.names.init.get(d).filter(|_| !plan.order.eager[*d]) {
@@ -187,9 +196,6 @@ fn chunk(plan: &Plan<'_>, c: usize) -> Result<String, String> {
             "var {name}={}(()=>{{{init}}});",
             plan.names.esm_helper
         ));
-    }
-    if let Some(ns) = plan.names.of.get(&Target::Ns(c)) {
-        top.push_str(&namespace(plan, c, ns)?);
     }
     Ok(top)
 }
@@ -291,16 +297,17 @@ fn externals(plan: &Plan<'_>, c: usize) -> String {
     out
 }
 
-/// A chunk's namespace object: a live getter per export.
+/// A chunk's namespace object, Bun's way: `var ns={};__export(ns,{name:
+/// ()=>binding,…})` — a live getter per export.
 fn namespace(plan: &Plan<'_>, c: usize, ns: &str) -> Result<String, String> {
     let mut props = Vec::new();
     for (name, _) in &plan.chunks[c].exports {
         let t = resolve_export(plan.chunks, c, &Imported::Name(name.clone()))?;
-        props.push(format!(
-            "get {}(){{return {}}}",
-            key(name),
-            plan.names.name(t)
-        ));
+        props.push(format!("{}:()=>{}", key(name), plan.names.name(t)));
     }
-    Ok(format!("var {ns}={{{}}};", props.join(",")))
+    Ok(format!(
+        "var {ns}={{}};{}({ns},{{{}}});",
+        plan.names.export_helper,
+        props.join(",")
+    ))
 }
