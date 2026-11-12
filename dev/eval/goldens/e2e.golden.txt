@@ -62,6 +62,70 @@ humanify-config| enabled = true
 humanify-config| [naming]
 humanify-config| schedule = "sequential"
 humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/bun-chunk-assets/build/v1.0.0/build/index.js 
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-chunk-assets/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/fresh.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/fresh.stats.json"
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-chunk-assets/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-chunk-assets/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/fresh -o <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-chunk-assets/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/seq-fresh-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/seq-fresh-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-chunk-assets/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/seq-fresh-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/seq-fresh-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-chunk-assets/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/seq-prior-a --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/seq-prior-a.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+<REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-chunk-assets/build/v1.1.0/build/index.js --prior-version <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/seq-fresh-a -o <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/seq-prior-b --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-chunk-assets-1.0.0-1.1.0/seq-prior-b.toml 
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [library]
+humanify-config| index_store_dir = "<REPO>/test/e2e/library-index"
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
 <REPO>/target/release/humanify-ag HUMANIFY_API_KEY= :: detect --toolchain <REPO>/test/e2e/fixtures/bun-chunks/build/v1.0.0/build/index.js 
 <REPO>/target/release/humanify-ag HUMANIFY_API_KEY=e2e :: <REPO>/test/e2e/fixtures/bun-chunks/build/v1.0.0/build/index.js -o <TMP>/humanify-e2e-<RUN>/bun-chunks-1.0.0-1.1.0/fresh --endpoint http://127.0.0.1:<PORT>/v1 --config <TMP>/humanify-e2e-<RUN>/bun-chunks-1.0.0-1.1.0/fresh.toml 
 humanify-config| [llm]

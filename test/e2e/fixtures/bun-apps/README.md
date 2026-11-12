@@ -10,6 +10,7 @@ Bun's CommonJS output, the `// @bun @bun-cjs` wrapper):
 | `bun-mixed` | 2 reached only through `require()` from a CommonJS loader, 4 eager | 2 (~45% of code)  | fresh grouping            |
 | `bun-lazy`  | all 6 reached only through the loader; a two-statement entry       | 6 (>99% of code)  | module markers            |
 | `bun-chunks` | `--compile --splitting --format esm --minify`: 2 static, 4 through `import()`, a shared helper chunk; unpacked with bun-decompile (exp216) | linked by the input reader | fresh grouping |
+| `bun-chunk-assets` | the `assets` app: bun-chunks plus a lazy `notes` module with three text imports and one `file` import, built with **Bun 1.4.1** by `../bun-chunk-assets/build.sh` (exp217) | linked by the input reader | fresh grouping |
 
 Bun writes a lazy-init module (`var init_x = __esm(…)`) only for an ES
 module that is `require()`d or loaded by `import()`. Claude Code loads

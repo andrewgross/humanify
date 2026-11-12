@@ -50,9 +50,12 @@
 //! unknown `import.meta`, an import of a name the chunk does not export.
 
 mod analyse;
+mod embedded;
 mod emit;
 mod graph;
 mod names;
+
+pub use embedded::{EMBEDDED_DIR, EmbeddedFile};
 
 use std::path::Path;
 
@@ -81,6 +84,15 @@ pub struct LinkReport {
     pub sync_requires: usize,
     /// Top-level bindings renamed apart.
     pub renamed: usize,
+    /// Reads of an embedded TEXT file, written as the text.
+    pub embedded_text: usize,
+    /// Path strings naming an embedded file, rewritten to the tree's copy.
+    pub embedded_paths: usize,
+    /// Path strings naming a Bun-built module nothing links (left as is).
+    pub bun_module_paths: usize,
+    /// The embedded files the linked program reads by path: the output
+    /// tree must carry each under [`EMBEDDED_DIR`] (sorted, one each).
+    pub embedded: Vec<EmbeddedFile>,
 }
 
 impl LinkReport {
@@ -95,6 +107,10 @@ impl LinkReport {
             "dynamicImports": self.dynamic_imports,
             "syncRequires": self.sync_requires,
             "renamed": self.renamed,
+            "embeddedText": self.embedded_text,
+            "embeddedPaths": self.embedded_paths,
+            "embeddedFiles": self.embedded.len(),
+            "bunModulePaths": self.bun_module_paths,
         })
     }
 }
@@ -137,11 +153,13 @@ pub fn link(entry: &Path) -> Result<(String, LinkReport), String> {
     let needs_init = graph::needs_init(&chunks, &order, &moved);
     let needs_ns = namespaces_needed(&chunks);
     let names = names::assign(&chunks, &order, &needs_init, &needs_ns)?;
+    let embedded = embedded::resolve(&chunks, &loader.dir)?;
     let text = emit::program(&emit::Plan {
         chunks: &chunks,
         order: &order,
         moved: &moved,
         names: &names,
+        embedded: &embedded.edits,
     })?;
     let report = LinkReport {
         chunks_linked: chunks.len(),
@@ -160,6 +178,10 @@ pub fn link(entry: &Path) -> Result<(String, LinkReport), String> {
             .filter(|e| e.sync)
             .count(),
         renamed: names.renamed,
+        embedded_text: embedded.text,
+        embedded_paths: embedded.paths,
+        bun_module_paths: embedded.bun_module_paths,
+        embedded: embedded.files,
     };
     Ok((text, report))
 }
@@ -197,3 +219,5 @@ fn unreached_js(loader: &Loader) -> usize {
 
 #[cfg(test)]
 mod chunk_link_test;
+#[cfg(test)]
+mod embedded_test;

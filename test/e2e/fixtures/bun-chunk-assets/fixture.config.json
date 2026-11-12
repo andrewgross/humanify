@@ -1,0 +1,25 @@
+{
+  "package": "bun-chunk-assets",
+  "repo": "",
+  "sourceStrategy": { "type": "local" },
+  "entryPoints": ["index.js"],
+  "bundle": true,
+  "recordedBehavior": true,
+  "expect": {
+    "bundler": "bun",
+    "unpackAdapter": "bun",
+    "vendor": true,
+    "splitMethod": "fresh-grouping",
+    "apart": [
+      ["UNITS#", "NOTES#"],
+      ["ARCHIVE#", "NOTES#"]
+    ]
+  },
+  "versionPairs": [
+    {
+      "v1": "1.0.0",
+      "v2": "1.1.0",
+      "description": "A compiled, code-split Bun app with EMBEDDED FILES (Bun 1.4.1, `bun build --compile --splitting --format esm --minify`, unpacked with bun-decompile): the bun-chunks app plus a lazy notes module that imports three text files (one stored as UTF-16) and one `file` asset, Claude Code's shape from 2.1.246. The linker writes each text read as the text and points the path at the tree's embedded/ copy (exp217); the split trees must print what the compiled executable printed (build/v<ver>/compiled.stdout). v1.1.0 changes the intro text (a new content-hash name) and the archive report."
+    }
+  ]
+}
