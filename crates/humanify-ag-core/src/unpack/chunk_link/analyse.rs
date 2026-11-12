@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
 use oxc_ast::ast::{
-    BindingPattern, Class, ClassElement, Declaration, ExportDefaultDeclarationKind, Expression,
-    ImportDeclarationSpecifier, ModuleExportName, ObjectPropertyKind, Statement,
+    BindingPattern, Class, Declaration, ExportDefaultDeclarationKind, Expression,
+    ImportDeclarationSpecifier, ModuleExportName, Statement,
 };
 use oxc_parser::Parser;
 use oxc_semantic::{AstNodes, Scoping, SemanticBuilder, SymbolId};
@@ -65,16 +65,18 @@ pub(super) struct LazyEdge {
     pub sync: bool,
 }
 
-/// `None`: the value has effects or reads state. `Some(helpers)`: free
-/// of both, provided every listed binding is a thunk factory.
-pub(super) type Purity = Option<Vec<SymbolId>>;
-
 pub(super) struct Declarator {
     pub pattern: Span,
     pub init: Option<Span>,
     pub simple: bool,
     pub names: Vec<SymbolId>,
-    pub purity: Purity,
+    /// `var x = h(fn, …)` (x a plain name, every argument a function, `h`
+    /// a top-level binding): a factory call, order-free when `h` is a
+    /// thunk factory ([`Chunk::thunk_factories`]) already declared.
+    pub factory_call: Option<SymbolId>,
+    /// `var h = (…) => () => …` (h a plain name, never written): a thunk
+    /// factory, order-free (building a closure reads nothing).
+    pub thunk_factory: bool,
     /// `var x = import.meta.require` (x never written): Bun's ESM runtime
     /// alias of `require`, which the linked program can drop for the
     /// wrapper's own `require` (see `names`).
@@ -84,17 +86,15 @@ pub(super) struct Declarator {
 pub(super) enum StmtKind {
     /// An import or `export {…}` / `export … from`: removed.
     Removed,
-    /// `export <declaration>`: the declaration stays, `[start, decl)` goes.
-    ExportPrefix(u32),
+    /// A function declaration (also `export function` / `export default
+    /// function f`).
     Function,
     Class {
-        pure: bool,
         name: SymbolId,
     },
     Var(Vec<Declarator>),
     DefaultExpr {
         expr: Span,
-        purity: Purity,
     },
     /// `nested_decl`: declares a top-level `var` from inside a block.
     Other {
@@ -140,9 +140,10 @@ pub(super) struct Chunk {
     pub nested_names: BTreeSet<String>,
     /// Names read but bound nowhere in the chunk (globals).
     pub unresolved: BTreeSet<String>,
-    /// Top-level `var h = (…) => () => …` bindings: calling one has no
+    /// Top-level `var h = (…) => () => …` bindings, never written, with
+    /// the index of the statement declaring each: calling one has no
     /// effect (Bun's `__esm` / `__commonJS` shapes).
-    pub thunk_factories: BTreeSet<SymbolId>,
+    pub thunk_factories: BTreeMap<SymbolId, usize>,
     /// The chunk's Bun `__toESM` helper, recognised by shape (the
     /// toolchain's interop piece), when it declares one.
     pub to_esm: Option<SymbolId>,
@@ -150,6 +151,8 @@ pub(super) struct Chunk {
     pub leading_comments: Vec<String>,
     /// `import.meta.*` rewritten to the CommonJS bindings.
     pub meta_edits: Vec<Edit>,
+    /// `export <declaration>` prefixes (`[start, declaration)`), removed.
+    pub export_prefixes: Vec<(u32, u32)>,
     pub static_deps: Vec<usize>,
     /// Every use of an embedded (non-chunk) bunfs file (`embedded`).
     pub file_refs: Vec<FileRef>,
@@ -230,10 +233,11 @@ pub(super) fn analyse(path: &Path, loader: &mut Loader) -> Result<Chunk, String>
         sym_index: BTreeMap::new(),
         nested_names: BTreeSet::new(),
         unresolved: BTreeSet::new(),
-        thunk_factories: BTreeSet::new(),
+        thunk_factories: BTreeMap::new(),
         to_esm: None,
         leading_comments: Vec::new(),
         meta_edits: Vec::new(),
+        export_prefixes: Vec::new(),
         static_deps: Vec::new(),
         file_refs: Vec::new(),
     };
@@ -244,7 +248,19 @@ pub(super) fn analyse(path: &Path, loader: &mut Loader) -> Result<Chunk, String>
             kind,
         });
     }
-    chunk.thunk_factories = thunk_factories(&program.body);
+    chunk.thunk_factories = chunk
+        .stmts
+        .iter()
+        .enumerate()
+        .flat_map(|(i, st)| match &st.kind {
+            StmtKind::Var(ds) => ds
+                .iter()
+                .filter(|d| d.thunk_factory)
+                .flat_map(|d| d.names.iter().map(move |s| (*s, i)))
+                .collect(),
+            _ => Vec::new(),
+        })
+        .collect();
     chunk.to_esm = to_esm_helper(&text, &program.body, ctx.scoping);
     let shorthand = ctx.walk_nodes(loader, &mut chunk)?;
     ctx.bindings(&mut chunk, &shorthand);
@@ -310,17 +326,14 @@ fn binding_names(p: &BindingPattern<'_>, out: &mut Vec<SymbolId>) {
     }
 }
 
-/// A class whose evaluation runs nothing: no heritage, decorators,
-/// computed keys, static fields or static blocks.
-fn class_is_pure(c: &Class<'_>) -> bool {
-    c.heritage.is_none()
-        && c.decorators.is_empty()
-        && c.body.body.iter().all(|el| match el {
-            ClassElement::MethodDefinition(m) => !m.computed,
-            ClassElement::PropertyDefinition(p) => !p.computed && !p.r#static,
-            ClassElement::AccessorProperty(a) => !a.computed && !a.r#static,
-            _ => false,
-        })
+/// A class declaration's kind (an anonymous one is any other statement).
+fn class_kind(c: &Class<'_>) -> StmtKind {
+    match &c.id {
+        Some(id) => StmtKind::Class {
+            name: id.symbol_id(),
+        },
+        None => StmtKind::Other { nested_decl: false },
+    }
 }
 
 /// `import.meta.require`.
@@ -372,90 +385,26 @@ fn to_esm_helper(text: &str, body: &[Statement<'_>], scoping: &Scoping) -> Optio
         })
 }
 
-fn thunk_factories(body: &[Statement<'_>]) -> BTreeSet<SymbolId> {
-    let mut out = BTreeSet::new();
-    for st in body {
-        let Statement::VariableDeclaration(v) = st else {
-            continue;
-        };
-        for d in &v.declarations {
-            if let (BindingPattern::BindingIdentifier(b), Some(init)) = (&d.id, &d.init)
-                && is_thunk_factory(init)
-            {
-                out.insert(b.symbol_id());
-            }
-        }
-    }
-    out
-}
-
 impl Ctx<'_, '_> {
     fn symbol_of_ref(&self, r: &oxc_ast::ast::IdentifierReference<'_>) -> Option<SymbolId> {
         self.scoping.get_reference(r.reference_id()).symbol_id()
     }
 
-    /// Is evaluating `e` free of effects and of reads of other bindings?
-    /// A call counts only when its callee is a top-level binding (checked
-    /// to be a thunk factory once every chunk is known) and every argument
-    /// is a function.
-    fn purity(&self, e: &Expression<'_>, helpers: &mut Vec<SymbolId>) -> bool {
-        use oxc_syntax::operator::UnaryOperator as U;
-        match unparen(e) {
-            Expression::BooleanLiteral(_)
-            | Expression::NullLiteral(_)
-            | Expression::NumericLiteral(_)
-            | Expression::BigIntLiteral(_)
-            | Expression::StringLiteral(_)
-            | Expression::RegExpLiteral(_)
-            | Expression::FunctionExpression(_)
-            | Expression::ArrowFunctionExpression(_) => true,
-            Expression::TemplateLiteral(t) => t.expressions.is_empty(),
-            Expression::UnaryExpression(u) => {
-                matches!(u.operator, U::Void | U::LogicalNot | U::UnaryNegation)
-                    && self.purity(&u.argument, helpers)
-            }
-            Expression::ArrayExpression(a) => a.elements.iter().all(|el| {
-                el.is_elision() || el.as_expression().is_some_and(|x| self.purity(x, helpers))
-            }),
-            Expression::ObjectExpression(o) => o.properties.iter().all(|p| match p {
-                ObjectPropertyKind::SpreadProperty(_) => false,
-                ObjectPropertyKind::ObjectProperty(p) => {
-                    !p.computed && self.purity(&p.value, helpers)
-                }
-            }),
-            Expression::CallExpression(c) => self.helper_call(c, helpers),
-            _ => false,
-        }
-    }
-
-    fn helper_call(
-        &self,
-        c: &oxc_ast::ast::CallExpression<'_>,
-        helpers: &mut Vec<SymbolId>,
-    ) -> bool {
+    /// `h(fn, …)` with `h` a top-level binding and every argument a
+    /// function: the callee.
+    fn factory_call(&self, e: &Expression<'_>) -> Option<SymbolId> {
+        let Expression::CallExpression(c) = unparen(e) else {
+            return None;
+        };
         let Expression::Identifier(callee) = unparen(&c.callee) else {
-            return false;
+            return None;
         };
-        let Some(sym) = self.symbol_of_ref(callee) else {
-            return false;
-        };
-        let args_are_functions = c
-            .arguments
-            .iter()
-            .all(|a| a.as_expression().is_some_and(is_function_value));
-        if self.scoping.symbol_scope_id(sym) != self.root || !args_are_functions {
-            return false;
-        }
-        helpers.push(sym);
-        true
-    }
-
-    fn purity_of(&self, e: Option<&Expression<'_>>) -> Purity {
-        let mut helpers = Vec::new();
-        match e {
-            None => Some(helpers),
-            Some(e) => self.purity(e, &mut helpers).then_some(helpers),
-        }
+        let sym = self.symbol_of_ref(callee)?;
+        let args_are_functions = !c.arguments.is_empty()
+            && c.arguments
+                .iter()
+                .all(|a| a.as_expression().is_some_and(is_function_value));
+        (self.scoping.symbol_scope_id(sym) == self.root && args_are_functions).then_some(sym)
     }
 
     fn statement(
@@ -503,19 +452,25 @@ impl Ctx<'_, '_> {
             Statement::ExportAllDeclaration(_) => {
                 return Err(format!("{}: `export *` is not linked", self.path.display()));
             }
-            Statement::ExportDefaultDeclaration(d) => self.export_default(&d.declaration, chunk),
+            Statement::ExportDefaultDeclaration(d) => {
+                self.export_default(d.span.start, &d.declaration, chunk)
+            }
             Statement::ExportDeclaration(d) => {
                 self.export_declaration(&d.declaration, chunk);
-                StmtKind::ExportPrefix(d.declaration.span().start)
+                chunk
+                    .export_prefixes
+                    .push((d.span.start, d.declaration.span().start));
+                match &d.declaration {
+                    Declaration::VariableDeclaration(v) => {
+                        StmtKind::Var(self.declarators(&v.declarations))
+                    }
+                    Declaration::FunctionDeclaration(_) => StmtKind::Function,
+                    Declaration::ClassDeclaration(c) => class_kind(c),
+                    _ => StmtKind::Other { nested_decl: false },
+                }
             }
             Statement::FunctionDeclaration(_) => StmtKind::Function,
-            Statement::ClassDeclaration(c) => match &c.id {
-                Some(id) => StmtKind::Class {
-                    pure: class_is_pure(c),
-                    name: id.symbol_id(),
-                },
-                None => StmtKind::Other { nested_decl: false },
-            },
+            Statement::ClassDeclaration(c) => class_kind(c),
             Statement::VariableDeclaration(v) => StmtKind::Var(self.declarators(&v.declarations)),
             _ => StmtKind::Other { nested_decl: false },
         })
@@ -529,29 +484,34 @@ impl Ctx<'_, '_> {
         .ok_or_else(|| format!("{}: exports an unbound name", self.path.display()))
     }
 
-    fn export_default(&self, d: &ExportDefaultDeclarationKind<'_>, chunk: &mut Chunk) -> StmtKind {
+    fn export_default(
+        &self,
+        start: u32,
+        d: &ExportDefaultDeclarationKind<'_>,
+        chunk: &mut Chunk,
+    ) -> StmtKind {
         let named = match d {
             ExportDefaultDeclarationKind::FunctionDeclaration(f) => {
-                f.id.as_ref().map(|i| (i.symbol_id(), f.span))
+                f.id.as_ref()
+                    .map(|i| (i.symbol_id(), f.span, StmtKind::Function))
             }
             ExportDefaultDeclarationKind::ClassDeclaration(c) => {
-                c.id.as_ref().map(|i| (i.symbol_id(), c.span))
+                c.id.as_ref()
+                    .map(|i| (i.symbol_id(), c.span, class_kind(c)))
             }
             _ => None,
         };
-        if let Some((sym, span)) = named {
+        if let Some((sym, span, kind)) = named {
             chunk
                 .exports
                 .push(("default".into(), ExportTarget::Local(sym)));
-            return StmtKind::ExportPrefix(span.start);
+            chunk.export_prefixes.push((start, span.start));
+            return kind;
         }
         chunk
             .exports
             .push(("default".into(), ExportTarget::DefaultExpr));
-        StmtKind::DefaultExpr {
-            expr: d.span(),
-            purity: self.purity_of(d.as_expression()),
-        }
+        StmtKind::DefaultExpr { expr: d.span() }
     }
 
     fn export_declaration(&self, d: &Declaration<'_>, chunk: &mut Chunk) {
@@ -582,20 +542,22 @@ impl Ctx<'_, '_> {
             .map(|dc| {
                 let mut names = Vec::new();
                 binding_names(&dc.id, &mut names);
-                let require_alias = match (&dc.id, &dc.init) {
+                let plain = match (&dc.id, &dc.init) {
                     (BindingPattern::BindingIdentifier(b), Some(init)) => {
-                        is_import_meta_require(init)
-                            && !self.scoping.symbol_is_mutated(b.symbol_id())
+                        Some((!self.scoping.symbol_is_mutated(b.symbol_id()), init))
                     }
-                    _ => false,
+                    _ => None,
                 };
                 Declarator {
                     pattern: dc.id.span(),
                     init: dc.init.as_ref().map(GetSpan::span),
                     simple: matches!(dc.id, BindingPattern::BindingIdentifier(_)),
                     names,
-                    purity: self.purity_of(dc.init.as_ref()),
-                    require_alias,
+                    factory_call: plain.and_then(|(_, init)| self.factory_call(init)),
+                    thunk_factory: plain
+                        .is_some_and(|(unwritten, init)| unwritten && is_thunk_factory(init)),
+                    require_alias: plain
+                        .is_some_and(|(unwritten, init)| unwritten && is_import_meta_require(init)),
                 }
             })
             .collect()

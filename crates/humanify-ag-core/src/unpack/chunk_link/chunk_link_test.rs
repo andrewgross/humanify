@@ -208,7 +208,7 @@ fn a_lazily_imported_chunk_runs_only_when_imported_and_once() {
 }
 
 #[test]
-fn a_lazy_chunks_pure_declarations_stay_at_the_top_level() {
+fn a_lazy_chunks_functions_stay_at_the_top_level() {
     let entry = layout(&[
         (
             "index.js",
@@ -512,6 +512,160 @@ fn a_lazy_chunks_external_imports_load_only_with_the_chunk() {
             "chunk-p.js",
             &format!(
                 "{HEAD}import{{sep as s}}from\"path\";function sep(){{return s}}export{{sep}};\n"
+            ),
+        ),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(run(&text), "/\n");
+}
+
+/// Bun's `__commonJS` helper shape (`(cb, mod) => () => …`).
+const CJS: &str = "(e,t)=>()=>(t||e((t={exports:{}}).exports,t),t.exports)";
+
+/// The text of the init the linker wrote for the chunk whose code holds
+/// `marker` (the `__esm(()=>{…})` body after it).
+fn init_after<'t>(text: &'t str, marker: &str) -> &'t str {
+    let from = text
+        .find(marker)
+        .unwrap_or_else(|| panic!("{marker} in:\n{text}"));
+    let rest = &text[from..];
+    let open = rest.find("=__esm(()=>{").expect("an init") + "=__esm(()=>{".len();
+    let close = rest[open..].find("});").expect("the init's end");
+    &rest[open..open + close]
+}
+
+#[test]
+fn a_default_import_of_a_built_in_runs_after_the_interop_helpers_init() {
+    // exp218, failure 1 (Claude Code 2.1.248+): Bun's runtime chunk, with
+    // its `__toESM`, is itself reached only lazily. A chunk that
+    // default-imports a built-in reads it through that helper, whose
+    // values (`Object.create`, …) its chunk's init sets: the helper's
+    // init must have run before the import is read, as ESM evaluates a
+    // module's imports before its body.
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!(
+                "{HEAD}import(\"/$bunfs/root/chunk-l.js\").then((m)=>console.log(m.sep()));\n"
+            ),
+        ),
+        (
+            "chunk-l.js",
+            &format!(
+                "{HEAD}import{{t as g}}from\"/$bunfs/root/chunk-rt.js\";import p from\"path\";\
+                 function sep(){{return p.sep+typeof g}}export{{sep}};\n"
+            ),
+        ),
+        ("chunk-rt.js", &format!("{HEAD}{TO_ESM}export{{g as t}};\n")),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(run(&text), "/function\n");
+}
+
+#[test]
+fn an_eager_default_import_runs_the_lazy_helpers_init_first() {
+    // The first `__toESM` written can sit in a lazy chunk the eager code
+    // never imports: its init runs before the helper is called.
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!(
+                "{HEAD}import p from\"path\";function never(){{return import(\"/$bunfs/root/chunk-rt.js\")}}\
+                 console.log(p.sep,typeof never);\n"
+            ),
+        ),
+        ("chunk-rt.js", &format!("{HEAD}{TO_ESM}export{{g as t}};\n")),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(run(&text), "/ function\n");
+}
+
+#[test]
+fn a_factory_call_waits_for_a_helper_declared_beside_moved_values() {
+    // exp218, failure 2 (Claude Code 2.1.269+): a pre-bundled dependency
+    // declares its own `__commonJS` helper in ONE `var` with values that
+    // read `Object`, and its wrapped modules in a later statement. The
+    // helper must exist before any factory call runs.
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!("{HEAD}import(\"/$bunfs/root/chunk-l.js\").then((m)=>console.log(m.v()));\n"),
+        ),
+        (
+            "chunk-l.js",
+            &format!(
+                "{HEAD}var{{create:c}}=Object,J={CJS};function d(x){{return x}}\
+                 var r=J((e,m)=>{{m.exports=d(5)}});function v(){{return r()+typeof c}}export{{v}};\n"
+            ),
+        ),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(run(&text), "5function\n");
+}
+
+#[test]
+fn a_lazy_chunk_runs_every_statement_in_its_init_but_functions_and_factories() {
+    // ESM: a lazily loaded chunk's statements run when it is loaded, in
+    // order. Only what is order-free stays at the top level: function
+    // declarations (hoisted, as ESM instantiation does) and Bun's
+    // `__commonJS` / `__esm` helpers and the factories they wrap (building
+    // a thunk runs nothing; Bun's single-file bundles keep them there, and
+    // the bun adapter extracts them from there).
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!("{HEAD}import(\"/$bunfs/root/chunk-l.js\").then((m)=>console.log(m.v()));\n"),
+        ),
+        (
+            "chunk-l.js",
+            &format!(
+                "{HEAD}var z=5;class K{{m(){{return z}}}}var o={{k:1}},q=()=>o.k;var J={CJS};\
+                 var r=J((e,m)=>{{m.exports=new K().m()+q()}});function v(){{return r()}}export{{v}};\n"
+            ),
+        ),
+    ]);
+    let (text, report) = linked(&entry);
+    assert_eq!(run(&text), "6\n");
+    assert_eq!(report.inits, 1);
+    let init = init_after(&text, "var z");
+    for moved in ["z=5", "K=class K", "o={k:1}", "q=()=>o.k"] {
+        assert!(init.contains(moved), "{moved} runs in the init: {init}");
+    }
+    assert!(!init.contains("J=") && !init.contains("r="), "{init}");
+    assert!(text.contains(&format!("var J={CJS};")), "{text}");
+    assert!(text.contains("var r=J((e,m)=>"), "{text}");
+}
+
+#[test]
+fn a_lazy_chunks_var_declared_in_a_nested_block_is_refused() {
+    // Moved into the init, `var y` would become the init's own binding.
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!("{HEAD}import(\"/$bunfs/root/chunk-l.js\").then((m)=>console.log(m.g()));\n"),
+        ),
+        (
+            "chunk-l.js",
+            &format!("{HEAD}if(globalThis){{var y=1}}function g(){{return y}}export{{g}};\n"),
+        ),
+    ]);
+    let err = link(&entry).unwrap_err();
+    assert!(err.contains("nested block"), "{err}");
+}
+
+#[test]
+fn a_lazy_chunks_side_effect_import_declares_no_empty_name() {
+    // `import "m"` loads with no binding: the hoisted `var` must not list
+    // an empty name beside the chunk's other external bindings.
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!("{HEAD}import(\"/$bunfs/root/chunk-l.js\").then((m)=>console.log(m.s()));\n"),
+        ),
+        (
+            "chunk-l.js",
+            &format!(
+                "{HEAD}import\"path\";import{{sep as p}}from\"path\";function s(){{return p}}export{{s}};\n"
             ),
         ),
     ]);

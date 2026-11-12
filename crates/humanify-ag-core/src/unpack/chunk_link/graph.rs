@@ -4,7 +4,7 @@
 
 use oxc_semantic::SymbolId;
 
-use super::analyse::{Chunk, ExportTarget, Imported, Spec, StmtKind};
+use super::analyse::{Chunk, Declarator, ExportTarget, Imported, Spec, StmtKind};
 
 /// A binding of the linked program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -165,47 +165,102 @@ pub(super) fn order(chunks: &[Chunk]) -> Order {
     }
 }
 
-/// Is `helper` (a top-level binding of `chunk`) a thunk factory written
-/// at or before `chunk`?
-fn is_factory(chunks: &[Chunk], order: &Order, chunk: usize, helper: SymbolId) -> bool {
-    match resolve_sym(chunks, chunk, helper) {
-        Ok(Target::Sym(d, s)) => {
-            chunks[d].thunk_factories.contains(&s) && order.position[d] <= order.position[chunk]
+/// Where each statement of the linked program runs.
+pub(super) struct Placement {
+    /// Per chunk, per statement: does (some of) it run in the chunk's
+    /// init?
+    pub moved: Vec<Vec<bool>>,
+    /// Per chunk, per statement: for a `var`, which declarators stay at
+    /// the top level (one flag per declarator; empty for other kinds).
+    pub stays: Vec<Vec<Vec<bool>>>,
+}
+
+/// ESM evaluation, exactly: a lazily loaded chunk's statements all run in
+/// its init, in order, when it is first loaded (exp218). What stays at
+/// the top level is only what is order-free — evaluating it earlier
+/// cannot be observed:
+///
+/// - function declarations (ESM hoists them when the module graph is
+///   instantiated, before any module body runs);
+/// - a thunk factory, `var h = (…) => () => …` never written (building a
+///   closure reads nothing: Bun's `__commonJS` / `__esm` helpers);
+/// - a factory call, `var x = h(fn, …)`, when `h` is a thunk factory
+///   written earlier in the program (top level: a thunk factory always
+///   stays, and an eager chunk's statements all do) — calling it builds a
+///   thunk and runs nothing. These are Bun's `__commonJS` modules and
+///   `__esm` inits, which its single-file bundles keep at the top level
+///   and where the bun adapter extracts them.
+///
+/// A `var` statement whose declarators differ is split: the order-free
+/// ones are written at the top level, the rest are assigned in the init.
+/// Eager chunks run at the top level in ESM postorder and move nothing.
+///
+/// Refused: a lazy chunk's statement that declares a top-level `var` from
+/// a nested block (`if (x) { var y }`) — moved into the init, its `var`
+/// would become the init's own. Bun hoists those itself: none in any
+/// Claude Code release from 2.1.242 to 2.1.322.
+pub(super) fn placement(chunks: &[Chunk], order: &Order) -> Result<Placement, String> {
+    let mut moved = Vec::with_capacity(chunks.len());
+    let mut stays = Vec::with_capacity(chunks.len());
+    for (c, chunk) in chunks.iter().enumerate() {
+        let nested = chunk
+            .stmts
+            .iter()
+            .any(|st| matches!(st.kind, StmtKind::Other { nested_decl: true }));
+        if nested && !order.eager[c] {
+            return Err(format!(
+                "{}: a lazily loaded chunk declares a top-level `var` inside a nested block; not linked",
+                chunk.path.display()
+            ));
         }
-        _ => false,
+        let per: Vec<Vec<bool>> = chunk
+            .stmts
+            .iter()
+            .enumerate()
+            .map(|(i, st)| match &st.kind {
+                StmtKind::Var(ds) => ds
+                    .iter()
+                    .map(|d| order.eager[c] || order_free(chunks, order, (c, i), d))
+                    .collect(),
+                _ => Vec::new(),
+            })
+            .collect();
+        moved.push(
+            chunk
+                .stmts
+                .iter()
+                .zip(&per)
+                .map(|(st, s)| !order.eager[c] && moves(&st.kind, s))
+                .collect(),
+        );
+        stays.push(per);
+    }
+    Ok(Placement { moved, stays })
+}
+
+fn moves(kind: &StmtKind, stays: &[bool]) -> bool {
+    match kind {
+        StmtKind::Removed | StmtKind::Function => false,
+        StmtKind::Var(_) => stays.iter().any(|s| !s),
+        StmtKind::Class { .. } | StmtKind::DefaultExpr { .. } | StmtKind::Other { .. } => true,
     }
 }
 
-fn pure(chunks: &[Chunk], order: &Order, chunk: usize, purity: &super::analyse::Purity) -> bool {
-    purity
-        .as_ref()
-        .is_some_and(|helpers| helpers.iter().all(|&h| is_factory(chunks, order, chunk, h)))
-}
-
-/// Per lazy chunk, which statements move into its init: everything that
-/// does something or reads another binding. Declarations whose values are
-/// pure stay at the top level (so do functions, and statements that
-/// declare a top-level `var` from a nested block). Eager chunks move
-/// nothing.
-pub(super) fn moved_statements(chunks: &[Chunk], order: &Order) -> Vec<Vec<bool>> {
-    (0..chunks.len())
-        .map(|c| {
-            chunks[c]
-                .stmts
-                .iter()
-                .map(|st| !order.eager[c] && moves(chunks, order, c, &st.kind))
-                .collect()
-        })
-        .collect()
-}
-
-fn moves(chunks: &[Chunk], order: &Order, c: usize, kind: &StmtKind) -> bool {
-    match kind {
-        StmtKind::Removed | StmtKind::ExportPrefix(_) | StmtKind::Function => false,
-        StmtKind::Class { pure, .. } => !pure,
-        StmtKind::Var(ds) => ds.iter().any(|d| !pure(chunks, order, c, &d.purity)),
-        StmtKind::DefaultExpr { purity, .. } => !pure(chunks, order, c, purity),
-        StmtKind::Other { nested_decl } => !nested_decl,
+/// Is a lazy chunk's declarator order-free (see [`placement`])? `at` is
+/// its (chunk, statement).
+fn order_free(chunks: &[Chunk], order: &Order, at: (usize, usize), d: &Declarator) -> bool {
+    if d.thunk_factory {
+        return true;
+    }
+    let Some(helper) = d.factory_call else {
+        return false;
+    };
+    match resolve_sym(chunks, at.0, helper) {
+        Ok(Target::Sym(hc, hs)) => chunks[hc]
+            .thunk_factories
+            .get(&hs)
+            .is_some_and(|&hi| (order.position[hc], hi) < (order.position[at.0], at.1)),
+        _ => false,
     }
 }
 

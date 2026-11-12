@@ -40,8 +40,14 @@ pub(crate) fn fixture_pairs() -> Vec<(String, String, String)> {
     // fixture adds lines without moving any old one (checked when each was
     // added: the pins hold with it left out). exp172's CommonJS app;
     // exp216's code-split app (whose index.js is only the loader);
-    // exp217's code-split app with embedded files (the same).
-    const ADDED_AFTER_THE_PINS: [&str; 3] = ["bun-cjs-app", "bun-chunks", "bun-chunk-assets"];
+    // exp217's code-split app with embedded files (the same); exp218's
+    // code-split app with a lazily loaded runtime chunk (the same).
+    const ADDED_AFTER_THE_PINS: [&str; 4] = [
+        "bun-cjs-app",
+        "bun-chunks",
+        "bun-chunk-assets",
+        "bun-chunk-order",
+    ];
     names.retain(|n| !ADDED_AFTER_THE_PINS.contains(&n.as_str()));
     let mut out = Vec::new();
     for name in names {
