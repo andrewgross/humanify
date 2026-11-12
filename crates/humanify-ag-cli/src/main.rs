@@ -401,7 +401,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
     use humanify_ag_core::unpack::{AdapterOutcome, AdapterRun, bun, gate, run_adapter};
     use std::path::Path;
 
-    let code = humanify_ag_core::unpack::chunk_link::read_input(Path::new(input))?.text;
+    let code = humanify_ag_core::unpack::input::read_input(Path::new(input))?.text;
     let out = Path::new(out_dir);
     let toolchain = humanify_ag_core::toolchain::resolve_toolchain(
         &humanify_ag_core::detect::detect_bundle(&code),
@@ -568,7 +568,7 @@ fn run_detect(input: &str, profile: Option<&str>, toolchain: bool, split_method:
 
     let profiler = Profiler::new(profile.is_some());
     let read = profiler.start_span("file-io:read", "io", trace_tid::PIPELINE, None);
-    let code = match humanify_ag_core::unpack::chunk_link::read_input(std::path::Path::new(input)) {
+    let code = match humanify_ag_core::unpack::input::read_input(std::path::Path::new(input)) {
         Ok(b) => b.text,
         Err(e) => {
             eprintln!("Error: {e}");

@@ -206,8 +206,7 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
 
 /// The verb: read the input, run, write `out` (or stdout).
 pub fn run_discover(args: &DiscoverArgs<'_>, out: Option<&str>) -> Result<(), String> {
-    let code =
-        humanify_ag_core::unpack::chunk_link::read_input(std::path::Path::new(args.input))?.text;
+    let code = humanify_ag_core::unpack::input::read_input(std::path::Path::new(args.input))?.text;
     let doc = discover(&code, args)?;
     let text = serde_json::to_string(&doc).map_err(|e| e.to_string())? + "\n";
     match out {

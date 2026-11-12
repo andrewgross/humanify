@@ -328,7 +328,7 @@ fn pipeline_body(
     // The one reader of the input file: a Bun code-split entry comes back
     // linked into one program (exp216), anything else as read.
     let input_bundle =
-        humanify_ag_core::unpack::chunk_link::input_from_text(Path::new(input), read_utf8(input)?)
+        humanify_ag_core::unpack::input::input_from_text(Path::new(input), read_utf8(input)?)
             .map_err(|e| Crash(format!("cannot link the input {input}: {e}")))?;
     let input_link = input_bundle.link.clone();
     if let Some(link) = &input_link {

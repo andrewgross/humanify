@@ -10,9 +10,11 @@
 //! so it read only the loader and refused the prior ("only 1908 of 91971
 //! prior functions have a matching structural hash").
 //!
-//! [`read_input`] is the one reader of a run's input file. A file that is
-//! not this layout is returned byte-for-byte (every bundle before 2.1.242,
-//! every e2e fixture but `bun-chunks`). This layout is linked into the
+//! This is the `bun-chunks` layout of the input-layout registry
+//! (`unpack::input`, whose `read_input` is the one reader of a run's input
+//! file), chosen when [`is_chunked_entry`] holds; any other file takes the
+//! `single-file` fallback and is returned byte-for-byte (every bundle
+//! before 2.1.242, every e2e fixture but `bun-chunks`). This layout is linked into the
 //! shape of the single-file Bun bundle that came before it, so detection,
 //! the unpack adapter (bun) and everything after run unchanged:
 //!
@@ -84,7 +86,7 @@ pub struct LinkReport {
 impl LinkReport {
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
-            "layout": "bun-chunks",
+            "layout": super::input::InputLayout::BunChunks.name(),
             "chunksLinked": self.chunks_linked,
             "jsFilesUnreached": self.js_files_unreached,
             "eager": self.eager,
@@ -95,35 +97,6 @@ impl LinkReport {
             "renamed": self.renamed,
         })
     }
-}
-
-/// A run's input: the text every stage reads, and the link report when
-/// the input was a chunked layout.
-#[derive(Debug)]
-pub struct InputBundle {
-    pub text: String,
-    pub link: Option<LinkReport>,
-}
-
-/// Read a run's input file (invalid UTF-8 becomes U+FFFD). A Bun
-/// code-split entry ([`is_chunked_entry`]) is linked; anything else is
-/// returned as read.
-pub fn read_input(path: &Path) -> Result<InputBundle, String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-    input_from_text(path, String::from_utf8_lossy(&bytes).into_owned())
-}
-
-/// [`read_input`] for a caller that read the file itself (and reports a
-/// failed read its own way): `text` is the file at `path`.
-pub fn input_from_text(path: &Path, text: String) -> Result<InputBundle, String> {
-    if !is_chunked_entry(path, &text) {
-        return Ok(InputBundle { text, link: None });
-    }
-    let (text, report) = link(path)?;
-    Ok(InputBundle {
-        text,
-        link: Some(report),
-    })
 }
 
 /// Is this file a Bun code-split entry: an ESM file under Bun's pragma

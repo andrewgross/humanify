@@ -21,6 +21,7 @@ editing the caller.
 
 | #   | stage                    | entry point (`humanify_ag_core::…`, driven by `humanify_ag_cli::unified`) | pluggable?                                                                                                                                                  |
 | --- | ------------------------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | Read the input (layout)  | `unpack::input::read_input` → `choose_input_layout` (before detection)    | **yes** — registry of 2 (bun-chunks, single-file), `supports()`, single-file last                                                                           |
 | 1   | Detect bundler/minifier  | `detect` → `toolchain::resolve_toolchain` (every plugin piece, once)      | **yes** — `--bundler` / `--minifier` override detection                                                                                                     |
 | 2   | Select unpack adapter    | `unpack::choose_adapter` (called by the toolchain)                        | **yes** — registry of 4 (webcrack, bun, esbuild, passthrough), `supports()`, passthrough last                                                               |
 | 3   | Unpack the bundle        | `unpack::run_adapter` (the ONE dispatch site; webcrack via its shim)      | via stage 2 — bun and esbuild share the one vendor-extraction flow (`unpack::bun::unpack_bun`)                                                              |
@@ -34,8 +35,10 @@ editing the caller.
 | 11  | Split (one path)         | `emit::stable_split`                                                      | **no** — prior present → inherit layout; no prior → clustered fresh grouping                                                                                |
 | 12  | Emit + finish on disk    | `emit::cjs`, `finish` (scaffold, relink, ledgers)                         | **no**                                                                                                                                                      |
 
-Stage 2 has an INPUT side (exp216, 2026-11-12): before detection, the one
-reader of the input file (`unpack::chunk_link::read_input`) recognises a Bun
+Stage 0, the input layout (exp216, 2026-11-12): before detection, the one
+reader of the input file (`unpack::input::read_input`) asks the INPUT-LAYOUT
+registry (`INPUT_LAYOUTS`: `bun-chunks`, then the `single-file` fallback)
+which layout reads it. `bun-chunks` (`unpack::chunk_link`) recognises a Bun
 code-split layout — an ESM entry under `// @bun` (not `@bun-cjs`) that
 imports `/$bunfs/root/<chunk>.js` siblings present beside it, Claude Code's
 shape from 2.1.242 — and LINKS the chunks into one program shaped like the
@@ -44,8 +47,9 @@ to the exporting chunk's binding, colliding top-level names are renamed
 apart, the entry's static closure runs in ESM order, a lazily loaded
 chunk's effects move into an `__esm`-shaped init, and `import(chunk)`
 becomes `Promise.resolve().then(() => (init(), ns))` (Bun's own single-file
-form). Every other input is returned byte-for-byte. It sits before
-detection, not in the adapter registry, because detection, the library
+form). Every other input takes `single-file` and is returned
+byte-for-byte. It sits before detection, not in the adapter registry,
+because detection, the library
 recipe, the run-time index, the split's markers and the bun adapter all
 read the input text: placed after detection, five of them would read the
 20 KB loader. The linked program then takes the bun adapter like any Bun
@@ -172,9 +176,9 @@ written to the `--stats-json` `toolchain` block and logged at `-vv`, so a
 run's plugin choice is visible. The registries below are what the
 toolchain selects FROM. docs/plugin-spec.md is the per-piece status.
 
-**Two** stages have a real registry — 2 (unpack) and 4 (library detection) —
-both the same shape: an array, selection by name or `supports()`, a fallback
-last. Stage 10 (`PLACEMENT_TIERS`) is a registry internally but is not
+**Three** stages have a real registry — 0 (input layout, exp216), 2 (unpack)
+and 4 (library detection) — all the same shape: an array, selection by name
+or `supports()`, a fallback last. Stage 10 (`PLACEMENT_TIERS`) is a registry internally but is not
 selectable from outside. Stage 9 gained a third, smaller one on
 2026-10-03: the minifier **name profile** (`rename::name_profile`,
 `NAME_PROFILES` — bun, esbuild, terser, swc, none), the shape knowledge
@@ -232,7 +236,7 @@ resolve.
 ## The cascades
 
 Fourteen ordered-fallback cascades run inside stages 8–10 — decide-by-first-hit
-ladders that are distinct from the three adapter registries above, which pick a
+ladders that are distinct from the adapter registries above, which pick a
 strategy once per run. Exactly one of the fourteen, `PLACEMENT_TIERS`, is
 declared as an array with counters and a trail derived from it; the rest are
 hand-written `if` ladders with no per-stage counter and no per-item trail, which

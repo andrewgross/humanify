@@ -26,10 +26,16 @@ matching structural hash".
 
 ## What was built
 
-`humanify_ag_core::unpack::chunk_link` — stage 2's input side. Its
-`read_input` is now the one reader of a run's input file (the pipeline and
-the `detect`, `unpack`, `discover` and `match` verbs). A file that is not
-this layout comes back byte-for-byte. This layout is detected (an ESM entry
+A REGISTRY OF INPUT LAYOUTS before detection (`humanify_ag_core::unpack::
+input`, docs/pipeline-stages.md stage 0) — the same shape as the unpack
+and library-detector registries: `INPUT_LAYOUTS = [bun-chunks,
+single-file]`, each with `supports(path, text)`, the first that holds wins,
+`single-file` (byte-for-byte passthrough) last as the fallback. Its
+`read_input` is the one reader of a run's input file (the pipeline and
+the `detect`, `unpack`, `discover` and `match` verbs; the e2e runner asks
+`choose_input_layout`). The `bun-chunks` layout is
+`humanify_ag_core::unpack::chunk_link`. A file that is not this layout
+comes back byte-for-byte. This layout is detected (an ESM entry
 under `// @bun`, not `@bun-cjs`, that imports at least one
 `/$bunfs/root/*.js` sibling present beside it), its import graph followed
 from the entry (never by listing the directory), and the chunks linked
@@ -242,7 +248,5 @@ string, a sibling present) — every single-file Claude Code bundle is
 4. **Renamed names reach the model.** ~45,000 top-level names are renamed
    apart (`a$4`); a binding the matcher does not carry is shown to the
    model under that spelling, as a minified name would be.
-5. **Where it plugs in.** Andrew's plan named a fifth adapter in
-   `choose_adapter`; it is the input side of stage 2 instead (reason in
-   "What was built"). If a registry is wanted there, the natural one is a
-   list of input layouts (`single-file`, `bun-chunks`) before detection.
+5. **Where it plugs in** (settled): the input-layout registry above,
+   approved by Andrew in place of a fifth unpack adapter.

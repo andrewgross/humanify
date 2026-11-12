@@ -5,7 +5,8 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{LinkReport, link, read_input};
+use super::{LinkReport, link};
+use crate::unpack::input::read_input;
 
 /// Write a layout into a fresh directory; the first file is the entry.
 fn layout(files: &[(&str, &str)]) -> PathBuf {
