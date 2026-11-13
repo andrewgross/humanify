@@ -182,6 +182,9 @@ pub(super) struct Placement {
 ///
 /// - function declarations (ESM hoists them when the module graph is
 ///   instantiated, before any module body runs);
+/// - a declarator whose value is a literal or a closure (Bun's own
+///   bundler keeps these at the top level of a lazily wrapped module, as
+///   Claude Code's single-file bundles up to 2.1.241 did; exp218 variant);
 /// - a thunk factory, `var h = (…) => () => …` never written (building a
 ///   closure reads nothing: Bun's `__commonJS` / `__esm` helpers);
 /// - a factory call, `var x = h(fn, …)`, when `h` is a thunk factory
@@ -249,7 +252,7 @@ fn moves(kind: &StmtKind, stays: &[bool]) -> bool {
 /// Is a lazy chunk's declarator order-free (see [`placement`])? `at` is
 /// its (chunk, statement).
 fn order_free(chunks: &[Chunk], order: &Order, at: (usize, usize), d: &Declarator) -> bool {
-    if d.thunk_factory {
+    if d.thunk_factory || d.inert_value {
         return true;
     }
     let Some(helper) = d.factory_call else {

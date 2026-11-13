@@ -77,6 +77,10 @@ pub(super) struct Declarator {
     /// `var h = (…) => () => …` (h a plain name, never written): a thunk
     /// factory, order-free (building a closure reads nothing).
     pub thunk_factory: bool,
+    /// The value is a literal or a closure (Bun's bundler keeps these at
+    /// the top level of a lazily wrapped module): evaluating it reads
+    /// nothing, so it is order-free.
+    pub inert_value: bool,
     /// `var x = import.meta.require` (x never written): Bun's ESM runtime
     /// alias of `require`, which the linked program can drop for the
     /// wrapper's own `require` (see `names`).
@@ -355,6 +359,26 @@ fn is_function_value(e: &Expression<'_>) -> bool {
 
 /// `(…) => () => …` / `(…) => function …`: Bun's `__esm` and
 /// `__commonJS` helper shapes, whose call only builds a thunk.
+/// A literal or a closure: evaluating it reads no binding and runs nothing.
+fn is_inert(e: &Expression<'_>) -> bool {
+    use oxc_syntax::operator::UnaryOperator as U;
+    match unparen(e) {
+        Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::BigIntLiteral(_)
+        | Expression::StringLiteral(_)
+        | Expression::FunctionExpression(_)
+        | Expression::ArrowFunctionExpression(_) => true,
+        Expression::TemplateLiteral(t) => t.expressions.is_empty(),
+        Expression::UnaryExpression(u) => {
+            matches!(u.operator, U::Void | U::LogicalNot | U::UnaryNegation)
+                && is_inert(&u.argument)
+        }
+        _ => false,
+    }
+}
+
 fn is_thunk_factory(e: &Expression<'_>) -> bool {
     match unparen(e) {
         Expression::ArrowFunctionExpression(a) => {
@@ -554,6 +578,7 @@ impl Ctx<'_, '_> {
                     simple: matches!(dc.id, BindingPattern::BindingIdentifier(_)),
                     names,
                     factory_call: plain.and_then(|(_, init)| self.factory_call(init)),
+                    inert_value: dc.init.as_ref().is_some_and(is_inert),
                     thunk_factory: plain
                         .is_some_and(|(unwritten, init)| unwritten && is_thunk_factory(init)),
                     require_alias: plain

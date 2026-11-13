@@ -604,7 +604,7 @@ fn a_factory_call_waits_for_a_helper_declared_beside_moved_values() {
 }
 
 #[test]
-fn a_lazy_chunk_runs_every_statement_in_its_init_but_functions_and_factories() {
+fn a_lazy_chunk_runs_every_statement_in_its_init_but_order_free_ones() {
     // ESM: a lazily loaded chunk's statements run when it is loaded, in
     // order. Only what is order-free stays at the top level: function
     // declarations (hoisted, as ESM instantiation does) and Bun's
@@ -628,9 +628,12 @@ fn a_lazy_chunk_runs_every_statement_in_its_init_but_functions_and_factories() {
     assert_eq!(run(&text), "6\n");
     assert_eq!(report.inits, 1);
     let init = init_after(&text, "var z");
-    for moved in ["z=5", "K=class K", "o={k:1}", "q=()=>o.k"] {
+    for moved in ["K=class K", "o={k:1}"] {
         assert!(init.contains(moved), "{moved} runs in the init: {init}");
     }
+    // Bun's bundler's shape: a literal or a closure is order-free and
+    // stays at the top level.
+    assert!(!init.contains("z=5") && !init.contains("q=()=>"), "{init}");
     assert!(!init.contains("J=") && !init.contains("r="), "{init}");
     assert!(text.contains(&format!("var J={CJS};")), "{text}");
     assert!(text.contains("var r=J((e,m)=>"), "{text}");
