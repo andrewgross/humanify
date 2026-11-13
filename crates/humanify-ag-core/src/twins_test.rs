@@ -303,3 +303,36 @@ fn graph_rows_assign_to_their_enclosing_statement() {
     let binding_spans: Vec<oxc_span::Span> = graph.module_bindings.iter().map(|b| b.span).collect();
     assert_eq!(brute(&binding_spans), fresh.unassigned_bindings);
 }
+
+// ── values a strict JSON parser refuses ──────────────────────────────────
+
+/// A wrapper bundle whose body holds a lone-surrogate template and an
+/// infinite number literal: the inventory reads the wrapper body (55
+/// fillers + 3 statements). It used to fail with "wrapper detected … but
+/// that block is absent from the estree json" — the whole program JSON
+/// had read as `Null`.
+#[test]
+fn a_wrapper_body_with_a_lone_surrogate_and_infinity_is_inventoried() {
+    let code = wrapper_bundle(
+        &[
+            r"var range = String.raw`\ud800-\udfff`;",
+            r#"var lone = "\udc00";"#,
+            "var big = 1e400;",
+        ],
+        "z",
+    );
+    let inventory = inventory_of(&code, FRESH_ANCHOR, None);
+    assert_eq!(inventory.statements.len(), FIRST_STMT + 3);
+}
+
+/// Two statements that differ only in WHICH lone surrogate they hold hash
+/// apart — the code unit survives the parse.
+#[test]
+fn different_lone_surrogates_hash_apart() {
+    let code = r#"var a = "\ud800";
+var b = "\udfff";
+"#;
+    let inventory = inventory_of(code, FRESH_ANCHOR, None);
+    assert_eq!(inventory.statements.len(), 2);
+    assert_ne!(inventory.statements[0].hash, inventory.statements[1].hash);
+}

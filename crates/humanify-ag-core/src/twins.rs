@@ -178,7 +178,7 @@ fn statement_inventory_inner(
     // JSON, the partition dump's own settings), then take each side's
     // statement list out of it.
     let estree = ingest.program.to_estree_json(false, true);
-    let program_json = parse_unbounded(&estree)?;
+    let program_json = crate::ingest::try_parse_estree_json(&estree)?;
     statement_inventory_from_json(
         &program_json,
         wrapper.map(|w| w.body_span),
@@ -205,6 +205,9 @@ pub fn statement_inventory_from_json(
         wrapper_body,
     )
     .ok_or_else(|| match wrapper_body {
+        // `parse_estree_json` answers Null for text it could not read: say
+        // so, rather than blame the wrapper's block.
+        _ if program_json.is_null() => "the estree json did not parse (read as null)".to_string(),
         Some(body_span) => format!(
             "wrapper detected (body span {}..{}) but that block is absent from the estree json",
             body_span.start, body_span.end
@@ -307,13 +310,4 @@ pub fn unique_twin_proposals(prior: &SideInventory, fresh: &SideInventory) -> Un
         out.pairs.push((i, prior_idx));
     }
     out
-}
-
-/// The ESTree JSON's parse: the AST nests hundreds deep, past serde_json's
-/// default recursion limit — unbounded depth is safe (the input is oxc's
-/// own serialization of a program that parsed; same as the partition dump).
-fn parse_unbounded(json: &str) -> Result<Value, String> {
-    let mut de = serde_json::Deserializer::from_str(json);
-    de.disable_recursion_limit();
-    serde::Deserialize::deserialize(&mut de).map_err(|e| format!("estree json: {e}"))
 }
