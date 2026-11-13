@@ -63,11 +63,136 @@ pub fn program_estree_json(program: &oxc_ast::ast::Program<'_>) -> serde_json::V
 /// Parse oxc's ESTree JSON text. The AST nests hundreds deep, past
 /// serde_json's default recursion limit; unbounded depth is safe (the
 /// input is oxc's own serialization of a program that parsed). Malformed
-/// text answers `Null`.
+/// text answers `Null` — use [`try_parse_estree_json`] where a reader must
+/// say why.
 pub fn parse_estree_json(text: &str) -> serde_json::Value {
-    let mut de = serde_json::Deserializer::from_str(text);
+    try_parse_estree_json(text).unwrap_or(serde_json::Value::Null)
+}
+
+/// [`parse_estree_json`], with the parse error. ONE owner for reading
+/// oxc's ESTree JSON back.
+///
+/// oxc's JSON follows `JSON.parse`, which is looser than serde_json in
+/// two places that real JavaScript reaches (exp219), and either used to
+/// turn a WHOLE program into `Null`:
+/// - a string holding a lone surrogate (`"\ud800"`, or a tagged template's
+///   cooked text over a surrogate range) — legal JavaScript, not legal
+///   Unicode. serde_json refuses the `\uXXXX` escape. It is read as U+FFFD
+///   followed by the code unit's four hex digits, oxc's own in-memory
+///   encoding of a lone surrogate, so each code unit stays distinct.
+/// - a number past the double range (`1e400` is `Infinity`): oxc writes
+///   `1e+400`, which serde_json refuses as out of range. It is read as the
+///   largest finite double, still a NUMBER (readers classify literals by
+///   their JSON type); the literal's `raw` keeps the source spelling.
+pub fn try_parse_estree_json(text: &str) -> Result<serde_json::Value, String> {
+    let text = strict_json_from_estree(text);
+    let mut de = serde_json::Deserializer::from_str(&text);
     de.disable_recursion_limit();
-    serde::Deserialize::deserialize(&mut de).unwrap_or(serde_json::Value::Null)
+    serde::Deserialize::deserialize(&mut de).map_err(|e| format!("estree json: {e}"))
+}
+
+/// oxc's spelling of an infinite number (`oxc_estree`'s `f64` impl).
+const ESTREE_INFINITY: &[u8] = b"1e+400";
+/// What [`try_parse_estree_json`] reads it as: `f64::MAX`.
+const FINITE_STAND_IN: &str = "1.7976931348623157e308";
+
+/// The ESTree JSON with every lone-surrogate escape and every infinite
+/// number rewritten into JSON serde_json accepts (see
+/// [`try_parse_estree_json`]); borrowed untouched when the text holds
+/// neither (the common case — one substring scan).
+fn strict_json_from_estree(text: &str) -> std::borrow::Cow<'_, str> {
+    let might_need = text.contains("\\ud") || text.contains("\\uD") || text.contains("e+400");
+    if !might_need {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len() + 64);
+    let mut copied = 0;
+    let mut i = 0;
+    let mut in_string = false;
+    while i < bytes.len() {
+        let step = if in_string {
+            string_step(bytes, i, &mut in_string)
+        } else {
+            value_step(bytes, i, &mut in_string)
+        };
+        match step {
+            Step::Advance(n) => i += n,
+            Step::Replace(n, with) => {
+                out.push_str(&text[copied..i]);
+                out.push_str(&with);
+                i += n;
+                copied = i;
+            }
+        }
+    }
+    if copied == 0 {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    out.push_str(&text[copied..]);
+    std::borrow::Cow::Owned(out)
+}
+
+/// One scanner step: skip `n` bytes, or replace them.
+enum Step {
+    Advance(usize),
+    Replace(usize, String),
+}
+
+/// A step inside a JSON string: an escape is consumed whole (so an escaped
+/// backslash never starts a `\u`), a valid surrogate PAIR is left alone,
+/// and a lone surrogate escape becomes U+FFFD plus its four hex digits.
+fn string_step(bytes: &[u8], i: usize, in_string: &mut bool) -> Step {
+    match bytes[i] {
+        b'"' => {
+            *in_string = false;
+            Step::Advance(1)
+        }
+        b'\\' => match unicode_escape(bytes, i) {
+            Some(unit) if (0xD800..0xDC00).contains(&unit) => match unicode_escape(bytes, i + 6) {
+                Some(low) if (0xDC00..0xE000).contains(&low) => Step::Advance(12),
+                _ => Step::Replace(6, format!("\\ufffd{unit:04x}")),
+            },
+            Some(unit) if (0xDC00..0xE000).contains(&unit) => {
+                Step::Replace(6, format!("\\ufffd{unit:04x}"))
+            }
+            Some(_) => Step::Advance(6),
+            None => Step::Advance(2),
+        },
+        _ => Step::Advance(1),
+    }
+}
+
+/// A step outside every string: a string opens, or an infinite number
+/// token (`1e+400`, not the tail of a longer number) becomes the finite
+/// stand-in; a sign before it is kept.
+fn value_step(bytes: &[u8], i: usize, in_string: &mut bool) -> Step {
+    match bytes[i] {
+        b'"' => {
+            *in_string = true;
+            Step::Advance(1)
+        }
+        b'1' if bytes[i..].starts_with(ESTREE_INFINITY)
+            && !i
+                .checked_sub(1)
+                .is_some_and(|p| bytes[p].is_ascii_digit() || bytes[p] == b'.')
+            && !bytes
+                .get(i + ESTREE_INFINITY.len())
+                .is_some_and(u8::is_ascii_digit) =>
+        {
+            Step::Replace(ESTREE_INFINITY.len(), FINITE_STAND_IN.to_string())
+        }
+        _ => Step::Advance(1),
+    }
+}
+
+/// The code unit of a `\uXXXX` escape starting at `i`, if there is one.
+fn unicode_escape(bytes: &[u8], i: usize) -> Option<u32> {
+    if bytes.get(i) != Some(&b'\\') || bytes.get(i + 1) != Some(&b'u') {
+        return None;
+    }
+    let hex = std::str::from_utf8(bytes.get(i + 2..i + 6)?).ok()?;
+    u32::from_str_radix(hex, 16).ok()
 }
 
 impl<'a> Ingest<'a> {
