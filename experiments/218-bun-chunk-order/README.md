@@ -2,9 +2,13 @@
 
 STATUS: BUILT (TDD), GATED (all 11 stages, see Gate), LINK + BOOT SWEEP
 2.1.242-2.1.322 (68 of 68 versions boot both halves, from 5), MATCHING
-COST ON 2.1.241 -> 2.1.242 NOT YET MEASURED (see Matching), NOT MERGED. Branch
-`exp218-bun-chunk-order` from main `6477bf247`. No eval, no walk and no
-full pipeline run on a Claude Code version. Every number naming Claude
+MEASURED on 2.1.241 -> 2.1.242 (three stub runs, see Matching). MERGED
+WITH THE BUN-SHAPE VARIANT (Andrew's plan asked for the strict rule; the
+variant is equally order-free, boots the same 68 of 68 and costs much less
+matching, so it is what main carries; the variant commit's full gate: all
+11 stages pass). Branch `exp218-bun-chunk-order` from main `6477bf247`
+(strict rule), variant branch `exp218-variant-bun-shape` on top of it. No eval, no walk, no
+real-model run. Every number naming Claude
 Code comes from this host's inputs and runs; no Claude Code text is
 committed.
 
@@ -16,6 +20,7 @@ committed.
 | `bun run.cjs --version` passes | 19 | **68** |
 | `bun run.cjs -p "say exactly: boot-ok" --model claude-opus-4-1` passes | 5 | **68** |
 | gate (`cargo dev check`, 11 stages) | green | green |
+| 2.1.241 -> 2.1.242 stub: still ambiguous / functions asked | 4,202 / 13,553 | 5,127 / 14,020 (variant: 4,546 / 13,634) |
 
 `run.cjs` is the RAW linked program (the linker's output, no naming, no
 split) with its embedded files beside it, run by Bun 1.4.1.
@@ -91,6 +96,11 @@ evaluation exactly (`graph::placement`).
     `h` is a thunk factory written EARLIER in the program — calling it
     only builds a thunk. These are Bun's CommonJS modules and nested
     `__esm` inits.
+
+  - (the variant, merged) a declarator whose value is a literal or a
+    closure (function or arrow expression): evaluating it reads no
+    binding and runs nothing. Bun's own bundler keeps these at the top
+    level too.
 
   A `var` statement whose declarators differ is split: the order-free
   ones are written at the top level, the rest are assigned in the init.
@@ -224,57 +234,73 @@ choices are order-free and so cannot be observed:
 
 ## Matching: 2.1.241 -> 2.1.242
 
-NOT MEASURED YET. The exp216 baseline (stub run, binary `e10432eea`):
-84,318 of 91,971 prior functions present, 7,653 unmatched, 4,202 still
-ambiguous.
+Stub runs (no LLM; matching is decided before any answer, exp209), the
+walk's prior `/work/walk-73d01430-up/trees/2.1.241/.humanify/humanified.js`
+and library index `77b12699…`, split on, run by hand against `cargo dev
+stub-llm serve` with `--stats-json` (exp216's protocol; `cargo dev run
+stub` writes no stats file, so it was run first and then repeated by
+hand). The three legs ran in parallel: 23-27 GB peak each, 26-28 min.
+Outputs: `/work/exp218-runs/hand-242-{main,exp218,variant}/`.
 
-The first instrument tried was the binary's own `humanify-ag match` verb
-(matching only, no naming, no split), on main `6477bf247` and on exp218,
-prior `/work/walk-73d01430-up/trees/2.1.241/.humanify/humanified.js`.
-Both legs were stopped after 80 and 70 minutes without finishing (flat
-at ~11 GB each, ~1.2 cores). exp216's whole stub PIPELINE run on the same
-input took 23 minutes, so on a bundle this size the dump verb is slower
-than the pipeline and is not the cheap instrument.
+| column | exp216 (`e10432eea`) | main `6477bf247` | exp218 `572ced4f5` (strict) | variant `ed96d4f59` (Bun's shape) |
+| --- | ---: | ---: | ---: | ---: |
+| prior functions present (of 91,971) | 84,318 | 84,316 | 84,370 | 84,409 |
+| prior functions unmatched | 7,653 | 7,655 | 7,601 | 7,562 |
+| still ambiguous | 4,202 | 4,202 | **5,127** (+925) | 4,546 (+344) |
+| structural hash unique | 47,353 | 47,351 | 47,357 | 47,371 |
+| enclosing statement resolved | 17,113 | 17,113 | 16,239 (-874) | 16,846 (-267) |
+| fresh functions | 107,937 | 107,937 | 108,043 | 108,014 |
+| carried | 73,345 | 73,343 | 73,190 (-153) | 73,623 (+280) |
+| close-matched | 3,955 | 3,957 | 4,025 | 3,969 |
+| already named | 6,771 | 6,771 | 6,053 (-718) | 6,240 (-531) |
+| asked the model | 13,553 | 13,553 | 14,020 (+467) | 13,634 (+81) |
+| module bindings carried / asked | 24,368 / 3,234 | 24,363 / 3,234 | 23,950 / 3,834 (+600) | 24,067 / 3,390 (+156) |
+| CommonJS modules extracted (`_bun-modules.json` factories) | — | 1,915 | 1,915 | 1,915 |
+| `vendor/` files / `src/` files | — / 6,077 | 2,446 / 6,077 | 2,403 / 6,229 | 2,537 / 6,050 |
+| exit | 0 | 0 | 0 | 0 |
 
-The instrument that gives the exp216 counts is the stub pipeline run
-exp216 used, `cargo dev run stub` (footprint: one pipeline run, ~10-17
-GB, ~25 min), once per binary:
+(Deltas are against main.) Main reproduces exp216 to within 2-5 per
+column (exp217's 9 path strings sit in between). Module extraction is
+unchanged in both new legs: every factory declaration stays where the bun
+adapter reads it.
 
-```bash
-cargo dev run stub <bin> \
-  /Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.242/binary-decompiled/index.js \
-  /work/exp218-runs/stub-242-<main|exp218> \
-  /work/walk-73d01430-up/trees/2.1.241/.humanify/humanified.js \
-  --library-index /work/library-index-exp213/77b12699e27500f1da7cef8aef19558704189a8086ebc8fec603854296e074f2
-```
+**The strict rule costs matching.** Moving every literal and closure
+declarator into an init takes away the top-level statements 2.1.241 had
+(Bun's bundler kept them there), so the "enclosing statement" tier
+resolves 874 fewer functions: 925 more stay ambiguous, 467 more functions
+and 600 more module bindings go to the model.
 
-with `<bin>` = `/work/exp218-runs/humanify-ag-main` (main `6477bf247`)
-and `/work/exp218-runs/humanify-ag-exp218` (`572ced4f5`). These are full
-pipeline runs on a Claude Code version, so they wait for the
-coordinator's go-ahead (lane rule).
+**The variant (Bun's own shape) recovers most of it.** It also keeps a
+declarator at the top level when its value is a literal (number, string,
+boolean, null, a template with no expressions, `!0` / `void 0` / `-1`)
+or a closure (function or arrow expression): order-free for the same
+reason a function declaration is (evaluating it reads no binding and runs
+nothing). Against main: 344 more ambiguous (not 925), 81 more functions
+asked (not 467), 156 more module bindings asked (not 600), and 280 more
+functions carried. It boots exactly as the strict rule does: the raw linked
+program passes both halves on all 68 versions (`/work/exp218-runs/sweep-variant.txt`).
 
-What is expected to move, and why: functions do not change, but 106 more
-chunks gain an init, and the declarators that used to stay at the top
-level (literals, closures, classes, objects) are now assignments inside
-an init, so their "enclosing statement" context differs from 2.1.241's
-(where Bun's bundler had kept them at the top level). The context tiers
-may resolve somewhat less; CommonJS module extraction is unaffected
-(factory declarations stay where they were).
+The variant is commit `ed96d4f59` on its own branch,
+`exp218-variant-bun-shape` (worktree `/work/exp218-runs/variant-src`),
+on top of this branch: `analyse::is_inert` and one line in
+`graph::order_free`, and the strict-rule unit test changed to expect a
+literal and a closure to stay at the top level. Its full gate (`cargo dev
+check`, 11 stages) passes. It is the version merged to main: same boot
+result, much smaller matching cost.
 
 ## Open
 
-1. **Measure the matching cost on 2.1.241 -> 2.1.242** with the two stub
-   runs above (needs the go-ahead). If the context tiers lose much, the
-   variant to try is Bun's own bundler's shape (keep literal- and
-   closure-valued declarators at the top level too: equally order-free,
-   and what 2.1.241's single file did), which the cross-check above
-   describes.
+1. **The 344 ambiguous functions the variant still adds** on 2.1.241 ->
+   2.1.242 are not broken down; most are likely the chunk re-ordering the
+   re-ordering experiment (todo) targets.
 2. **A pipeline tree past 2.1.250 is still unbooted.** This sweep runs the
    RAW linked program; the pipeline's bun adapter re-links the factories
    and the finish writes its own helper file. A walk tree from 2.1.248+
    on this linker is the next check (a walk needs the coordinator's slot).
 3. **The `humanify-ag match` verb is slower than the pipeline on a
-   Claude Code bundle** (above): worth a look before the next harness
-   lane relies on it for a large input.
+   Claude Code bundle**: on 2.1.242 it was stopped after 70-80 minutes
+   unfinished (~11 GB, ~1.2 cores), where the whole stub pipeline takes
+   26 minutes. Worth a look before a harness lane relies on it for a
+   large input.
 4. **exp217's open item 2 (the cold 2.1.321 stub run's memory)** is not
    touched here.
