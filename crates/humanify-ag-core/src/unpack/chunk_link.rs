@@ -25,13 +25,17 @@
 //! - every import of a chunk becomes a direct reference to the exporting
 //!   chunk's binding (re-export chains followed); top-level names that
 //!   would collide are renamed apart ([`names`]);
-//! - module evaluation order is kept: the entry's static closure runs at
-//!   the top level in ESM order; a chunk reached only lazily keeps its
-//!   pure declarations at the top level (functions, and values that read
-//!   nothing and do nothing — so Bun's `__commonJS` factories stay where
-//!   the bun adapter finds them) and moves everything else into an init
-//!   built with Bun's `__esm` shape, which runs once, after the inits of
-//!   the lazy chunks it imports;
+//! - module evaluation order is ESM's, exactly ([`graph::placement`],
+//!   exp218): the entry's static closure runs at the top level in ESM
+//!   order; a chunk reached only lazily runs every statement in an init
+//!   built with Bun's `__esm` shape, which runs once, first the inits of
+//!   the lazy chunks it imports, then its external loads, then its body.
+//!   Its top-level names are declared at the top level (`var x;`) and
+//!   assigned in the init. Only what is order-free stays outside: function
+//!   declarations, Bun's thunk-factory helpers (`__commonJS`, `__esm`)
+//!   and the factory calls that use them (so Bun's `__commonJS` modules
+//!   stay where its single-file bundles have them and the bun adapter
+//!   finds them);
 //! - `import(chunk)` becomes `Promise.resolve().then(() => (init(), ns))`
 //!   — exactly what Bun writes for an `import()` within one file — and
 //!   `import.meta.require(chunk)` becomes `(init(), ns)`, where `ns` is
@@ -47,7 +51,8 @@
 //!
 //! What it refuses (an error, never a silent partial read): a bunfs
 //! import whose file is missing, top-level await, `export *`, a bare or
-//! unknown `import.meta`, an import of a name the chunk does not export.
+//! unknown `import.meta`, an import of a name the chunk does not export,
+//! a lazily loaded chunk's top-level `var` declared in a nested block.
 
 mod analyse;
 mod embedded;
@@ -149,15 +154,15 @@ pub fn link(entry: &Path) -> Result<(String, LinkReport), String> {
         chunks.push(analyse::analyse(&path, &mut loader)?);
     }
     let order = graph::order(&chunks);
-    let moved = graph::moved_statements(&chunks, &order);
-    let needs_init = graph::needs_init(&chunks, &order, &moved);
+    let placement = graph::placement(&chunks, &order)?;
+    let needs_init = graph::needs_init(&chunks, &order, &placement.moved);
     let needs_ns = namespaces_needed(&chunks);
     let names = names::assign(&chunks, &order, &needs_init, &needs_ns)?;
     let embedded = embedded::resolve(&chunks, &loader.dir)?;
     let text = emit::program(&emit::Plan {
         chunks: &chunks,
         order: &order,
-        moved: &moved,
+        placement: &placement,
         names: &names,
         embedded: &embedded.edits,
     })?;

@@ -3,13 +3,13 @@
 //! chunk's imports and exports gone and every name its linked one.
 
 use super::analyse::{Chunk, Declarator, Edit, Imported, Spec, Stmt, StmtKind};
-use super::graph::{Order, Target, resolve_export, resolve_sym};
+use super::graph::{Order, Placement, Target, resolve_export, resolve_sym};
 use super::names::Names;
 
 pub(super) struct Plan<'a> {
     pub chunks: &'a [Chunk],
     pub order: &'a Order,
-    pub moved: &'a [Vec<bool>],
+    pub placement: &'a Placement,
     pub names: &'a Names,
     /// Per chunk, the edits that replace its embedded-file uses
     /// (`embedded::resolve`).
@@ -128,14 +128,12 @@ fn edits(plan: &Plan<'_>, c: usize) -> Result<Vec<Edit>, String> {
         out.retain(|x| x.start < e.start || x.end > e.end);
         out.push(e.clone());
     }
-    for st in &chunk.stmts {
-        if let StmtKind::ExportPrefix(decl) = st.kind {
-            out.push(Edit {
-                start: st.span.start as usize,
-                end: decl as usize,
-                text: String::new(),
-            });
-        }
+    for &(start, decl) in &chunk.export_prefixes {
+        out.push(Edit {
+            start: start as usize,
+            end: decl as usize,
+            text: String::new(),
+        });
     }
     out.sort();
     out.dedup();
@@ -166,7 +164,7 @@ fn drop_require_aliases(plan: &Plan<'_>, c: usize, mut edits: Vec<Edit>) -> Vec<
         let StmtKind::Var(ds) = &st.kind else {
             continue;
         };
-        if plan.moved[c][i] || !ds.iter().any(|d| is_dropped(plan, c, d)) {
+        if plan.placement.moved[c][i] || !ds.iter().any(|d| is_dropped(plan, c, d)) {
             continue;
         }
         let (Some(first), Some(last)) = (ds.first(), ds.last()) else {
@@ -210,9 +208,10 @@ fn lazy_load(plan: &Plan<'_>, target: usize, sync: bool) -> String {
     }
 }
 
-/// One chunk: its kept statements at the top level, then its init (the
-/// moved statements, after the inits of the lazy chunks it imports), then
-/// its namespace object.
+/// One chunk: its namespace object and kept statements at the top level,
+/// then its init: the inits of the lazy chunks it imports, its external
+/// loads, its moved statements (ESM: a module's imports are evaluated
+/// before its body).
 fn chunk(plan: &Plan<'_>, c: usize) -> Result<String, String> {
     let ch = &plan.chunks[c];
     let edits = edits(plan, c)?;
@@ -225,20 +224,27 @@ fn chunk(plan: &Plan<'_>, c: usize) -> Result<String, String> {
     let (declared, loads) = externals(plan, c);
     if plan.order.eager[c] {
         top.push_str(&eager_loads(&declared, &loads));
-    } else if !declared.is_empty() {
-        top.push_str(&format!("var {};", declared.join(",")));
+    } else {
+        let names: Vec<&str> = declared
+            .iter()
+            .map(String::as_str)
+            .filter(|d| !d.is_empty())
+            .collect();
+        if !names.is_empty() {
+            top.push_str(&format!("var {};", names.join(",")));
+        }
     }
     if let Some(ns) = plan.names.of.get(&Target::Ns(c)) {
         top.push_str(&namespace(plan, c, ns)?);
     }
     if plan.names.init.contains_key(&c) {
-        if !plan.order.eager[c] {
-            init.push_str(&lazy_loads(&declared, &loads));
-        }
         for d in &ch.static_deps {
             if let Some(name) = plan.names.init.get(d).filter(|_| !plan.order.eager[*d]) {
                 init.push_str(&format!("{name}();"));
             }
+        }
+        if !plan.order.eager[c] {
+            init.push_str(&lazy_loads(&declared, &loads));
         }
     }
     let mut prev_end = ch.stmts.first().map_or(0, |s| s.span.start as usize);
@@ -250,7 +256,8 @@ fn chunk(plan: &Plan<'_>, c: usize) -> Result<String, String> {
             edits: &edits,
             range,
         };
-        statement(plan, c, st, plan.moved[c][i], &out, (&mut top, &mut init))?;
+        let at = (c, i);
+        statement(plan, at, st, &out, (&mut top, &mut init))?;
     }
     if let Some(name) = plan.names.init.get(&c) {
         top.push_str(&format!(
@@ -280,12 +287,12 @@ impl Out<'_> {
 
 fn statement(
     plan: &Plan<'_>,
-    c: usize,
+    (c, i): (usize, usize),
     st: &Stmt,
-    moved: bool,
     out: &Out<'_>,
     (top, init): (&mut String, &mut String),
 ) -> Result<(), String> {
+    let moved = plan.placement.moved[c][i];
     let name = |s| plan.names.name(Target::Sym(c, s)).to_string();
     match &st.kind {
         StmtKind::Removed => {}
@@ -300,17 +307,28 @@ fn statement(
         }
         _ if !moved => top.push_str(&out.all()),
         StmtKind::Var(ds) => {
-            let ds: Vec<&Declarator> = ds.iter().filter(|d| !is_dropped(plan, c, d)).collect();
-            if ds.is_empty() {
-                return Ok(());
-            }
-            let names: Vec<String> = ds
+            let stays = &plan.placement.stays[c][i];
+            let (kept, moved): (Vec<_>, Vec<_>) = ds
                 .iter()
-                .flat_map(|d| d.names.iter())
+                .zip(stays)
+                .filter(|(d, _)| !is_dropped(plan, c, d))
+                .partition(|(_, s)| **s);
+            let names: Vec<String> = moved
+                .iter()
+                .flat_map(|(d, _)| d.names.iter())
                 .map(|s| name(*s))
                 .collect();
-            top.push_str(&format!("var {};", names.join(",")));
-            let parts: Vec<String> = ds.iter().filter_map(|d| assignment(d, out)).collect();
+            if !names.is_empty() {
+                top.push_str(&format!("var {};", names.join(",")));
+            }
+            if !kept.is_empty() {
+                let kept: Vec<String> = kept.iter().map(|(d, _)| declarator(d, out)).collect();
+                top.push_str(&format!("var {};", kept.join(",")));
+            }
+            let parts: Vec<String> = moved
+                .iter()
+                .filter_map(|(d, _)| assignment(d, out))
+                .collect();
             if !parts.is_empty() {
                 init.push_str(&format!("{};", parts.join(",")));
             }
@@ -323,6 +341,12 @@ fn statement(
         _ => init.push_str(&out.all()),
     }
     Ok(())
+}
+
+/// A declarator as written (with its edits).
+fn declarator(d: &Declarator, out: &Out<'_>) -> String {
+    let end = d.init.map_or(d.pattern.end, |s| s.end);
+    out.span(oxc_span::Span::new(d.pattern.start, end))
 }
 
 /// A moved declarator as an assignment to its hoisted names.
@@ -345,6 +369,10 @@ fn assignment(d: &Declarator, out: &Out<'_>) -> Option<String> {
 /// loads them in its init.
 fn externals(plan: &Plan<'_>, c: usize) -> (Vec<String>, Vec<String>) {
     let (mut declared, mut loads) = (Vec::new(), Vec::new());
+    if let Some(init) = to_esm_init(plan, c) {
+        declared.push(String::new());
+        loads.push(format!("{init}()"));
+    }
     for (k, d) in plan.chunks[c].imports.iter().enumerate() {
         let Spec::External(spec) = &d.spec else {
             continue;
@@ -368,6 +396,24 @@ fn externals(plan: &Plan<'_>, c: usize) -> (Vec<String>, Vec<String>) {
         }
     }
     (declared, loads)
+}
+
+/// The init a chunk must run before its external loads call `__toESM`:
+/// the helper's chunk's, when that chunk is lazy and not one this chunk
+/// imports (whose inits run first anyway). ESM never calls the helper
+/// here — the linker does, so the linker orders it.
+fn to_esm_init<'p>(plan: &'p Plan<'_>, c: usize) -> Option<&'p str> {
+    let uses = plan.chunks[c].imports.iter().enumerate().any(|(k, _)| {
+        plan.names
+            .external
+            .get(&(c, k))
+            .is_some_and(|e| e.to_esm.is_some())
+    });
+    let h = plan.names.to_esm_chunk?;
+    if !uses || plan.order.eager[h] || plan.chunks[c].static_deps.contains(&h) {
+        return None;
+    }
+    plan.names.init.get(&h).map(String::as_str)
 }
 
 /// An eager chunk's external loads, as declarations at its top.

@@ -1,0 +1,3 @@
+// @bun
+var k=Object.create;var{getPrototypeOf:l,defineProperty:i,getOwnPropertyNames:m}=Object;var j=Object.prototype.hasOwnProperty;function o(a){return this[a]}var p,q,t=(a,b,d)=>{var f=a!=null&&typeof a==="object";if(f){var g=b?p??=new WeakMap:q??=new WeakMap,h=g.get(a);if(h)return h}d=a!=null?k(l(a)):{};let c=b||!a||!a.__esModule||!j.call(a,"default")?i(d,"default",{value:a,enumerable:!0}):d;if(a&&typeof a==="object"||typeof a==="function"){for(let e of m(a))if(!j.call(c,e))i(c,e,{get:o.bind(a,e),enumerable:!0})}if(f)g.set(a,c);return c};var n=(a,b)=>()=>(b||a((b={exports:{}}).exports,b),b.exports);
+export{t,n};

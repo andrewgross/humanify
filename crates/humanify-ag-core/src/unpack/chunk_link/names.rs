@@ -44,6 +44,8 @@ pub(super) struct Names {
     /// Per chunk (written position), its init's name.
     pub init: BTreeMap<usize, String>,
     pub esm_helper: String,
+    /// The chunk whose `__toESM` the external default imports call.
+    pub to_esm_chunk: Option<usize>,
     /// Bun's `__export` (defines a namespace object's getters).
     pub export_helper: String,
     pub renamed: usize,
@@ -105,6 +107,7 @@ pub(super) fn assign(
         external: BTreeMap::new(),
         init: BTreeMap::new(),
         esm_helper: String::new(),
+        to_esm_chunk: None,
         export_helper: String::new(),
         renamed: 0,
         require_aliases: require_aliases(chunks)?,
@@ -177,6 +180,7 @@ fn to_esm_helper(chunks: &[Chunk], order: &Order, names: &Names) -> Option<(Stri
 /// give each of its locals the expression its references become.
 fn externals(chunks: &[Chunk], order: &Order, names: &mut Names) {
     let helper = to_esm_helper(chunks, order, names);
+    names.to_esm_chunk = helper.as_ref().map(|(_, pos)| order.chunks[*pos]);
     for (pos, &c) in order.chunks.iter().enumerate() {
         for (k, decl) in chunks[c].imports.iter().enumerate() {
             if !matches!(decl.spec, Spec::External(_)) || decl.specifiers.is_empty() {
