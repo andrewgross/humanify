@@ -297,6 +297,18 @@ byte-equal. The leaderboard REFUSES labels of different scorer versions unless
 `byScorer.2` (equal to the v1 bands for every KPI, except the names-mode
 section, re-measured on five pairs by exp201).
 
+**Scorer version 3 (exp222, 2026-11-14) is the current one.** It is version 2
+with one change: both line counters (`eval::difftool`, `runners::tree_diff`)
+run GNU `diff --minimal`, because the default heuristic overcharges very large
+files (one split-era hop read 229,478 lines where the minimum is 60,876). It
+moves only the vendor columns of the references (`vendorReal` /
+`vendorChurnLines` −32 on the names references) and the walk report's
+`diffLn`; `byScorer.3` bands equal `byScorer.2`. The current references
+re-scored as v3 are `ref-names-40921b9f-{r1,r2,r3}-s3` and
+`serial-40921b9f-s1-s3` (names) and `ref-scratch-0f338ffa-{r1,r2,r3}-s3`
+(off), host-only, in `/work/exp222-runs/refs-s3/` and `/work/exp222-runs/off-s3/`.
+Re-score any older label with `cargo dev eval rescore <label>` before comparing.
+
 A label scored before exp201 has four pairs (both off-mode references stay
 that way). The leaderboard compares labels with different pair sets over the
 pairs both scored, with a `!! COMMON PAIRS` line and every total re-folded
