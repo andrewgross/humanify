@@ -632,9 +632,28 @@ fn written_ledger(b: &Body, out: &FossilAssignment, rename: &[(&str, &str)]) -> 
             ..m.clone()
         })
         .collect();
+    let order: Vec<String> = out.assignment.iter().map(|f| to(f)).collect();
+    let mut name_to_files: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for (stmt, file) in b.values.iter().zip(&order) {
+        for n in crate::twins::fossil::declared_names(stmt) {
+            name_to_files.entry(n).or_default().push(file.clone());
+        }
+    }
+    let emit_names = b
+        .values
+        .iter()
+        .map(|stmt| {
+            let names = crate::twins::fossil::declared_names(stmt);
+            (!names.is_empty()).then(|| names.join(","))
+        })
+        .collect();
     StableSplitLedger {
-        order: out.assignment.iter().map(|f| to(f)).collect(),
+        order,
         hashes: Some(b.hashes.clone()),
+        emit_hashes: Some(b.hashes.clone()),
+        emit_names: Some(emit_names),
+        name_to_files,
         ..ledger(modules)
     }
 }
@@ -756,10 +775,11 @@ fn the_trail_records_a_kept_statement_with_its_own_tier() {
 }
 
 #[test]
-fn a_statement_whose_shape_this_bundle_holds_twice_is_not_refiled() {
+fn a_statement_whose_shape_this_bundle_holds_twice_is_refiled_by_its_name() {
     // A new function with the same rename-blind shape as a carried one:
-    // the hash no longer says which statement the prior's was, so neither
-    // copy is filed by it.
+    // the hash no longer says which statement the prior's was, but the
+    // name does (exp229) — the carried copy kept the prior's name, the new
+    // one has a name the prior never declared.
     let b = body_of(&[
         ESM,
         "function mimeOf(bytes) { return bytes[0] === 137 ? \"png\" : \"jpeg\"; }",
@@ -776,8 +796,157 @@ fn a_statement_whose_shape_this_bundle_holds_twice_is_not_refiled() {
     assert_eq!(b.hashes[1], b.hashes[4], "the two functions share a shape");
     let out = assign(&b, Some(&image_prior()));
     let a = &out.assignment;
-    assert_eq!(a[1], "src/media/limits.js", "{a:?}");
+    assert_eq!(a[1], "src/media/resize.js", "{a:?}");
     assert_eq!(a[4], "src/media/limits.js", "{a:?}");
     assert_eq!(a[2], "src/media/resize.js", "{a:?}");
-    assert_eq!(out.stats.kept_statements, 1, "{:?}", out.stats);
+    assert_eq!(out.stats.kept_statements, 2, "{:?}", out.stats);
+}
+
+#[test]
+fn a_name_two_statements_of_this_bundle_declare_files_nothing() {
+    // `var` lists can repeat a name; a name declared twice says nothing.
+    let b = body_of(&[
+        ESM,
+        "function mimeOf(bytes) { return bytes[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "function dimensionsOf(bytes) { return { w: bytes[16], h: bytes[20] }; }",
+        "function limitTiles(n) { return n * 4; }",
+        "function tileKind(t) { return t[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "var limitMax, mimeOf;",
+        "var init_limits = __esm(() => { limitMax = limitTiles(8); });",
+        "function resizeImage(img) { return mimeOf(img) + dimensionsOf(img).w; }",
+        "var resizeState;",
+        "var init_resize = __esm(() => { init_limits(); resizeState = resizeImage([137]); });",
+        "console.log(init_resize);",
+    ]);
+    let out = assign(&b, Some(&image_prior()));
+    assert_eq!(
+        out.assignment[1], "src/media/limits.js",
+        "{:?}",
+        out.assignment
+    );
+}
+
+/// v2 of the image bundle: upstream moved `dimensionsOf` into a module of
+/// its own (a new init) and edited it. Its hash is new; its name is the
+/// prior's.
+fn image_v2_split_edit() -> Body {
+    body_of(&[
+        ESM,
+        "function limitTiles(n) { return n * 4; }",
+        "var limitMax;",
+        "var init_limits = __esm(() => { limitMax = limitTiles(8); });",
+        "function dimensionsOf(bytes) { return { w: bytes[16], h: bytes[20], d: bytes[24] }; }",
+        "var dimsReady;",
+        "var init_dims = __esm(() => { dimsReady = dimensionsOf([1]).d; });",
+        "function mimeOf(bytes) { return bytes[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "function resizeImage(img) { return mimeOf(img) + dimensionsOf(img).w; }",
+        "var resizeState;",
+        "var init_resize = __esm(() => { init_limits(); init_dims(); resizeState = resizeImage([137]); });",
+        "console.log(init_resize);",
+    ])
+}
+
+#[test]
+fn an_edited_statement_split_into_a_new_module_stays_in_its_prior_file() {
+    let out = assign(&image_v2_split_edit(), Some(&image_prior()));
+    let a = &out.assignment;
+    assert_eq!(a[4], "src/media/resize.js", "{a:?}");
+    // The new module's own statements are not the prior's.
+    assert_ne!(a[6], "src/media/resize.js", "{a:?}");
+    assert_eq!(a[7], "src/media/resize.js", "{a:?}");
+}
+
+#[test]
+fn a_statement_refiled_by_name_holds_on_the_next_hop() {
+    let b = image_v2_split_edit();
+    let second = assign(&b, Some(&image_prior()));
+    let third = assign(&b, Some(&written_ledger(&b, &second, &[])));
+    assert_eq!(third.assignment, second.assignment);
+}
+
+#[test]
+fn an_export_registration_follows_its_namespace() {
+    // The namespace object and its registrar are glued to the image
+    // module in v1. In v2 the run is glued to the limits module; the
+    // registrar's shape (one getter) is also the limits module's, so its
+    // hash says nothing — it follows the namespace it registers.
+    let v1 = body_of(&[
+        ESM,
+        "var reg = (ns, all) => { for (var k in all) ns[k] = all[k]; };",
+        "var limitNs = {};",
+        "reg(limitNs, { limitTiles: () => limitTiles });",
+        "function limitTiles(n) { return n * 4; }",
+        "var limitMax;",
+        "var init_limits = __esm(() => { limitMax = limitTiles(8); });",
+        "var mimeNs = {};",
+        "reg(mimeNs, { mimeOf: () => mimeOf });",
+        "function mimeOf(bytes) { return bytes[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "function resizeImage(img) { return mimeOf(img) + 1; }",
+        "var resizeState;",
+        "var init_resize = __esm(() => { init_limits(); resizeState = resizeImage([137]); });",
+        "console.log(init_resize, limitNs, mimeNs);",
+    ]);
+    let first = assign(&v1, None);
+    let files: Vec<String> = first
+        .fossil_modules
+        .iter()
+        .map(|m| m.file.clone())
+        .collect();
+    let prior = written_ledger(
+        &v1,
+        &first,
+        &[
+            (files[0].as_str(), "src/media/limits.js"),
+            (files[1].as_str(), "src/media/resize.js"),
+        ],
+    );
+    let v2 = body_of(&[
+        ESM,
+        "var reg = (ns, all) => { for (var k in all) ns[k] = all[k]; };",
+        "var mimeNs = {};",
+        "reg(mimeNs, { mimeOf: () => mimeOf });",
+        "function mimeOf(bytes) { return bytes[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "var limitNs = {};",
+        "reg(limitNs, { limitTiles: () => limitTiles });",
+        "function limitTiles(n) { return n * 4; }",
+        "var limitMax;",
+        "var init_limits = __esm(() => { limitMax = limitTiles(8); });",
+        "function resizeImage(img) { return mimeOf(img) + 1; }",
+        "var resizeState;",
+        "var init_resize = __esm(() => { init_limits(); resizeState = resizeImage([137]); });",
+        "console.log(init_resize, limitNs, mimeNs);",
+    ]);
+    assert_eq!(
+        v2.hashes[3], v2.hashes[6],
+        "the two registrars share a shape"
+    );
+    let out = assign(&v2, Some(&prior));
+    let a = &out.assignment;
+    assert_eq!(a[2], "src/media/resize.js", "{a:?}");
+    assert_eq!(a[3], "src/media/resize.js", "{a:?}");
+    assert_eq!(a[6], "src/media/limits.js", "{a:?}");
+}
+
+#[test]
+fn a_new_statement_wearing_a_prior_name_whose_code_is_still_here_stays_put() {
+    // Before the per-file reconcile, a new function can carry the name the
+    // prior gave another statement — one this bundle still holds under a
+    // new name. The name is not that statement's evidence.
+    let b = body_of(&[
+        ESM,
+        "function mimeOf(bytes) { return bytes[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "function dimsOf(bytes) { return { w: bytes[16], h: bytes[20] }; }",
+        "function dimensionsOf(t) { return t.length * 3 + 1; }",
+        "function limitTiles(n) { return n * 4; }",
+        "var limitMax;",
+        "var init_limits = __esm(() => { limitMax = limitTiles(8); });",
+        "function resizeImage(img) { return mimeOf(img) + dimsOf(img).w; }",
+        "var resizeState;",
+        "var init_resize = __esm(() => { init_limits(); resizeState = resizeImage([137]); });",
+        "console.log(init_resize, dimensionsOf);",
+    ]);
+    let out = assign(&b, Some(&image_prior()));
+    let a = &out.assignment;
+    assert_eq!(a[2], "src/media/resize.js", "{a:?}");
+    assert_eq!(a[3], "src/media/limits.js", "{a:?}");
 }

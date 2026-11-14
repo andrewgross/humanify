@@ -30,7 +30,9 @@ use super::fossil_match::{FossilSignature, match_fossil_modules};
 use crate::place::ledger::{FossilLedgerModule, StableSplitLedger};
 use crate::place::stems::{module_stem_of_wrapper, stem_of};
 use crate::place::trail::{PlacementTrail, TrailEntry};
-use crate::twins::fossil::{FossilExtract, FossilModule, declared_names, extract_fossil_modules};
+use crate::twins::fossil::{
+    FossilExtract, FossilModule, declared_names, export_registration_target, extract_fossil_modules,
+};
 
 /// The eager zone's file: the program's entry file (exp074).
 pub const FOSSIL_BOOTSTRAP_FILE: &str = "src/index.js";
@@ -822,13 +824,17 @@ definitions) — fix detection or run with --disable fossil-split"
     // the other half — unchanged code — would otherwise move to a new file.
     let prior_layout = prior.filter(|p| p.hashes_current());
     let prior_files = prior_hash_files(prior_layout, prior_modules);
+    // Names are read from the same per-statement layout as the hashes:
+    // a ledger whose layout is not usable gives no name evidence either.
+    let name_layout = prior_layout.filter(|p| layout_is_usable(p, prior_modules));
+    let evidence = CarriedEvidence::new(body, hashes, &prior_files, name_layout);
     let mut kept_tiers = matched.pair_tiers.clone();
     let mut kept_files = 0;
     for (i, module) in extract.modules.iter().enumerate() {
         if file_of_module[i].is_some() {
             continue;
         }
-        if let Some(file) = kept_prior_file(module, hashes, &prior_files) {
+        if let Some(file) = kept_prior_file(module, &evidence) {
             used.add(file);
             file_of_module[i] = Some(file.to_string());
             kept_tiers.insert(i, KEPT_BY_CONTENT);
@@ -878,8 +884,8 @@ definitions) — fix detection or run with --disable fossil-split"
     let kept_statements = keep_carried_statements(
         &CarriedInput {
             extract: &extract,
-            hashes,
-            prior_files: &prior_files,
+            body,
+            evidence: &evidence,
             final_file: &final_file,
             library: options.library,
         },
@@ -959,18 +965,9 @@ fn prior_hash_files<'p>(
         }
         Some(_) => {}
     };
-    let layout = prior.and_then(|p| {
-        p.hashes
-            .as_deref()
-            .filter(|h| !h.is_empty() && h.len() == p.order.len())
-            .map(|h| (h, p.order.as_slice()))
-    });
-    let layout = layout.filter(|(_, order)| {
-        let written: HashSet<&str> = order.iter().map(String::as_str).collect();
-        prior_modules
-            .iter()
-            .all(|m| written.contains(m.file.as_str()))
-    });
+    let layout = prior
+        .filter(|p| layout_is_usable(p, prior_modules))
+        .and_then(|p| p.hashes.as_deref().map(|h| (h, p.order.as_slice())));
     match layout {
         Some((hashes, order)) => {
             for (h, file) in hashes.iter().zip(order) {
@@ -988,23 +985,161 @@ fn prior_hash_files<'p>(
     out
 }
 
+/// Which prior file a fresh statement came from, read two ways (exp229):
+/// its HASH (the prior held that exact statement in one file, exp226) or,
+/// when the hash gives no evidence, its NAMES (every name it declares is
+/// declared by this one statement of the bundle and by one statement of
+/// the prior, all in the same prior file). A name is the prior's when the
+/// naming stage carried it — an edited function keeps its prior name, and
+/// of two statements with one shape, only the carried one has it.
+struct CarriedEvidence<'a, 'p> {
+    hashes: &'a [String],
+    prior_files: &'a HashMap<&'p str, Option<&'p str>>,
+    fresh_hash_count: HashMap<&'a str, usize>,
+    names: Vec<Vec<String>>,
+    fresh_name_count: HashMap<String, usize>,
+    prior_names: Option<&'p HashMap<String, Vec<String>>>,
+    /// Name → the hash of the one prior statement declaring it (`None`
+    /// when several did), from the prior's emitted layout.
+    prior_name_hash: HashMap<&'p str, Option<&'p str>>,
+}
+
+/// Name → the hash of the one prior statement that declares it, read from
+/// the prior ledger's emitted layout (`emitNames` + `emitHashes`, the
+/// names as shipped).
+fn prior_name_hashes(prior: Option<&StableSplitLedger>) -> HashMap<&str, Option<&str>> {
+    let mut out: HashMap<&str, Option<&str>> = HashMap::new();
+    let Some((names, hashes)) =
+        prior.and_then(|p| p.emit_names.as_ref().zip(p.emit_hashes.as_ref()))
+    else {
+        return out;
+    };
+    if names.len() != hashes.len() {
+        return out;
+    }
+    for (slot, h) in names.iter().zip(hashes) {
+        for n in slot
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .filter(|n| !n.is_empty())
+        {
+            out.entry(n)
+                .and_modify(|cur| *cur = None)
+                .or_insert(Some(h.as_str()));
+        }
+    }
+    out
+}
+
+impl<'a, 'p> CarriedEvidence<'a, 'p> {
+    fn new(
+        body: &[Value],
+        hashes: &'a [String],
+        prior_files: &'a HashMap<&'p str, Option<&'p str>>,
+        prior: Option<&'p StableSplitLedger>,
+    ) -> Self {
+        let mut fresh_hash_count: HashMap<&str, usize> = HashMap::new();
+        for h in hashes {
+            *fresh_hash_count.entry(h.as_str()).or_default() += 1;
+        }
+        let names: Vec<Vec<String>> = body.iter().map(declared_names).collect();
+        let mut fresh_name_count: HashMap<String, usize> = HashMap::new();
+        for n in names.iter().flatten() {
+            *fresh_name_count.entry(n.clone()).or_default() += 1;
+        }
+        CarriedEvidence {
+            hashes,
+            prior_files,
+            fresh_hash_count,
+            names,
+            fresh_name_count,
+            prior_names: prior.map(|p| &p.name_to_files),
+            prior_name_hash: prior_name_hashes(prior),
+        }
+    }
+
+    /// The prior file the statement's hash names, if any.
+    fn by_hash(&self, s: usize) -> Option<&'p str> {
+        self.prior_files
+            .get(self.hashes[s].as_str())
+            .copied()
+            .flatten()
+    }
+
+    fn hash_is_unique(&self, s: usize) -> bool {
+        self.fresh_hash_count[self.hashes[s].as_str()] == 1
+    }
+
+    /// The prior file the statement's names name, if any. A name is
+    /// evidence only when the prior statement that declared it is not
+    /// still in this bundle as ANOTHER statement: before the per-file
+    /// reconcile, a new statement can wear a name the prior gave code
+    /// this bundle still holds under a new name.
+    fn by_name(&self, s: usize) -> Option<&'p str> {
+        let prior_names = self.prior_names?;
+        let mut file: Option<&'p str> = None;
+        for n in &self.names[s] {
+            if self.fresh_name_count[n] != 1 {
+                return None;
+            }
+            let prior_hash = self.prior_name_hash.get(n.as_str()).copied().flatten()?;
+            if prior_hash != self.hashes[s] && self.fresh_hash_count.contains_key(prior_hash) {
+                return None;
+            }
+            let [f] = prior_names.get(n)?.as_slice() else {
+                return None;
+            };
+            if file.is_some_and(|g| g != f.as_str()) {
+                return None;
+            }
+            file = Some(f.as_str());
+        }
+        file
+    }
+
+    /// The statement's prior file: its hash when the prior held it in one
+    /// file (and, with `unique_hash`, this bundle holds it once), else
+    /// its names.
+    fn prior_file(&self, s: usize, unique_hash: bool) -> Option<&'p str> {
+        match self.by_hash(s) {
+            Some(f) if !unique_hash || self.hash_is_unique(s) => Some(f),
+            _ => self.by_name(s),
+        }
+    }
+}
+
+/// Does the prior ledger carry a per-statement layout this run can read:
+/// a hash per statement, and every file its modules name actually written?
+fn layout_is_usable(prior: &StableSplitLedger, prior_modules: &[FossilLedgerModule]) -> bool {
+    let Some(hashes) = prior.hashes.as_deref() else {
+        return false;
+    };
+    if hashes.is_empty() || hashes.len() != prior.order.len() {
+        return false;
+    }
+    let written: HashSet<&str> = prior.order.iter().map(String::as_str).collect();
+    prior_modules
+        .iter()
+        .all(|m| written.contains(m.file.as_str()))
+}
+
 /// The prior file an unmatched module keeps: every one of its statements
-/// that the prior holds in exactly one file names the SAME file, and those
-/// carried statements are more than half the module. New statements (no
-/// prior file) and ambiguous ones (several) do not vote. None otherwise —
-/// the module is named fresh.
+/// with a prior file ([`CarriedEvidence::prior_file`]) names the SAME
+/// file, and those carried statements are more than half the module. New
+/// statements (no prior file) and ambiguous ones (several) do not vote.
+/// None otherwise — the module is named fresh.
 fn kept_prior_file<'p>(
     module: &FossilModule,
-    hashes: &[String],
-    prior_files: &HashMap<&str, Option<&'p str>>,
+    evidence: &CarriedEvidence<'_, 'p>,
 ) -> Option<&'p str> {
     let mut file: Option<&'p str> = None;
     let mut carried = 0usize;
     for &s in &module.statements {
-        let Some(Some(f)) = prior_files.get(hashes[s].as_str()) else {
+        let Some(f) = evidence.prior_file(s, false) else {
             continue;
         };
-        if file.is_some_and(|g| g != *f) {
+        if file.is_some_and(|g| g != f) {
             return None;
         }
         file = Some(f);
@@ -1016,8 +1151,8 @@ fn kept_prior_file<'p>(
 /// What [`keep_carried_statements`] reads.
 struct CarriedInput<'a, 'p> {
     extract: &'a FossilExtract,
-    hashes: &'a [String],
-    prior_files: &'a HashMap<&'p str, Option<&'p str>>,
+    body: &'a [Value],
+    evidence: &'a CarriedEvidence<'a, 'p>,
     final_file: &'a [String],
     library: &'a [(usize, String)],
 }
@@ -1041,11 +1176,8 @@ fn app_module_file(file: &str) -> bool {
 /// entry. Returns how many statements were refiled.
 fn keep_carried_statements(input: &CarriedInput, assignment: &mut [String]) -> usize {
     // The hash is rename-blind, so small shapes collide: a statement is
-    // the prior's only when this bundle holds its hash once.
-    let mut fresh_count: HashMap<&str, usize> = HashMap::new();
-    for h in input.hashes {
-        *fresh_count.entry(h.as_str()).or_default() += 1;
-    }
+    // the prior's by hash only when this bundle holds its hash once, and
+    // otherwise by its names (exp229).
     let mut kept = 0;
     for (i, module) in input.extract.modules.iter().enumerate() {
         let file = input.final_file[i].as_str();
@@ -1053,16 +1185,46 @@ fn keep_carried_statements(input: &CarriedInput, assignment: &mut [String]) -> u
             continue;
         }
         for &s in &module.statements {
-            if s == module.init_index || fresh_count[input.hashes[s].as_str()] != 1 {
+            if s == module.init_index {
                 continue;
             }
-            let Some(Some(prior)) = input.prior_files.get(input.hashes[s].as_str()) else {
+            let Some(prior) = input.evidence.prior_file(s, true) else {
                 continue;
             };
-            if *prior != file && app_module_file(prior) {
+            if prior != file && app_module_file(prior) {
                 assignment[s] = prior.to_string();
                 kept += 1;
             }
+        }
+        kept += follow_namespaces(input, module, file, assignment);
+    }
+    kept
+}
+
+/// An export registration (`register(ns, { name: () => binding })`) goes
+/// where the statement declaring its namespace went, when that statement
+/// is in the same module and was refiled (exp229): its shape repeats for
+/// every module with the same number of exports, so its hash never says
+/// which file it came from. Returns how many were refiled.
+fn follow_namespaces(
+    input: &CarriedInput,
+    module: &FossilModule,
+    file: &str,
+    assignment: &mut [String],
+) -> usize {
+    let mut kept = 0;
+    for &s in &module.statements {
+        let Some(target) = export_registration_target(&input.body[s]) else {
+            continue;
+        };
+        let home = module
+            .statements
+            .iter()
+            .find(|&&d| input.evidence.names[d].iter().any(|n| n == target));
+        let Some(&home) = home else { continue };
+        if assignment[home] != assignment[s] {
+            assignment[s] = assignment[home].clone();
+            kept += usize::from(assignment[s] != file);
         }
     }
     kept

@@ -239,7 +239,11 @@ impl MatchState<'_> {
         best
     }
 
-    /// `exportHeirVeto`.
+    /// `exportHeirVeto`: a pair whose declared names are disjoint is
+    /// refused when either side has a clear heir by names elsewhere —
+    /// the prior module's best fresh one, or (exp229) the fresh module's
+    /// best prior one. A fresh module that is a prior module's code and
+    /// names is never handed to a different prior module of similar shape.
     fn export_heir_veto(&self, pi: usize, fi: usize) -> bool {
         let pd = self.prior[pi].declared.as_deref().unwrap_or(&[]);
         let fd = self.fresh[fi].declared.as_deref().unwrap_or(&[]);
@@ -250,7 +254,11 @@ impl MatchState<'_> {
             return false;
         }
         let (best_fi, score) = self.best_fresh_by_exports(pi);
-        best_fi != fi as isize && score >= EXPORT_SET_FLOOR
+        if best_fi != fi as isize && score >= EXPORT_SET_FLOOR {
+            return true;
+        }
+        let (best_pi, score) = self.best_prior_by_exports(fi);
+        best_pi != pi as isize && score >= EXPORT_SET_FLOOR
     }
 }
 
