@@ -1029,8 +1029,9 @@ fn app_module_file(file: &str) -> bool {
     !file.starts_with("vendor/") && file != FOSSIL_BOOTSTRAP_FILE
 }
 
-/// Every carried statement — a hash the prior held in exactly ONE file —
-/// goes back to that file when its module went to another (exp226). The
+/// Every carried statement — a hash this bundle holds once and the prior
+/// held in exactly ONE file — goes back to that file when its module went
+/// to another (exp226). The
 /// markers cut a module at its init, so an init-less run of declarations
 /// is glued to whichever module the bundler emits next; when the bundler
 /// emits another module in between, or a new init appears, the run joins
@@ -1039,6 +1040,12 @@ fn app_module_file(file: &str) -> bool {
 /// modules and statements whose prior file was a library path or the
 /// entry. Returns how many statements were refiled.
 fn keep_carried_statements(input: &CarriedInput, assignment: &mut [String]) -> usize {
+    // The hash is rename-blind, so small shapes collide: a statement is
+    // the prior's only when this bundle holds its hash once.
+    let mut fresh_count: HashMap<&str, usize> = HashMap::new();
+    for h in input.hashes {
+        *fresh_count.entry(h.as_str()).or_default() += 1;
+    }
     let mut kept = 0;
     for (i, module) in input.extract.modules.iter().enumerate() {
         let file = input.final_file[i].as_str();
@@ -1046,7 +1053,7 @@ fn keep_carried_statements(input: &CarriedInput, assignment: &mut [String]) -> u
             continue;
         }
         for &s in &module.statements {
-            if s == module.init_index {
+            if s == module.init_index || fresh_count[input.hashes[s].as_str()] != 1 {
                 continue;
             }
             let Some(Some(prior)) = input.prior_files.get(input.hashes[s].as_str()) else {

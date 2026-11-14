@@ -754,3 +754,30 @@ fn the_trail_records_a_kept_statement_with_its_own_tier() {
     assert_eq!(row.placed_by, "fossil:kept-statement");
     assert_eq!(row.prior_file.as_deref(), Some("src/media/resize.js"));
 }
+
+#[test]
+fn a_statement_whose_shape_this_bundle_holds_twice_is_not_refiled() {
+    // A new function with the same rename-blind shape as a carried one:
+    // the hash no longer says which statement the prior's was, so neither
+    // copy is filed by it.
+    let b = body_of(&[
+        ESM,
+        "function mimeOf(bytes) { return bytes[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "function dimensionsOf(bytes) { return { w: bytes[16], h: bytes[20] }; }",
+        "function limitTiles(n) { return n * 4; }",
+        "function tileKind(t) { return t[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "var limitMax;",
+        "var init_limits = __esm(() => { limitMax = limitTiles(8); });",
+        "function resizeImage(img) { return mimeOf(img) + dimensionsOf(img).w; }",
+        "var resizeState;",
+        "var init_resize = __esm(() => { init_limits(); resizeState = resizeImage([137]); });",
+        "console.log(init_resize);",
+    ]);
+    assert_eq!(b.hashes[1], b.hashes[4], "the two functions share a shape");
+    let out = assign(&b, Some(&image_prior()));
+    let a = &out.assignment;
+    assert_eq!(a[1], "src/media/limits.js", "{a:?}");
+    assert_eq!(a[4], "src/media/limits.js", "{a:?}");
+    assert_eq!(a[2], "src/media/resize.js", "{a:?}");
+    assert_eq!(out.stats.kept_statements, 1, "{:?}", out.stats);
+}
