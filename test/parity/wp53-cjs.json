@@ -139,11 +139,11 @@
     "tree": [
       [
         "core/a.js",
-        "Object.defineProperty(module.exports, \"counter\", { get: () => counter, set: v => { counter = v; }, enumerable: true, configurable: true });\nObject.defineProperty(module.exports, \"sharedHelper\", { get: () => sharedHelper, enumerable: true, configurable: true });\n\nfunction sharedHelper(x) {\n    return x + 1;\n  }\nvar counter = 0;\n"
+        "Object.defineProperty(module.exports, \"counter\", { get: () => counter, set: v => { counter = v; }, enumerable: true, configurable: true });\nObject.defineProperty(module.exports, \"sharedHelper\", { get: () => sharedHelper, enumerable: true, configurable: true });\n\nfunction sharedHelper(x) {\n  return x + 1;\n}\nvar counter = 0;\n"
       ],
       [
         "core/b.js",
-        "const a = require(\"./a.js\");\n\nfunction useHelper(y) {\n    a.counter = a.counter + 1;\n    return (0, a.sharedHelper)(y);\n  }\n"
+        "const a = require(\"./a.js\");\n\nfunction useHelper(y) {\n  a.counter = a.counter + 1;\n  return (0, a.sharedHelper)(y);\n}\n"
       ],
       [
         "pad/fill.js",
@@ -1145,7 +1145,7 @@
       ],
       [
         "core/b.js",
-        "const a = require(\"./a.js\");\n\nfunction bump() { a.counter = a.counter + 1; }\nfunction localOnly(z) {\n    var counter = z;\n    return counter * 2;\n  }\n"
+        "const a = require(\"./a.js\");\n\nfunction bump() { a.counter = a.counter + 1; }\nfunction localOnly(z) {\n  var counter = z;\n  return counter * 2;\n}\n"
       ],
       [
         "pad/fill.js",
@@ -2780,7 +2780,7 @@
       ],
       [
         "b.js",
-        "const __bundle = require(\"./.humanify/_bundle.js\");\n\nvar getThis = () => __bundle.thisArg;\nclass Widget {\n    opts = this.compute();\n    static reg = this.seed;\n    static { this.init(); }\n    run() { return this.value; }\n    [this.key]() {}\n  }\nvar o = { m() { return this; }, get g() { return this; } };\n"
+        "const __bundle = require(\"./.humanify/_bundle.js\");\n\nvar getThis = () => __bundle.thisArg;\nclass Widget {\n  opts = this.compute();\n  static reg = this.seed;\n  static { this.init(); }\n  run() { return this.value; }\n  [this.key]() {}\n}\nvar o = { m() { return this; }, get g() { return this; } };\n"
       ],
       [
         "pad/fill.js",
@@ -4618,7 +4618,7 @@
       ],
       [
         "src/repl/session.js",
-        "const coreFeatureFlags = require(\"../core/feature-flags.js\");\n\nfunction check() {\n    var featureFlags = null;\n    return featureFlags;\n  }\nvar used = coreFeatureFlags.flagOn;\n"
+        "const coreFeatureFlags = require(\"../core/feature-flags.js\");\n\nfunction check() {\n  var featureFlags = null;\n  return featureFlags;\n}\nvar used = coreFeatureFlags.flagOn;\n"
       ],
       [
         "pad/fill.js",
@@ -5480,7 +5480,7 @@
       ],
       [
         "src/repl/session.js",
-        "const featureFlags = require(\"../core/feature-flags.js\");\n\nfunction check() {\n    var coreFeatureFlags = null;\n    return coreFeatureFlags;\n  }\nvar used = featureFlags.flagOn;\n"
+        "const featureFlags = require(\"../core/feature-flags.js\");\n\nfunction check() {\n  var coreFeatureFlags = null;\n  return coreFeatureFlags;\n}\nvar used = featureFlags.flagOn;\n"
       ],
       [
         "pad/fill.js",
@@ -6207,7 +6207,7 @@
       ],
       [
         "src/other/unrelated.js",
-        "function scan() {\n    let featureFlags = 1;\n    return featureFlags;\n  }\n"
+        "function scan() {\n  let featureFlags = 1;\n  return featureFlags;\n}\n"
       ],
       [
         "src/repl/session.js",
@@ -6390,7 +6390,7 @@
     "tree": [
       [
         "helper.js",
-        "Object.defineProperty(module.exports, \"copyProps\", { get: () => copyProps, enumerable: true, configurable: true });\n\nvar copyProps = (target, source) => {\n    for (var key in source) Object.defineProperty(target, key, {\n      get: source[key],\n      enumerable: true,\n      configurable: true\n    });\n  };\n"
+        "Object.defineProperty(module.exports, \"copyProps\", { get: () => copyProps, enumerable: true, configurable: true });\n\nvar copyProps = (target, source) => {\n  for (var key in source) Object.defineProperty(target, key, {\n    get: source[key],\n    enumerable: true,\n    configurable: true\n  });\n};\n"
       ],
       [
         "target.js",
@@ -6576,7 +6576,7 @@
     "tree": [
       [
         "helper.js",
-        "Object.defineProperty(module.exports, \"copyProps\", { get: () => copyProps, enumerable: true, configurable: true });\n\nvar copyProps = (target, source) => {\n    for (var key in source) Object.defineProperty(target, key, {\n      get: source[key],\n      enumerable: true,\n      configurable: true\n    });\n  };\n"
+        "Object.defineProperty(module.exports, \"copyProps\", { get: () => copyProps, enumerable: true, configurable: true });\n\nvar copyProps = (target, source) => {\n  for (var key in source) Object.defineProperty(target, key, {\n    get: source[key],\n    enumerable: true,\n    configurable: true\n  });\n};\n"
       ],
       [
         "target.js",
@@ -6763,7 +6763,7 @@
     "tree": [
       [
         "helper.js",
-        "var copyProps = (target, source) => {\n    for (var key in source) Object.defineProperty(target, key, {\n      get: source[key],\n      enumerable: true,\n      configurable: true\n    });\n  };\n"
+        "var copyProps = (target, source) => {\n  for (var key in source) Object.defineProperty(target, key, {\n    get: source[key],\n    enumerable: true,\n    configurable: true\n  });\n};\n"
       ],
       [
         "target.js",
