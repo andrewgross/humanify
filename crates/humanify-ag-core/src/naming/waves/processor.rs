@@ -2992,7 +2992,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 ))
             }
             RecordMode::Full => {
-                let cache_key = cache_key_of(&request, &self.inp.params);
+                let cache_key = cache_key_of(&system_prompt, &user_prompt, &self.inp.params);
                 Prepared::Full(DispatchRecord {
                     seq: 0,
                     function_id: function_id.to_string(),
@@ -3086,7 +3086,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         self.replaying.set(false);
         let system_prompt = render_system_prompt(&request);
         let user_prompt = render_user_prompt(&request, self.state.name_profile());
-        let cache_key = cache_key_of(&request, &self.inp.params);
+        let cache_key = cache_key_of(&system_prompt, &user_prompt, &self.inp.params);
         DispatchRecord {
             seq: 0,
             function_id: replay.function_id.clone(),

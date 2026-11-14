@@ -1,10 +1,11 @@
-//! The JS-JSON and cache-key rules, pinned to vectors recorded from the
-//! real TS functions: test/parity/wp41-js-vectors.json (generator
-//! test/parity/wp41-js-probe.ts) and test/parity/cache-key-vectors.jsonl
-//! (R4, generator test/parity/generate-cache-key-vectors.ts).
+//! The JS-JSON rules, pinned to vectors recorded from the real TS
+//! functions: test/parity/wp41-js-vectors.json (generator
+//! test/parity/wp41-js-probe.ts). The cache key's TS vectors (`keys`,
+//! cache-key-vectors.jsonl) were retired by exp233: the key is no longer
+//! the TS `cacheKeyOf` but what the endpoint receives.
 
 use crate::js::{JsValue, canonical, math_round, number_to_string, stringify, to_fixed};
-use crate::llm::{BatchRenameRequest, CacheKeyParams, cache_key_material, cache_key_of};
+use crate::llm::{CacheKeyParams, cache_key_material, cache_key_of};
 
 fn parity_file(name: &str) -> String {
     let path = format!("{}/../../test/parity/{name}", env!("CARGO_MANIFEST_DIR"));
@@ -41,54 +42,79 @@ fn canonical_matches_the_ts_on_every_probe_case() {
     }
 }
 
-/// `cacheKeyOf` on temperatures 0 / -0 / 0.7 / 1e-7 / absent, a callee
-/// WITH its snippet (key material the prompt never shows), a UTF-16-sorted
-/// Set, and index-keyed maps — material AND key.
+/// The cache key (version 2, exp233) is the canonical JSON of what the
+/// endpoint receives: key version, both messages, the model parameters,
+/// the response format. Pinned byte for byte, so a change to the key is a
+/// deliberate act (it invalidates every standing cache).
 #[test]
-fn cache_key_matches_the_ts_on_every_probe_case() {
-    let v = vectors();
-    for case in v["keys"].as_array().unwrap() {
-        let mut params: CacheKeyParams =
-            serde_json::from_str(case["params"].as_str().unwrap()).unwrap();
-        if case["tempIsNegZero"].as_bool().unwrap() {
-            params.temperature = Some(-0.0);
-        }
-        let request: BatchRenameRequest =
-            serde_json::from_str(case["request"].as_str().unwrap()).unwrap();
-        let name = &case["name"];
-        assert_eq!(
-            cache_key_material(&request, &params),
-            case["material"].as_str().unwrap(),
-            "material {name}"
-        );
-        assert_eq!(
-            cache_key_of(&request, &params),
-            case["key"].as_str().unwrap(),
-            "key {name}"
-        );
-    }
+fn cache_key_material_is_the_wire_content_and_nothing_else() {
+    let params = CacheKeyParams {
+        model: "m".to_string(),
+        temperature: Some(-0.0),
+        max_tokens: None,
+        reasoning_effort: Some("low".to_string()),
+    };
+    assert_eq!(
+        cache_key_material("sys", "user: f(a, b)", &params),
+        "{\"cacheVersion\":2,\"messages\":[{\"content\":\"sys\",\"role\":\"system\"},\
+         {\"content\":\"user: f(a, b)\",\"role\":\"user\"}],\
+         \"params\":{\"model\":\"m\",\"reasoningEffort\":\"low\",\"temperature\":0},\
+         \"responseFormat\":\"json_object\"}"
+    );
+    let key = cache_key_of("sys", "user: f(a, b)", &params);
+    assert_eq!(key.len(), 64);
+    assert!(
+        key.bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    );
 }
 
-/// R4's adversarial vectors (unicode identifiers, empty sets, absent vs
-/// present optionals, retry fields, prompt overrides, prior fields, absent
-/// params, callee params, and the set-order pair that must share a key).
+/// Every input the endpoint receives moves the key: each prompt, and each
+/// model parameter (an absent temperature differs from 0; 0 and -0 agree,
+/// as JS numbers do).
 #[test]
-fn cache_key_matches_every_r4_vector() {
-    let text = parity_file("cache-key-vectors.jsonl");
-    let mut n = 0;
-    for line in text.lines().filter(|l| !l.is_empty()) {
-        let row: serde_json::Value = serde_json::from_str(line).unwrap();
-        let params: CacheKeyParams = serde_json::from_value(row["params"].clone()).unwrap();
-        let request: BatchRenameRequest = serde_json::from_value(row["request"].clone()).unwrap();
-        assert_eq!(
-            cache_key_of(&request, &params),
-            row["expectedKey"].as_str().unwrap(),
-            "vector {}",
-            row["name"]
-        );
-        n += 1;
+fn every_wire_input_moves_the_key() {
+    let base = CacheKeyParams {
+        model: "m".to_string(),
+        temperature: Some(0.0),
+        max_tokens: None,
+        reasoning_effort: None,
+    };
+    let key = |s: &str, u: &str, p: &CacheKeyParams| cache_key_of(s, u, p);
+    let k0 = key("s", "u", &base);
+    assert_ne!(k0, key("s2", "u", &base));
+    assert_ne!(k0, key("s", "u2", &base));
+    assert_ne!(k0, key("u", "s", &base), "the roles are part of the key");
+    let variants = [
+        CacheKeyParams {
+            model: "m2".to_string(),
+            ..base.clone()
+        },
+        CacheKeyParams {
+            temperature: None,
+            ..base.clone()
+        },
+        CacheKeyParams {
+            temperature: Some(0.7),
+            ..base.clone()
+        },
+        CacheKeyParams {
+            max_tokens: Some(6000),
+            ..base.clone()
+        },
+        CacheKeyParams {
+            reasoning_effort: Some("low".to_string()),
+            ..base.clone()
+        },
+    ];
+    for p in &variants {
+        assert_ne!(k0, key("s", "u", p), "{p:?}");
     }
-    assert_eq!(n, 12);
+    let neg_zero = CacheKeyParams {
+        temperature: Some(-0.0),
+        ..base.clone()
+    };
+    assert_eq!(k0, key("s", "u", &neg_zero));
 }
 
 /// `JSON.stringify(JSON.parse(raw))` — the cache write path's byte shape:

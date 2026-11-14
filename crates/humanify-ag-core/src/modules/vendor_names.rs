@@ -1114,9 +1114,7 @@ pub fn name_fallback_factories_with_llm_sized(
 /// The batch request the TS vendor namer sends (`createVendorNamer`): the
 /// built prompt as BOTH `code` and `userPrompt`, the batch keys as
 /// `identifiers`, an empty used-name set, no callees or callsites, the
-/// namer's system prompt. Its cache key is `humanify_ag_model::llm::
-/// cache_key_of` — the one owner of the key — so a vendor batch replays the
-/// entry the TS run wrote.
+/// namer's system prompt.
 pub fn vendor_batch_request(requests: &[VendorNameRequest]) -> BatchRenameRequest {
     let prompt = build_prompt(requests);
     BatchRenameRequest {
@@ -1125,6 +1123,19 @@ pub fn vendor_batch_request(requests: &[VendorNameRequest]) -> BatchRenameReques
         system_prompt: Some(VENDOR_NAMER_SYSTEM_PROMPT.to_string()),
         user_prompt: Some(prompt),
         ..BatchRenameRequest::default()
+    }
+}
+
+/// The call a vendor batch dispatches: the namer's system prompt and the
+/// built prompt. Its cache key is [`LlmCall::cache_key`] — the one owner
+/// of the key.
+pub fn vendor_batch_call(requests: &[VendorNameRequest]) -> LlmCall {
+    let request = vendor_batch_request(requests);
+    LlmCall {
+        system_prompt: VENDOR_NAMER_SYSTEM_PROMPT.to_string(),
+        user_prompt: request.code.clone(),
+        request,
+        site: humanify_ag_model::llm::CallSite::Vendor,
     }
 }
 
@@ -1202,13 +1213,7 @@ impl VendorNamer for ProviderVendorNamer<'_> {
         if requests.is_empty() {
             return Vec::new();
         }
-        let request = vendor_batch_request(&requests);
-        let call = LlmCall {
-            system_prompt: VENDOR_NAMER_SYSTEM_PROMPT.to_string(),
-            user_prompt: request.code.clone(),
-            request,
-            site: humanify_ag_model::llm::CallSite::Vendor,
-        };
+        let call = vendor_batch_call(&requests);
         // The `vendor` site's row, recorded before the provider answers
         // (as `recordPromptDump` is) — streamed, never accumulated.
         self.log.record(&Dispatch::Plain {
