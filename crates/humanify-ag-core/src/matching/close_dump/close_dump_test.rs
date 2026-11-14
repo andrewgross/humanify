@@ -548,44 +548,44 @@ fn method_row(name: &str, graph: &UnifiedGraph, semantic: &Semantic<'_>) -> (Val
 /// exp225: a release that inserts a parameter in front shifts the others
 /// one place. The positional signature pair then hands the SECOND prior
 /// parameter's name to the binding that now plays the FIRST one's role —
-/// a wrong carry (the 2.1.238 -> 2.1.239 walk: a markdown lexer's text
-/// parameter inherited the boolean flag's name). The aligned body says
-/// which prior parameter each fresh one is: an unchanged statement uses
-/// `t` exactly where the prior used `text`. Body evidence beats position.
+/// a wrong carry (seen on the 2.1.238 -> 2.1.239 walk: a text parameter
+/// inherited a boolean flag's name). The aligned body says which prior
+/// parameter each fresh one is: an unchanged statement uses `t` exactly
+/// where the prior used `label`. Body evidence beats position.
 const PRIOR_SHIFTED_PARAMS: &str = r#"
-    function lexMarkdown(text, wantTokens, useCache) {
-      if (!headingRe.test(text.length > 500 ? text.slice(0, 500) : text)) {
-        return [{ type: "paragraph", raw: text, text: text }];
+    function formatEntry(label, verbose, palette) {
+      if (!label.trim()) {
+        return { kind: "empty", text: label };
       }
-      let lexer = useCache ? engineA : engineB;
-      if (!wantTokens) {
-        return lexer.lexer(text);
+      let painter = palette ? colors.rich : colors.plain;
+      if (!verbose) {
+        return painter.paint(label);
       }
-      let cacheKey = `${useCache ? "_" : ""}${text.length}:${hashText(text)}`;
-      let cached = tokenCache.get(cacheKey);
-      if (cached) {
-        return cached;
+      let key = `${palette ? "c" : "p"}:${label.length}`;
+      let hit = memo.get(key);
+      if (hit) {
+        return hit;
       }
-      let parsed = lexer.lexer(text);
-      tokenCache.set(cacheKey, parsed);
-      return parsed;
+      let out = painter.paint(label);
+      memo.set(key, out);
+      return out;
     }
 "#;
 const FRESH_SHIFTED_PARAMS: &str = r#"
-    function lexMarkdown(e, t, n) {
-      if (!headingRe.test(t.length > 500 ? t.slice(0, 500) : t)) {
-        return [{ type: "paragraph", raw: t, text: t }];
+    function formatEntry(e, t, n) {
+      if (!t.trim()) {
+        return { kind: "empty", text: t };
       }
-      let r = n ? engineA : engineB;
+      let r = n ? colors.rich : colors.plain;
       if (e === null) {
-        return r.lexer(t);
+        return r.paint(t);
       }
-      let o = `${n ? "_" : ""}${t.length}:${hashText(t)}`;
+      let o = `${n ? "c" : "p"}:${t.length}`;
       let i = e.get(o);
       if (i) {
         return i;
       }
-      let s = r.lexer(t);
+      let s = r.paint(t);
       e.set(o, s);
       return s;
     }
@@ -615,16 +615,16 @@ fn body_evidence_overrides_a_shifted_positional_parameter_pair() {
     };
     assert_eq!(
         target("t"),
-        vec!["text"],
-        "t is used where the prior used `text` (moved one place): {transfers:?}"
+        vec!["label"],
+        "t is used where the prior used `label` (moved one place): {transfers:?}"
     );
     assert!(
-        !target("e").contains(&"text"),
-        "the new first parameter must not inherit `text` by position: {transfers:?}"
+        !target("e").contains(&"label"),
+        "the new first parameter must not inherit `label` by position: {transfers:?}"
     );
-    assert_eq!(target("n"), vec!["useCache"], "{transfers:?}");
+    assert_eq!(target("n"), vec!["palette"], "{transfers:?}");
     assert!(
-        transfers.iter().all(|(_, n)| n != "wantTokens"),
+        transfers.iter().all(|(_, n)| n != "verbose"),
         "no fresh binding plays the removed flag's role: {transfers:?}"
     );
 }
@@ -636,21 +636,21 @@ fn positional_parameter_pairs_stand_when_the_body_agrees() {
     let prior = PRIOR_SHIFTED_PARAMS;
     let fresh = FRESH_SHIFTED_PARAMS
         .replace(
-            "function lexMarkdown(e, t, n)",
-            "function lexMarkdown(t, e, n)",
+            "function formatEntry(e, t, n)",
+            "function formatEntry(t, e, n)",
         )
         .replace("if (e === null)", "if (!e)");
     let transfers = close_transfers(prior, &fresh);
     assert!(
-        transfers.contains(&("t".into(), "text".into())),
+        transfers.contains(&("t".into(), "label".into())),
         "{transfers:?}"
     );
     assert!(
-        transfers.contains(&("e".into(), "wantTokens".into())),
+        transfers.contains(&("e".into(), "verbose".into())),
         "{transfers:?}"
     );
     assert!(
-        transfers.contains(&("n".into(), "useCache".into())),
+        transfers.contains(&("n".into(), "palette".into())),
         "{transfers:?}"
     );
 }

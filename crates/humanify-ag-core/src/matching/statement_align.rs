@@ -17,9 +17,17 @@
 //!   masks numbers (see "THE NUMBER POLICY" below); inside a group the
 //!   exact numbers break the tie, and a positional pair that would cross
 //!   a pair the numbers fixed is refused.
+//! - Edited containers (if/try/loop/switch/block whose hash changed) are
+//!   descended in pairs: a node type present once on each side pairs as
+//!   is; several same-type siblings pair only by content (exp225: each
+//!   the other's strict best above the shingle floor, source order kept),
+//!   so indistinguishable siblings never pair.
 //! - Declaration anchor: a function-owned binding transfers only when its
 //!   declaration lives inside an aligned statement — its defining content
-//!   is provably unchanged. Use-sites alone never carry a name.
+//!   is provably unchanged. Use-sites alone never carry a name, with one
+//!   exception (exp225): a use-site hint whose DEFINITION is also
+//!   unchanged (snap-eligible) and whose prior name no other binding's
+//!   evidence names.
 //! - Unanimity: conflicting prior names for one identifier drop it.
 //! - Bindings owned by nested functions are skipped entirely (the nested
 //!   function has its own match); outer bindings pass through as candidate

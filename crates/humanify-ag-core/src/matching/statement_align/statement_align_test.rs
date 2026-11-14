@@ -387,8 +387,8 @@ fn pairs_changed_same_type_siblings_by_content_never_crossed() {
 /// which prior one it is by its content (different calls, different
 /// properties). The type-unique rule refused to descend either, so the
 /// unchanged declaration inside each lost its carried name and went back
-/// to the model — the 2.1.238 -> 2.1.239 walk's deploy-response local,
-/// renamed while its own statement was byte-identical. Content similarity
+/// to the model (seen on the 2.1.238 -> 2.1.239 walk: a local renamed
+/// while its own statement was byte-identical). Content similarity
 /// pairs them; the declarations inside then align as usual.
 #[test]
 fn descends_same_type_siblings_that_content_tells_apart() {
