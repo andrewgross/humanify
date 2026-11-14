@@ -9,17 +9,22 @@
 //! with `using` are regenerated (a token prefilter, then a parse-level
 //! check), so every other file stays byte-identical.
 //!
-//! The port reproduces those OUTPUT BYTES through `core::format` (one
-//! owner of Babel's AST, converter and generator): `format::convert`
-//! builds Babel's AST from oxc's, [`transform`] is the plugin,
-//! `format::printer` in `Mode::RetainLines` is the generator (no
-//! comments). What it cannot reproduce faithfully it
-//! refuses loudly — comments (Babel's attachment is not ported), a helper
-//! global shadowed at program scope, an input already spelling a
-//! generated uid — the way a Babel throw fails the TS stage.
+//! The port builds the plugin's PROGRAM but does not reprint the file
+//! (exp228): [`transform`] plans the plugin's edits as splices into the
+//! file's own text, so every line the desugar does not have to change
+//! keeps the writer's bytes, and a file that starts or stops declaring
+//! with `using` between two versions changes only the lines it must.
+//! `core::format` still parses (`format::convert` builds Babel's AST from
+//! oxc's, which the plan walks) and prints the two injected helpers
+//! (`format::printer` in `Mode::RetainLines`). What it cannot do
+//! faithfully it refuses loudly — a helper global shadowed at program
+//! scope, an input already spelling a generated uid — the way a Babel
+//! throw fails the TS stage.
 
 pub mod helpers;
 pub mod transform;
+
+use helpers::helper_declaration;
 
 use std::path::Path;
 
@@ -29,6 +34,7 @@ use oxc_ast::ast::VariableDeclarationKind;
 
 use super::relink::parse_or_err;
 use super::scaffold::{js_files_under, read_utf8};
+use crate::format::ast::{Kind, Tree};
 use crate::format::convert::Converter;
 use crate::format::printer::{Mode, Printer};
 use crate::ingest::Ingest;
@@ -76,11 +82,9 @@ const HELPER_GLOBALS: [&str; 6] = [
 ];
 
 /// The inputs the port refuses rather than guess at (each fails the
-/// finishing stage loudly, as a Babel throw would).
+/// finishing stage loudly, as a Babel throw would). Comments are kept:
+/// the splices never move them.
 fn refuse(ingest: &Ingest<'_>, code: &str) -> Result<(), String> {
-    if !ingest.program.comments.is_empty() {
-        return Err("using desugar: comments are not ported (Babel's attachment)".into());
-    }
     if code.contains("_usingCtx") || code.contains("_setFunctionName") {
         return Err("using desugar: an identifier spelled like a generated uid".into());
     }
@@ -117,8 +121,30 @@ pub(crate) fn print_retaining_lines(code: &str) -> Result<String, String> {
     Ok(Printer::new(&converter.tree, Mode::RetainLines).generate(program))
 }
 
+/// The helpers' declarations (`addHelper` order; Babel unshifts each, so
+/// the last added comes first), printed as Babel prints them: compact, on
+/// one line.
+fn helpers_text(tree: &mut Tree, helpers: &[(&'static str, String)]) -> Result<String, String> {
+    let mut body = Vec::new();
+    for (name, uid) in helpers {
+        body.insert(0, helper_declaration(tree, name, uid)?);
+    }
+    let program = tree.synth(Kind::Program {
+        interpreter: None,
+        directives: Vec::new(),
+        body,
+    });
+    Ok(Printer::new(tree, Mode::RetainLines).generate(program))
+}
+
 /// `desugarUsing(code)`: the transformed text, or None when there is
 /// nothing to transform (the caller keeps the original bytes).
+///
+/// The result is the input with SPLICES applied ([`transform`]): the
+/// helpers on a new first line, the `try` opener and closer on the lines
+/// of each block's braces, `const` and the context call on each `using`
+/// statement. Nothing else is reprinted, so a file that starts or stops
+/// declaring with `using` changes only those lines.
 pub fn desugar_using(code: &str) -> Result<Option<String>, String> {
     if !has_using_token(code) {
         return Ok(None);
@@ -135,10 +161,12 @@ pub fn desugar_using(code: &str) -> Result<Option<String>, String> {
     let mut converter = Converter::new(code);
     let program = converter.program(ingest.program)?;
     let mut tree = converter.tree;
-    transform::transform_program(&mut tree, program)?;
-    Ok(Some(
-        Printer::new(&tree, Mode::RetainLines).generate(program),
-    ))
+    let mut state = transform::State::new(code);
+    transform::plan_program(&mut tree, program, &mut state)?;
+    let helpers = helpers_text(&mut tree, &state.helpers)?;
+    let mut splices = std::mem::take(&mut state.splices);
+    splices.push(transform::helpers_splice(&tree, program, helpers)?);
+    transform::apply(code, splices).map(Some)
 }
 
 /// `desugarUsingInTree(outputDir)`: the number of files rewritten.
