@@ -382,4 +382,8 @@ fn match_stage_and_transfers_are_pinned() {
 const PIN_CANONICAL_AND_CONTENT: &str = "4547ddfeba1da7b20233c278";
 const PIN_FEATURES_AND_SHINGLES: &str = "3746b94d76bb9556cd9461ac";
 const PIN_TEXT_EXTRACTORS: &str = "5aed2a4d97e46b22238b4ab4";
-const PIN_MATCH_STAGE: &str = "af413f7a8e6ddb94f7c1fccf";
+// exp225: a behaviour change, not a refactor — on the three esbuild
+// fixtures one snap-eligible close-match hint (`It` -> `Ct`) is now carried
+// mechanically (a transfer row instead of a hint/snap row); nothing else in
+// the stage's output moved (diffed line by line against main d3fed6a4).
+const PIN_MATCH_STAGE: &str = "ed22686e0f579bdbe72114f2";

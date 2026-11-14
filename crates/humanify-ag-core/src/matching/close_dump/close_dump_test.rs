@@ -544,3 +544,113 @@ fn method_row(name: &str, graph: &UnifiedGraph, semantic: &Semantic<'_>) -> (Val
     }
     panic!("no {name} method row in fixture");
 }
+
+/// exp225: a release that inserts a parameter in front shifts the others
+/// one place. The positional signature pair then hands the SECOND prior
+/// parameter's name to the binding that now plays the FIRST one's role —
+/// a wrong carry (the 2.1.238 -> 2.1.239 walk: a markdown lexer's text
+/// parameter inherited the boolean flag's name). The aligned body says
+/// which prior parameter each fresh one is: an unchanged statement uses
+/// `t` exactly where the prior used `text`. Body evidence beats position.
+const PRIOR_SHIFTED_PARAMS: &str = r#"
+    function lexMarkdown(text, wantTokens, useCache) {
+      if (!headingRe.test(text.length > 500 ? text.slice(0, 500) : text)) {
+        return [{ type: "paragraph", raw: text, text: text }];
+      }
+      let lexer = useCache ? engineA : engineB;
+      if (!wantTokens) {
+        return lexer.lexer(text);
+      }
+      let cacheKey = `${useCache ? "_" : ""}${text.length}:${hashText(text)}`;
+      let cached = tokenCache.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+      let parsed = lexer.lexer(text);
+      tokenCache.set(cacheKey, parsed);
+      return parsed;
+    }
+"#;
+const FRESH_SHIFTED_PARAMS: &str = r#"
+    function lexMarkdown(e, t, n) {
+      if (!headingRe.test(t.length > 500 ? t.slice(0, 500) : t)) {
+        return [{ type: "paragraph", raw: t, text: t }];
+      }
+      let r = n ? engineA : engineB;
+      if (e === null) {
+        return r.lexer(t);
+      }
+      let o = `${n ? "_" : ""}${t.length}:${hashText(t)}`;
+      let i = e.get(o);
+      if (i) {
+        return i;
+      }
+      let s = r.lexer(t);
+      e.set(o, s);
+      return s;
+    }
+"#;
+
+fn close_transfers(prior: &str, fresh: &str) -> Vec<(String, String)> {
+    with_close_pair(prior, fresh, |sides, pj, fj, _matches| {
+        let (_, contexts) = super::close_dump_with_context(&sides, &pj, &fj).unwrap();
+        assert_eq!(contexts.len(), 1, "the two functions close-match");
+        contexts[0]
+            .name_transfers
+            .iter()
+            .map(|t| (t.old_name.clone(), t.new_name.clone()))
+            .collect()
+    })
+}
+
+#[test]
+fn body_evidence_overrides_a_shifted_positional_parameter_pair() {
+    let transfers = close_transfers(PRIOR_SHIFTED_PARAMS, FRESH_SHIFTED_PARAMS);
+    let target = |old: &str| -> Vec<&str> {
+        transfers
+            .iter()
+            .filter(|(o, _)| o == old)
+            .map(|(_, n)| n.as_str())
+            .collect()
+    };
+    assert_eq!(
+        target("t"),
+        vec!["text"],
+        "t is used where the prior used `text` (moved one place): {transfers:?}"
+    );
+    assert!(
+        !target("e").contains(&"text"),
+        "the new first parameter must not inherit `text` by position: {transfers:?}"
+    );
+    assert_eq!(target("n"), vec!["useCache"], "{transfers:?}");
+    assert!(
+        transfers.iter().all(|(_, n)| n != "wantTokens"),
+        "no fresh binding plays the removed flag's role: {transfers:?}"
+    );
+}
+
+/// The control: an UNSHIFTED signature keeps every positional pair (the
+/// body agrees with position, so nothing is vetoed).
+#[test]
+fn positional_parameter_pairs_stand_when_the_body_agrees() {
+    let prior = PRIOR_SHIFTED_PARAMS;
+    let fresh = FRESH_SHIFTED_PARAMS
+        .replace(
+            "function lexMarkdown(e, t, n)",
+            "function lexMarkdown(t, e, n)",
+        )
+        .replace("if (e === null)", "if (!e)");
+    let transfers = close_transfers(prior, &fresh);
+    assert!(
+        transfers.contains(&("t".into(), "text".into())),
+        "{transfers:?}"
+    );
+    assert!(
+        transfers.contains(&("e".into(), "wantTokens".into())),
+        "{transfers:?}"
+    );
+    assert!(
+        transfers.contains(&("n".into(), "useCache".into())),
+        "{transfers:?}"
+    );
+}

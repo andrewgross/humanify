@@ -636,6 +636,126 @@ fn type_unique_pairs<'u, 'v>(
     pairs
 }
 
+/// The container statement types [`corresponding_blocks`] can descend.
+const CONTAINER_TYPES: [&str; 10] = [
+    "IfStatement",
+    "TryStatement",
+    "SwitchStatement",
+    "ForStatement",
+    "ForOfStatement",
+    "ForInStatement",
+    "WhileStatement",
+    "DoWhileStatement",
+    "BlockStatement",
+    "LabeledStatement",
+];
+
+/// A remainder group larger than this on either side is not paired by
+/// content (the similarity matrix is quadratic; a body with hundreds of
+/// edited same-type containers is a rewrite, not an edit).
+const MAX_SIMILAR_GROUP: usize = 64;
+
+/// exp225: unaligned container remainders of one node type that are NOT
+/// type-unique (two edited `if`s, say), paired by CONTENT. Each candidate
+/// pair's similarity is the Jaccard overlap of the two containers'
+/// slot-blind, literal-preserving shingles ([`content_shingles`]'s form,
+/// uncapped). A pair stands only when it clears
+/// [`SHINGLE_SIMILARITY_FLOOR`], each side is the other's STRICT best (a
+/// tie is a coin flip and abstains), and it does not cross the source
+/// order of a better pair already taken. Type-unique groups keep
+/// [`type_unique_pairs`]' rule, so this only ADDS descents; a wrong pair
+/// still needs identical-modulo-names inner statements to carry anything.
+fn similar_container_pairs<'u, 'v>(
+    rest_prior: &[&'u HashedUnit<'v>],
+    rest_next: &[&'u HashedUnit<'v>],
+    prior_tables: &SymbolTables,
+    next_tables: &SymbolTables,
+) -> Vec<(&'u HashedUnit<'v>, &'u HashedUnit<'v>)> {
+    let prior_by_type = indices_by_type(rest_prior);
+    let next_by_type = indices_by_type(rest_next);
+    let mut out = Vec::new();
+    for (ty, prior_list) in prior_by_type {
+        if !CONTAINER_TYPES.contains(&ty) {
+            continue;
+        }
+        let Some((_, next_list)) = next_by_type.iter().find(|(t, _)| *t == ty) else {
+            continue;
+        };
+        let type_unique = prior_list.len() == 1 && next_list.len() == 1;
+        if type_unique
+            || prior_list.len() > MAX_SIMILAR_GROUP
+            || next_list.len() > MAX_SIMILAR_GROUP
+        {
+            continue;
+        }
+        let shingles = |unit: &HashedUnit, tables: &SymbolTables| {
+            content_shingles_capped(tables, unit.value, usize::MAX)
+        };
+        let prior_sets: Vec<BTreeSet<String>> = prior_list
+            .iter()
+            .map(|&i| shingles(rest_prior[i], prior_tables))
+            .collect();
+        let next_sets: Vec<BTreeSet<String>> = next_list
+            .iter()
+            .map(|&j| shingles(rest_next[j], next_tables))
+            .collect();
+        let sims: Vec<Vec<f64>> = prior_sets
+            .iter()
+            .map(|p| next_sets.iter().map(|n| jaccard(p, n)).collect())
+            .collect();
+        for (pi, ni) in mutual_best_in_order(&sims) {
+            out.push((rest_prior[prior_list[pi]], rest_next[next_list[ni]]));
+        }
+    }
+    out
+}
+
+/// The (row, column) pairs of a similarity matrix that clear the floor,
+/// are each other's STRICT best, and keep source order — taken best
+/// first, a pair crossing an already-taken one is refused.
+fn mutual_best_in_order(sims: &[Vec<f64>]) -> Vec<(usize, usize)> {
+    let strict_best = |values: &mut dyn Iterator<Item = (usize, f64)>| -> Option<usize> {
+        let mut best: Option<(usize, f64)> = None;
+        let mut tied = false;
+        for (k, v) in values {
+            match best {
+                Some((_, b)) if v > b => {
+                    best = Some((k, v));
+                    tied = false;
+                }
+                Some((_, b)) if v == b => tied = true,
+                None => best = Some((k, v)),
+                _ => {}
+            }
+        }
+        best.filter(|_| !tied).map(|(k, _)| k)
+    };
+    let cols = sims.first().map_or(0, Vec::len);
+    let mut candidates: Vec<(usize, usize, f64)> = Vec::new();
+    for (i, row) in sims.iter().enumerate() {
+        let Some(j) = strict_best(&mut row.iter().copied().enumerate()) else {
+            continue;
+        };
+        let v = row[j];
+        if v < SHINGLE_SIMILARITY_FLOOR {
+            continue;
+        }
+        let col_best = strict_best(&mut (0..sims.len()).map(|r| (r, sims[r][j])));
+        if col_best == Some(i) && j < cols {
+            candidates.push((i, j, v));
+        }
+    }
+    candidates.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+    let mut taken: Vec<(usize, usize)> = Vec::new();
+    for (i, j, _) in candidates {
+        if taken.iter().all(|&(ti, tj)| (i < ti) == (j < tj)) {
+            taken.push((i, j));
+        }
+    }
+    taken.sort_unstable();
+    taken
+}
+
 /// Aligns two unit lists, then descends into unaligned container
 /// statements that pair unambiguously by node type (TS
 /// `collectAlignedPairs` :165) — an edit nested inside an if/try/loop/
@@ -668,7 +788,14 @@ fn collect_aligned_pairs<'v>(
     let rest_prior: Vec<&HashedUnit> = prior.iter().flatten().collect();
     let rest_next: Vec<&HashedUnit> = next.iter().flatten().collect();
 
-    for (prior_unit, next_unit) in type_unique_pairs(&rest_prior, &rest_next) {
+    let mut descend = type_unique_pairs(&rest_prior, &rest_next);
+    descend.extend(similar_container_pairs(
+        &rest_prior,
+        &rest_next,
+        prior_tables,
+        next_tables,
+    ));
+    for (prior_unit, next_unit) in descend {
         let block_pairs =
             corresponding_blocks(prior_unit.value, next_unit.value, prior_tables, next_tables);
         for (prior_block, next_block) in block_pairs {
@@ -1206,6 +1333,29 @@ pub fn compute_body_local_transfers(
         contents_agree(prior_content, prior.tables, fresh_content, fresh.tables)
     });
     for (entry, snap_eligible) in hint_entries.into_iter().zip(snaps) {
+        // exp225: a snap-eligible hint with no conflicting anchored
+        // evidence is carried mechanically — its use sites say which
+        // prior binding it is and its definition is unchanged, the two
+        // proofs the snap gate requires. Carried before any model answer,
+        // it also claims its name before a new binding of the same
+        // function can take it.
+        // Injective only: a prior name some OTHER binding's evidence also
+        // names (an anchored transfer, or a hint) is not this binding's to
+        // take — the aligned use sites were paired by a statement whose
+        // other slots already contradict it.
+        let prior_name = &entry.hint_prior_names[0];
+        let contested = evidence.iter().any(|other| {
+            other.binding != entry.binding
+                && (other.transfer_prior_names.contains(prior_name)
+                    || other.hint_prior_names.contains(prior_name))
+        });
+        if snap_eligible && entry.transfer_prior_names.is_empty() && !contested {
+            result.transfers.push(TransferPair {
+                old_name: entry.new_name.clone(),
+                new_name: entry.hint_prior_names[0].clone(),
+                binding: Some(entry.binding),
+            });
+        }
         result.hints.push(NameHint {
             new_name: entry.new_name.clone(),
             prior_name: entry.hint_prior_names[0].clone(),
@@ -1502,6 +1652,13 @@ fn contents_agree(
 /// yield one shingle of the whole stream, so tiny contents (`null`, a
 /// single literal) still compare.
 pub(crate) fn content_shingles(tables: &SymbolTables, content: &Value) -> BTreeSet<String> {
+    content_shingles_capped(tables, content, SHINGLE_CAP)
+}
+
+/// [`content_shingles`] with the set's size cap as a parameter (the
+/// container pairing reads whole containers: a prefix-capped set would
+/// compare only their first few statements).
+fn content_shingles_capped(tables: &SymbolTables, content: &Value, cap: usize) -> BTreeSet<String> {
     let form = &ALIGN_CONTENT;
     let mut tokenizer = Tokenizer::new(tables, form);
     tokenizer.serialize_value(content, None, "");
@@ -1517,7 +1674,7 @@ pub(crate) fn content_shingles(tables: &SymbolTables, content: &Value) -> BTreeS
     let mut shingles = BTreeSet::new();
     for window in shingle_windows(&tokens, SHINGLE_K) {
         shingles.insert(window.join("\u{0}"));
-        if shingles.len() >= SHINGLE_CAP {
+        if shingles.len() >= cap {
             break;
         }
     }

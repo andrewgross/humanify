@@ -335,10 +335,15 @@ fn descends_multiple_changed_containers() {
 }
 
 /// TS "does not pair changed same-type siblings (ambiguous
-/// correspondence)": TWO changed if-statements at the same level — pairing
-/// them by position would be a guess. Locals inside them must NOT transfer.
+/// correspondence)": TWO changed if-statements at the same level. The TS
+/// refused both (pairing by position would be a guess). Since exp225 they
+/// pair by CONTENT, not position: `.a`/`.k1` against `.b`/`.k2` tells each
+/// fresh sibling which prior one it is, so each declaration carries its
+/// own sibling's name and never the other's. The fully ambiguous case
+/// (identical contents) is
+/// `does_not_pair_same_type_siblings_content_cannot_tell_apart`.
 #[test]
-fn does_not_pair_changed_same_type_siblings() {
+fn pairs_changed_same_type_siblings_by_content_never_crossed() {
     with_fn_pair(
         r#"
       function pick(cfg, io) {
@@ -353,24 +358,121 @@ fn does_not_pair_changed_same_type_siblings() {
       }"#,
         r#"
       function pick(c, o) {
+        if (c.b) {
+          let y = o.box(c.b);
+          o.sendFast(y, c.k2);
+        }
         if (c.a) {
           let x = o.box(c.a);
           o.sendFast(x, c.k1);
         }
-        if (c.b) {
-          let y = o.box(c.b);
-          o.sendFast(y, c.k2);
+      }"#,
+        |prior, next| {
+            let transfers = transfer_map(&compute_body_local_transfers(prior, next));
+            assert_ne!(
+                transfers.get("x").map(String::as_str),
+                Some("betaBox"),
+                "a reordered sibling must never cross-pair, got {transfers:?}"
+            );
+            assert_ne!(
+                transfers.get("y").map(String::as_str),
+                Some("alphaBox"),
+                "a reordered sibling must never cross-pair, got {transfers:?}"
+            );
+        },
+    );
+}
+
+/// exp225: TWO edited if-statements at one level, each still telling
+/// which prior one it is by its content (different calls, different
+/// properties). The type-unique rule refused to descend either, so the
+/// unchanged declaration inside each lost its carried name and went back
+/// to the model — the 2.1.238 -> 2.1.239 walk's deploy-response local,
+/// renamed while its own statement was byte-identical. Content similarity
+/// pairs them; the declarations inside then align as usual.
+#[test]
+fn descends_same_type_siblings_that_content_tells_apart() {
+    with_fn_pair(
+        r#"
+      function publish(cfg, io) {
+        if (cfg.inline) {
+          let deployResult = io.deploy(cfg.files, cfg.slug);
+          if (!deployResult.ok) return io.fail(deployResult.reason);
+          io.note("deployed", deployResult.status);
+        }
+        if (cfg.upload) {
+          let uploadedSet = new Set();
+          for (let file of cfg.files) uploadedSet.add(file.sha);
+          io.check(uploadedSet, cfg.chunks);
+        }
+      }"#,
+        r#"
+      function publish(a, b) {
+        let x;
+        if (a.inline) {
+          let d = b.deploy(a.files, a.slug);
+          if (!d.ok) return b.fail(d.reason);
+          b.note("deployed", d.status);
+          x = b.embeds(d.data);
+        }
+        if (a.upload) {
+          let s = new Set();
+          for (let file of a.files) s.add(file.sha);
+          b.check(s, a.chunks);
+          b.log("uploaded");
+        }
+        return x;
+      }"#,
+        |prior, next| {
+            let transfers = transfer_map(&compute_body_local_transfers(prior, next));
+            assert_eq!(
+                transfers.get("d").map(String::as_str),
+                Some("deployResult"),
+                "first if: {transfers:?}"
+            );
+            assert_eq!(
+                transfers.get("s").map(String::as_str),
+                Some("uploadedSet"),
+                "second if: {transfers:?}"
+            );
+            assert!(!transfers.contains_key("x"), "x is new: {transfers:?}");
+        },
+    );
+}
+
+/// The precision half: two edited siblings whose contents are the SAME
+/// modulo names — content cannot say which is which, so nothing inside
+/// either may transfer (a coin flip presented as a match).
+#[test]
+fn does_not_pair_same_type_siblings_content_cannot_tell_apart() {
+    with_fn_pair(
+        r#"
+      function pick(cfg, io) {
+        if (cfg.on) {
+          let alphaBox = io.box(cfg.v);
+          io.send(alphaBox, cfg.k);
+        }
+        if (cfg.on) {
+          let betaBox = io.box(cfg.v);
+          io.send(betaBox, cfg.k);
+        }
+      }"#,
+        r#"
+      function pick(c, o) {
+        if (c.on) {
+          let x = o.box(c.v);
+          o.sendFast(x, c.k);
+        }
+        if (c.on) {
+          let y = o.box(c.v);
+          o.sendFast(y, c.k);
         }
       }"#,
         |prior, next| {
             let transfers = transfer_map(&compute_body_local_transfers(prior, next));
             assert!(
-                !transfers.contains_key("x"),
-                "ambiguous sibling must not transfer, got {transfers:?}"
-            );
-            assert!(
-                !transfers.contains_key("y"),
-                "ambiguous sibling must not transfer, got {transfers:?}"
+                !transfers.contains_key("x") && !transfers.contains_key("y"),
+                "indistinguishable siblings must not transfer, got {transfers:?}"
             );
         },
     );
@@ -484,6 +586,48 @@ fn marks_a_hint_snap_eligible_when_the_definition_is_unchanged() {
             );
         },
     );
+}
+
+/// exp225: a snap-eligible hint is carried BEFORE the model is asked.
+/// The use sites (aligned, identical statements) say which prior binding
+/// this is, and its definition is rename-identical — the two pieces of
+/// evidence the snap was designed to require. On the 2.1.238 -> 2.1.239
+/// walk the model kept 1,008 of 1,029 such hints anyway; the 21 it lost
+/// were mostly names another binding had taken first (`fooVal`), which a
+/// mechanical carry claims before any model answer lands.
+#[test]
+fn carries_a_snap_eligible_hint_mechanically() {
+    with_fn_pair(
+        r#"
+      function handle(input) {
+        let caughtError = decode(input);
+        let scratch = decode(input);
+        report(caughtError);
+      }"#,
+        r#"
+      function handle(a) {
+        let x = decode(a);
+        report(x);
+      }"#,
+        |prior, next| {
+            let transfers = transfer_map(&compute_body_local_transfers(prior, next));
+            assert_eq!(
+                transfers.get("x").map(String::as_str),
+                Some("caughtError"),
+                "a snap-eligible hint is a transfer, got {transfers:?}"
+            );
+        },
+    );
+}
+
+/// The control: a plain (non-snap) hint stays a hint — its definition
+/// changed, so the model decides.
+#[test]
+fn does_not_carry_a_hint_whose_definition_changed() {
+    with_fn_pair(PRIOR_HINT, NEXT_HINT, |prior, next| {
+        let transfers = transfer_map(&compute_body_local_transfers(prior, next));
+        assert!(!transfers.contains_key("b"), "{transfers:?}");
+    });
 }
 
 /// TS "does NOT mark snap-eligible when the definition materially changed":
@@ -660,6 +804,41 @@ fn frozen_shape(case: &serde_json::Value) -> AlignmentShape {
         case["alignedStatements"].as_u64().expect("aligned") as usize,
         case["totalNewStatements"].as_u64().expect("total") as usize,
     )
+}
+
+/// The frozen TS cases a later, measured change deliberately moved off the
+/// TS's output, with the shape that change produces. exp225: the two
+/// edited `if` siblings of `same_type_siblings` differ in content
+/// (`.a`/`.k1` against `.b`/`.k2`), so content similarity pairs each with
+/// its own prior sibling and the declarations inside carry their names;
+/// the TS refused every non-type-unique container. `snap_eligible`: see
+/// the arm.
+fn superseded_parity_case(label: &str) -> Option<AlignmentShape> {
+    match label {
+        "same_type_siblings" => Some((
+            vec![
+                ("x".into(), "alphaBox".into()),
+                ("y".into(), "betaBox".into()),
+            ],
+            vec![
+                ("x".into(), "alphaBox".into(), true),
+                ("o".into(), "io".into(), false),
+                ("c".into(), "cfg".into(), false),
+                ("y".into(), "betaBox".into(), true),
+            ],
+            2,
+            2,
+        )),
+        // exp225: a snap-eligible hint with uncontested evidence is
+        // carried mechanically (it stays in the hint list as well).
+        "snap_eligible" => Some((
+            vec![("x".into(), "caughtError".into())],
+            vec![("x".into(), "caughtError".into(), true)],
+            1,
+            2,
+        )),
+        _ => None,
+    }
 }
 
 #[test]
@@ -864,7 +1043,10 @@ fn parity_alignments_match_the_frozen_probe_exactly() {
         let case = &frozen[label];
         with_fn_pair(prior_code, next_code, |prior, next| {
             let got = alignment_shape(&compute_body_local_transfers(prior, next));
-            let want = frozen_shape(case);
+            let mut want = frozen_shape(case);
+            if let Some(superseded) = superseded_parity_case(label) {
+                want = superseded;
+            }
             assert_eq!(got.0, want.0, "{label}: transfers (ordered)");
             assert_eq!(got.1, want.1, "{label}: hints (ordered, with snap flags)");
             assert_eq!(got.2, want.2, "{label}: alignedStatements");

@@ -370,7 +370,12 @@ fn pair_row(
     let signature = if verdict == Corroboration::Uncorroborated {
         Vec::new()
     } else {
-        partial_transfer(prior_json, fresh_json)
+        vet_signature_by_body(
+            partial_transfer(prior_json, fresh_json),
+            &signature_params(prior_json),
+            &signature_params(fresh_json),
+            &alignment.hints,
+        )
     };
     let name_transfers: Vec<TransferPair> = if verdict == Corroboration::Uncorroborated {
         Vec::new()
@@ -457,17 +462,6 @@ fn partial_transfer(prior_row: &Value, fresh_row: &Value) -> Vec<(String, String
         }
     };
 
-    let params_of = |row: &Value| -> Vec<Value> {
-        // Method rows carry the function under `value` (oxc nests; babel
-        // has one node — the TS reads `node.params` directly, which is the
-        // method's params).
-        row.get("value")
-            .and_then(|v| v.get("params"))
-            .or_else(|| row.get("params"))
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default()
-    };
     let name_of = |row: &Value| -> Option<String> {
         if !matches!(row_kind(row), "FunctionDeclaration" | "FunctionExpression") {
             return None;
@@ -487,39 +481,110 @@ fn partial_transfer(prior_row: &Value, fresh_row: &Value) -> Vec<(String, String
 
     // Parameter i to parameter i (TS :1314-1324), unwrapping the three
     // simple binding forms (`getParamIdentifier` :1272).
-    let param_identifier = |param: &Value| -> Option<String> {
-        match row_kind(param) {
-            "Identifier" => param
-                .get("name")
-                .and_then(Value::as_str)
-                .map(str::to_string),
-            "AssignmentPattern" => param
-                .get("left")
-                .filter(|l| row_kind(l) == "Identifier")
-                .and_then(|l| l.get("name"))
-                .and_then(Value::as_str)
-                .map(str::to_string),
-            "RestElement" => param
-                .get("argument")
-                .filter(|a| row_kind(a) == "Identifier")
-                .and_then(|a| a.get("name"))
-                .and_then(Value::as_str)
-                .map(str::to_string),
-            _ => None,
-        }
-    };
-    let prior_params = params_of(prior_row);
-    let fresh_params = params_of(fresh_row);
-    for i in 0..prior_params.len().min(fresh_params.len()) {
-        if let (Some(prior_name), Some(new_name)) = (
-            param_identifier(&prior_params[i]),
-            param_identifier(&fresh_params[i]),
-        ) && prior_name != new_name
+    let prior_params = signature_params(prior_row);
+    let fresh_params = signature_params(fresh_row);
+    for (prior_name, new_name) in prior_params.into_iter().zip(fresh_params) {
+        if let (Some(prior_name), Some(new_name)) = (prior_name, new_name)
+            && prior_name != new_name
         {
             record(new_name, prior_name);
         }
     }
     transfers
+}
+
+/// The simple parameter names of a row, in position order (`None` for a
+/// destructured parameter). Method rows carry the function under `value`
+/// (oxc nests; babel has one node — the TS reads `node.params` directly,
+/// which is the method's params).
+fn signature_params(row: &Value) -> Vec<Option<String>> {
+    row.get("value")
+        .and_then(|v| v.get("params"))
+        .or_else(|| row.get("params"))
+        .and_then(Value::as_array)
+        .map(|params| params.iter().map(param_identifier).collect())
+        .unwrap_or_default()
+}
+
+/// `getParamIdentifier` (TS :1272): the three simple binding forms.
+fn param_identifier(param: &Value) -> Option<String> {
+    let ident = match row_type(param) {
+        "Identifier" => Some(param),
+        "AssignmentPattern" => param.get("left"),
+        "RestElement" => param.get("argument"),
+        _ => None,
+    }?;
+    if row_type(ident) != "Identifier" {
+        return None;
+    }
+    ident
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+/// exp225: the positional signature pairs, checked against what the
+/// aligned body says. Position is a guess the moment a release inserts or
+/// removes a parameter — every later one shifts and inherits its
+/// neighbour's name. A fresh parameter's unanimous body hint is stronger
+/// evidence (an unchanged statement uses it exactly where the prior used
+/// that name), so:
+///
+/// - a positional pair whose fresh parameter the body hints to a DIFFERENT
+///   name is dropped, and so is one whose prior name the body hints to a
+///   different fresh parameter (that name has a better owner);
+/// - a fresh parameter left without a pair whose body hint names a prior
+///   PARAMETER nobody else takes inherits it (the parameter moved).
+///
+/// The function's own name pair is not a parameter and is kept as is.
+pub(crate) fn vet_signature_by_body(
+    signature: Vec<(String, String)>,
+    prior_params: &[Option<String>],
+    fresh_params: &[Option<String>],
+    hints: &[super::statement_align::NameHint],
+) -> Vec<(String, String)> {
+    let is_fresh_param = |n: &str| fresh_params.iter().flatten().any(|p| p == n);
+    let is_prior_param = |n: &str| prior_params.iter().flatten().any(|p| p == n);
+    // Unanimous per fresh parameter (a name hinted twice with different
+    // prior names says nothing).
+    let mut hint_of: Vec<(&str, Option<&str>)> = Vec::new();
+    for h in hints {
+        if !is_fresh_param(&h.new_name) {
+            continue;
+        }
+        match hint_of.iter_mut().find(|(n, _)| *n == h.new_name) {
+            Some((_, prior)) if *prior != Some(h.prior_name.as_str()) => *prior = None,
+            Some(_) => {}
+            None => hint_of.push((&h.new_name, Some(&h.prior_name))),
+        }
+    }
+    let hint = |n: &str| hint_of.iter().find(|(f, _)| *f == n).and_then(|(_, p)| *p);
+    let claimed_elsewhere = |fresh: &str, prior: &str| {
+        hint_of
+            .iter()
+            .any(|(f, p)| *f != fresh && *p == Some(prior))
+    };
+    let mut kept: Vec<(String, String)> = signature
+        .into_iter()
+        .filter(|(fresh, prior)| {
+            if !is_fresh_param(fresh) {
+                return true; // the function's own name
+            }
+            match hint(fresh) {
+                Some(h) => h == prior,
+                None => !claimed_elsewhere(fresh, prior),
+            }
+        })
+        .collect();
+    for fresh in fresh_params.iter().flatten() {
+        let Some(prior) = hint(fresh) else { continue };
+        let paired = kept.iter().any(|(f, _)| f == fresh);
+        let taken = kept.iter().any(|(_, p)| p == prior);
+        if !paired && !taken && prior != fresh && is_prior_param(prior) {
+            kept.push((fresh.clone(), prior.to_string()));
+        }
+    }
+    kept
 }
 
 /// TS `buildPriorNameHints` (:1237) + `accumulateHint` (:1209): per
