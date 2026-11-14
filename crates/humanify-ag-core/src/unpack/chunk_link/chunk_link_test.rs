@@ -675,3 +675,219 @@ fn a_lazy_chunks_side_effect_import_declares_no_empty_name() {
     let (text, _) = linked(&entry);
     assert_eq!(run(&text), "/\n");
 }
+
+/// The name of the init the linker wrote around the chunk whose code
+/// holds `marker` (`var <name>=__esm(()=>{…marker…})`).
+fn init_name_of(text: &str, marker: &str) -> String {
+    let at = text
+        .find(marker)
+        .unwrap_or_else(|| panic!("{marker} in:\n{text}"));
+    let open = text[..at].rfind("=__esm(()=>{").expect("an init");
+    let var = text[..open].rfind("var ").expect("the init's var") + "var ".len();
+    text[var..open].to_string()
+}
+
+/// The namespace object `import()` of the chunk with init `init` reads
+/// (`(init(), ns)`).
+fn ns_name_of(text: &str, init: &str) -> String {
+    let call = format!("({init}(), ");
+    let at = text
+        .find(&call)
+        .unwrap_or_else(|| panic!("{call} in:\n{text}"))
+        + call.len();
+    let end = text[at..].find(')').expect("the pair's end");
+    text[at..at + end].to_string()
+}
+
+/// A layout whose entry loads `chunk-x.js` lazily, after loading each of
+/// `before` lazily first; `before` holds (chunk name, chunk code).
+fn x_after(before: &[(&str, &str)]) -> String {
+    let mut loads = String::new();
+    let mut files = Vec::new();
+    for (name, code) in before {
+        loads.push_str(&format!("await import(\"/$bunfs/root/chunk-{name}.js\");"));
+        files.push((format!("chunk-{name}.js"), format!("{HEAD}{code}\n")));
+    }
+    let entry = format!(
+        "{HEAD}(async()=>{{{loads}let m=await import(\"/$bunfs/root/chunk-x.js\");console.log(m.xv())}})();\n"
+    );
+    files.insert(0, ("index.js".to_string(), entry));
+    files.push((
+        "chunk-x.js".to_string(),
+        format!(
+            "{HEAD}console.log(\"x ran\");var q=3;function w(){{return q}}export{{w as xv}};\n"
+        ),
+    ));
+    let files: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(n, t)| (n.as_str(), t.as_str()))
+        .collect();
+    linked(&layout(&files)).0
+}
+
+const NEW: (&str, &str) = ("new", "console.log(\"new ran\");var v=1;export{v};");
+const OTHER: (&str, &str) = ("other", "console.log(\"other ran\");var v=2;export{v};");
+
+#[test]
+fn a_chunks_init_and_namespace_keep_their_names_when_a_chunk_is_added_before_it() {
+    // exp221: the init and namespace names were the chunk's position in
+    // the written order (`__chunkInit<k>`), so one chunk added earlier
+    // renamed every later one, in every file that calls it.
+    let alone = x_after(&[]);
+    let after_one = x_after(&[NEW]);
+    let after_two = x_after(&[NEW, OTHER]);
+    assert_eq!(run(&alone), "x ran\n3\n");
+    assert_eq!(run(&after_two), "new ran\nother ran\nx ran\n3\n");
+    let init = init_name_of(&alone, "\"x ran\"");
+    assert_eq!(init, init_name_of(&after_one, "\"x ran\""), "{after_one}");
+    assert_eq!(init, init_name_of(&after_two, "\"x ran\""), "{after_two}");
+    let ns = ns_name_of(&alone, &init);
+    assert_eq!(ns, ns_name_of(&after_two, &init), "{after_two}");
+}
+
+#[test]
+fn the_linkers_init_and_namespace_names_are_left_to_the_naming_stage() {
+    // exp221: a name the naming stage treats as a bundler helper
+    // (`__word…`) is never renamed nor carried from the prior version;
+    // the linker's names must be ordinary (eligible) bindings, as Bun's
+    // own per-module inits were before the split.
+    use crate::rename::eligibility::{NeverRename, is_eligible};
+    let text = x_after(&[NEW]);
+    for marker in ["\"x ran\"", "\"new ran\""] {
+        let init = init_name_of(&text, marker);
+        let ns = ns_name_of(&text, &init);
+        for name in [&init, &ns] {
+            assert!(
+                is_eligible(name, NeverRename::default()),
+                "{name} in:\n{text}"
+            );
+        }
+    }
+}
+
+#[test]
+fn chunks_with_the_same_code_up_to_names_get_distinct_inits() {
+    // Two lazily loaded chunks that differ only in their minified names
+    // share a content key; the linked program still needs two inits, and
+    // which gets which does not depend on the written order alone.
+    let a = (
+        "a",
+        "var alphaOnly=[];alphaOnly.push(1);export{alphaOnly as v};",
+    );
+    let b = (
+        "b",
+        "var betaOnly=[];betaOnly.push(1);export{betaOnly as v};",
+    );
+    let text = x_after(&[a, b]);
+    assert_eq!(run(&text), "x ran\n3\n");
+    let ia = init_name_of(&text, "alphaOnly.push");
+    let ib = init_name_of(&text, "betaOnly.push");
+    assert_ne!(ia, ib, "{text}");
+}
+
+#[test]
+fn a_chunks_init_name_ignores_comments_and_minified_names() {
+    // Every chunk of a release carries the release in a header comment,
+    // and Bun re-minifies names per build: neither is a change to the
+    // module, so neither may rename its init.
+    let one = |header: &str, q: &str, w: &str| {
+        let entry = layout(&[
+            (
+                "index.js",
+                &format!(
+                    "{HEAD}import(\"/$bunfs/root/chunk-x.js\").then((m)=>console.log(m.xv()));\n"
+                ),
+            ),
+            (
+                "chunk-x.js",
+                &format!(
+                    "{HEAD}// Version: {header}\nconsole.log(\"x ran\");var {q}=3;function {w}(){{return {q}}}export{{{w} as xv}};\n"
+                ),
+            ),
+        ]);
+        let text = linked(&entry).0;
+        init_name_of(&text, "\"x ran\"")
+    };
+    assert_eq!(one("1.0.0", "q", "w"), one("1.0.1", "Kz", "Ab"));
+}
+
+#[test]
+fn a_chunks_init_name_ignores_its_import_and_export_lists() {
+    // A chunk lists a side-effect import of every chunk it needs and
+    // exports what other chunks use: both change when the chunks around
+    // it change, while its own code does not.
+    let one = |imports: &str, exports: &str| {
+        let entry = layout(&[
+            (
+                "index.js",
+                &format!(
+                    "{HEAD}import(\"/$bunfs/root/chunk-x.js\").then((m)=>console.log(m.xv()));\n"
+                ),
+            ),
+            (
+                "chunk-x.js",
+                &format!(
+                    "{HEAD}{imports}console.log(\"x ran\");var q=3;function w(){{return q}}{exports}\n"
+                ),
+            ),
+            ("chunk-s.js", &format!("{HEAD}var s=1;export{{s}};\n")),
+        ]);
+        let text = linked(&entry).0;
+        init_name_of(&text, "\"x ran\"")
+    };
+    assert_eq!(
+        one("", "export{w as xv};"),
+        one(
+            "import\"/$bunfs/root/chunk-s.js\";",
+            "export{w as xv,q as qq};"
+        )
+    );
+}
+
+#[test]
+fn chunks_with_no_code_are_named_by_what_they_load_not_where_they_are_written() {
+    // A chunk with no code of its own (its init only runs the inits of the
+    // chunks it imports) has the same content as every other such chunk;
+    // what tells two apart is what they load, never the written order.
+    let link_in = |first: &str, second: &str| {
+        let entry = layout(&[
+            (
+                "index.js",
+                &format!(
+                    "{HEAD}(async()=>{{await import(\"/$bunfs/root/chunk-{first}.js\");await import(\"/$bunfs/root/chunk-{second}.js\")}})();\n"
+                ),
+            ),
+            (
+                "chunk-ba.js",
+                &format!("{HEAD}import\"/$bunfs/root/chunk-pa.js\";\n"),
+            ),
+            (
+                "chunk-bb.js",
+                &format!("{HEAD}import\"/$bunfs/root/chunk-pb.js\";\n"),
+            ),
+            ("chunk-pa.js", &format!("{HEAD}console.log(\"pa ran\");\n")),
+            ("chunk-pb.js", &format!("{HEAD}console.log(\"pb ran\");\n")),
+        ]);
+        let text = linked(&entry).0;
+        assert_eq!(
+            run(&text),
+            format!("p{} ran\np{} ran\n", &first[1..], &second[1..])
+        );
+        // A barrel's init calls the init of the chunk it loads.
+        let pa = init_name_of(&text, "\"pa ran\"");
+        let pb = init_name_of(&text, "\"pb ran\"");
+        let barrel_of = |inner: &str| {
+            let call = format!("{inner}();");
+            let at = text
+                .find(&format!("=__esm(()=>{{{call}"))
+                .unwrap_or_else(|| panic!("{call} in:\n{text}"));
+            let var = text[..at].rfind("var ").unwrap() + "var ".len();
+            text[var..at].to_string()
+        };
+        (barrel_of(&pa), barrel_of(&pb))
+    };
+    let (a1, b1) = link_in("ba", "bb");
+    let (a2, b2) = link_in("bb", "ba");
+    assert_ne!(a1, b1);
+    assert_eq!((a1, b1), (a2, b2));
+}
