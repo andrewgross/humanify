@@ -484,7 +484,7 @@ fn pipeline_body(
         .as_ref()
         .map(|r| r.restoration_map())
         .unwrap_or_default();
-    let prior_library = prior_library_carry(
+    let prior_modules = prior_module_carry(
         &unpacked.claimed_module_regions,
         prior_path,
         config.split.ledger.as_deref(),
@@ -500,7 +500,7 @@ fn pipeline_body(
         mixed_files: &mixed_files,
         failed_calls: Default::default(),
         claimed_regions: &unpacked.claimed_module_regions,
-        prior_library: &prior_library,
+        prior_modules: &prior_modules,
         era_bridge: unpacked.era_bridge.as_ref(),
         restorations: &restorations,
     };
@@ -717,6 +717,17 @@ prior, {} calls ({} failed), {} named, {} retried as duplicates, {} disclosed re
                 m.named_on_disclosure.len(),
                 m.fallback.len(),
                 m.left.len(),
+            ));
+            // exp232: wrappers named after the prior module they are by
+            // content, before the plan.
+            let id = &m.identity;
+            renderer.message(&format!(
+                "Module identity: {} modules paired with a prior module by content, {} already wore \
+its init name, {} renamed to it, {} refused",
+                id.paired,
+                id.agreed,
+                id.carried.len(),
+                id.refused.len(),
             ));
         }
         let peak = &outcome.waves;
@@ -1439,9 +1450,10 @@ struct NamingRun<'a> {
     /// era's wrapper-body ordinals for the bundle's runtime file. Empty
     /// in every other mode.
     claimed_regions: &'a [humanify_ag_core::naming::module_names::ClaimedRegion],
-    /// The prior release's library placement by module content key
-    /// (exp211): empty without a prior or without claimed regions.
-    prior_library: &'a std::collections::BTreeMap<String, String>,
+    /// The prior release's modules from its split ledger: the library
+    /// placement by content key (exp211, only with claimed regions) and
+    /// the app modules' init names by content (exp232).
+    prior_modules: &'a humanify_ag_core::naming::module_names::PriorModuleCarry,
     /// The raw-to-era bridge (exp166): the file it names is formatted
     /// with statement provenance and handed both.
     era_bridge: Option<&'a humanify_ag_core::naming::module_names::EraBridge>,
@@ -1553,7 +1565,7 @@ impl NamingRun<'_> {
                 prior: self.prior,
                 library,
                 claimed_regions: self.claimed_regions,
-                prior_library: self.prior_library,
+                prior_modules: self.prior_modules,
                 era_bridge,
                 restorations: self.restorations,
                 statement_holds: &[],
@@ -1858,31 +1870,39 @@ fn naming_config(config: &Config, toolchain: &Toolchain) -> NamingConfig {
     }
 }
 
-/// The prior release's library placement by module content key (exp211,
-/// names mode): read from the prior's split ledger only when the unpack
-/// claimed regions — the one reader of it is the era's placement plan. An
-/// unreadable ledger carries nothing (the split stage reads the same file
-/// and reports it loudly); a ledger of another hash era carries nothing.
-fn prior_library_carry(
+/// What the prior's split ledger says about its modules, read once:
+/// the library placement by module content key (exp211, names mode — only
+/// when the unpack claimed regions, the era's placement plan being its one
+/// reader) and the app modules' init names by content (exp232, the module
+/// step's identity carry). An unreadable ledger carries nothing (the split
+/// stage reads the same file and reports it loudly); a ledger of another
+/// hash era carries nothing.
+fn prior_module_carry(
     regions: &[humanify_ag_core::naming::module_names::ClaimedRegion],
     prior_path: Option<&Path>,
     split_ledger: Option<&str>,
     renderer: &mut dyn ProgressRenderer,
-) -> std::collections::BTreeMap<String, String> {
-    if regions.is_empty() {
-        return Default::default();
-    }
+) -> humanify_ag_core::naming::module_names::PriorModuleCarry {
+    use humanify_ag_core::naming::module_names::{
+        PriorModuleCarry, init_identity, prior_library_packages,
+    };
     let Some(path) = crate::split_stage::prior_split_ledger_path(prior_path, split_ledger) else {
-        return Default::default();
+        return PriorModuleCarry::default();
     };
     let Ok(ledger) = humanify_ag_core::place::ledger::read_ledger(&path) else {
-        return Default::default();
+        return PriorModuleCarry::default();
     };
-    let carry = humanify_ag_core::naming::module_names::prior_library_packages(&ledger);
-    renderer.message(&format!(
-        "Library placement: {} prior vendor module(s) carry their package by content",
-        carry.len()
-    ));
+    let mut carry = PriorModuleCarry {
+        inits: init_identity::prior_module_inits(&ledger),
+        ..PriorModuleCarry::default()
+    };
+    if !regions.is_empty() {
+        carry.library = prior_library_packages(&ledger);
+        renderer.message(&format!(
+            "Library placement: {} prior vendor module(s) carry their package by content",
+            carry.library.len()
+        ));
+    }
     carry
 }
 

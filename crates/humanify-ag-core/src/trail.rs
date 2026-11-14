@@ -65,6 +65,10 @@ pub enum Tier {
     /// the package's source declares, never asked of the model, never a
     /// guess — absent slots keep whatever named them.
     Restoration,
+    /// A lazy-init wrapper given the init name of the prior module it is
+    /// by content (`naming::module_names::init_identity`, exp232): the
+    /// prior's own name, before the module step plans its asks.
+    ModuleIdentity,
 }
 
 impl Tier {
@@ -95,6 +99,7 @@ impl Tier {
             Tier::LibraryImport => "library-import",
             Tier::ModuleNaming => "module-naming",
             Tier::Restoration => "restoration",
+            Tier::ModuleIdentity => "module-identity",
         }
     }
 }

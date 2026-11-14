@@ -61,6 +61,7 @@
 
 pub mod barrels;
 pub mod evidence;
+pub mod init_identity;
 
 use std::collections::{HashMap, HashSet};
 
@@ -584,6 +585,20 @@ pub struct ModulePlan {
     helpers: HashSet<BindingId>,
     /// Modules whose wrapper the prior-version transfer already named.
     carried: usize,
+    /// What the init-identity carry did before the plan (exp232).
+    identity: init_identity::InitIdentityReport,
+}
+
+/// What the prior release's split ledger says about its modules, read
+/// once by the caller and handed to the naming era.
+#[derive(Clone, Debug, Default)]
+pub struct PriorModuleCarry {
+    /// The library placement by module content key (exp211,
+    /// [`prior_library_packages`]); empty outside names mode.
+    pub library: std::collections::BTreeMap<String, String>,
+    /// The prior's modules' content and init names (exp232,
+    /// [`init_identity::prior_module_inits`]).
+    pub inits: Vec<init_identity::PriorModuleInit>,
 }
 
 /// What the step did, for the run's record.
@@ -597,6 +612,9 @@ pub struct ModuleNamingReport {
     pub barrels: usize,
     /// Modules whose wrapper the transfer carried (never re-asked).
     pub carried: usize,
+    /// The init-identity carry (exp232): wrappers named after the prior
+    /// module they are by content, before the plan.
+    pub identity: init_identity::InitIdentityReport,
     /// Provider calls, every round together.
     pub calls: usize,
     /// Calls that failed (every module in them fell back).
@@ -666,10 +684,11 @@ fn is_barrel(module: &FossilModule) -> bool {
 pub fn plan_module_naming(
     source: &ModuleSource<'_>,
     graph: &UnifiedGraph,
-    state: &RenameState,
+    state: &mut RenameState,
     occ: &Occurrences,
     helper_names: &HashSet<String>,
     binding_state: &mut [Lifecycle],
+    prior_inits: &[init_identity::PriorModuleInit],
 ) -> ModulePlan {
     let body = source.body;
     let spans: Vec<(u32, u32)> = body.iter().map(|s| span_of(s).unwrap_or((0, 0))).collect();
@@ -678,9 +697,13 @@ pub fn plan_module_naming(
     if !crate::place::method::markers_describe_bundle(&coverage) {
         return ModulePlan::default();
     }
-    // The hashes only feed the cross-version signature, which naming
-    // never reads.
-    let hashes = vec![String::new(); body.len()];
+    // The hashes feed the cross-version signature, which only the
+    // init-identity carry reads (and only with a prior).
+    let hashes = if prior_inits.is_empty() {
+        vec![String::new(); body.len()]
+    } else {
+        init_identity::body_hashes(body)
+    };
     let Ok(extract) = extract_fossil_modules(body, &hashes) else {
         return ModulePlan::default();
     };
@@ -699,12 +722,25 @@ pub fn plan_module_naming(
             .collect(),
         ..ModulePlan::default()
     };
+    plan.wrappers = extract
+        .modules
+        .iter()
+        .map(|module| {
+            wrapper_ident(&body[module.init_index], &module.init_name)
+                .and_then(span_of)
+                .and_then(|(start, _)| occ.binding_at(start))
+        })
+        .collect();
+    plan.identity = init_identity::carry_init_names(
+        graph,
+        state,
+        binding_state,
+        &extract.modules,
+        &plan.wrappers,
+        prior_inits,
+    );
     for (i, module) in extract.modules.iter().enumerate() {
-        let wrapper = wrapper_ident(&body[module.init_index], &module.init_name)
-            .and_then(span_of)
-            .and_then(|(start, _)| occ.binding_at(start));
-        plan.wrappers.push(wrapper);
-        let Some(row) = wrapper.and_then(|b| row_of.get(&b).copied()) else {
+        let Some(row) = plan.wrappers[i].and_then(|b| row_of.get(&b).copied()) else {
             continue;
         };
         if binding_state[row].is_pending() {
@@ -1194,6 +1230,7 @@ pub fn run_module_naming<P: NameProvider>(
         asked: plan.asked.len(),
         barrels: plan.barrels.len(),
         carried: plan.carried,
+        identity: plan.identity.clone(),
         ..ModuleNamingReport::default()
     };
     if plan.asked.is_empty() && plan.barrels.is_empty() {

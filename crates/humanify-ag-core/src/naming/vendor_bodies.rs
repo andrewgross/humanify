@@ -162,7 +162,7 @@ pub fn name_vendor_bodies<P: NameProvider>(
                 prior,
                 library: None,
                 claimed_regions: &[],
-                prior_library: &Default::default(),
+                prior_modules: &Default::default(),
                 era_bridge: None,
                 restorations: crate::naming::driver::no_restorations(),
                 statement_holds: &holds,

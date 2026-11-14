@@ -161,7 +161,7 @@ fn run(fresh: &str, prior: Option<&str>, provider: &ModuleProvider) -> NamingOut
             prior,
             library: None,
             claimed_regions: &[],
-            prior_library: &Default::default(),
+            prior_modules: &Default::default(),
             era_bridge: None,
             restorations: crate::naming::driver::no_restorations(),
             statement_holds: &[],
@@ -483,7 +483,7 @@ fn run_with_regions(
             prior,
             library: None,
             claimed_regions: regions,
-            prior_library: &Default::default(),
+            prior_modules: &Default::default(),
             era_bridge: None,
             restorations: crate::naming::driver::no_restorations(),
             statement_holds: &[],
@@ -510,7 +510,7 @@ fn run_with_restorations(
             prior,
             library: None,
             claimed_regions: regions,
-            prior_library: &Default::default(),
+            prior_modules: &Default::default(),
             era_bridge: None,
             restorations,
             statement_holds: &[],
@@ -712,7 +712,7 @@ fn run_bridged(
             prior: None,
             library: None,
             claimed_regions: regions,
-            prior_library: &Default::default(),
+            prior_modules: &Default::default(),
             era_bridge: Some(crate::naming::driver::EraBridgeInput { bridge, origins }),
             restorations: crate::naming::driver::no_restorations(),
             statement_holds: &[],
@@ -1217,4 +1217,239 @@ fn the_era_keeps_the_prior_s_package_for_a_family_twin_claim() {
         foreign.moved, fresh.moved,
         "a prior package of another family changes nothing"
     );
+}
+
+// exp232: an init's name follows its module. The prior's modules come from
+// its split ledger; here they are read off the prior text the same way the
+// split records them (statement hashes, the init's own name).
+fn prior_inits_of(prior: &str) -> crate::naming::module_names::PriorModuleCarry {
+    let body = era_body(prior);
+    let hashes = crate::naming::module_names::init_identity::body_hashes(&body);
+    let extract =
+        crate::twins::fossil::extract_fossil_modules(&body, &hashes).expect("recorded modules");
+    crate::naming::module_names::PriorModuleCarry {
+        inits: extract
+            .modules
+            .iter()
+            .map(
+                |m| crate::naming::module_names::init_identity::PriorModuleInit {
+                    hashes: m.hashes.clone(),
+                    init_name: m.init_name.clone(),
+                    app: true,
+                },
+            )
+            .collect(),
+        ..Default::default()
+    }
+}
+
+fn run_with_prior_modules(
+    fresh: &str,
+    prior: &str,
+    provider: &ModuleProvider,
+    prior_modules: &crate::naming::module_names::PriorModuleCarry,
+) -> NamingOutcome {
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(config().params);
+    run_naming(
+        &NamingInput {
+            fresh,
+            prior: Some(prior),
+            library: None,
+            claimed_regions: &[],
+            prior_modules,
+            era_bridge: None,
+            restorations: crate::naming::driver::no_restorations(),
+            statement_holds: &[],
+        },
+        &config(),
+        &provider.fake,
+        &mut log,
+    )
+    .expect("the stage runs")
+}
+
+/// Two recorded modules nothing else loads: a color module and a theme
+/// module.
+const TWO_MODULES: &str = "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n\
+function a1(x) {\n  return Math.round(x);\n}\n\
+var b1;\n\
+function c1(from, to, t) {\n  return a1(from + (to - from) * t) + \"spinner-frames\";\n}\n\
+var Gq = W(() => {\n  b1 = c1(0, 1, 0.5);\n});\n\
+function d1(y) {\n  return y + \"theme-name\";\n}\n\
+var e1;\n\
+var Jq = W(() => {\n  e1 = d1(2);\n});\n";
+
+/// [`TWO_MODULES`] with the color module's setup code rewritten, so its
+/// wrapper's body matches nothing in the prior; every other statement of
+/// the module is unchanged.
+const EDITED_SETUP_BUNDLE: &str = "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n\
+function a1(x) {\n  return Math.round(x);\n}\n\
+var b1;\n\
+function c1(from, to, t) {\n  return a1(from + (to - from) * t) + \"spinner-frames\";\n}\n\
+var Gq = W(() => {\n  try {\n    b1 = [c1(1, 2, 0.25), c1(3, 4, 0.75)].join(\",\");\n  } catch {\n    b1 = null;\n  }\n});\n\
+function d1(y) {\n  return y + \"theme-name\";\n}\n\
+var e1;\n\
+var Jq = W(() => {\n  e1 = d1(2);\n});\n";
+
+#[test]
+fn an_edited_modules_wrapper_keeps_its_prior_init_name_by_content() {
+    let prior = run(TWO_MODULES, None, &ModuleProvider::new(by_purpose))
+        .code
+        .expect("shipped");
+    assert!(prior.contains("var initColorUtils = __esm("), "{prior}");
+    let provider = ModuleProvider::new(|_| Some("other-name"));
+    let out = run_with_prior_modules(
+        EDITED_SETUP_BUNDLE,
+        &prior,
+        &provider,
+        &prior_inits_of(&prior),
+    );
+    let code = out.code.expect("shipped");
+    assert!(
+        code.contains("var initColorUtils = __esm("),
+        "the module's statements are the prior's color module: its name, not a new one\n{code}"
+    );
+    assert!(!code.contains("initOtherName"), "{code}");
+    assert_eq!(out.module_names.asked, 0, "nothing left to ask");
+    assert_eq!(
+        out.module_names.identity.carried,
+        vec![("Gq".to_string(), "initColorUtils".to_string())],
+        "named by its module's content, before the plan"
+    );
+}
+
+/// Three modules whose setup code has one shape (`v = f(n)`, every name
+/// masked), each with its own helper.
+const SAME_SETUP: &str = "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n\
+function a1(x) {\n  return x + \"modal-open\";\n}\n\
+var v1;\n\
+var Ga = W(() => {\n  v1 = a1(1);\n});\n\
+function b1(x) {\n  return x * 2 + \"picker-open\";\n}\n\
+var v2;\n\
+var Gb = W(() => {\n  v2 = b1(2);\n});\n\
+function c1(x) {\n  return [x, \"store-open\"];\n}\n\
+var v3;\n\
+var Gc = W(() => {\n  v3 = c1(3);\n});\n";
+
+/// [`SAME_SETUP`] in another order, plus a new module of the same setup
+/// shape first.
+const SAME_SETUP_MOVED: &str = "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n\
+function n1(x) {\n  return { x, kind: \"brand-new\" };\n}\n\
+var v0;\n\
+var Gn = W(() => {\n  v0 = n1(0);\n});\n\
+function c1(x) {\n  return [x, \"store-open\"];\n}\n\
+var v3;\n\
+var Gc = W(() => {\n  v3 = c1(3);\n});\n\
+function a1(x) {\n  return x + \"modal-open\";\n}\n\
+var v1;\n\
+var Ga = W(() => {\n  v1 = a1(1);\n});\n\
+function b1(x) {\n  return x * 2 + \"picker-open\";\n}\n\
+var v2;\n\
+var Gb = W(() => {\n  v2 = b1(2);\n});\n";
+
+fn setup_purpose(entry: &str) -> Option<&'static str> {
+    [
+        ("modal-open", "modal-state"),
+        ("picker-open", "picker-state"),
+        ("store-open", "store-state"),
+        ("brand-new", "brand-new-thing"),
+    ]
+    .iter()
+    .find(|(s, _)| entry.contains(s))
+    .map(|(_, n)| *n)
+}
+
+/// The prior carry with two modules' init names traded: what the ledger
+/// says when the transfer's pairing of setup bodies disagrees with the
+/// modules' content.
+fn traded(
+    mut carry: crate::naming::module_names::PriorModuleCarry,
+    a: &str,
+    b: &str,
+) -> crate::naming::module_names::PriorModuleCarry {
+    for m in &mut carry.inits {
+        if m.init_name == a {
+            m.init_name = b.to_string();
+        } else if m.init_name == b {
+            m.init_name = a.to_string();
+        }
+    }
+    carry
+}
+
+#[test]
+fn wrappers_wearing_each_others_names_take_their_own_modules_names() {
+    let prior = run(SAME_SETUP, None, &ModuleProvider::new(setup_purpose))
+        .code
+        .expect("shipped");
+    assert!(prior.contains("var initModalState = __esm("), "{prior}");
+    // The transfer pairs each setup body with its own prior; the ledger
+    // says the modal module's init was `initPickerState` and the
+    // picker module's `initModalState`. The module's content decides.
+    let carry = traded(prior_inits_of(&prior), "initModalState", "initPickerState");
+    let out = run_with_prior_modules(
+        SAME_SETUP_MOVED,
+        &prior,
+        &ModuleProvider::new(|_| Some("other-name")),
+        &carry,
+    );
+    assert_eq!(
+        out.module_names.identity.carried,
+        vec![
+            ("initPickerState".to_string(), "initModalState".to_string()),
+            ("initModalState".to_string(), "initPickerState".to_string()),
+        ],
+        "the cycle is broken at the first module (the modal one), so the \
+         picker module's rename lands first: {:?}",
+        out.module_names.identity
+    );
+    assert!(out.module_names.identity.refused.is_empty());
+    assert_eq!(out.module_names.identity.agreed, 1, "the store module");
+    let code = out.code.expect("shipped");
+    let modal = code.find("modal-open").expect("modal module");
+    let picker = code.find("picker-open").expect("picker module");
+    let wrapper_after = |at: usize| {
+        code[at..]
+            .lines()
+            .find_map(|l| {
+                l.strip_prefix("var ")
+                    .and_then(|l| l.strip_suffix(" = __esm(() => {"))
+            })
+            .expect("a wrapper")
+            .to_string()
+    };
+    assert_eq!(wrapper_after(modal), "initPickerState", "{code}");
+    assert_eq!(wrapper_after(picker), "initModalState", "{code}");
+}
+
+#[test]
+fn a_target_another_binding_holds_is_refused() {
+    let prior = run(SAME_SETUP, None, &ModuleProvider::new(setup_purpose))
+        .code
+        .expect("shipped");
+    // The ledger names the modal module's init after the store module's,
+    // whose own pairing keeps it: precision over recall, nothing moves.
+    let mut carry = prior_inits_of(&prior);
+    for m in &mut carry.inits {
+        if m.init_name == "initModalState" {
+            m.init_name = "initStoreState".to_string();
+        }
+    }
+    let out = run_with_prior_modules(
+        SAME_SETUP_MOVED,
+        &prior,
+        &ModuleProvider::new(|_| Some("other-name")),
+        &carry,
+    );
+    assert!(out.module_names.identity.carried.is_empty());
+    assert_eq!(
+        out.module_names.identity.refused,
+        vec![(
+            "initModalState".to_string(),
+            "initStoreState".to_string(),
+            "target-held".to_string()
+        )]
+    );
+    let code = out.code.expect("shipped");
+    assert!(code.contains("var initModalState = __esm("), "{code}");
 }
