@@ -69,6 +69,9 @@ pub struct FossilStats {
     /// Unmatched modules that kept the one prior file their carried
     /// statements lived in ([`kept_prior_file`], exp215).
     pub kept_files: usize,
+    /// Carried statements filed in their prior file although their module
+    /// went elsewhere ([`keep_carried_statements`], exp226).
+    pub kept_statements: usize,
     pub fresh_named_files: usize,
     /// Fresh files named by their module name (read back from the
     /// wrapper), not the mechanical stem.
@@ -817,7 +820,8 @@ definitions) — fix detection or run with --disable fossil-split"
     // prior module in two (an init-less group, glued to the next module,
     // got its own init), the matcher pairs the prior with one half, and
     // the other half — unchanged code — would otherwise move to a new file.
-    let prior_files = prior_hash_files(prior_modules);
+    let prior_layout = prior.filter(|p| p.hashes_current());
+    let prior_files = prior_hash_files(prior_layout, prior_modules);
     let mut kept_tiers = matched.pair_tiers.clone();
     let mut kept_files = 0;
     for (i, module) in extract.modules.iter().enumerate() {
@@ -871,6 +875,16 @@ definitions) — fix detection or run with --disable fossil-split"
     for &s in &extract.eager_zone {
         assignment[s] = FOSSIL_BOOTSTRAP_FILE.to_string();
     }
+    let kept_statements = keep_carried_statements(
+        &CarriedInput {
+            extract: &extract,
+            hashes,
+            prior_files: &prior_files,
+            final_file: &final_file,
+            library: options.library,
+        },
+        &mut assignment,
+    );
     if let Some(trail) = options.trail {
         record_fossil_trail(
             trail,
@@ -879,10 +893,11 @@ definitions) — fix detection or run with --disable fossil-split"
                 body,
                 spans,
                 hashes,
-                prior_modules,
+                prior_files: &prior_files,
                 matched: &kept_tiers,
                 library: options.library,
                 final_file: &final_file,
+                assignment: &assignment,
             },
         );
     }
@@ -907,6 +922,7 @@ definitions) — fix detection or run with --disable fossil-split"
             modules: extract.modules.len(),
             inherited_files: matched.matches.len(),
             kept_files,
+            kept_statements,
             fresh_named_files: fresh_named,
             module_named_files,
             eager_statements: extract.eager_zone.len(),
@@ -919,22 +935,53 @@ definitions) — fix detection or run with --disable fossil-split"
 /// The trail tier of a module placed by [`kept_prior_file`].
 const KEPT_BY_CONTENT: &str = "kept-by-content";
 
-/// Statement hash → `Some(the one prior module file holding it)`, or
-/// `None` when prior modules in different files hold it (no evidence).
-/// The ONE reading of "which prior file did this statement live in" in
-/// the marker split: the trail's `priorFile` and the keep step share it.
-fn prior_hash_files(prior_modules: &[FossilLedgerModule]) -> HashMap<&str, Option<&str>> {
+/// Statement hash → `Some(the one prior file holding it)`, or `None` when
+/// the prior held it in different files (no evidence). The ONE reading of
+/// "which prior file did this statement live in" in the marker split: the
+/// trail's `priorFile`, the keep-module step and the keep-statement step
+/// share it. It reads the prior's per-statement layout (`hashes` +
+/// `order`, the files the statements were actually written to, exp226).
+/// A ledger without that layout, or whose layout never wrote a file one
+/// of its modules names (the split always writes a module's init to the
+/// module's file, so only a hand-edited ledger reads so), falls back to
+/// its modules' files.
+fn prior_hash_files<'p>(
+    prior: Option<&'p StableSplitLedger>,
+    prior_modules: &'p [FossilLedgerModule],
+) -> HashMap<&'p str, Option<&'p str>> {
     let mut out: HashMap<&str, Option<&str>> = HashMap::new();
-    for m in prior_modules {
-        for h in &m.hashes {
-            match out.get(h.as_str()) {
-                None => {
-                    out.insert(h, Some(&m.file));
+    let mut note = |h: &'p str, file: &'p str| match out.get(h) {
+        None => {
+            out.insert(h, Some(file));
+        }
+        Some(Some(cur)) if *cur != file => {
+            out.insert(h, None);
+        }
+        Some(_) => {}
+    };
+    let layout = prior.and_then(|p| {
+        p.hashes
+            .as_deref()
+            .filter(|h| !h.is_empty() && h.len() == p.order.len())
+            .map(|h| (h, p.order.as_slice()))
+    });
+    let layout = layout.filter(|(_, order)| {
+        let written: HashSet<&str> = order.iter().map(String::as_str).collect();
+        prior_modules
+            .iter()
+            .all(|m| written.contains(m.file.as_str()))
+    });
+    match layout {
+        Some((hashes, order)) => {
+            for (h, file) in hashes.iter().zip(order) {
+                note(h, file);
+            }
+        }
+        None => {
+            for m in prior_modules {
+                for h in &m.hashes {
+                    note(h, &m.file);
                 }
-                Some(Some(cur)) if *cur != m.file => {
-                    out.insert(h, None);
-                }
-                Some(_) => {}
             }
         }
     }
@@ -966,24 +1013,76 @@ fn kept_prior_file<'p>(
     file.filter(|_| carried * 2 > module.statements.len())
 }
 
+/// What [`keep_carried_statements`] reads.
+struct CarriedInput<'a, 'p> {
+    extract: &'a FossilExtract,
+    hashes: &'a [String],
+    prior_files: &'a HashMap<&'p str, Option<&'p str>>,
+    final_file: &'a [String],
+    library: &'a [(usize, String)],
+}
+
+/// Is `file` a path a carried statement may be filed back into? Library
+/// paths belong to the library placement (the index decides them), and
+/// the entry file to the eager zone.
+fn app_module_file(file: &str) -> bool {
+    !file.starts_with("vendor/") && file != FOSSIL_BOOTSTRAP_FILE
+}
+
+/// Every carried statement — a hash the prior held in exactly ONE file —
+/// goes back to that file when its module went to another (exp226). The
+/// markers cut a module at its init, so an init-less run of declarations
+/// is glued to whichever module the bundler emits next; when the bundler
+/// emits another module in between, or a new init appears, the run joins
+/// a different module and would change file although no statement in it
+/// changed. The module's own init stays with the module, as do library
+/// modules and statements whose prior file was a library path or the
+/// entry. Returns how many statements were refiled.
+fn keep_carried_statements(input: &CarriedInput, assignment: &mut [String]) -> usize {
+    let mut kept = 0;
+    for (i, module) in input.extract.modules.iter().enumerate() {
+        let file = input.final_file[i].as_str();
+        if !app_module_file(file) || input.library.iter().any(|&(lib, _)| lib == i) {
+            continue;
+        }
+        for &s in &module.statements {
+            if s == module.init_index {
+                continue;
+            }
+            let Some(Some(prior)) = input.prior_files.get(input.hashes[s].as_str()) else {
+                continue;
+            };
+            if *prior != file && app_module_file(prior) {
+                assignment[s] = prior.to_string();
+                kept += 1;
+            }
+        }
+    }
+    kept
+}
+
+/// The trail tier of a statement placed by [`keep_carried_statements`].
+const KEPT_STATEMENT: &str = "fossil:kept-statement";
+
 struct FossilTrailInput<'a> {
     extract: &'a FossilExtract,
     body: &'a [Value],
     spans: &'a [(u32, u32)],
     hashes: &'a [String],
-    prior_modules: &'a [FossilLedgerModule],
+    prior_files: &'a HashMap<&'a str, Option<&'a str>>,
     matched: &'a HashMap<usize, &'static str>,
     /// The names mode's pre-filled modules (exp156): they record their
     /// own tier so the trail is the one record of what the index moved.
     library: &'a [(usize, String)],
     final_file: &'a [String],
+    /// The per-statement files, kept statements included.
+    assignment: &'a [String],
 }
 
 /// `recordFossilTrail`: every wrapper statement into the placement trail.
 /// `priorFile` is hash-keyed: the ONE prior module file holding this
 /// statement's hash (ambiguous = no evidence).
 fn record_fossil_trail(trail: &mut PlacementTrail, input: &FossilTrailInput) {
-    let prior_hash_file = prior_hash_files(input.prior_modules);
     for (i, module) in input.extract.modules.iter().enumerate() {
         let placed_by = if input.library.iter().any(|&(lib, _)| lib == i) {
             "library-index".to_string()
@@ -994,7 +1093,8 @@ fn record_fossil_trail(trail: &mut PlacementTrail, input: &FossilTrailInput) {
             }
         };
         for &s in &module.statements {
-            let prior_file = prior_hash_file
+            let prior_file = input
+                .prior_files
                 .get(input.hashes[s].as_str())
                 .copied()
                 .flatten()
@@ -1004,8 +1104,12 @@ fn record_fossil_trail(trail: &mut PlacementTrail, input: &FossilTrailInput) {
                 index: s,
                 span: Some(input.spans[s]),
                 names: declared_names(&input.body[s]),
-                placed_by: placed_by.clone(),
-                file: input.final_file[i].clone(),
+                placed_by: if input.assignment[s] == input.final_file[i] {
+                    placed_by.clone()
+                } else {
+                    KEPT_STATEMENT.to_string()
+                },
+                file: input.assignment[s].clone(),
                 prior_file,
                 prior_file_from: from,
                 ..TrailEntry::default()

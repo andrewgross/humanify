@@ -121,12 +121,13 @@ pub fn assign_regime(
             )?;
             let s = &assigned.stats;
             summary = format!(
-                "{} modules ({} inherited, {} kept by content, {} fresh-named, {} module-named), {} eager",
+                "{} modules ({} inherited, {} kept by content, {} fresh-named, {} module-named), {} statements kept in their prior file, {} eager",
                 s.modules,
                 s.inherited_files,
                 s.kept_files,
                 s.fresh_named_files,
                 s.module_named_files,
+                s.kept_statements,
                 s.eager_statements
             );
             // The next hop's match targets (tokens included) — diffable

@@ -731,3 +731,71 @@ fn an_unchanged_module_split_out_of_its_prior_module_keeps_the_file_in_the_runna
     assert_eq!(file_holding(&v2, "function groupQuery"), line_file);
     assert!(v2.summary.contains("1 kept by content"), "{}", v2.summary);
 }
+
+// ---- an unchanged run glued to another module keeps its file through the
+// ---- runnable emit (exp226)
+
+/// v1: two init-less helpers are glued to the image module; the limits
+/// module comes later. v2: the bundler emits the limits module between
+/// the helpers and the image module, so the markers glue the helpers to
+/// it. No statement changes.
+fn glued_run_bundle(limits_first: bool) -> String {
+    let helpers = "  function mimeOf(bytes) { return bytes[0] === 137 ? \"png\" : \"jpeg\"; }\n\
+                   \x20 function dimensionsOf(bytes) { return { w: bytes[16], h: bytes[20] }; }\n";
+    let limits = "  function limitTiles(n) { return n * 4; }\n\
+                  \x20 var limitMax;\n\
+                  \x20 var initLimits = __esm(() => { limitMax = limitTiles(8); });\n";
+    let image = "  function resizeImage(img) { return mimeOf(img) + dimensionsOf(img).w + limitMax; }\n\
+                 \x20 var resizeState;\n\
+                 \x20 var initResize = __esm(() => { initLimits(); resizeState = resizeImage([137]); });\n";
+    let mut decls = String::from(LAZY_HELPER);
+    if limits_first {
+        decls.push_str(helpers);
+        decls.push_str(limits);
+        decls.push_str(image);
+    } else {
+        decls.push_str(limits);
+        decls.push_str("  function padTiles() { return 1; }\n");
+        decls.push_str("  var initPad = __esm(() => { initLimits(); padTiles(); });\n");
+        decls.push_str(helpers);
+        decls.push_str(image);
+    }
+    if limits_first {
+        decls.push_str("  function padTiles() { return 1; }\n");
+        decls.push_str("  var initPad = __esm(() => { initLimits(); padTiles(); });\n");
+    }
+    for i in 0..30 {
+        decls.push_str(&format!(
+            "  function read{i:02}() {{ return value{i:02} + {i}; }}\n\
+             \x20 var value{i:02};\n\
+             \x20 var init{i:02} = __esm(() => {{ initResize(); value{i:02} = readConfig({i}); }});\n"
+        ));
+    }
+    format!("(function () {{\n{decls}  init00();\n}})();\n")
+}
+
+#[test]
+fn an_unchanged_run_glued_to_another_module_keeps_its_file_in_the_runnable_tree() {
+    let v1 = stable_split(&glued_run_bundle(false), offered_options()).expect("v1 splits");
+    assert_eq!(v1.method.regime, Regime::Fossil);
+    let prior = ledger_of(&v1);
+    let image_file = file_holding(&v1, "function resizeImage").to_string();
+    let limits_file = file_holding(&v1, "function limitTiles").to_string();
+    assert_ne!(image_file, limits_file);
+    assert_eq!(file_holding(&v1, "function mimeOf"), image_file);
+
+    let v2 = stable_split(
+        &glued_run_bundle(true),
+        SplitOptions {
+            prior: Some(&prior),
+            ..offered_options()
+        },
+    )
+    .expect("v2 splits");
+    assert!(v2.declined.is_none(), "{:?}", v2.declined);
+    assert!(v2.runnable.is_some(), "the runnable tree is written");
+    assert_eq!(file_holding(&v2, "function limitTiles"), limits_file);
+    assert_eq!(file_holding(&v2, "function resizeImage"), image_file);
+    assert_eq!(file_holding(&v2, "function mimeOf"), image_file);
+    assert_eq!(file_holding(&v2, "function dimensionsOf"), image_file);
+}
