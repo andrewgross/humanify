@@ -2,13 +2,13 @@
 //! selection (openai-compatible.ts `buildBatchUserPrompt`, mirrored by the
 //! dump's `renderRequestUserPrompt`).
 //!
-//! Prompts are an external contract with the disk cache (02 §7): a Rust
-//! leg replays a TS-populated cache only if every prompt is byte-identical,
-//! and the cache key alone cannot prove it (it sorts `usedNames`; the
-//! prompt shows the first 50 in SET ORDER — 07 §5). The TS-side prompt
-//! gate and probe vectors were retired with the other parity fixtures
-//! (2026-09-28): the builders are pinned by their unit tests and, end to
-//! end, by the e2e and eval runs.
+//! The rendered prompts ARE the disk cache's key (exp233,
+//! `humanify_ag_model::llm::cache_key_of`): a byte that changes here
+//! re-keys the request, and a request field that never reaches the text
+//! (most of `usedNames`: the prompt shows the first 50 in SET ORDER) never
+//! moves the key. The TS-side prompt gate and probe vectors were retired
+//! with the other parity fixtures (2026-09-28): the builders are pinned by
+//! their unit tests and, end to end, by the e2e and eval runs.
 //!
 //! JS semantics reproduced, each one a TS expression:
 //! - `used_names` is a Set in insertion order; the prompt shows

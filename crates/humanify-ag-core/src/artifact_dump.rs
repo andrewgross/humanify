@@ -43,7 +43,7 @@ use humanify_ag_model::dump::{
     PartitionFamily, PartitionMember, PartitionsFile, SpanKey, TransfersFile, VotesFile,
 };
 use humanify_ag_model::js::{JsObject, JsValue, cmp_utf16, stringify};
-use humanify_ag_model::llm::{BatchRenameRequest, CacheKeyParams, LlmCall, StrMap, cache_key_of};
+use humanify_ag_model::llm::{BatchRenameRequest, CacheKeyParams, LlmCall, StrMap};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -1274,7 +1274,7 @@ pub fn prompt_rows(
                 &call.request,
                 call.system_prompt.as_str(),
                 call.user_prompt.as_str(),
-                cache_key_of(&call.request, params),
+                call.cache_key(params),
             ),
         };
         let target = |sid: &str, start: u32, end: u32, text: &str| {

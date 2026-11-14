@@ -4,10 +4,14 @@
 //! run, with or without `--llm-cache`, and of the cache's disk side: shard
 //! layout, entry format, read, atomic write. The
 //! key is derived by `humanify_ag_model::llm::cache_key_of` (its owner; see
-//! that module for why it lives in the model crate).
+//! that module for why it lives in the model crate). Since exp233 it is
+//! the two prompts and the model parameters — what the endpoint receives —
+//! so the cached answer is the RAW answer to those bytes, and every check
+//! against the run's state (used names, scopes) happens in the caller,
+//! after the lookup. Key version 2 shares no key with version 1: a cache
+//! written before exp233 (or by the TS) is never hit, only refilled.
 //!
-//! Format (unchanged from the TS, 02 §7 — a Rust leg replays a TS-written
-//! cache and vice versa):
+//! Entry format (unchanged from the TS, 02 §7):
 //! - path: `<dir>/<key[0..2]>/<key[2..]>.json`;
 //! - entry: `JSON.stringify({v: 1, renames, finishReason, originalUsage})`
 //!   — undefined fields absent, compact, no trailing newline;
@@ -38,7 +42,7 @@ use std::sync::{Arc, Mutex};
 
 use humanify_ag_model::js::{JsObject, JsValue, stringify};
 use humanify_ag_model::llm::{
-    BatchRenameResponse, CacheKeyParams, LlmCall, LlmError, Renames, Usage, cache_key_of,
+    BatchRenameResponse, CacheKeyParams, LlmCall, LlmError, Renames, Usage,
 };
 
 use humanify_ag_model::call_ledger::{CallLedger, Served};
@@ -282,7 +286,7 @@ impl<P> AnswerMemo<P> {
     }
 
     pub fn key_of(&self, call: &LlmCall) -> String {
-        cache_key_of(&call.request, &self.params)
+        call.cache_key(&self.params)
     }
 
     fn gate_of(&self, key: &str) -> KeyGate {

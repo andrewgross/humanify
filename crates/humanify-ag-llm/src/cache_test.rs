@@ -71,7 +71,8 @@ impl AsyncProvider for &FakeProvider {
     }
 }
 
-/// `function request(code)`: identifiers ["a"], usedNames {"taken"}.
+/// `function request(code)`: identifiers ["a"], usedNames {"taken"}; the
+/// prompts the model sees show the code (as the real builders do).
 fn request(code: &str) -> LlmCall {
     LlmCall {
         request: BatchRenameRequest {
@@ -80,10 +81,48 @@ fn request(code: &str) -> LlmCall {
             used_names: vec!["taken".to_string()],
             ..BatchRenameRequest::default()
         },
-        system_prompt: String::new(),
-        user_prompt: String::new(),
+        system_prompt: "sys".to_string(),
+        user_prompt: format!("Rename a in:\n{code}"),
         site: humanify_ag_model::llm::CallSite::Naming,
     }
+}
+
+/// exp233: the key is what the model sees. Two calls whose prompts are
+/// byte-identical share one answer even when the request behind them
+/// differs in a field the prompts do not show (here the used-name set;
+/// the prompt shows at most its first 50 entries).
+#[test]
+fn keys_on_the_prompts_not_on_fields_the_model_cannot_see() {
+    let dir = tmp_dir("cache");
+    let inner = FakeProvider::new();
+    let provider = cached(&inner, &dir, "m1");
+    let first = request("function f() {}");
+    let mut second = first.clone();
+    second.request.used_names.push("carriedName".to_string());
+    second.request.callsites.push("not shown".to_string());
+    run(provider.suggest_all_names(&first)).unwrap();
+    run(provider.suggest_all_names(&second)).unwrap();
+    assert_eq!(inner.calls(), 1, "identical prompts are one question");
+    assert_eq!(provider.key_of(&first), provider.key_of(&second));
+}
+
+/// exp233: and the other direction: two calls with the SAME request but
+/// different prompt bytes (a different name profile, or the used names in
+/// another order, both change the rendered text) are two questions.
+#[test]
+fn a_different_prompt_on_the_same_request_is_a_different_key() {
+    let dir = tmp_dir("cache");
+    let inner = FakeProvider::new();
+    let provider = cached(&inner, &dir, "m1");
+    let first = request("function f() {}");
+    let mut user = first.clone();
+    user.user_prompt.push_str("\nAlready used: x");
+    let mut system = first.clone();
+    system.system_prompt = "another system prompt".to_string();
+    for call in [&first, &user, &system] {
+        run(provider.suggest_all_names(call)).unwrap();
+    }
+    assert_eq!(inner.calls(), 3);
 }
 
 fn params(model: &str) -> CacheKeyParams {

@@ -75,22 +75,16 @@ impl OpenAiClient {
 
     /// `buildRequestBody` → the wire bytes.
     pub fn request_body(&self, system_prompt: &str, user_prompt: &str) -> String {
-        let message = |role: &str, content: &str| {
-            let mut m = JsObject::new();
-            m.insert("role", JsValue::str(role));
-            m.insert("content", JsValue::str(content));
-            JsValue::Object(m)
-        };
         let mut format = JsObject::new();
-        format.insert("type", JsValue::str("json_object"));
+        format.insert(
+            "type",
+            JsValue::str(humanify_ag_model::llm::RESPONSE_FORMAT_TYPE),
+        );
         let mut body = JsObject::new();
         body.insert("model", JsValue::str(&self.config.model));
         body.insert(
             "messages",
-            JsValue::Array(vec![
-                message("system", system_prompt),
-                message("user", user_prompt),
-            ]),
+            humanify_ag_model::llm::wire_messages(system_prompt, user_prompt),
         );
         body.insert("response_format", JsValue::Object(format));
         body.insert("temperature", JsValue::Number(self.config.temperature));

@@ -969,7 +969,7 @@ fn sweep_call(
     let user_prompt = render_user_prompt(&request, state.name_profile());
     if log.mode() != RecordMode::Off {
         let dispatch = SweepDispatch {
-            cache_key: cache_key_of(&request, params),
+            cache_key: cache_key_of(&system_prompt, &user_prompt, params),
             system_prompt: system_prompt.clone(),
             user_prompt: user_prompt.clone(),
             targets: targets

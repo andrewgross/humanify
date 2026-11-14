@@ -1,5 +1,5 @@
 //! The LLM boundary's data (src/llm/types.ts) and the ONE owner of the disk
-//! cache key (`cacheKeyOf`, src/llm/cached-provider.ts).
+//! cache key ([`cache_key_of`]: what the endpoint receives, exp233).
 //!
 //! Why the key lives HERE and not in humanify-ag-llm: it is a pure function of
 //! these types (canonical JSON + sha256), and three crates need it —
@@ -283,91 +283,63 @@ impl CacheKeyParams {
     }
 }
 
-fn callee_to_js(callee: &CalleeSignature) -> JsValue {
-    let mut obj = JsObject::new();
-    obj.insert("name", JsValue::str(&callee.name));
-    obj.insert("params", JsValue::str_array(&callee.params));
-    obj.insert_opt("snippet", callee.snippet.as_deref().map(JsValue::str));
-    JsValue::Object(obj)
+/// The cache key's version. 1 keyed every request field (the TS
+/// `cacheKeyOf`), including fields the model never sees — above all the
+/// run's whole used-name set, of which a prompt shows at most the first
+/// 50 or 200 — so a change that carried one name re-keyed nearly every
+/// prompt and an A/B could not replay its control's answers (exp230: 2,535
+/// of 4,806 new keys had a byte-identical prompt). 2 keys exactly what the
+/// endpoint receives (exp233).
+pub const CACHE_KEY_VERSION: u32 = 2;
+
+/// The `response_format.type` every request sends: part of the wire body
+/// (the client's) and so of the key (this module's) — one constant.
+pub const RESPONSE_FORMAT_TYPE: &str = "json_object";
+
+/// The `messages` array every request sends — the system prompt, then the
+/// user prompt. One builder for the wire body (the client's) and the key
+/// (this module's), so the two cannot disagree on what the model sees.
+pub fn wire_messages(system_prompt: &str, user_prompt: &str) -> JsValue {
+    let message = |role: &str, content: &str| {
+        let mut m = JsObject::new();
+        m.insert("role", JsValue::str(role));
+        m.insert("content", JsValue::str(content));
+        JsValue::Object(m)
+    };
+    JsValue::Array(vec![
+        message("system", system_prompt),
+        message("user", user_prompt),
+    ])
 }
 
-fn failures_to_js(f: &RenameFailures) -> JsValue {
+/// The canonical JSON the key hashes: the cache key version, the model
+/// parameters, the response format and the two messages — everything the
+/// endpoint receives that can shape the answer, and nothing else
+/// (`canonicalJson({cacheVersion: 2, messages, params, responseFormat})`).
+/// Whatever the answer is checked against afterwards (used names,
+/// identifiers, scopes) is applied by the caller to the recorded RAW
+/// answer, after the lookup, so a replay re-runs that check on the live
+/// state.
+pub fn cache_key_material(
+    system_prompt: &str,
+    user_prompt: &str,
+    params: &CacheKeyParams,
+) -> String {
     let mut obj = JsObject::new();
-    obj.insert("duplicates", JsValue::str_array(&f.duplicates));
-    obj.insert("invalid", JsValue::str_array(&f.invalid));
-    obj.insert("missing", JsValue::str_array(&f.missing));
-    obj.insert("unchanged", JsValue::str_array(&f.unchanged));
-    if !f.stray_keys.is_empty() {
-        obj.insert("strayKeys", JsValue::str_array(&f.stray_keys));
-    }
-    JsValue::Object(obj)
-}
-
-impl BatchRenameRequest {
-    /// The request half of the key material: the TS literal's sixteen
-    /// fields plus the Rust-run `priorRejects`, `undefined` ones absent,
-    /// the Set sorted by UTF-16 units (`[...set].map(String).sort()`).
-    pub fn key_material(&self) -> JsValue {
-        let mut used = self.used_names.clone();
-        used.sort_by(|a, b| crate::js::cmp_utf16(a, b));
-        let opt_str = |s: &Option<String>| s.as_deref().map(JsValue::str);
-        let mut obj = JsObject::new();
-        obj.insert("code", JsValue::str(&self.code));
-        obj.insert("identifiers", JsValue::str_array(&self.identifiers));
-        obj.insert("usedNames", JsValue::str_array(&used));
-        obj.insert(
-            "calleeSignatures",
-            JsValue::Array(self.callee_signatures.iter().map(callee_to_js).collect()),
-        );
-        obj.insert("callsites", JsValue::str_array(&self.callsites));
-        obj.insert_opt(
-            "contextVars",
-            self.context_vars.as_deref().map(JsValue::str_array),
-        );
-        obj.insert_opt("priorVersionCode", opt_str(&self.prior_version_code));
-        obj.insert_opt(
-            "priorVersionNames",
-            self.prior_version_names.as_deref().map(JsValue::str_array),
-        );
-        obj.insert_opt(
-            "priorNameHints",
-            self.prior_name_hints.as_ref().map(StrMap::to_js),
-        );
-        obj.insert_opt(
-            "alreadyRenamed",
-            self.already_renamed.as_ref().map(StrMap::to_js),
-        );
-        obj.insert_opt("isRetry", self.is_retry.map(JsValue::Bool));
-        obj.insert_opt(
-            "previousAttempt",
-            self.previous_attempt.as_ref().map(StrMap::to_js),
-        );
-        obj.insert_opt("failures", self.failures.as_ref().map(failures_to_js));
-        obj.insert_opt(
-            "priorRejects",
-            self.prior_rejects.as_ref().map(PriorRejects::to_js),
-        );
-        obj.insert_opt("promptBody", opt_str(&self.prompt_body));
-        obj.insert_opt("userPrompt", opt_str(&self.user_prompt));
-        obj.insert_opt("systemPrompt", opt_str(&self.system_prompt));
-        JsValue::Object(obj)
-    }
-}
-
-/// The canonical JSON the key hashes: `canonicalJson({cacheVersion: 1,
-/// params, request})`.
-pub fn cache_key_material(request: &BatchRenameRequest, params: &CacheKeyParams) -> String {
-    let mut obj = JsObject::new();
-    obj.insert("cacheVersion", JsValue::Number(1.0));
+    obj.insert(
+        "cacheVersion",
+        JsValue::Number(f64::from(CACHE_KEY_VERSION)),
+    );
+    obj.insert("messages", wire_messages(system_prompt, user_prompt));
     obj.insert("params", params.to_js());
-    obj.insert("request", request.key_material());
+    obj.insert("responseFormat", JsValue::str(RESPONSE_FORMAT_TYPE));
     canonical(&JsValue::Object(obj))
 }
 
-/// The disk cache key (`cacheKeyOf`): lowercase-hex sha256 over the UTF-8
-/// bytes of [`cache_key_material`].
-pub fn cache_key_of(request: &BatchRenameRequest, params: &CacheKeyParams) -> String {
-    let digest = Sha256::digest(cache_key_material(request, params).as_bytes());
+/// The disk cache key: lowercase-hex sha256 over the UTF-8 bytes of
+/// [`cache_key_material`].
+pub fn cache_key_of(system_prompt: &str, user_prompt: &str, params: &CacheKeyParams) -> String {
+    let digest = Sha256::digest(cache_key_material(system_prompt, user_prompt, params).as_bytes());
     digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -549,7 +521,8 @@ impl std::error::Error for LlmError {}
 /// user prompt itself (`buildBatchUserPrompt`, prompts.ts — WP4.2); in the
 /// port rendering is core's (`core::naming::prompts`), a pure function done
 /// before dispatch, so the client only sends what it is given. The cache
-/// keys on `request`, never on the rendered text.
+/// keys on the rendered text (what the model sees), never on `request`
+/// (exp233); `request` is what the caller checks the answer against.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LlmCall {
     pub request: BatchRenameRequest,
@@ -560,6 +533,14 @@ pub struct LlmCall {
     /// part of the request, so it never reaches the cache key, the prompt
     /// or a decision.
     pub site: CallSite,
+}
+
+impl LlmCall {
+    /// This call's cache key: its two prompts under `params` — what the
+    /// endpoint receives ([`cache_key_of`]).
+    pub fn cache_key(&self, params: &CacheKeyParams) -> String {
+        cache_key_of(&self.system_prompt, &self.user_prompt, params)
+    }
 }
 
 /// The namer an LLM call belongs to — the `providerErrors` block's five

@@ -6,7 +6,7 @@ use super::{
     FolderSummary, NameKind, NameLevel, ProviderSplitNamer, ProviderTreeReviser, SplitNameRequest,
     SplitNamer, SplitNamerBudget, TreeReviser, split_namer_batches,
 };
-use humanify_ag_model::llm::{CacheKeyParams, LlmCall, LlmError, LlmErrorKind, cache_key_of};
+use humanify_ag_model::llm::{LlmCall, LlmError, LlmErrorKind};
 use humanify_ag_testkit::fake::{ShuffledFake, names, reply};
 use serde_json::Value;
 
@@ -50,23 +50,16 @@ fn request_of(v: &Value) -> SplitNameRequest {
     }
 }
 
-fn params(v: &Value) -> CacheKeyParams {
-    CacheKeyParams {
-        model: v["model"].as_str().unwrap().to_string(),
-        temperature: v["temperature"].as_f64(),
-        max_tokens: None,
-        reasoning_effort: v["reasoningEffort"].as_str().map(str::to_string),
-    }
-}
-
-fn check_request(call: &LlmCall, want: &Value, key: &str, params: &CacheKeyParams) {
+/// The request and both prompts, byte for byte. (The TS cache key the
+/// vectors also record is retired, exp233: the key is now what the model
+/// sees — these two prompts.)
+fn check_request(call: &LlmCall, want: &Value) {
     let req = &want["request"];
     assert_eq!(call.request.code, req["code"].as_str().unwrap());
     assert_eq!(call.user_prompt, req["userPrompt"].as_str().unwrap());
     assert_eq!(call.system_prompt, req["systemPrompt"].as_str().unwrap());
     assert_eq!(call.request.identifiers, strs(&req["identifiers"]));
     assert_eq!(call.request.used_names, strs(&req["usedNames"]));
-    assert_eq!(cache_key_of(&call.request, params), key);
 }
 
 /// The retaining test log (finding #65): the namer tests read the calls
@@ -80,7 +73,6 @@ fn split_log() -> crate::artifact_dump::DispatchLog {
 #[test]
 fn every_ts_namer_request_and_answer_mapping_agrees() {
     let doc: Value = serde_json::from_str(VECTORS).expect("vectors");
-    let params = params(&doc["params"]);
     let mut namers = 0;
     for row in doc["rows"].as_array().unwrap() {
         if row["kind"] != "namer" {
@@ -104,7 +96,7 @@ fn every_ts_namer_request_and_answer_mapping_agrees() {
         let result = namer.name(&requests);
         let calls = provider.calls();
         assert_eq!(calls.len(), 1, "one batch = one provider call");
-        check_request(&calls[0], row, row["cacheKey"].as_str().unwrap(), &params);
+        check_request(&calls[0], row);
         let want: Vec<Option<String>> = row["result"]
             .as_array()
             .unwrap()
@@ -120,7 +112,6 @@ fn every_ts_namer_request_and_answer_mapping_agrees() {
 #[test]
 fn the_ts_reviser_request_and_map_agree() {
     let doc: Value = serde_json::from_str(VECTORS).expect("vectors");
-    let params = params(&doc["params"]);
     let row = doc["rows"]
         .as_array()
         .unwrap()
@@ -143,12 +134,7 @@ fn the_ts_reviser_request_and_map_agree() {
     ]));
     let mut reviser = ProviderTreeReviser::retaining(&provider);
     let out = reviser.revise(&folders);
-    check_request(
-        &provider.calls()[0],
-        row,
-        row["cacheKey"].as_str().unwrap(),
-        &params,
-    );
+    check_request(&provider.calls()[0], row);
     assert_eq!(out, vec![("auth".to_string(), "authFlow".to_string())]);
 }
 
