@@ -654,6 +654,16 @@ pub(crate) fn is_export_registration(stmt: &Value) -> bool {
         })
 }
 
+/// The namespace an export registration registers into (`ns` in
+/// `register(ns, { … })`), or None for any other statement.
+pub(crate) fn export_registration_target(stmt: &Value) -> Option<&str> {
+    if !is_export_registration(stmt) {
+        return None;
+    }
+    let call = stmt.get("expression").map(unwrap_paren)?;
+    ident_name(call.get("arguments")?.as_array()?.first())
+}
+
 /// Can a lazily loaded module's top level hold this statement?
 fn is_lazy_module_shaped(stmt: &Value) -> bool {
     match stmt.get("type").and_then(Value::as_str).unwrap_or("") {

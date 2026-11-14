@@ -76,3 +76,57 @@ fn every_ts_case_matches_in_the_same_order_with_the_same_tiers() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+fn sig(hashes: &[&str], declared: &[&str]) -> FossilSignature {
+    let mut hashes: Vec<String> = hashes.iter().map(|h| h.to_string()).collect();
+    hashes.sort();
+    FossilSignature {
+        hashes,
+        imports: Vec::new(),
+        stem: None,
+        tokens: None,
+        declared: Some(declared.iter().map(|d| d.to_string()).collect()),
+    }
+}
+
+/// exp229: a fresh module whose code AND names are a prior module's is
+/// never handed to another prior module that shares most of its shape
+/// but none of its names. Two prior modules carry the fresh one's exact
+/// signature (so the unique-signature tier cannot pair it), and a third
+/// prior module, earlier in the bundle, holds that signature plus one
+/// statement; the overlap tier used to give the fresh module to the
+/// first prior module it scanned.
+#[test]
+fn a_fresh_module_is_not_paired_against_a_prior_module_its_names_disown() {
+    let shape = ["h1", "h2", "h3", "h4", "h5"];
+    let prior = vec![
+        sig(
+            &["h1", "h2", "h3", "h4", "h5", "x9"],
+            &["checkerA", "checkerB", "initChecker"],
+        ),
+        sig(
+            &shape,
+            &["provA", "provB", "provC", "provD", "initProvider"],
+        ),
+        sig(&shape, &["otherA", "initOther"]),
+    ];
+    let fresh = vec![
+        sig(
+            &shape,
+            &["provA", "provB", "provC", "provD", "initProviderX"],
+        ),
+        sig(
+            &["h6", "h7", "h8"],
+            &["checkerA", "newB", "newC", "newD", "initChecker"],
+        ),
+    ];
+    let out = match_fossil_modules(&prior, &fresh);
+    let prior_of = |fi: usize| out.matches.iter().find(|m| m.0 == fi).map(|m| m.1);
+    assert_eq!(
+        prior_of(0),
+        Some(1),
+        "{:?} {:?}",
+        out.matches,
+        out.pair_tiers
+    );
+}
