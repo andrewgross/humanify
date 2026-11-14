@@ -5,10 +5,12 @@
 use humanify_ag_model::js::{JsObject, JsValue, to_fixed};
 
 /// The scorer version every card this scorer writes carries
-/// (`scorerVersion`), equal to the KPI statement form's version
-/// (`hash::forms::KPI_STATEMENT`). A card without the field is version 1
-/// (the TS scorer).
-pub const SCORER_VERSION: u64 = humanify_ag_core::hash::forms::KPI_STATEMENT.version;
+/// (`scorerVersion`). A card without the field is version 1 (the TS
+/// scorer). Version 2 (exp196) was the KPI statement form over oxc
+/// (`hash::forms::KPI_STATEMENT`, still its form); version 3 (exp222)
+/// counts changed lines with the minimal diff (`difftool::LINE_DIFF_FLAGS`),
+/// so every line column of a long file reads lower than v2's.
+pub const SCORER_VERSION: u64 = 3;
 
 /// An object from `(key, value)` pairs, in order.
 pub fn obj(entries: Vec<(&str, JsValue)>) -> JsValue {

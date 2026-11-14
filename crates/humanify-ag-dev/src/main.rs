@@ -123,7 +123,7 @@ const VERBS: &[Verb] = &[
     Verb {
         words: &["eval", "rescore"],
         usage: "eval rescore <label> --cards <dir> --work <dir> [--results <dir>]",
-        proves: "what the current scorer (v2) reads off a label's recorded trees, every partition checked, old -> new per KPI",
+        proves: "what the current scorer (v3) reads off a label's recorded trees, every partition checked, old -> new per KPI",
         cannot_prove: "anything about the pipeline: no binary runs",
         lane: None,
         today: "",

@@ -3,8 +3,9 @@
 STATUS (2026-11-08, harness lane L5 / exp203): **the code that this README
 describes is gone from this folder.** The eval is `cargo dev eval ...`
 (`crates/humanify-ag-dev`), its committed data is under `dev/eval/`, and its
-KPI scorer is scorer version 2 (exp196: a new scorer version that re-scores the
-frozen trees; cards carry `scorerVersion`, a card without it is v1). What each
+KPI scorer is scorer version 3 (exp222: changed lines counted by the minimal
+diff; v2, exp196, was the new scorer that re-scores the frozen trees; cards
+carry `scorerVersion`, a card without it is v1). What each
 file named below became:
 
 | Here (deleted; tag `experiments-code-final` has it)                       | Now                                                                  |

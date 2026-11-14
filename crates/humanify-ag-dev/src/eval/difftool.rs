@@ -4,6 +4,12 @@
 //! every published "git lines" figure means. CRLF is normalised first (a
 //! CRLF copy would otherwise differ on every line). A `diff` that cannot
 //! run is an error, never "no change".
+//!
+//! The diff is the MINIMAL one (`--minimal`, scorer v3, exp222). GNU
+//! diff's default gives up looking for the shortest edit on long inputs
+//! and charges more lines than changed: 229,478 against 60,876 on one
+//! 365k-line file (exp220). The minimal edit script is exact — no
+//! heuristic, so no count depends on a file's length.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -13,6 +19,10 @@ use crate::proc::{Spawn, run};
 /// One `diff` may take this long (a vendored library is one line of
 /// ~100KB; a whole bundle ~30MB).
 const DIFF_DEADLINE: Duration = Duration::from_secs(600);
+
+/// The algorithm flags of every changed-line count in the harness, this
+/// counter's and `runners::tree_diff`'s: the minimal edit script.
+pub const LINE_DIFF_FLAGS: &[&str] = &["--minimal"];
 
 /// The counter. CRLF-normalised copies (only when an input has CRLF
 /// line ends) go to a private scratch dir (`humanify_ag_core::scratch`).
@@ -29,11 +39,10 @@ impl Differ {
         let scratch = std::cell::OnceCell::new();
         let (a, a_copy) = normalised(a, &scratch)?;
         let (b, b_copy) = normalised(b, &scratch)?;
-        let spawn = Spawn::new(
-            "diff",
-            &[&a.display().to_string(), &b.display().to_string()],
-            DIFF_DEADLINE,
-        );
+        let (a_text, b_text) = (a.display().to_string(), b.display().to_string());
+        let mut args: Vec<&str> = LINE_DIFF_FLAGS.to_vec();
+        args.extend([a_text.as_str(), b_text.as_str()]);
+        let spawn = Spawn::new("diff", &args, DIFF_DEADLINE);
         let done = run(&spawn);
         for copy in [a_copy, b_copy].into_iter().flatten() {
             let _ = std::fs::remove_file(copy);

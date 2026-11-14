@@ -36,3 +36,28 @@ fn crlf_is_normalised_and_a_missing_file_is_an_error() {
             .is_err()
     );
 }
+
+#[test]
+fn a_long_file_is_charged_its_minimal_edit_not_the_speed_heuristics() {
+    // GNU diff's default gives up looking for the shortest edit on long
+    // inputs (exp222: 229,478 lines against a minimal 60,876 on one
+    // 365k-line file). This pair reads 17,600 by default; the minimum is
+    // 14,000.
+    let d = dir("minimal");
+    let (a, b, minimal) = crate::eval::test_support::overcharged_pair(16_000);
+    assert_eq!(minimal, 14_000);
+    std::fs::write(d.join("a"), a).unwrap();
+    std::fs::write(d.join("b"), b).unwrap();
+    let differ = Differ;
+    assert_eq!(
+        differ.changed_lines(&d.join("a"), &d.join("b")).unwrap(),
+        minimal
+    );
+    assert_eq!(
+        differ
+            .changed_line_texts(&d.join("a"), &d.join("b"))
+            .unwrap()
+            .len(),
+        minimal
+    );
+}
