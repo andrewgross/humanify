@@ -4,8 +4,8 @@
 //! unchanged, so any text difference is naming noise; a new hash is real
 //! change), relocation and tree churn from the split ledgers, the on-disk
 //! diff of `src/` (layout) and of `vendor/`, and every KPI split by surface.
-//! Every card carries `scorerVersion` (scorer v2: the KPI statement form
-//! over oxc; `card::SCORER_VERSION`).
+//! Every card carries `scorerVersion` (scorer v3: the KPI statement form
+//! over oxc, lines counted by the minimal diff; `card::SCORER_VERSION`).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

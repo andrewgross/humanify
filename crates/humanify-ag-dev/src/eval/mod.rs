@@ -25,4 +25,4 @@ pub mod vendor;
 pub mod verbs;
 
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;

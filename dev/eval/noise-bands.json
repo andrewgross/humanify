@@ -260,6 +260,148 @@
           }
         }
       }
+    },
+    "3": {
+      "provenance": {
+        "provisional": false,
+        "sources": [
+          "measured from 3 same-commit repeats",
+          "carried from scorer 2 (exp222): the three repeats' trees re-scored by scorer 3 give every total equal to scorer 2's, so every spread is equal; `eval bands` refuses these pre-exp208 repeats on fnAsked, a matching count they never held equal"
+        ],
+        "commit": "0f338ffa",
+        "labels": [
+          "ref-scratch-0f338ffa-r1-s3",
+          "ref-scratch-0f338ffa-r2-s3",
+          "ref-scratch-0f338ffa-r3-s3"
+        ]
+      },
+      "bands": {
+        "clean": 17,
+        "noise": 17,
+        "novel": 0,
+        "noiseLn": 1376,
+        "realLn": 0,
+        "reloc": 35,
+        "relocSt": 0,
+        "newName": 13,
+        "mints": 33,
+        "treeLn": 16,
+        "cleanLn": 16,
+        "cleanReal": 74,
+        "reorderLn": 0,
+        "vendorLn": 55,
+        "vendorReal": 32,
+        "app:treeLn": 16,
+        "app:cleanLn": 16,
+        "app:cleanReal": 74,
+        "app:reorderLn": 0,
+        "app:noise": 17,
+        "app:noiseLn": 1376,
+        "app:novel": 0,
+        "app:realLn": 0,
+        "app:reloc": 35,
+        "app:relocSt": 0,
+        "app:newName": 13,
+        "app:mints": 34,
+        "vendor:treeLn": 87,
+        "vendor:vendorLn": 55,
+        "vendor:vendorReal": 32,
+        "vendor:noise": 0,
+        "vendor:noiseLn": 0,
+        "vendor:novel": 0,
+        "vendor:realLn": 0,
+        "vendor:reloc": 0,
+        "vendor:relocSt": 0,
+        "vendor:newName": 0,
+        "vendor:mints": 0,
+        "cross:treeLn": 0,
+        "cross:stmts": 0,
+        "cross:relocSt": 0,
+        "cross:reloc": 0,
+        "mints:unattributed": 1
+      },
+      "byMode": {
+        "names": {
+          "provenance": {
+            "provisional": false,
+            "sources": [
+              "measured from 4 same-commit repeats"
+            ],
+            "commit": "40921b9f7",
+            "labels": [
+              "ref-names-40921b9f-r1-s3",
+              "ref-names-40921b9f-r2-s3",
+              "ref-names-40921b9f-r3-s3",
+              "serial-40921b9f-s1-s3"
+            ],
+            "pairs": [
+              "2.1.118->2.1.119",
+              "2.1.179->2.1.181",
+              "2.1.197->2.1.198",
+              "2.1.215->2.1.216",
+              "2.1.85->2.1.86"
+            ]
+          },
+          "bands": {
+            "clean": 20,
+            "noise": 20,
+            "novel": 0,
+            "noiseLn": 350,
+            "realLn": 0,
+            "reloc": 83,
+            "relocSt": 2,
+            "newName": 42,
+            "mints": 9,
+            "treeLn": 1183,
+            "cleanLn": 1187,
+            "cleanReal": 848,
+            "reorderLn": 0,
+            "vendorLn": 84,
+            "vendorReal": 28,
+            "app:treeLn": 1183,
+            "app:cleanLn": 1187,
+            "app:cleanReal": 843,
+            "app:reorderLn": 0,
+            "app:noise": 19,
+            "app:noiseLn": 364,
+            "app:novel": 0,
+            "app:realLn": 0,
+            "app:reloc": 79,
+            "app:relocSt": 2,
+            "app:newName": 41,
+            "app:mints": 7,
+            "vendor:treeLn": 106,
+            "vendor:vendorLn": 84,
+            "vendor:vendorReal": 28,
+            "vendor:noise": 2,
+            "vendor:noiseLn": 14,
+            "vendor:novel": 0,
+            "vendor:realLn": 0,
+            "vendor:reloc": 4,
+            "vendor:relocSt": 0,
+            "vendor:newName": 3,
+            "vendor:mints": 4,
+            "cross:treeLn": 0,
+            "cross:stmts": 0,
+            "cross:relocSt": 0,
+            "cross:reloc": 7,
+            "mints:unattributed": 4
+          },
+          "matchingBands": {
+            "fnTotal": 0,
+            "fnCarried": 0,
+            "fnClose": 0,
+            "fnAsked": 0,
+            "fnLLMRenamed": 1,
+            "fnUnmatched": 0,
+            "fnAmbiguous": 0,
+            "mbCarried": 4,
+            "mbLLMRenamed": 3,
+            "idAsked": 22,
+            "idLLMRenamed": 23
+          }
+        }
+      }
     }
   }
 }

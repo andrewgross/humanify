@@ -27,7 +27,7 @@ fn write_tree(root: &Path, body: &[&str], files: &[&str], srcs: &[(&str, &str)])
 }
 
 #[test]
-fn a_pair_scores_to_a_v2_card_whose_partitions_add_up() {
+fn a_pair_scores_to_a_v3_card_whose_partitions_add_up() {
     let base = std::env::temp_dir().join(format!("dev-analyze-{}", std::process::id()));
     write_tree(
         &base.join("prior"),
@@ -61,7 +61,7 @@ fn a_pair_scores_to_a_v2_card_whose_partitions_add_up() {
         stats,
     })
     .unwrap();
-    assert_eq!(scorer_version(&card), 2);
+    assert_eq!(scorer_version(&card), 3);
     assert_eq!(number_at(&card, "churn.statements.novel"), Some(1.0));
     assert_eq!(
         number_at(&card, "churn.statements.unchangedChurned"),

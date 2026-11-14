@@ -278,6 +278,9 @@ mod score_test;
 mod neutrality_test;
 
 #[cfg(test)]
+mod tree_diff_test;
+
+#[cfg(test)]
 mod library_test;
 
 #[cfg(test)]

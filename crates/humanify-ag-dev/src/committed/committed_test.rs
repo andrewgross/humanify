@@ -36,7 +36,7 @@ fn bands_and_self_hop_reference_load_per_mode() {
     );
     assert!(b.value.for_mode("names").is_some());
     let s = eval::self_hop_reference(&repo_root()).expect("self-hop-reference.json");
-    assert_eq!(s.value.range("off"), Some((2, 184)));
+    assert_eq!(s.value.range("off"), Some((2, 182)));
     assert_eq!(
         s.value.range("names"),
         Some((2, 8)),
