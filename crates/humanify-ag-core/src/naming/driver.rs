@@ -142,10 +142,11 @@ pub struct NamingInput<'t> {
     /// (unit tests) their `statements` are taken as era ordinals. Empty =
     /// nothing was claimed.
     pub claimed_regions: &'t [crate::naming::module_names::ClaimedRegion],
-    /// The prior release's library placement by module content key
-    /// (exp211): the planner keeps the prior's package for a claim's
-    /// family twin. Empty without a prior.
-    pub prior_library: &'t std::collections::BTreeMap<String, String>,
+    /// The prior release's modules as its split ledger records them: the
+    /// library placement by module content key (exp211: the planner keeps
+    /// the prior's package for a claim's family twin) and the app modules'
+    /// init names by content (exp232). Empty without a prior.
+    pub prior_modules: &'t crate::naming::module_names::PriorModuleCarry,
     /// The raw-to-era bridge (exp166) and the formatter's statement
     /// provenance for THIS file — names mode's app file only.
     pub era_bridge: Option<EraBridgeInput<'t>>,
@@ -281,7 +282,7 @@ pub fn run_naming<P: NameProvider>(
         prompt_window: config.prompt_window,
         module_naming: config.module_naming,
         claimed_regions: input.claimed_regions,
-        prior_library: input.prior_library,
+        prior_modules: input.prior_modules,
         era_bridge: input.era_bridge,
         restorations: input.restorations,
         statement_holds: input.statement_holds,

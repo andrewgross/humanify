@@ -72,6 +72,12 @@ module kind) and names its wrapper `init<Name>`. The split then reads each
 new module's file name back from its wrapper (`initColorUtils` →
 `color-utils.js`) and names inferred folders from the same names; the old
 warm-hop mint namer is gone. Inherited paths are never renamed.
+Before it marks anything, the module step gives every wrapper whose module
+is, by its statement hashes, one of the prior's app modules (mutual
+strictly-best, Jaccard >= 0.5; `naming::module_names::init_identity`,
+exp232) that module's init name from the prior split ledger: the
+transfer's pairing of setup bodies can rotate names between neighbours,
+and an edited setup body would otherwise be asked anew.
 
 Stage 9's generate also names class-PRIVATE members (exp224,
 `naming::private_members`): they are not scope bindings, so no wave, no
