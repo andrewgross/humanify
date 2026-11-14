@@ -1159,12 +1159,15 @@ fn an_already_renamed_entry_never_names_an_identifier_the_call_is_asking_for() {
 }
 console.log(renderItem({ type: "plugin" }, true));
 "#;
+    // The `plugin` block is rewritten past recognition (exp225: content
+    // similarity now pairs an edited sibling that still resembles its
+    // prior self, which would carry its `Z` too).
     let fresh = r#"function r(q, $) {
   if (q.type === "plugin") {
     let Z;
-    Z = mk.icon(q, 1);
-    let e = mk.plural(q.count, "error");
-    return mk.row(Z, e);
+    Z = await_queue.drain(q.hooks, q.limit ?? 8, "hooks:pending");
+    let e = Z.filter(h => h.enabled && !h.muted).map(h => h.name).join(", ");
+    return badge.render(e, Z.length);
   }
   if (q.type === "failed") {
     let Z = mk.fail(q, 2);
