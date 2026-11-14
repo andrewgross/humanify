@@ -73,6 +73,7 @@ fn replay(v: &Value) -> Result<(), String> {
         emit_hashes: &emit_hashes,
         emit_names: &[],
         prior_aliases: prior_aliases.as_ref(),
+        prior_entry: None,
         bundle_hashes: &bundle_hashes,
         bundle_names: &names,
         facts: &facts,
@@ -178,6 +179,15 @@ fn emit_tree_with_prior(
     order: &[&str],
     prior: Option<&PriorImportAliases>,
 ) -> super::RunnableTree {
+    emit_tree_with_priors(code, order, prior, None)
+}
+
+fn emit_tree_with_priors(
+    code: &str,
+    order: &[&str],
+    prior: Option<&PriorImportAliases>,
+    prior_entry: Option<&[String]>,
+) -> super::RunnableTree {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, code, "fixture.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
@@ -210,6 +220,7 @@ fn emit_tree_with_prior(
         emit_hashes: &input.hashes,
         emit_names: &[],
         prior_aliases: prior,
+        prior_entry,
         bundle_hashes: &input.hashes,
         bundle_names: &names,
         facts: &facts,
@@ -466,4 +477,52 @@ fn statements_are_written_at_their_own_depth_with_literal_lines_kept() {
     let b = file("b.js");
     let want_b = "var valueB = {\n  run: function () {\n    return (0, a.helperH)(1);\n  }\n};\n";
     assert!(b.contains(want_b), "b.js:\n{b}");
+}
+
+/// The entry's require lines, in order.
+fn entry_modules(files: &[(String, String)]) -> Vec<String> {
+    let entry = &files
+        .iter()
+        .find(|(p, _)| p == "index.js")
+        .expect("entry")
+        .1;
+    crate::emit::entry_order::parse_entry_modules(entry).expect("an emitted entry")
+}
+
+/// exp227: the entry keeps the prior tree's order for files whose load is
+/// effect-free — the bundle moving a module is not a source change — while
+/// files with load-time effects keep their bundle order relative to each
+/// other (their effects run in the same order as without a prior).
+#[test]
+fn the_entry_keeps_the_prior_order_except_for_load_time_effects() {
+    let mut code = String::from("(function (exports, require, module) {\n");
+    code.push_str("  var valueA = 1;\n");
+    code.push_str("  console.log(\"first\");\n");
+    code.push_str("  var valueC = 3;\n");
+    code.push_str("  console.log(\"second\");\n");
+    code.push_str("  var valueE = 5;\n");
+    let mut order = vec!["a.js", "b.js", "c.js", "d.js", "e.js"];
+    for i in 0..55 {
+        code.push_str(&format!("  var pad{i:02} = {i};\n"));
+        order.push("e.js");
+    }
+    code.push_str("});\n");
+    let fresh = emit_tree(&code, &order);
+    assert_eq!(
+        entry_modules(&fresh.files),
+        ["a.js", "b.js", "c.js", "d.js", "e.js"],
+        "no prior: bundle order"
+    );
+    let prior: Vec<String> = ["e.js", "d.js", "c.js", "b.js", "a.js"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let tree = emit_tree_with_priors(&code, &order, None, Some(&prior));
+    // a, c, e are effect-free and take the prior's order (e, c, a); each
+    // effect file follows its bundle predecessor's slot (d after c, b after
+    // a), and the two fill those slots in bundle order (b before d).
+    assert_eq!(
+        entry_modules(&tree.files),
+        ["e.js", "c.js", "b.js", "a.js", "d.js"]
+    );
 }

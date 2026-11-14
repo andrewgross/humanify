@@ -34,9 +34,8 @@ pub fn alignment_key(hash: &str, name: Option<&str>) -> String {
 
 /// `orderByHashSequence`: an index claims its prior rank only when
 /// `claims` says its key is unambiguous; everything else keeps its place
-/// relative to its predecessor (`prevRank + 0.5`, doubled here to stay in
-/// integers). Stable.
-fn order_by_hash_sequence(
+/// relative to its predecessor. Stable.
+pub(super) fn order_by_hash_sequence(
     list: &[usize],
     keys: &[String],
     prior_seq: &[String],
@@ -46,33 +45,97 @@ fn order_by_hash_sequence(
     for (rank, h) in prior_seq.iter().enumerate() {
         rank_of.entry(h.as_str()).or_insert(rank as i64);
     }
+    order_by_claimed_ranks(list, |idx| {
+        if claims(idx) {
+            rank_of.get(keys[idx].as_str()).copied()
+        } else {
+            None
+        }
+    })
+}
+
+/// Order `list` by each index's claimed prior rank; an index with no
+/// claim keeps its place relative to its predecessor (`prevRank + 0.5`,
+/// doubled here to stay in integers). Stable.
+fn order_by_claimed_ranks(list: &[usize], rank: impl Fn(usize) -> Option<i64>) -> Vec<usize> {
     let mut prev_rank: i64 = -1;
     let mut keyed: Vec<(i64, usize, usize)> = list
         .iter()
         .enumerate()
-        .map(|(pos, &idx)| {
-            let rank = if claims(idx) {
-                rank_of.get(keys[idx].as_str()).copied()
-            } else {
-                None
-            };
-            match rank {
-                Some(r) => {
-                    prev_rank = r;
-                    (2 * r, pos, idx)
-                }
-                None => (2 * prev_rank + 1, pos, idx),
+        .map(|(pos, &idx)| match rank(idx) {
+            Some(r) => {
+                prev_rank = r;
+                (2 * r, pos, idx)
             }
+            None => (2 * prev_rank + 1, pos, idx),
         })
         .collect();
     keyed.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
     keyed.into_iter().map(|(_, _, idx)| idx).collect()
 }
 
+/// The names in an [`alignment_key`] (empty for a hash-only key).
+fn key_names(key: &str) -> impl Iterator<Item = &str> {
+    key.split_once('\u{0}')
+        .map(|(_, names)| names)
+        .into_iter()
+        .flat_map(|names| names.split(','))
+        .filter(|n| !n.is_empty())
+}
+
+/// How many entries of `keys` bind each name.
+fn name_counts<'k>(keys: impl Iterator<Item = &'k str>) -> HashMap<&'k str, usize> {
+    let mut counts: HashMap<&str, usize> = HashMap::new();
+    for key in keys {
+        let names: std::collections::BTreeSet<&str> = key_names(key).collect();
+        for n in names {
+            *counts.entry(n).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+/// exp227's name tier: a statement whose key claimed nothing (an edited
+/// statement: its hash changed) claims the prior rank of the one prior
+/// statement it shares a name with, when that name is bound by exactly
+/// one statement on each side and every such name points at the same
+/// prior statement. Ranks already claimed by a key are never taken.
+fn name_claims(
+    slots: &[usize],
+    keys: &[String],
+    prior_seq: &[String],
+    key_claimed: &HashMap<usize, i64>,
+) -> HashMap<usize, i64> {
+    let fresh = name_counts(slots.iter().map(|&s| keys[s].as_str()));
+    let prior = name_counts(prior_seq.iter().map(String::as_str));
+    let mut prior_rank: HashMap<&str, i64> = HashMap::new();
+    for (rank, key) in prior_seq.iter().enumerate() {
+        for n in key_names(key) {
+            prior_rank.entry(n).or_insert(rank as i64);
+        }
+    }
+    let taken: std::collections::HashSet<i64> = key_claimed.values().copied().collect();
+    let mut out = HashMap::new();
+    for &s in slots.iter().filter(|s| !key_claimed.contains_key(s)) {
+        let ranks: std::collections::BTreeSet<i64> = key_names(&keys[s])
+            .filter(|n| fresh.get(n) == Some(&1) && prior.get(n) == Some(&1))
+            .filter_map(|n| prior_rank.get(n).copied())
+            .collect();
+        if let (1, Some(&r)) = (ranks.len(), ranks.first())
+            && !taken.contains(&r)
+        {
+            out.insert(s, r);
+        }
+    }
+    out
+}
+
 /// `alignFileStatements(slots, keys, priorSeq, facts)`: one file's
 /// statement indices ordered to match its prior emission order, within
 /// what the load-time dependencies allow. PRECISION gate: only a key with
-/// exactly one occurrence on each side may claim a prior position.
+/// exactly one occurrence on each side may claim a prior position; a
+/// statement whose key claims nothing may then claim one through a name
+/// ([`name_claims`]).
 pub fn align_file_statements(
     slots: &[usize],
     keys: &[String],
@@ -87,17 +150,27 @@ pub fn align_file_statements(
         *fresh_count.entry(keys[s].as_str()).or_insert(0) += 1;
     }
     let mut prior_count: HashMap<&str, usize> = HashMap::new();
-    for h in prior_seq {
+    let mut rank_of: HashMap<&str, i64> = HashMap::new();
+    for (rank, h) in prior_seq.iter().enumerate() {
         *prior_count.entry(h.as_str()).or_insert(0) += 1;
+        rank_of.entry(h.as_str()).or_insert(rank as i64);
     }
     let unambiguous = |s: usize| {
         fresh_count.get(keys[s].as_str()) == Some(&1)
             && prior_count.get(keys[s].as_str()) == Some(&1)
     };
-    if slots.iter().filter(|&&s| unambiguous(s)).count() < 2 {
+    let key_claimed: HashMap<usize, i64> = slots
+        .iter()
+        .filter(|&&s| unambiguous(s))
+        .filter_map(|&s| rank_of.get(keys[s].as_str()).map(|&r| (s, r)))
+        .collect();
+    if key_claimed.len() < 2 {
         return slots.to_vec();
     }
-    let desired = order_by_hash_sequence(slots, keys, prior_seq, unambiguous);
+    let by_name = name_claims(slots, keys, prior_seq, &key_claimed);
+    let desired = order_by_claimed_ranks(slots, |s| {
+        key_claimed.get(&s).or_else(|| by_name.get(&s)).copied()
+    });
     order_respecting_load_order(slots, &desired, facts)
 }
 
