@@ -439,6 +439,29 @@ fn assign_synthetic_paths(input: &LayoutInput, wants: &[Want], paths: &mut [Opti
     }
 }
 
+/// Is `path` a synthetic vendor name ([`assign_synthetic_paths`]):
+/// `vendor/<package>/module-<8 hex>.js`, or `module-<8 hex>-<n>.js` for a
+/// sort-key tie? Such a name says only "this content"; an index-composed
+/// path says which file of the package the module is.
+pub fn is_synthetic_vendor_path(path: &str) -> bool {
+    if !path.starts_with("vendor/") {
+        return false;
+    }
+    let file = strip_js_extension(basename(path));
+    let Some(stem) = file.strip_prefix("module-") else {
+        return false;
+    };
+    let (key, tie) = match stem.split_once('-') {
+        Some((key, tie)) => (key, Some(tie)),
+        None => (stem, None),
+    };
+    key.len() == 8
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        && tie.is_none_or(|t| !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// `vendor/<package>/<file>.js`, both sides sanitized as PATHS (scoped
 /// packages keep their directories); `None` when either side sanitizes to
 /// nothing and the path would not be a vendor file at all.

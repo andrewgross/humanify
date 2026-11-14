@@ -28,6 +28,7 @@ use serde_json::Value;
 
 use super::fossil_match::{FossilSignature, match_fossil_modules};
 use crate::place::ledger::{FossilLedgerModule, StableSplitLedger};
+use crate::place::library_layout::is_synthetic_vendor_path;
 use crate::place::stems::{module_stem_of_wrapper, stem_of};
 use crate::place::trail::{PlacementTrail, TrailEntry};
 use crate::twins::fossil::{
@@ -806,6 +807,8 @@ definitions) — fix detection or run with --disable fossil-split"
                 "library placement: module {i} is outside this bundle's fossils"
             ));
         }
+        let path = carried_content_name(i, path, &matched.matches, prior_modules, options.library)
+            .unwrap_or(path);
         used.add(path);
         file_of_module[i] = Some(path.to_string());
     }
@@ -936,6 +939,34 @@ definitions) — fix detection or run with --disable fossil-split"
             hoisted_singletons: hoisted,
         },
     })
+}
+
+/// The prior path a library module keeps instead of its synthetic one
+/// (exp234). A synthetic vendor name is the module's own content key
+/// ([`is_synthetic_vendor_path`]), so one edit to the module renames its
+/// file, and every app file that loads it changes its `require` line and
+/// its module alias. When the matcher pairs the module with a prior
+/// module whose file is ALSO a synthetic name in the SAME package folder,
+/// and no other library module of this run claims that path, the module
+/// keeps it. An index-composed path (the index named the file) always
+/// wins, as does any path in another package.
+fn carried_content_name<'p>(
+    module: usize,
+    path: &str,
+    matches: &[(usize, usize)],
+    prior_modules: &'p [FossilLedgerModule],
+    library: &[(usize, String)],
+) -> Option<&'p str> {
+    if !is_synthetic_vendor_path(path) {
+        return None;
+    }
+    let &(_, prior) = matches.iter().find(|&&(fresh, _)| fresh == module)?;
+    let prior_path = prior_modules.get(prior)?.file.as_str();
+    (prior_path != path
+        && is_synthetic_vendor_path(prior_path)
+        && folder_of_path(prior_path) == folder_of_path(path)
+        && !library.iter().any(|(_, p)| p == prior_path))
+    .then_some(prior_path)
 }
 
 /// The trail tier of a module placed by [`kept_prior_file`].
@@ -1124,28 +1155,44 @@ fn layout_is_usable(prior: &StableSplitLedger, prior_modules: &[FossilLedgerModu
         .all(|m| written.contains(m.file.as_str()))
 }
 
-/// The prior file an unmatched module keeps: every one of its statements
-/// with a prior file ([`CarriedEvidence::prior_file`]) names the SAME
-/// file, and those carried statements are more than half the module. New
-/// statements (no prior file) and ambiguous ones (several) do not vote.
-/// None otherwise — the module is named fresh.
+/// The prior file an unmatched module keeps. Its carried statements (those
+/// with a prior file, [`CarriedEvidence::prior_file`]) must be more than
+/// half the module, and then either all name the SAME file (exp215), or
+/// more than half of them name one APP file (exp234: upstream carved a new
+/// module out of prior modules — a new chunk, a new init — and most of its
+/// code came from one file; its carried statements stay where they were
+/// either way (exp226), so the choice only decides where the module's init
+/// and its new statements go, and a fresh file there is a new file every
+/// importer of the init must require). New statements (no prior file) and
+/// ambiguous ones (several) do not vote. None otherwise — the module is
+/// named fresh.
 fn kept_prior_file<'p>(
     module: &FossilModule,
     evidence: &CarriedEvidence<'_, 'p>,
 ) -> Option<&'p str> {
-    let mut file: Option<&'p str> = None;
-    let mut carried = 0usize;
+    // Prior file → carried statements naming it, in first-seen order (no
+    // hash-map order reaches the decision).
+    let mut votes: Vec<(&'p str, usize)> = Vec::new();
     for &s in &module.statements {
         let Some(f) = evidence.prior_file(s, false) else {
             continue;
         };
-        if file.is_some_and(|g| g != f) {
-            return None;
+        match votes.iter_mut().find(|(g, _)| *g == f) {
+            Some((_, n)) => *n += 1,
+            None => votes.push((f, 1)),
         }
-        file = Some(f);
-        carried += 1;
     }
-    file.filter(|_| carried * 2 > module.statements.len())
+    let carried: usize = votes.iter().map(|&(_, n)| n).sum();
+    if carried * 2 <= module.statements.len() {
+        return None;
+    }
+    match votes.as_slice() {
+        [(only, _)] => Some(*only),
+        _ => votes
+            .iter()
+            .find(|&&(f, n)| n * 2 > carried && app_module_file(f))
+            .map(|&(f, _)| f),
+    }
 }
 
 /// What [`keep_carried_statements`] reads.

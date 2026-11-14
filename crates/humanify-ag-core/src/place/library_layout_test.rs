@@ -759,3 +759,25 @@ fn the_evidence_never_moves_an_unclaimed_shared_key() {
          between owners, it does not make a region library code"
     );
 }
+
+#[test]
+fn a_synthetic_vendor_name_is_recognised_and_an_index_name_is_not() {
+    use super::library_layout::is_synthetic_vendor_path;
+    for path in [
+        "vendor/pkg/module-26b50354.js",
+        "vendor/@scope/pkg/module-0d601e34.js",
+        "vendor/pkg/module-26b50354-2.js",
+    ] {
+        assert!(is_synthetic_vendor_path(path), "{path}");
+    }
+    for path in [
+        "vendor/pkg/index.js",
+        "vendor/pkg/module-26b5035.js",
+        "vendor/pkg/module-26B50354.js",
+        "vendor/pkg/module-26b50354-.js",
+        "src/module-26b50354.js",
+        "vendor/pkg/lib/module-xyzxyzxy.js",
+    ] {
+        assert!(!is_synthetic_vendor_path(path), "{path}");
+    }
+}

@@ -563,9 +563,11 @@ fn the_kept_file_holds_on_the_next_hop() {
 }
 
 #[test]
-fn a_module_whose_carried_statements_came_from_two_prior_files_is_named_fresh() {
-    // The prior held groupRead in one file and groupWrite in another: the
-    // carried statements disagree, so no prior file is the module's.
+fn a_module_whose_carried_statements_came_from_two_prior_files_takes_the_majority_file() {
+    // The prior held the helper declaration and groupRead in one file and
+    // groupWrite in another: two of the three carried statements name the
+    // runtime file, so the module (its new function and its init) goes
+    // there (exp234; before, any disagreement named it fresh).
     let b = glued_v2();
     let mut prior = glued_prior();
     let moved = b.hashes[2].clone();
@@ -574,11 +576,8 @@ fn a_module_whose_carried_statements_came_from_two_prior_files_is_named_fresh() 
     modules[1].hashes.push(moved);
     let out = assign(&b, Some(&prior));
     let a = &out.assignment;
-    // The module is named fresh: its new function and its init go there.
-    let fresh = a[3].as_str();
-    assert_ne!(fresh, "src/legacy/runtime.js", "{a:?}");
-    assert_ne!(fresh, "src/legacy/beta.js", "{a:?}");
-    assert_eq!(a[4], fresh, "{a:?}");
+    assert_eq!(a[3], "src/legacy/runtime.js", "{a:?}");
+    assert_eq!(a[4], "src/legacy/runtime.js", "{a:?}");
     // Each carried statement stays in the file it lived in (exp226).
     assert_eq!(a[1], "src/legacy/runtime.js", "{a:?}");
     assert_eq!(a[2], "src/legacy/beta.js", "{a:?}");
@@ -949,4 +948,247 @@ fn a_new_statement_wearing_a_prior_name_whose_code_is_still_here_stays_put() {
     let a = &out.assignment;
     assert_eq!(a[2], "src/media/resize.js", "{a:?}");
     assert_eq!(a[3], "src/media/limits.js", "{a:?}");
+}
+
+// ---- a module upstream carved out of prior modules takes the file most
+// ---- of its carried statements came from (exp234)
+
+/// v1: an alpha module (three helpers), a beta module (one helper), and a
+/// main module that uses them.
+fn carved_v1() -> Body {
+    body_of(&[
+        ESM,
+        "function alphaOne(x) { return x + 1; }",
+        "function alphaTwo(x) { return x * 2; }",
+        "function alphaThree(x) { return x - 3; }",
+        "var alphaState;",
+        "var init_alpha = __esm(() => { alphaState = alphaOne(1); });",
+        "function betaOne(y) { return y + \"b\"; }",
+        "var betaState;",
+        "var init_beta = __esm(() => { betaState = betaOne(2); });",
+        "function useAll() { return alphaTwo(1) + alphaThree(2) + betaOne(3); }",
+        "var init_main = __esm(() => { init_alpha(); init_beta(); useAll(); });",
+        "console.log(init_main);",
+    ])
+}
+
+/// v2: upstream carved a shared module out of alpha (two helpers) and
+/// beta (one helper) and gave it its own new init. Every carried helper
+/// is byte for byte the prior's.
+fn carved_v2() -> Body {
+    body_of(&[
+        ESM,
+        "function alphaTwo(x) { return x * 2; }",
+        "function alphaThree(x) { return x - 3; }",
+        "function betaOne(y) { return y + \"b\"; }",
+        "var sharedReady;",
+        "var init_shared = __esm(() => { sharedReady = alphaTwo(0) > 0; });",
+        "function alphaOne(x) { return x + 1; }",
+        "var alphaState;",
+        "var init_alpha = __esm(() => { init_shared(); alphaState = alphaOne(1); });",
+        "var betaState;",
+        "var init_beta = __esm(() => { init_shared(); betaState = betaOne(2); });",
+        "function useAll() { return alphaTwo(1) + alphaThree(2) + betaOne(3); }",
+        "var init_main = __esm(() => { init_shared(); init_alpha(); init_beta(); useAll(); });",
+        "console.log(init_main);",
+    ])
+}
+
+fn carved_prior() -> StableSplitLedger {
+    let b = carved_v1();
+    let first = assign(&b, None);
+    let files: Vec<String> = first
+        .fossil_modules
+        .iter()
+        .map(|m| m.file.clone())
+        .collect();
+    assert_eq!(files.len(), 3, "{files:?}");
+    written_ledger(
+        &b,
+        &first,
+        &[
+            (files[0].as_str(), "src/alpha.js"),
+            (files[1].as_str(), "src/beta.js"),
+            (files[2].as_str(), "src/main.js"),
+        ],
+    )
+}
+
+#[test]
+fn a_module_carved_mostly_from_one_prior_file_takes_that_file() {
+    let out = assign(&carved_v2(), Some(&carved_prior()));
+    let a = &out.assignment;
+    // Each carried helper stays where it was (exp226) ...
+    assert_eq!(a[1], "src/alpha.js", "{a:?}");
+    assert_eq!(a[2], "src/alpha.js", "{a:?}");
+    assert_eq!(a[3], "src/beta.js", "{a:?}");
+    // ... and the new module (its new state and its init) joins the file
+    // two of its three carried statements came from, instead of a new
+    // file every importer of the init would have to require.
+    assert_eq!(a[4], "src/alpha.js", "{a:?}");
+    assert_eq!(a[5], "src/alpha.js", "{a:?}");
+    assert_eq!(out.fossil_modules[0].file, "src/alpha.js");
+}
+
+#[test]
+fn a_carved_module_holds_its_file_on_the_next_hop() {
+    let b = carved_v2();
+    let second = assign(&b, Some(&carved_prior()));
+    let third = assign(&b, Some(&written_ledger(&b, &second, &[])));
+    assert_eq!(third.assignment, second.assignment);
+}
+
+#[test]
+fn a_carved_module_whose_carried_statements_split_evenly_is_named_fresh() {
+    // One helper from alpha, one from beta: no prior file holds most. (The
+    // carved module is not the bundle's first, so the bundler helper
+    // declaration does not vote in it.)
+    let b = body_of(&[
+        ESM,
+        "function alphaOne(x) { return x + 1; }",
+        "function alphaThree(x) { return x - 3; }",
+        "var alphaState;",
+        "var init_alpha = __esm(() => { alphaState = alphaOne(1); });",
+        "function alphaTwo(x) { return x * 2; }",
+        "function betaOne(y) { return y + \"b\"; }",
+        "var init_shared = __esm(() => { init_alpha(); alphaTwo(0); });",
+        "var betaState;",
+        "var init_beta = __esm(() => { init_shared(); betaState = betaOne(2); });",
+        "function useAll() { return alphaTwo(1) + alphaThree(2) + betaOne(3); }",
+        "var init_main = __esm(() => { init_shared(); init_alpha(); init_beta(); useAll(); });",
+        "console.log(init_main);",
+    ]);
+    let out = assign(&b, Some(&carved_prior()));
+    let a = &out.assignment;
+    assert_eq!(a[5], "src/alpha.js", "{a:?}");
+    assert_eq!(a[6], "src/beta.js", "{a:?}");
+    for f in ["src/alpha.js", "src/beta.js", "src/main.js"] {
+        assert_ne!(a[7], f, "{a:?}");
+    }
+}
+
+#[test]
+fn a_carved_module_never_joins_a_vendor_file_by_majority() {
+    // The prior filed alpha's helpers under vendor/: the majority is not
+    // an app file, so the new module is named fresh (its helpers stay).
+    let b = carved_v1();
+    let first = assign(&b, None);
+    let files: Vec<String> = first
+        .fossil_modules
+        .iter()
+        .map(|m| m.file.clone())
+        .collect();
+    let prior = written_ledger(
+        &b,
+        &first,
+        &[
+            (files[0].as_str(), "vendor/alpha-lib/index.js"),
+            (files[1].as_str(), "src/beta.js"),
+            (files[2].as_str(), "src/main.js"),
+        ],
+    );
+    let out = assign(&carved_v2(), Some(&prior));
+    let a = &out.assignment;
+    assert!(!a[5].starts_with("vendor/"), "{a:?}");
+}
+
+// ---- a library module named by its own content keeps its prior name when
+// ---- an edit changes the content (exp234)
+
+fn assign_with_library(
+    b: &Body,
+    prior: Option<&StableSplitLedger>,
+    library: &[(usize, String)],
+) -> FossilAssignment {
+    assign_fossil(
+        &b.values,
+        &b.spans,
+        &b.hashes,
+        prior,
+        FossilOptions {
+            library,
+            ..FossilOptions::default()
+        },
+    )
+    .expect("assign")
+}
+
+fn lazy_library(edited: bool) -> Body {
+    body_of(&[
+        ESM,
+        "class LazyBox { constructor() { this.resets = []; } }",
+        if edited {
+            "function lazyValue(make) { let v; return () => { if (v === undefined) v = make(); return v; }; }"
+        } else {
+            "function lazyValue(make) { let v; return () => v ??= make(); }"
+        },
+        "var lazyRoot;",
+        "var init_lazy = __esm(() => { lazyRoot = new LazyBox(); });",
+        "function appMain() { return lazyValue(() => 1)(); }",
+        "var init_app = __esm(() => { init_lazy(); appMain(); });",
+        "console.log(init_app);",
+    ])
+}
+
+#[test]
+fn an_edited_library_module_keeps_its_prior_content_named_file() {
+    let v1 = lazy_library(false);
+    let first = assign_with_library(&v1, None, &[(0, "vendor/pkg/module-aaaaaaaa.js".into())]);
+    let prior = written_ledger(&v1, &first, &[]);
+    // The edit changes the module's content key, so the library placement
+    // names it anew; the module is the prior's (the matcher pairs them).
+    let v2 = lazy_library(true);
+    let out = assign_with_library(
+        &v2,
+        Some(&prior),
+        &[(0, "vendor/pkg/module-bbbbbbbb.js".into())],
+    );
+    let a = &out.assignment;
+    for i in 0..=4 {
+        assert_eq!(
+            a[i], "vendor/pkg/module-aaaaaaaa.js",
+            "statement {i}: {a:?}"
+        );
+    }
+    assert_eq!(out.fossil_modules[0].file, "vendor/pkg/module-aaaaaaaa.js");
+}
+
+#[test]
+fn a_library_module_never_takes_a_prior_name_from_another_package_or_an_index_file() {
+    let v1 = lazy_library(false);
+    let v2 = lazy_library(true);
+    for (prior_path, fresh_path) in [
+        // another package's folder
+        (
+            "vendor/other/module-aaaaaaaa.js",
+            "vendor/pkg/module-bbbbbbbb.js",
+        ),
+        // the index named the file: its path wins over the prior's
+        ("vendor/pkg/module-aaaaaaaa.js", "vendor/pkg/lazy.js"),
+    ] {
+        let first = assign_with_library(&v1, None, &[(0, prior_path.into())]);
+        let prior = written_ledger(&v1, &first, &[]);
+        let out = assign_with_library(&v2, Some(&prior), &[(0, fresh_path.into())]);
+        assert_eq!(
+            out.assignment[1], fresh_path,
+            "{prior_path} -> {fresh_path}"
+        );
+    }
+}
+
+#[test]
+fn a_prior_content_name_another_library_module_claims_is_not_carried() {
+    let v1 = lazy_library(false);
+    let first = assign_with_library(&v1, None, &[(0, "vendor/pkg/module-aaaaaaaa.js".into())]);
+    let prior = written_ledger(&v1, &first, &[]);
+    let v2 = lazy_library(true);
+    let out = assign_with_library(
+        &v2,
+        Some(&prior),
+        &[
+            (0, "vendor/pkg/module-bbbbbbbb.js".into()),
+            (1, "vendor/pkg/module-aaaaaaaa.js".into()),
+        ],
+    );
+    assert_eq!(out.assignment[1], "vendor/pkg/module-bbbbbbbb.js");
 }
