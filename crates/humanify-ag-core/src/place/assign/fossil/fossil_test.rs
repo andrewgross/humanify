@@ -295,7 +295,7 @@ fn the_trail_records_every_statement_with_hash_keyed_prior_files() {
 }
 
 #[test]
-fn a_statement_whose_hash_lived_in_another_prior_module_reads_as_a_move() {
+fn a_statement_whose_hash_lived_in_another_prior_module_stays_there() {
     let b = bundle();
     let first = assign(&b, None);
     let moved_hash = b.hashes[4].clone();
@@ -306,9 +306,14 @@ fn a_statement_whose_hash_lived_in_another_prior_module_reads_as_a_move() {
     m1.hashes.retain(|h| *h != moved_hash);
     m1.file = "src/beta.js".into();
     let trail = trail_run(&b, &ledger(vec![m0, m1]));
-    let moved = trail.rows.iter().find(|r| r.index == 4).expect("row 4");
-    assert_eq!(moved.prior_file.as_deref(), Some("src/alpha.js"));
-    assert_ne!(moved.prior_file.as_deref(), Some(moved.file.as_str()));
+    // The statement's module is beta's, but the statement itself is
+    // unchanged and lived in alpha's file: it stays there (exp226).
+    let kept = trail.rows.iter().find(|r| r.index == 4).expect("row 4");
+    assert_eq!(kept.prior_file.as_deref(), Some("src/alpha.js"));
+    assert_eq!(kept.file, "src/alpha.js");
+    assert_eq!(kept.placed_by, "fossil:kept-statement");
+    let init = trail.rows.iter().find(|r| r.index == 6).expect("row 6");
+    assert_eq!(init.file, "src/beta.js");
 }
 
 /// The names mode's pre-filled modules (library-names plan step 4,
@@ -568,16 +573,15 @@ fn a_module_whose_carried_statements_came_from_two_prior_files_is_named_fresh() 
     modules[0].hashes.retain(|h| *h != moved);
     modules[1].hashes.push(moved);
     let out = assign(&b, Some(&prior));
-    assert_ne!(
-        out.assignment[1], "src/legacy/runtime.js",
-        "{:?}",
-        out.assignment
-    );
-    assert_ne!(
-        out.assignment[1], "src/legacy/beta.js",
-        "{:?}",
-        out.assignment
-    );
+    let a = &out.assignment;
+    // The module is named fresh: its new function and its init go there.
+    let fresh = a[3].as_str();
+    assert_ne!(fresh, "src/legacy/runtime.js", "{a:?}");
+    assert_ne!(fresh, "src/legacy/beta.js", "{a:?}");
+    assert_eq!(a[4], fresh, "{a:?}");
+    // Each carried statement stays in the file it lived in (exp226).
+    assert_eq!(a[1], "src/legacy/runtime.js", "{a:?}");
+    assert_eq!(a[2], "src/legacy/beta.js", "{a:?}");
 }
 
 #[test]
@@ -598,10 +602,182 @@ fn a_mostly_new_module_is_named_fresh() {
         "console.log(init_beta);",
     ]);
     let out = assign(&b, Some(&glued_prior()));
-    assert_ne!(
-        out.assignment[1], "src/legacy/runtime.js",
+    let a = &out.assignment;
+    // The module's file is fresh; its one carried statement stays (exp226).
+    for i in [2, 3, 4] {
+        assert_ne!(a[i], "src/legacy/runtime.js", "statement {i}: {a:?}");
+    }
+    assert_eq!(a[1], "src/legacy/runtime.js", "{a:?}");
+    assert_eq!(a[5], "src/legacy/runtime.js");
+}
+
+// ---- an unchanged statement keeps its prior file when its run is glued
+// ---- to another module (exp226)
+
+/// The prior ledger as the split writes it: the modules AND the
+/// per-statement layout (`hashes` + `order`, parallel to the body), with
+/// each fresh file renamed through `rename`.
+fn written_ledger(b: &Body, out: &FossilAssignment, rename: &[(&str, &str)]) -> StableSplitLedger {
+    let to = |f: &str| -> String {
+        rename
+            .iter()
+            .find(|(from, _)| *from == f)
+            .map_or(f.to_string(), |(_, to)| to.to_string())
+    };
+    let modules = out
+        .fossil_modules
+        .iter()
+        .map(|m| FossilLedgerModule {
+            file: to(&m.file),
+            ..m.clone()
+        })
+        .collect();
+    StableSplitLedger {
+        order: out.assignment.iter().map(|f| to(f)).collect(),
+        hashes: Some(b.hashes.clone()),
+        ..ledger(modules)
+    }
+}
+
+/// v1: two init-less helpers sit before the image module and are glued to
+/// it; the limits module lives elsewhere in the bundle.
+fn image_v1() -> Body {
+    body_of(&[
+        ESM,
+        "function limitTiles(n) { return n * 4; }",
+        "var limitMax;",
+        "var init_limits = __esm(() => { limitMax = limitTiles(8); });",
+        "function mimeOf(bytes) { return bytes[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "function dimensionsOf(bytes) { return { w: bytes[16], h: bytes[20] }; }",
+        "function resizeImage(img) { return mimeOf(img) + dimensionsOf(img).w; }",
+        "var resizeState;",
+        "var init_resize = __esm(() => { init_limits(); resizeState = resizeImage([137]); });",
+        "console.log(init_resize);",
+    ])
+}
+
+/// v2: the bundler now emits the limits module between the helpers and
+/// the image module (a new import moved it up), so the markers glue the
+/// unchanged helpers to the limits module. Every statement is the
+/// prior's, byte for byte.
+fn image_v2() -> Body {
+    body_of(&[
+        ESM,
+        "function mimeOf(bytes) { return bytes[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "function dimensionsOf(bytes) { return { w: bytes[16], h: bytes[20] }; }",
+        "function limitTiles(n) { return n * 4; }",
+        "var limitMax;",
+        "var init_limits = __esm(() => { limitMax = limitTiles(8); });",
+        "function resizeImage(img) { return mimeOf(img) + dimensionsOf(img).w; }",
+        "var resizeState;",
+        "var init_resize = __esm(() => { init_limits(); resizeState = resizeImage([137]); });",
+        "console.log(init_resize);",
+    ])
+}
+
+fn image_prior() -> StableSplitLedger {
+    let b = image_v1();
+    let first = assign(&b, None);
+    let files: Vec<String> = first
+        .fossil_modules
+        .iter()
+        .map(|m| m.file.clone())
+        .collect();
+    written_ledger(
+        &b,
+        &first,
+        &[
+            (files[0].as_str(), "src/media/limits.js"),
+            (files[1].as_str(), "src/media/resize.js"),
+        ],
+    )
+}
+
+#[test]
+fn an_unchanged_run_glued_to_another_module_stays_in_its_prior_file() {
+    let out = assign(&image_v2(), Some(&image_prior()));
+    let a = &out.assignment;
+    assert_eq!(a[1], "src/media/resize.js", "{a:?}");
+    assert_eq!(a[2], "src/media/resize.js", "{a:?}");
+    for i in [3, 4, 5] {
+        assert_eq!(a[i], "src/media/limits.js", "statement {i}: {a:?}");
+    }
+    for i in [6, 7, 8] {
+        assert_eq!(a[i], "src/media/resize.js", "statement {i}: {a:?}");
+    }
+    assert_eq!(out.stats.kept_statements, 2, "{:?}", out.stats);
+}
+
+#[test]
+fn a_kept_statement_holds_on_the_next_hop() {
+    let b = image_v2();
+    let second = assign(&b, Some(&image_prior()));
+    let third = assign(&b, Some(&written_ledger(&b, &second, &[])));
+    assert_eq!(third.assignment, second.assignment);
+    assert_eq!(third.stats.kept_statements, 2, "{:?}", third.stats);
+}
+
+#[test]
+fn a_statement_never_returns_to_a_vendor_file() {
+    let b = image_v1();
+    let first = assign(&b, None);
+    let files: Vec<String> = first
+        .fossil_modules
+        .iter()
+        .map(|m| m.file.clone())
+        .collect();
+    let mut prior = written_ledger(
+        &b,
+        &first,
+        &[
+            (files[0].as_str(), "src/media/limits.js"),
+            (files[1].as_str(), "src/media/resize.js"),
+        ],
+    );
+    // The prior filed the two helpers under vendor/ (a library claim).
+    prior.order[4] = "vendor/pkg/index.js".into();
+    prior.order[5] = "vendor/pkg/index.js".into();
+    let out = assign(&image_v2(), Some(&prior));
+    assert_eq!(
+        out.assignment[1], "src/media/limits.js",
         "{:?}",
         out.assignment
     );
-    assert_eq!(out.assignment[5], "src/legacy/runtime.js");
+    assert_eq!(out.stats.kept_statements, 0, "{:?}", out.stats);
+}
+
+#[test]
+fn the_trail_records_a_kept_statement_with_its_own_tier() {
+    let trail = trail_run(&image_v2(), &image_prior());
+    let row = trail.rows.iter().find(|r| r.index == 1).expect("row 1");
+    assert_eq!(row.file, "src/media/resize.js");
+    assert_eq!(row.placed_by, "fossil:kept-statement");
+    assert_eq!(row.prior_file.as_deref(), Some("src/media/resize.js"));
+}
+
+#[test]
+fn a_statement_whose_shape_this_bundle_holds_twice_is_not_refiled() {
+    // A new function with the same rename-blind shape as a carried one:
+    // the hash no longer says which statement the prior's was, so neither
+    // copy is filed by it.
+    let b = body_of(&[
+        ESM,
+        "function mimeOf(bytes) { return bytes[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "function dimensionsOf(bytes) { return { w: bytes[16], h: bytes[20] }; }",
+        "function limitTiles(n) { return n * 4; }",
+        "function tileKind(t) { return t[0] === 137 ? \"png\" : \"jpeg\"; }",
+        "var limitMax;",
+        "var init_limits = __esm(() => { limitMax = limitTiles(8); });",
+        "function resizeImage(img) { return mimeOf(img) + dimensionsOf(img).w; }",
+        "var resizeState;",
+        "var init_resize = __esm(() => { init_limits(); resizeState = resizeImage([137]); });",
+        "console.log(init_resize);",
+    ]);
+    assert_eq!(b.hashes[1], b.hashes[4], "the two functions share a shape");
+    let out = assign(&b, Some(&image_prior()));
+    let a = &out.assignment;
+    assert_eq!(a[1], "src/media/limits.js", "{a:?}");
+    assert_eq!(a[4], "src/media/limits.js", "{a:?}");
+    assert_eq!(a[2], "src/media/resize.js", "{a:?}");
+    assert_eq!(out.stats.kept_statements, 1, "{:?}", out.stats);
 }
