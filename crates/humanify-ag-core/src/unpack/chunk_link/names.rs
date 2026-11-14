@@ -144,13 +144,15 @@ pub(super) fn assign(
     externals(chunks, order, &mut names);
     names.esm_helper = names.fresh("__esm");
     names.export_helper = names.fresh("__export");
-    for (k, &c) in order.chunks.iter().enumerate() {
+    let keys = chunk_keys(chunks);
+    for &c in &order.chunks {
+        let stem = content_stem(&keys[c]);
         if needs_init[c] {
-            let n = names.fresh(&format!("__chunkInit{k}"));
+            let n = names.fresh(&format!("i{stem}"));
             names.init.insert(c, n);
         }
         if needs_ns[c] {
-            let n = names.fresh(&format!("__chunkNs{k}"));
+            let n = names.fresh(&format!("n{stem}"));
             names.of.insert(Target::Ns(c), n);
         }
         if chunks[c]
@@ -158,11 +160,75 @@ pub(super) fn assign(
             .iter()
             .any(|(_, t)| matches!(t, super::analyse::ExportTarget::DefaultExpr))
         {
-            let n = names.fresh(&format!("__chunkDefault{k}"));
+            let n = names.fresh(&format!("d{stem}"));
             names.of.insert(Target::Default(c), n);
         }
     }
     Ok(names)
+}
+
+/// Rounds of [`chunk_keys`] refinement: a chain of barrels this deep is
+/// still told apart.
+const KEY_ROUNDS: usize = 4;
+
+/// Each chunk's key: its content key ([`super::analyse`]), and for chunks
+/// that share one — above all the chunks with no code of their own, whose
+/// init only runs the inits of the chunks they import — the content key
+/// followed by the keys of the chunks it imports, statics then lazy
+/// loads, in the chunk's own order; repeated while that tells more
+/// chunks apart. Never the written order.
+fn chunk_keys(chunks: &[Chunk]) -> Vec<[u8; 32]> {
+    use sha2::{Digest, Sha256};
+    let mut keys: Vec<[u8; 32]> = chunks.iter().map(|c| c.content_key).collect();
+    for _ in 0..KEY_ROUNDS {
+        let mut count: BTreeMap<[u8; 32], usize> = BTreeMap::new();
+        keys.iter().for_each(|k| *count.entry(*k).or_default() += 1);
+        if count.values().all(|&n| n == 1) {
+            break;
+        }
+        keys = chunks
+            .iter()
+            .enumerate()
+            .map(|(c, chunk)| {
+                if count[&keys[c]] == 1 {
+                    return keys[c];
+                }
+                let mut h = Sha256::new();
+                h.update(chunk.content_key);
+                let deps = chunk
+                    .static_deps
+                    .iter()
+                    .chain(chunk.lazy.iter().map(|e| &e.target));
+                deps.for_each(|&d| h.update(keys[d]));
+                h.finalize().into()
+            })
+            .collect();
+    }
+    keys
+}
+
+/// Six base-62 characters of a chunk's content key: the linker's names
+/// for a chunk's init (`i<stem>`), namespace object (`n<stem>`) and
+/// default-export binding (`d<stem>`) (exp221). They used to be the
+/// chunk's position in the written order (`__chunkInit<k>`), so one chunk
+/// added early renamed every later one in every file that called it, and
+/// their bundler-helper shape (`__word…`) kept the naming stage, the
+/// module step and the prior-version transfer from ever replacing them.
+/// These are minified-shaped ordinary bindings, as Bun's own per-module
+/// inits were before Claude Code's builds split: the module step names
+/// the init `init<Name>` and the transfer carries it. When two chunks
+/// share a key (the same code up to names), [`Names::fresh`] gives the
+/// later one in the written order a `$k` suffix.
+fn content_stem(key: &[u8; 32]) -> String {
+    const DIGITS: &[u8; 62] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    let mut n = u64::from_be_bytes(key[..8].try_into().unwrap_or_default());
+    (0..6)
+        .map(|_| {
+            let d = DIGITS[(n % 62) as usize] as char;
+            n /= 62;
+            d
+        })
+        .collect()
 }
 
 /// The first `__toESM` helper written, with its position.

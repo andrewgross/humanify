@@ -160,6 +160,9 @@ pub(super) struct Chunk {
     pub static_deps: Vec<usize>,
     /// Every use of an embedded (non-chunk) bunfs file (`embedded`).
     pub file_refs: Vec<FileRef>,
+    /// The chunk's code with every name masked ([`content_key`]): what
+    /// the linker's own names for it are derived from (exp221).
+    pub content_key: [u8; 32],
 }
 
 /// The load queue: every chunk path gets an index the first time any
@@ -244,6 +247,7 @@ pub(super) fn analyse(path: &Path, loader: &mut Loader) -> Result<Chunk, String>
         export_prefixes: Vec::new(),
         static_deps: Vec::new(),
         file_refs: Vec::new(),
+        content_key: [0; 32],
     };
     for st in &program.body {
         let kind = ctx.statement(st, loader, &mut chunk)?;
@@ -273,6 +277,7 @@ pub(super) fn analyse(path: &Path, loader: &mut Loader) -> Result<Chunk, String>
         .body
         .first()
         .map_or(text.len(), |s| s.span().start as usize);
+    chunk.content_key = content_key(&text, ctx.nodes, &program.comments);
     chunk.leading_comments = program
         .comments
         .iter()
@@ -282,6 +287,52 @@ pub(super) fn analyse(path: &Path, loader: &mut Loader) -> Result<Chunk, String>
     drop(semantic);
     chunk.text = text;
     Ok(chunk)
+}
+
+/// SHA-256 of the chunk's code with everything masked that varies between
+/// two builds of an unchanged module: every binding and reference (Bun
+/// re-minifies them per build), every bunfs path (a chunk's file name is
+/// a hash of its contents, so it changes when ANY chunk it imports
+/// changes), and the chunk's import and export lists — the edges of the
+/// chunk graph, not its code: a chunk lists a side-effect import of every
+/// chunk it needs, which changes whenever the graph around it does (on
+/// one real hop, most chunks whose key changed had changed only there).
+/// Comments are dropped (every chunk's header names the release).
+/// Property names, strings and code shape are kept.
+/// An unchanged module keeps its key however the chunks around it move.
+fn content_key(text: &str, nodes: &AstNodes<'_>, comments: &[oxc_ast::Comment]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    // (span, replacement): a name becomes one marker byte, a dropped
+    // piece nothing (a chunk that gains an import keeps its key).
+    let mut masked: Vec<(Span, &[u8])> = nodes
+        .iter()
+        .filter_map(|node| match node.kind() {
+            AstKind::BindingIdentifier(i) => Some((i.span, &b"\x00"[..])),
+            AstKind::IdentifierReference(i) => Some((i.span, &b"\x00"[..])),
+            AstKind::LabelIdentifier(i) => Some((i.span, &b"\x00"[..])),
+            AstKind::StringLiteral(s) if s.value.starts_with(ROOT) => Some((s.span, &b"\x00"[..])),
+            AstKind::ImportDeclaration(i) => Some((i.span, &b""[..])),
+            AstKind::ExportNamedDeclaration(e) => Some((e.span, &b""[..])),
+            AstKind::ExportAllDeclaration(e) => Some((e.span, &b""[..])),
+            _ => None,
+        })
+        .chain(comments.iter().map(|c| (c.span, &b""[..])))
+        .collect();
+    // Outer spans first: a dropped declaration hides the names inside it.
+    masked.sort_unstable_by_key(|(s, _)| (s.start, std::cmp::Reverse(s.end)));
+    let mut hasher = Sha256::new();
+    let mut at = 0usize;
+    for (span, replacement) in masked {
+        let (start, end) = (span.start as usize, span.end as usize);
+        if start < at {
+            continue; // inside a dropped declaration
+        }
+        hasher.update(&text.as_bytes()[at..start]);
+        hasher.update(replacement);
+        at = end;
+    }
+    hasher.update(&text.as_bytes()[at..]);
+    hasher.finalize().into()
 }
 
 struct Ctx<'s, 'a> {
