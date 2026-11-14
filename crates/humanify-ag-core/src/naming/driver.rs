@@ -32,9 +32,9 @@ pub mod validate;
 
 use humanify_ag_model::llm::{CacheKeyParams, NameProvider};
 use humanify_ag_model::stats::{
-    CloseMatchStats, CoverageSummary, EvalStats, NamingFloorStats, RejectionCounts,
-    RenameClaimGuards, RenameClaimStats, TransferStats as StatsTransferStats, TransferStatsByTier,
-    WaveGaugesStats,
+    CloseMatchStats, CoverageSummary, EvalStats, NamingFloorStats, PrivateNameStats,
+    RejectionCounts, RenameClaimGuards, RenameClaimStats, TransferStats as StatsTransferStats,
+    TransferStatsByTier, WaveGaugesStats,
 };
 
 use crate::naming::passes::census::MintedCensus;
@@ -201,6 +201,8 @@ pub struct NamingOutcome {
     pub waves: WaveRecords,
     pub pre_sweep: Option<SweepResult>,
     pub floor: Option<FloorCounts>,
+    /// The class-private member namer's counts (exp224).
+    pub private_names: crate::naming::private_members::PrivateNameCounts,
     pub prior: Option<PriorStats>,
     /// Every report (`allReports`: the processor's, then library prefix).
     pub reports: Vec<RenameReport>,
@@ -331,6 +333,7 @@ pub fn run_naming<P: NameProvider>(
         library,
         library_functions,
         floor,
+        private_names,
         pre_sweep,
         exhausted_names: era_exhausted,
         prior,
@@ -376,6 +379,7 @@ pub fn run_naming<P: NameProvider>(
         waves,
         pre_sweep,
         floor,
+        private_names,
         prior,
         reports,
         processor,
@@ -935,6 +939,12 @@ impl NamingOutcome {
             prior_version_bindings_applied: Some(
                 p.map_or(0.0, |p| p.counts.bindings_applied as f64),
             ),
+            private_names: Some(PrivateNameStats {
+                members: self.private_names.members as f64,
+                kept: self.private_names.kept as f64,
+                derived: self.private_names.derived as f64,
+                numbered: self.private_names.numbered as f64,
+            }),
             naming_floor: self.floor.map(|f| NamingFloorStats {
                 derived: f.derived as f64,
                 undecorated: f.undecorated as f64,

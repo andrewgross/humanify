@@ -28,7 +28,9 @@
 //!   DEFERS (`isSweepDeferred`) when `namingFloor && namingFloorSweep &&
 //!   reconcilePriorDiff && priorVersionCode && !sourceMap`;
 //! - `generate`: [`crate::naming::waves::render::render_program_with`] with
-//!   the statement twins' [`crate::naming::waves::render::private_rename_edits`];
+//!   the private-member edits ([`crate::naming::private_members::private_member_edits`]:
+//!   the statement twins' carried spellings, then every still-minted
+//!   `#name` named from its class, exp224);
 //! - when `reconcilePriorDiff && prior && !sourceMap && outputValid`:
 //!   [`crate::naming::reconcile::step::run_prior_diff_reconciliation`]
 //!   (an Err is "did not run": ship the generated text);

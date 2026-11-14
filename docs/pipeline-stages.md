@@ -73,6 +73,15 @@ new module's file name back from its wrapper (`initColorUtils` →
 `color-utils.js`) and names inferred folders from the same names; the old
 warm-hop mint namer is gone. Inherited paths are never renamed.
 
+Stage 9's generate also names class-PRIVATE members (exp224,
+`naming::private_members`): they are not scope bindings, so no wave, no
+prior slot table and no sweep sees them, and the minifier re-letters them
+every build. Every still-minted `#name` takes a name derived from its own
+class — the public accessor that only returns or writes it, an object key
+reading it, a property read assigned to it, a global constructor it is
+built from, else its kind and ordinal (`#field2`) — so an unchanged class
+prints identically in every release, with no prior and no model draw.
+
 Stage 3 keeps a CommonJS app's OWN modules in the app (exp172,
 `modules::app_factories`): Bun and esbuild wrap every CommonJS module, app
 or library, and the unpack used to vendor every one. Before any name is

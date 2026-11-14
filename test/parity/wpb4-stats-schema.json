@@ -1163,6 +1163,48 @@
       }
     },
     {
+      "name": "privateNames",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "members",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "kept",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "derived",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "numbered",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "closeMatchStats",
       "optional": true,
       "nullable": false,

@@ -219,6 +219,18 @@ js_record! {
 }
 
 js_record! {
+    /// The `privateNames` block (exp224): the class-private member namer
+    /// (`naming::private_members`), per member — kept (not minted),
+    /// derived from the class, or numbered by kind.
+    pub struct PrivateNameStats {
+        members: f64 = "members",
+        kept: f64 = "kept",
+        derived: f64 = "derived",
+        numbered: f64 = "numbered",
+    }
+}
+
+js_record! {
     /// `RenamePluginResult.namingFloor` (plugin.ts floorStats).
     pub struct NamingFloorStats {
         derived: f64 = "derived",
@@ -499,6 +511,10 @@ js_record! {
         prior_version_already_named: Option<f64> = "priorVersionAlreadyNamed",
         prior_version_bindings_applied: Option<f64> = "priorVersionBindingsApplied",
         naming_floor: Option<NamingFloorStats> = "namingFloor",
+        /// The `privateNames` block (exp224). ALWAYS written on runs from
+        /// this writer; ABSENT on every earlier recorded scorecard — the
+        /// `reask` precedent, verbatim.
+        private_names: Option<PrivateNameStats> = "privateNames",
         close_match_stats: Option<CloseMatchStats> = "closeMatchStats",
         resolution_stats: Option<ResolutionStats> = "resolutionStats",
         binding_resolution_stats: Nullable<ResolutionStats> = "bindingResolutionStats",

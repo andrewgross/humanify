@@ -39,8 +39,7 @@ use crate::naming::waves::processor::{
     CloseContext, DispatchRecord, NameRecord, WaveGauges, WaveInputs, WaveOutcome, run_waves,
 };
 use crate::naming::waves::render::{
-    FnPrinter, Occurrences, private_rename_edits, program_edits, render_program_with,
-    span_in_generated_text,
+    FnPrinter, Occurrences, program_edits, render_program_with, span_in_generated_text,
 };
 use crate::prior::MatchStage;
 use crate::rename::eligibility::Eligibility;
@@ -248,6 +247,8 @@ pub struct NamingEra {
     /// The library freeze as applied (regions.json `libraryFunctions`).
     pub library_functions: Vec<LibraryFunctionKey>,
     pub floor: Option<FloorCounts>,
+    /// The class-private member namer's counts (exp224).
+    pub private_names: crate::naming::private_members::PrivateNameCounts,
     /// The pre-generate coverage sweep (fresh-anchored), when it ran.
     pub pre_sweep: Option<SweepResult>,
     /// The era state's retry-exhausted still-unrenamed names (the wave
@@ -811,6 +812,7 @@ fn run_era<P: NameProvider>(
         library,
         library_functions,
         floor: None,
+        private_names: Default::default(),
         pre_sweep: None,
         exhausted_names: Vec::new(),
         prior,
@@ -878,7 +880,14 @@ fn run_era<P: NameProvider>(
     });
     drop(ph);
     let ph = crate::profiling::phase("era:generate");
-    let privates = private_rename_edits(semantic.source_text(), &start.private);
+    // The twins' carried spellings, then every still-minted private
+    // member's derived name (exp224, `naming::private_members`).
+    let (privates, private_names) = crate::naming::private_members::private_member_edits(
+        semantic,
+        &start.private,
+        opts.name_profile,
+    );
+    era.private_names = private_names;
     let generated = render_program_with(semantic, &state, &privates);
     // The moved modules' spans in the generated text, for the passes that
     // re-parse it (the prior-diff reconcile arm the same library hold
