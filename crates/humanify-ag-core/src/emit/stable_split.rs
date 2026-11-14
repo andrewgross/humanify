@@ -25,6 +25,7 @@ use crate::rename::validated::scopes::BabelScopes;
 
 use super::align::AlignSwitches;
 use super::cjs::{RunnableInput, emit_runnable_cjs, wrapper_view};
+use super::entry_order::read_prior_entry_order;
 use super::import_alias::read_prior_import_aliases;
 use super::load_order::{LoadOrderFacts, bundle_load_order_facts};
 use super::review::{review_split, statement_align_name};
@@ -437,6 +438,9 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         None
     } else {
         let scopes = BabelScopes::build(ingest.semantic());
+        let prior_entry = options.prior_tree.and_then(|root| {
+            read_prior_entry_order(|f| std::fs::read_to_string(root.join(f)).ok())
+        });
         let prior_aliases = options.prior_tree.map(|root| {
             read_prior_import_aliases(&review.files, |f| {
                 std::fs::read_to_string(root.join(f)).ok()
@@ -452,6 +456,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             emit_hashes: &review.emit_hashes,
             emit_names: &review.emit_names,
             prior_aliases: prior_aliases.as_ref(),
+            prior_entry: prior_entry.as_deref(),
             bundle_hashes: &input.hashes,
             bundle_names: &names,
             facts: &facts,

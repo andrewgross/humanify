@@ -28,6 +28,7 @@
 pub mod align;
 pub mod cjs;
 pub mod emit_dump;
+pub mod entry_order;
 pub mod import_alias;
 pub mod load_order;
 pub mod paths;

@@ -9,7 +9,8 @@
 //! assignment); declaring files export live accessors BEFORE their require
 //! header; the wrapper's module context routes through
 //! `.humanify/_bundle.js`; an `index.js` entry loads every file in
-//! first-statement order. Every rewrite is a byte-range splice of the ONE
+//! first-statement order, or in the prior tree's entry order where the
+//! load-time effects allow ([`super::entry_order`]). Every rewrite is a byte-range splice of the ONE
 //! parse's reference nodes — never a re-parse, never name matching.
 //!
 //! The emitter DECLINES (an `Err` with the TS's reason) where the input
@@ -42,6 +43,7 @@ use crate::place::layout::METADATA_DIR;
 use crate::rename::validated::scopes::{BabelScopes, BindingId, BindingKind, SiteType};
 
 use super::align::{AlignSwitches, align_file_statements, alignment_key};
+use super::entry_order::{ENTRY_MARKER, pinned_entry_order};
 use super::import_alias::{ImportAliases, ImportScope, PriorImportAliases, build_import_aliases};
 use super::load_order::LoadOrderFacts;
 use super::paths::compute_relative_import_path;
@@ -138,6 +140,9 @@ pub struct RunnableInput<'a, 's> {
     /// The prior tree's require aliases, per importer
     /// ([`super::import_alias::read_prior_import_aliases`]).
     pub prior_aliases: Option<&'s PriorImportAliases>,
+    /// The prior tree's entry order (paths, [`super::entry_order`]):
+    /// effect-free files keep their prior place in `index.js`.
+    pub prior_entry: Option<&'s [String]>,
     /// `statementHash` / `statementAlignName` per bundle statement.
     pub bundle_hashes: &'s [String],
     pub bundle_names: &'s [Option<String>],
@@ -253,6 +258,9 @@ struct Plan<'a, 's> {
     /// ([`Plan::settle_load_order`]); empty unless a load-order hazard
     /// was found.
     deferred: HashSet<usize>,
+    /// The entry's require order when it is not bundle order
+    /// ([`Plan::adopt_prior_entry_order`]).
+    entry: Option<Vec<usize>>,
     bundle_context: Option<BundleContext>,
     /// (start, end) → identifier node (IdentifierReference /
     /// BindingIdentifier): violation targets come back as spans.
@@ -702,9 +710,16 @@ impl Plan<'_, '_> {
         decls.into_iter().partition(|d| load_time.contains(d))
     }
 
-    /// The entry's require order (`entry_source`): first-statement order,
-    /// then every file.
+    /// The entry's require order (`entry_source`): the adopted order, else
+    /// [`Self::bundle_entry_order`].
     fn entry_order(&self) -> Vec<usize> {
+        self.entry
+            .clone()
+            .unwrap_or_else(|| self.bundle_entry_order())
+    }
+
+    /// First-statement order, then every file.
+    fn bundle_entry_order(&self) -> Vec<usize> {
         let mut seen = HashSet::new();
         self.stmt_file
             .iter()
@@ -803,6 +818,51 @@ impl Plan<'_, '_> {
             self.deferred.extend(newly);
         }
         Ok(())
+    }
+}
+
+impl Plan<'_, '_> {
+    /// Files whose body does something observable at load
+    /// ([`super::entry_order`]): a statement with a load-time effect or a
+    /// write to another file's binding.
+    fn effect_files(&self) -> Vec<bool> {
+        let mut effect = vec![false; self.input.files.len()];
+        for (idx, facts) in self.input.facts.iter().enumerate() {
+            let Some(&file) = self.stmt_file.get(idx) else {
+                continue;
+            };
+            let foreign_write = facts
+                .writes
+                .iter()
+                .any(|w| self.cross.get(w).is_some_and(|c| c.decl_file != file));
+            if facts.effects || foreign_write {
+                effect[file] = true;
+            }
+        }
+        effect
+    }
+
+    /// Keep the prior tree's entry order where the load allows it
+    /// ([`pinned_entry_order`]); bundle order when there is no prior or the
+    /// new order would read a file mid-load. Runs after
+    /// [`Self::settle_load_order`], whose deferrals it never changes.
+    fn adopt_prior_entry_order(&mut self) {
+        let Some(prior) = self.input.prior_entry else {
+            return;
+        };
+        let bundle = self.bundle_entry_order();
+        let headers: Vec<Vec<usize>> = (0..self.input.files.len())
+            .map(|f| self.require_lists(f).0)
+            .collect();
+        let effect = self.effect_files();
+        let Some(order) = pinned_entry_order(&bundle, self.input.files, prior, &headers, &effect)
+        else {
+            return;
+        };
+        self.entry = Some(order);
+        if self.load_order_hazard().is_some() {
+            self.entry = None;
+        }
     }
 }
 
@@ -1295,8 +1355,12 @@ impl Plan<'_, '_> {
     /// `entrySource`.
     fn entry_source(&self, entry: &str) -> String {
         let mut lines: Vec<String> = self.directives.clone();
-        lines.push("// Entry for the runnable split tree: loads every module in the".into());
-        lines.push("// original bundle's first-statement order.".into());
+        lines.push(format!("{ENTRY_MARKER}: loads every module in the"));
+        lines.push(if self.entry.is_some() {
+            "// prior tree's order, load-time effects in bundle order.".into()
+        } else {
+            "// original bundle's first-statement order.".into()
+        });
         if let Some(bc) = &self.bundle_context {
             lines.push(format!(
                 "const {} = require(\"{}\");",
@@ -1309,20 +1373,11 @@ impl Plan<'_, '_> {
             ));
             lines.push(String::new());
         }
-        let mut seen = HashSet::new();
-        let all: Vec<usize> = self
-            .stmt_file
-            .iter()
-            .copied()
-            .chain(0..self.input.files.len())
-            .collect();
-        for file in all {
-            if seen.insert(file) {
-                lines.push(format!(
-                    "require(\"{}\");",
-                    compute_relative_import_path(entry, &self.input.files[file])
-                ));
-            }
+        for file in self.entry_order() {
+            lines.push(format!(
+                "require(\"{}\");",
+                compute_relative_import_path(entry, &self.input.files[file])
+            ));
         }
         format!("{}\n", lines.join("\n"))
     }
@@ -1444,6 +1499,7 @@ fn new_plan<'a, 's>(input: &'s RunnableInput<'a, 's>) -> Result<Plan<'a, 's>, St
         load_time_edges: OrderedSets::default(),
         load_time_value_edges: OrderedSets::default(),
         deferred: HashSet::new(),
+        entry: None,
         bundle_context: None,
         ident_at,
     })
@@ -1658,6 +1714,7 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
     }
     plan.assert_load_time_acyclic()?;
     plan.settle_load_order()?;
+    plan.adopt_prior_entry_order();
     let by_file = ordered_indexes_by_file(&plan);
     let (emit_hashes, emit_names, emit_indexes) = record_emitted_layout(&plan, &by_file);
     let layout = || EmittedLayout {

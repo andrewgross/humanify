@@ -104,3 +104,52 @@ fn emission_order_is_identity_without_a_usable_prior() {
     );
     assert_eq!(perm, vec![1, 0]);
 }
+
+/// exp227: an EDITED statement (its hash changed) keeps its prior place
+/// through a name only it binds, on both sides — it used to follow its
+/// bundle predecessor, and moved whenever the prior order and bundle
+/// order disagreed around it.
+#[test]
+fn an_edited_statement_keeps_its_prior_place_by_a_name_only_it_binds() {
+    let key = |h: &str, n: &str| alignment_key(h, Some(n));
+    // prior: a, edited (old hash), b, c. Bundle: a, b, c, edited (new hash).
+    let prior = vec![
+        key("ha", "alpha,props"),
+        key("old", "Dialog,props"),
+        key("hb", "beta,props"),
+        key("hc", "gamma"),
+    ];
+    let keys = vec![
+        key("ha", "alpha,props"),
+        key("hb", "beta,props"),
+        key("hc", "gamma"),
+        key("new", "Dialog,props"),
+    ];
+    assert_eq!(
+        align_file_statements(&[0, 1, 2, 3], &keys, Some(&prior), &pure(4)),
+        vec![0, 3, 1, 2]
+    );
+}
+
+/// A name more than one statement binds (a parameter name, say) claims
+/// nothing.
+#[test]
+fn a_shared_name_claims_no_prior_place() {
+    let key = |h: &str, n: &str| alignment_key(h, Some(n));
+    let prior = vec![
+        key("ha", "alpha"),
+        key("old", "props,x"),
+        key("hb", "beta"),
+        key("hd", "props,y"),
+    ];
+    let keys = vec![
+        key("ha", "alpha"),
+        key("hb", "beta"),
+        key("new", "props,z"),
+        key("he", "props,w"),
+    ];
+    assert_eq!(
+        align_file_statements(&[0, 1, 2, 3], &keys, Some(&prior), &pure(4)),
+        vec![0, 1, 2, 3]
+    );
+}
