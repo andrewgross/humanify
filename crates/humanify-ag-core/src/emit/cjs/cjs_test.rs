@@ -1,7 +1,11 @@
 //! The runnable emit replayed against the REAL TS on every cjs-emit.test.ts
 //! fixture and the Babel-shape extras (test/parity/wp53-cjs-probe.ts →
 //! wp53-cjs.json): the whole emitted tree byte for byte, the aliases, the
-//! emitted layout — or the TS's exact decline reason.
+//! emitted layout — or the TS's exact decline reason. One deliberate
+//! departure (exp223): a statement is written re-indented to its own depth,
+//! so the 9 emitted files whose statements span lines were re-recorded —
+//! each differs from the TS's bytes only by leading spaces removed from a
+//! statement's continuation lines.
 
 use std::collections::HashMap;
 
@@ -426,4 +430,40 @@ fn each_importer_carries_its_own_prior_alias() {
         require_line_of(&v3.files, rule, m),
         "const srcValidatePathVal = require(\"./validatePathVal.js\");"
     );
+}
+
+/// exp223: a top-level statement is written as if printed at its own depth
+/// in its file — column 0, its body one level in — never with the
+/// indentation it had nested in the bundle's wrapper (`function f() {` at
+/// column 0, the body at 4, the closing `}` at 2). A template literal's
+/// lines and a string's continuation lines are content and stay byte for
+/// byte; a rewritten (cross-file) statement is re-indented the same way.
+#[test]
+fn statements_are_written_at_their_own_depth_with_literal_lines_kept() {
+    let mut code = String::from("(function (exports, require, module) {\n");
+    code.push_str("  function helperH(a) {\n");
+    code.push_str("    if (a) {\n");
+    code.push_str("      return `line one\n    kept as is\n${a}\n        too`;\n");
+    code.push_str("    }\n");
+    code.push_str("    return \"x\\\n    continued\";\n");
+    code.push_str("  }\n");
+    code.push_str("  var valueB = {\n");
+    code.push_str("    run: function () {\n");
+    code.push_str("      return helperH(1);\n");
+    code.push_str("    }\n");
+    code.push_str("  };\n");
+    let mut order = vec!["a.js", "b.js"];
+    for i in 0..55 {
+        code.push_str(&format!("  var pad{i:02} = {i};\n"));
+        order.push("a.js");
+    }
+    code.push_str("});\n");
+    let tree = emit_tree(&code, &order);
+    let file = |p: &str| tree.files.iter().find(|(f, _)| f == p).expect(p).1.clone();
+    let a = file("a.js");
+    let want_a = "function helperH(a) {\n  if (a) {\n    return `line one\n    kept as is\n${a}\n        too`;\n  }\n  return \"x\\\n    continued\";\n}\n";
+    assert!(a.contains(want_a), "a.js:\n{a}");
+    let b = file("b.js");
+    let want_b = "var valueB = {\n  run: function () {\n    return (0, a.helperH)(1);\n  }\n};\n";
+    assert!(b.contains(want_b), "b.js:\n{b}");
 }

@@ -37,6 +37,7 @@ use oxc_span::{GetSpan, Span};
 use humanify_ag_model::js::cmp_utf16;
 
 use crate::babel_view::unparen;
+use crate::naming::waves::generate::{Replacement, TextView};
 use crate::place::layout::METADATA_DIR;
 use crate::rename::validated::scopes::{BabelScopes, BindingId, BindingKind, SiteType};
 
@@ -223,6 +224,9 @@ struct Plan<'a, 's> {
     nodes: &'s AstNodes<'a>,
     statements: &'a [Statement<'a>],
     ranges: Vec<(u32, u32)>,
+    /// The printer's view of the bundle text: writes every statement
+    /// re-indented to its own depth (exp223), raw literal lines kept.
+    text: TextView<'a>,
     /// statement index → owning file id (relocated).
     stmt_file: Vec<usize>,
     /// name → cross-file binding (only bindings that cross).
@@ -999,22 +1003,26 @@ fn relocate_namespace_augmentations(plan: &mut Plan<'_, '_>) {
 // Rendering
 // ---------------------------------------------------------------------------
 
-/// `applyEdits`: non-overlapping splices, right to left.
-fn apply_edits(src: &str, base: u32, edits: &[Edit]) -> Result<String, String> {
+/// `applyEdits`, re-indented (exp223): the text of `[start, end)` with
+/// the non-overlapping splices applied, every line moved left by the
+/// indentation of the line `start` sits on — the bytes the formatter
+/// prints for the node at depth 0, wherever it sat in the bundle. A line
+/// that begins inside a template quasi or a string is content and stays
+/// byte for byte (the one owner: [`TextView::pretty`]).
+fn reindented(text: &TextView<'_>, start: u32, end: u32, edits: &[Edit]) -> Result<String, String> {
     let mut sorted: Vec<&Edit> = edits.iter().collect();
-    // Stable, descending by start (`(a, b) => b.start - a.start`).
-    sorted.sort_by_key(|e| std::cmp::Reverse(e.start));
-    let mut out = src.to_string();
-    let mut prev_start = u32::MAX;
-    for e in sorted {
-        if e.end > prev_start {
-            return Err("runnable emit: overlapping rewrites (internal)".into());
-        }
-        prev_start = e.start;
-        let (s, t) = ((e.start - base) as usize, (e.end - base) as usize);
-        out = format!("{}{}{}", &out[..s], e.text, &out[t..]);
+    sorted.sort_by_key(|e| (e.start, e.end));
+    if sorted.windows(2).any(|w| w[1].start < w[0].end) {
+        return Err("runnable emit: overlapping rewrites (internal)".into());
     }
-    Ok(out)
+    let replacements: Vec<Replacement> = sorted
+        .into_iter()
+        .map(|e| Replacement {
+            span: Span::new(e.start, e.end),
+            text: e.text.clone(),
+        })
+        .collect();
+    Ok(text.pretty(Span::new(start, end), &replacements, true))
 }
 
 /// `takeWithin`: remove and return the pool edits inside [start, end).
@@ -1062,7 +1070,7 @@ impl Plan<'_, '_> {
         };
         let s = init.span();
         let taken = take_within(pool, s.start, s.end);
-        let text = apply_edits(self.slice(s.start, s.end), s.start, &taken)?;
+        let text = reindented(&self.text, s.start, s.end, &taken)?;
         Ok(Some(format!(
             "{}.{name} = {text}",
             self.ns_of_cross(reader, name)?
@@ -1098,7 +1106,7 @@ impl Plan<'_, '_> {
                 }
             } else {
                 let taken = take_within(pool, d.span.start, d.span.end);
-                let text = apply_edits(self.slice(d.span.start, d.span.end), d.span.start, &taken)?;
+                let text = reindented(&self.text, d.span.start, d.span.end, &taken)?;
                 lines.push(format!("{} {text};", declaration_kind(decl.kind)));
             }
         }
@@ -1199,21 +1207,19 @@ impl Plan<'_, '_> {
         )
     }
 
-    /// `stmtText`: byte-exact when untouched, spliced otherwise.
+    /// `stmtText`: the statement re-indented to its own depth (exp223),
+    /// spliced where it was rewritten.
     fn stmt_text(&self, idx: usize) -> Result<String, String> {
         let (start, end) = self.ranges[idx];
         let edits = &self.edits[idx];
         let redecls = &self.redecls[idx];
-        if edits.is_empty() && redecls.is_empty() {
-            return Ok(self.slice(start, end).to_string());
-        }
         let pool = edits.clone();
         let final_edits = if redecls.is_empty() {
             pool
         } else {
             self.with_redecl_composites(self.stmt_file[idx], &self.statements[idx], redecls, pool)?
         };
-        apply_edits(self.slice(start, end), start, &final_edits)
+        reindented(&self.text, start, end, &final_edits)
     }
 
     /// `accessorLine`.
@@ -1426,6 +1432,7 @@ fn new_plan<'a, 's>(input: &'s RunnableInput<'a, 's>) -> Result<Plan<'a, 's>, St
             .iter()
             .map(|s| (s.span().start, s.span().end))
             .collect(),
+        text: TextView::build(input.semantic),
         stmt_file,
         cross: HashMap::new(),
         edits: vec![Vec::new(); statements.len()],
