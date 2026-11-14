@@ -44,6 +44,7 @@ pub mod js_record;
 pub mod module_names;
 pub mod passes;
 pub mod plumbing;
+pub mod private_members;
 pub mod prompts;
 pub mod reask;
 pub mod reconcile;

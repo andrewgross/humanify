@@ -118,6 +118,13 @@ one of them is in the Rust crate `crates/humanify-ag-dev` (`cargo dev`); the TS
 - **`applyTwinPrivateRenames`** (`prior-transfer.ts:829`) writes `node.id.name`
   directly for class-private `#foo` names. No validated path exists for them,
   and the `#` namespace is disjoint — it cannot hit a reserved word or a global.
+  Since exp224 the ONE owner of every private-name edit is
+  `naming::private_members::private_member_edits` (Rust): it applies the
+  statement twins' carried spellings (`naming::waves::render::private_rename_edits`)
+  and then names every still-minted `#name` from its class (accessor, object
+  key, property read, global constructor, else kind + ordinal), unique per
+  class and never capturing across nested classes; legality is
+  `is_valid_rename_target` minus `constructor`.
 - **`JS_BUILTINS`** (`src/split/emitter.ts:13`) is a third, smaller global list
   and is labelled as such. It answers a different question — "is this free
   reference ambient?" — not "may a rename shadow this?".
