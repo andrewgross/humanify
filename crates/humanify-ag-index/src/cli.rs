@@ -23,9 +23,43 @@ use std::path::PathBuf;
 
 use crate::build::{BuildConfig, SpongeRegions, run};
 use crate::cache::{BUILD_SIDECAR_SCHEMA, BuildSidecar, SpecSidecar};
+use crate::error::{FileError, at};
 use crate::planner::{self, ResolvedSpec};
 use crate::spec::{IndexSpec, SPEC_SCHEMA};
-use crate::tools;
+use crate::tools::{self, ToolError};
+
+/// Why an `index` command failed.
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error(transparent)]
+    Slim(#[from] crate::slim::SlimError),
+    #[error("{0} maps failed")]
+    MapsFailed(usize),
+    #[error("--chunk {text}: {why}")]
+    Chunk { text: String, why: &'static str },
+    #[error(transparent)]
+    File(#[from] FileError),
+    #[error(transparent)]
+    Spec(#[from] crate::spec::SpecError),
+    #[error(transparent)]
+    Plan(#[from] planner::PlanError),
+    #[error("spec tools: {0}")]
+    SpecTools(ToolError),
+    #[error(transparent)]
+    Tool(#[from] ToolError),
+    #[error(transparent)]
+    Cache(#[from] crate::cache::CacheError),
+    #[error(transparent)]
+    Build(#[from] crate::build::BuildError),
+    #[error(transparent)]
+    Replay(#[from] crate::replay::ReplayError),
+    #[error("--out is required unless --dry-run or --chunk")]
+    NoOut,
+    #[error("--sponge-regions {0:?} (drop, origin)")]
+    SpongeRegions(String),
+    #[error("exactly one of --spec and --replay")]
+    OneOf,
+}
 use humanify_ag_core::libindex::recipe::Recipe;
 
 /// `humanify-ag index <command>`: build a library fingerprint index from a
@@ -121,7 +155,7 @@ pub enum IndexCommand {
 
 /// `slim-cache`: progress on stderr, the report as JSON on stdout; an
 /// error on any map fails the run (the maps it did slim stay slimmed).
-fn slim_cache(work: &[PathBuf], journal: &std::path::Path) -> Result<(), String> {
+fn slim_cache(work: &[PathBuf], journal: &std::path::Path) -> Result<(), CommandError> {
     let line = |r: &crate::slim::SlimReport| {
         serde_json::json!({
             "maps": r.maps, "stripped": r.stripped, "absent": r.absent,
@@ -141,7 +175,7 @@ fn slim_cache(work: &[PathBuf], journal: &std::path::Path) -> Result<(), String>
     if report.errors.is_empty() {
         Ok(())
     } else {
-        Err(format!("{} maps failed", report.errors.len()))
+        Err(CommandError::MapsFailed(report.errors.len()))
     }
 }
 
@@ -149,7 +183,7 @@ fn slim_cache(work: &[PathBuf], journal: &std::path::Path) -> Result<(), String>
 /// `<work>/lists/` (cached: a rerun replays them).
 fn list_fetcher(
     work: &std::path::Path,
-) -> impl Fn(crate::spec::HighImpactList, &str, &str) -> Result<String, String> {
+) -> impl Fn(crate::spec::HighImpactList, &str, &str) -> Result<String, planner::ListError> {
     let dir = work.join("lists");
     move |list, version, sha256| planner::fetch_high_impact_list(list, version, sha256, &dir)
 }
@@ -196,17 +230,21 @@ struct BuildArgs {
 }
 
 /// A chunk spec `I/N`: 0 <= I < N.
-fn parse_chunk(text: &str) -> Result<(usize, usize), String> {
+fn parse_chunk(text: &str) -> Result<(usize, usize), CommandError> {
+    let bad = |why| CommandError::Chunk {
+        text: text.to_string(),
+        why,
+    };
     let Some((i, n)) = text.split_once('/') else {
-        return Err(format!("--chunk {text}: expected I/N"));
+        return Err(bad("expected I/N"));
     };
     let (i, n) = (i.trim(), n.trim());
     let (i, n) = (i.parse::<usize>(), n.parse::<usize>());
     let (Ok(i), Ok(n)) = (i, n) else {
-        return Err(format!("--chunk {text}: expected I/N (numbers)"));
+        return Err(bad("expected I/N (numbers)"));
     };
     if n == 0 || i >= n {
-        return Err(format!("--chunk {text}: need 0 <= I < N"));
+        return Err(bad("need 0 <= I < N"));
     }
     Ok((i, n))
 }
@@ -220,9 +258,8 @@ fn resolve_spec(
     store: &std::path::Path,
     work: &std::path::Path,
     offline: bool,
-) -> Result<(IndexSpec, ResolvedSpec, String), String> {
-    let text =
-        std::fs::read_to_string(spec_path).map_err(|e| format!("{}: {e}", spec_path.display()))?;
+) -> Result<(IndexSpec, ResolvedSpec, String), CommandError> {
+    let text = std::fs::read_to_string(spec_path).map_err(at(spec_path))?;
     let sha = crate::shard::hex_sha256(text.as_bytes());
     let spec = IndexSpec::parse(&text)?;
     let mut loader = planner::SnapshotLoader::new(registry.to_path_buf(), offline, 16);
@@ -232,7 +269,7 @@ fn resolve_spec(
     };
     let resolved = planner::resolve(&spec, &mut src)?;
     for (bundler, version) in &spec.tools {
-        tools::tool_at(store, *bundler, version).map_err(|e| format!("spec tools: {e}"))?;
+        tools::tool_at(store, *bundler, version).map_err(CommandError::SpecTools)?;
     }
     Ok((spec, resolved, sha))
 }
@@ -287,7 +324,7 @@ fn write_sidecar(
     outcome: &crate::build::BuildOutcome,
     made: Made,
     spec: Option<SpecSidecar>,
-) -> Result<(), String> {
+) -> Result<(), CommandError> {
     let side = BuildSidecar {
         schema: BUILD_SIDECAR_SCHEMA.into(),
         index_id: outcome.index_id.clone(),
@@ -324,7 +361,7 @@ fn write_sidecar(
         completed: crate::cache::now_iso(),
         spec,
     };
-    crate::cache::write_build_sidecar(out, &side)
+    Ok(crate::cache::write_build_sidecar(out, &side)?)
 }
 
 /// What a build plans from — a resolved spec, or a replayed index's pins.
@@ -345,7 +382,7 @@ struct PlanInputs {
 fn build_config(
     args: &BuildArgs,
     plan: PlanInputs,
-) -> Result<(BuildConfig, Option<(usize, usize)>), String> {
+) -> Result<(BuildConfig, Option<(usize, usize)>), CommandError> {
     let chunk = args.chunk.as_deref().map(parse_chunk).transpose()?;
     let mut recipes: Vec<crate::recipe::RecipeBuild> = Vec::new();
     for (recipe, version) in &plan.recipes {
@@ -379,7 +416,7 @@ fn build_config(
     Ok((cfg, chunk))
 }
 
-fn build(spec_path: &std::path::Path, args: &BuildArgs) -> Result<String, String> {
+fn build(spec_path: &std::path::Path, args: &BuildArgs) -> Result<String, CommandError> {
     let (spec, resolved, spec_sha) = resolve_spec(
         spec_path,
         &args.registry,
@@ -439,10 +476,9 @@ fn build_replay(
     index: &std::path::Path,
     sponge_regions: SpongeRegions,
     args: &BuildArgs,
-) -> Result<String, String> {
+) -> Result<String, CommandError> {
     let manifest = index.join("manifest.json");
-    let text =
-        std::fs::read_to_string(&manifest).map_err(|e| format!("{}: {e}", manifest.display()))?;
+    let text = std::fs::read_to_string(&manifest).map_err(at(&manifest))?;
     let replay = crate::replay::replay_plan(&text)?;
     let plan = PlanInputs {
         as_of: replay.as_of.clone(),
@@ -503,13 +539,13 @@ pub fn run_index(command: IndexCommand) -> i32 {
     else {
         unreachable!("slim-cache returned above")
     };
-    let result = (|| -> Result<String, String> {
+    let result = (|| -> Result<String, CommandError> {
         if out.is_none() && !dry_run && chunk.is_none() {
-            return Err("--out is required unless --dry-run or --chunk".into());
+            return Err(CommandError::NoOut);
         }
         // the bundlers and npm run inside each install: every path absolute
-        let abs = |p: PathBuf| -> Result<PathBuf, String> {
-            std::path::absolute(&p).map_err(|e| format!("{}: {e}", p.display()))
+        let abs = |p: PathBuf| -> Result<PathBuf, CommandError> {
+            Ok(std::path::absolute(&p).map_err(at(&p))?)
         };
         let args = BuildArgs {
             registry: abs(registry)?,
@@ -528,10 +564,10 @@ pub fn run_index(command: IndexCommand) -> i32 {
             (None, Some(index)) => {
                 let regions = sponge_regions.as_deref().unwrap_or_default();
                 let regions = SpongeRegions::parse(regions)
-                    .ok_or_else(|| format!("--sponge-regions {regions:?} (drop, origin)"))?;
+                    .ok_or_else(|| CommandError::SpongeRegions(regions.to_string()))?;
                 build_replay(&abs(index)?, regions, &args)
             }
-            _ => Err("exactly one of --spec and --replay".into()),
+            _ => Err(CommandError::OneOf),
         }
     })();
     match result {

@@ -31,7 +31,46 @@ use humanify_ag_core::libindex::table::{NameInterner, NameRowCompact, RawName, u
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use crate::error::{FileError, op_at};
 use crate::shard::{Shard, ShardInputs, hex_sha256, read_current, shard_path};
+
+/// Why the merge stopped.
+#[derive(Debug, thiserror::Error)]
+pub enum MergeError {
+    #[error("{0}: {1}")]
+    Stream(&'static str, std::io::Error),
+    #[error("{0}")]
+    Encode(#[from] serde_json::Error),
+    #[error(transparent)]
+    File(#[from] FileError),
+    #[error("shard {0} added out of label order")]
+    OutOfOrder(String),
+    #[error("shard {label}: {what} hash {hash:?} is not 16 lowercase hex digits")]
+    ShardHash {
+        label: String,
+        what: &'static str,
+        hash: String,
+    },
+    #[error("names row {0:016x}: no unit row of the slice holds it")]
+    NamesRowUnheld(u64),
+    #[error("unit row hash {0:?} is not 16 lowercase hex digits")]
+    RowHash(String),
+    #[error("unit row {what} {row:?}: the merge never interned it")]
+    NotInterned {
+        what: &'static str,
+        row: Box<UnitRow>,
+    },
+    #[error("names list: name {0:?} is not interned")]
+    NameNotInterned(String),
+    #[error("names rows for slice {0}: the slice has no unit rows")]
+    NoUnitRows(String),
+    #[error("{0}")]
+    Table(humanify_ag_core::libindex::table::TableError),
+    #[error("{0}")]
+    TableWrite(Box<humanify_ag_core::libindex::table::TableWriteError<MergeError>>),
+    #[error("the giant-shard gate lock is poisoned")]
+    GatePoisoned,
+}
 
 /// The stop-lists shipped with every index.
 pub const STOPLISTS_JSON: &str = include_str!("../data/stoplists.json");
@@ -182,33 +221,33 @@ enum StreamOut {
 }
 
 impl JsonlStream {
-    fn take(&mut self, bytes: &[u8]) -> Result<(), String> {
+    fn take(&mut self, bytes: &[u8]) -> Result<(), MergeError> {
         self.hasher.update(bytes);
         match &mut self.out {
             StreamOut::Buffer(b) => {
                 b.extend_from_slice(bytes);
                 Ok(())
             }
-            StreamOut::File(f) => {
-                std::io::Write::write_all(f, bytes).map_err(|e| format!("write the table: {e}"))
-            }
+            StreamOut::File(f) => std::io::Write::write_all(f, bytes)
+                .map_err(|e| MergeError::Stream("write the table", e)),
         }
     }
 
     /// One row: serde's writer path — the bytes [`jsonl`] would build.
-    fn row<T: Serialize>(&mut self, r: &T) -> Result<(), String> {
+    fn row<T: Serialize>(&mut self, r: &T) -> Result<(), MergeError> {
         let mut line = Vec::new();
-        serde_json::to_writer(&mut line, r).map_err(|e| e.to_string())?;
+        serde_json::to_writer(&mut line, r)?;
         line.push(b'\n');
         self.take(&line)
     }
 
     /// Flush; the table's sha256 and, buffered only, its bytes.
-    fn done(self) -> Result<(String, Option<Vec<u8>>), String> {
+    fn done(self) -> Result<(String, Option<Vec<u8>>), MergeError> {
         match self.out {
             StreamOut::Buffer(b) => Ok((hex_digest(self.hasher), Some(b))),
             StreamOut::File(mut f) => {
-                std::io::Write::flush(&mut f).map_err(|e| format!("flush the table: {e}"))?;
+                std::io::Write::flush(&mut f)
+                    .map_err(|e| MergeError::Stream("flush the table", e))?;
                 Ok((hex_digest(self.hasher), None))
             }
         }
@@ -218,7 +257,7 @@ impl JsonlStream {
 impl TableSink<'_> {
     /// A WHOLE table's bytes (the bin tables, versions.json): buffered, or
     /// written out and recorded by sha.
-    fn whole(&mut self, name: &str, bytes: Vec<u8>) -> Result<(), String> {
+    fn whole(&mut self, name: &str, bytes: Vec<u8>) -> Result<(), MergeError> {
         match self {
             TableSink::Buffer(files) => {
                 files.insert(name.to_string(), bytes);
@@ -226,7 +265,7 @@ impl TableSink<'_> {
             }
             TableSink::Stream(dir, written) => {
                 let sha = hex_sha256(&bytes);
-                std::fs::write(dir.join(name), &bytes).map_err(|e| format!("write {name}: {e}"))?;
+                std::fs::write(dir.join(name), &bytes).map_err(op_at("write ", Path::new(name)))?;
                 written.insert(name.to_string(), sha);
                 Ok(())
             }
@@ -235,11 +274,11 @@ impl TableSink<'_> {
 
     /// A streamed table opened for its rows: the sink's mode picks where
     /// the bytes land.
-    fn stream(&mut self, name: &str) -> Result<JsonlStream, String> {
+    fn stream(&mut self, name: &str) -> Result<JsonlStream, MergeError> {
         let out = match self {
             TableSink::Buffer(_) => StreamOut::Buffer(Vec::new()),
             TableSink::Stream(dir, _) => StreamOut::File(std::io::BufWriter::new(
-                std::fs::File::create(dir.join(name)).map_err(|e| format!("create {name}: {e}"))?,
+                std::fs::File::create(dir.join(name)).map_err(op_at("create ", Path::new(name)))?,
             )),
         };
         Ok(JsonlStream {
@@ -253,7 +292,7 @@ impl TableSink<'_> {
         &mut self,
         name: &str,
         rows: impl Iterator<Item = T>,
-    ) -> Result<(), String> {
+    ) -> Result<(), MergeError> {
         let mut s = self.stream(name)?;
         for r in rows {
             s.row(&r)?;
@@ -261,7 +300,7 @@ impl TableSink<'_> {
         self.record(name, s)
     }
 
-    fn record(&mut self, name: &str, s: JsonlStream) -> Result<(), String> {
+    fn record(&mut self, name: &str, s: JsonlStream) -> Result<(), MergeError> {
         let (sha, bytes) = s.done()?;
         match self {
             TableSink::Buffer(files) => {
@@ -456,10 +495,10 @@ impl Merger {
     /// Add one shard. Shards must come in (label, key) order — a unit
     /// group keeps the first shard's nodes and content — so one out of
     /// order is refused.
-    pub fn add(&mut self, shard: Shard) -> Result<(), String> {
+    pub fn add(&mut self, shard: Shard) -> Result<(), MergeError> {
         let order = (shard.label(), shard.key.clone());
         if self.last.as_ref().is_some_and(|last| *last > order) {
-            return Err(format!("shard {} added out of label order", order.0));
+            return Err(MergeError::OutOfOrder(order.0));
         }
         self.shard_keys.insert(order.0.clone(), shard.key.clone());
         self.last = Some(order);
@@ -495,14 +534,12 @@ impl Merger {
         }
     }
 
-    fn add_units(&mut self, shard: &Shard) -> Result<(), String> {
+    fn add_units(&mut self, shard: &Shard) -> Result<(), MergeError> {
         for u in &shard.units {
-            let hash = unit_key(&u.hash).ok_or_else(|| {
-                format!(
-                    "shard {}: unit hash {:?} is not 16 lowercase hex digits",
-                    shard.label(),
-                    u.hash
-                )
+            let hash = unit_key(&u.hash).ok_or_else(|| MergeError::ShardHash {
+                label: shard.label(),
+                what: "unit",
+                hash: u.hash.clone(),
             })?;
             if is_helper(&u.owner, &self.stop) {
                 if is_helper_source(&u.owner, &self.stop) && self.range.holds(hash) {
@@ -516,18 +553,17 @@ impl Merger {
             let (owner, version) = self.seen(&u.owner, &u.version);
             let file = self.strings.id(&u.file);
             let callee = |h: &str| {
-                unit_key(h).ok_or_else(|| {
-                    format!(
-                        "shard {}: callee hash {h:?} is not 16 lowercase hex digits",
-                        shard.label()
-                    )
+                unit_key(h).ok_or_else(|| MergeError::ShardHash {
+                    label: shard.label(),
+                    what: "callee",
+                    hash: h.to_string(),
                 })
             };
             let inside = u
                 .inside
                 .iter()
                 .map(|h| callee(h))
-                .collect::<Result<Vec<u64>, String>>()?;
+                .collect::<Result<Vec<u64>, MergeError>>()?;
             // a stop-listed helper is in no table: no OUT-OF edge names it
             let mut out_of = Vec::with_capacity(u.out_of.len());
             for c in u.out_of.iter().filter(|c| !is_helper(&c.owner, &self.stop)) {
@@ -773,7 +809,7 @@ impl Merger {
     /// instruments) and the lookup tables a run reads
     /// (`humanify_ag_core::libindex::table`), derived from the same rows —
     /// this merge's rows as one [`Segment`], finished like any worker's.
-    pub fn finish(self, meta: MergeMeta) -> Result<IndexFiles, String> {
+    pub fn finish(self, meta: MergeMeta) -> Result<IndexFiles, MergeError> {
         finish_segments(meta, vec![self.segment()])
     }
 }
@@ -791,9 +827,9 @@ fn name_rows_into(
     groups: &HashMap<(u64, u32, u32), BTreeMap<NameList, Vec<u32>>>,
     indexed: &BTreeMap<String, Vec<String>>,
     id_of: &HashMap<(u64, u32, u32), u32>,
-    name_of: impl Fn(u32) -> Result<u32, String>,
-    sink: &mut dyn FnMut(&[u8]) -> Result<(), String>,
-) -> Result<Vec<NameRowCompact>, String> {
+    name_of: impl Fn(u32) -> Result<u32, MergeError>,
+    sink: &mut dyn FnMut(&[u8]) -> Result<(), MergeError>,
+) -> Result<Vec<NameRowCompact>, MergeError> {
     let s = strings;
     let mut keys: Vec<&(u64, u32, u32)> = groups.keys().collect();
     keys.sort_by(|a, b| {
@@ -839,13 +875,11 @@ fn name_rows_into(
                     .collect(),
                 versions: ranges(s, indexed, k.1, &versions),
             };
-            sink(&serde_json::to_vec(&row).map_err(|e| e.to_string())?)?;
+            sink(&serde_json::to_vec(&row)?)?;
             sink(b"\n")?;
         }
         compact.push(NameRowCompact {
-            row: *id_of.get(k).ok_or_else(|| {
-                format!("names row {:016x}: no unit row of the slice holds it", k.0)
-            })?,
+            row: *id_of.get(k).ok_or(MergeError::NamesRowUnheld(k.0))?,
             lists: compact_lists,
         });
     }
@@ -945,24 +979,26 @@ fn unit_row_id_ofs(
     rows: &[UnitRow],
     counts: &[usize],
     ids: &[u32],
-) -> Result<Vec<RowIdOf>, String> {
+) -> Result<Vec<RowIdOf>, MergeError> {
     let mut id_ofs: Vec<RowIdOf> = Vec::with_capacity(segments.len());
     let mut off = 0usize;
     for (seg, &n) in segments.iter().zip(counts) {
         let rows = &rows[off..off + n];
         let mut id_of: RowIdOf = HashMap::with_capacity(rows.len());
         for (j, r) in rows.iter().enumerate() {
-            let key = unit_key(&r.hash).ok_or_else(|| {
-                format!("unit row hash {:?} is not 16 lowercase hex digits", r.hash)
-            })?;
+            let key = unit_key(&r.hash).ok_or_else(|| MergeError::RowHash(r.hash.clone()))?;
+            let not_interned = |what| MergeError::NotInterned {
+                what,
+                row: Box::new(r.clone()),
+            };
             let owner = seg
                 .strings
                 .lookup(&r.owner)
-                .ok_or_else(|| format!("unit row owner {r:?}: the merge never interned it"))?;
+                .ok_or_else(|| not_interned("owner"))?;
             let file = seg
                 .strings
                 .lookup(&r.file)
-                .ok_or_else(|| format!("unit row file {r:?}: the merge never interned it"))?;
+                .ok_or_else(|| not_interned("file"))?;
             id_of.insert((key, owner, file), ids[off + j]);
         }
         off += n;
@@ -981,7 +1017,7 @@ fn stream_names_rows(
     id_ofs: &[RowIdOf],
     interner: &NameInterner,
     out: &mut JsonlStream,
-) -> Result<Vec<NameRowCompact>, String> {
+) -> Result<Vec<NameRowCompact>, MergeError> {
     let mut compact: Vec<NameRowCompact> = Vec::new();
     for (i, seg) in segments.iter().enumerate() {
         let Some(groups) = seg.names_groups.get(kind) else {
@@ -996,12 +1032,9 @@ fn stream_names_rows(
             indexed,
             &id_ofs[i],
             |local| {
-                interner.lookup(seg.strings.get(local)).ok_or_else(|| {
-                    format!(
-                        "names list: name {:?} is not interned",
-                        seg.strings.get(local)
-                    )
-                })
+                interner
+                    .lookup(seg.strings.get(local))
+                    .ok_or_else(|| MergeError::NameNotInterned(seg.strings.get(local).to_string()))
             },
             &mut |bytes| out.take(bytes),
         )?);
@@ -1009,7 +1042,10 @@ fn stream_names_rows(
     Ok(compact)
 }
 
-pub fn finish_segments(meta: MergeMeta, mut segments: Vec<Segment>) -> Result<IndexFiles, String> {
+pub fn finish_segments(
+    meta: MergeMeta,
+    mut segments: Vec<Segment>,
+) -> Result<IndexFiles, MergeError> {
     let first = segments.first();
     let indexed = first.map_or(BTreeMap::new(), |s| s.indexed.clone());
     let shard_keys = first.map_or(BTreeMap::new(), |s| s.shard_keys.clone());
@@ -1068,10 +1104,10 @@ fn stream_tables(
     indexed: &BTreeMap<String, Vec<String>>,
     files: &mut BTreeMap<String, Vec<u8>>,
     written: &mut BTreeMap<String, String>,
-) -> Result<(), String> {
+) -> Result<(), MergeError> {
     let mut sink = match &meta.staging {
         Some(dir) => {
-            std::fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+            std::fs::create_dir_all(dir).map_err(op_at("mkdir ", dir))?;
             TableSink::Stream(dir, written)
         }
         None => TableSink::Buffer(files),
@@ -1097,7 +1133,7 @@ fn stream_tables(
             &literals,
             &mut put,
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| MergeError::TableWrite(Box::new(e)))?;
     }
     drop(units);
     drop(edges);
@@ -1141,7 +1177,7 @@ fn stream_row_tables(
     sink: &mut TableSink<'_>,
     segments: &mut [Segment],
     kinds: &[String],
-) -> Result<RowTables, String> {
+) -> Result<RowTables, MergeError> {
     let mut units: BTreeMap<String, Vec<UnitRow>> = BTreeMap::new();
     let mut edges: BTreeMap<String, Vec<EdgeRow>> = BTreeMap::new();
     let mut unit_counts: BTreeMap<String, Vec<usize>> = BTreeMap::new();
@@ -1209,7 +1245,7 @@ fn stream_names_tables(
     indexed: &BTreeMap<String, Vec<String>>,
     units: &BTreeMap<String, Vec<UnitRow>>,
     unit_counts: &BTreeMap<String, Vec<usize>>,
-) -> Result<(), String> {
+) -> Result<(), MergeError> {
     let interner = merge_distinct_names(segments);
     let mut names: BTreeMap<String, Vec<NameRowCompact>> = BTreeMap::new();
     for kind in kinds {
@@ -1221,9 +1257,9 @@ fn stream_names_tables(
         }
         let unit_rows = units
             .get(kind)
-            .ok_or_else(|| format!("names rows for slice {kind}: the slice has no unit rows"))?;
+            .ok_or_else(|| MergeError::NoUnitRows(kind.clone()))?;
         let ids = humanify_ag_core::libindex::table::unit_row_ids(unit_rows)
-            .map_err(|e| e.to_string())?;
+            .map_err(MergeError::Table)?;
         let id_ofs = unit_row_id_ofs(
             segments,
             unit_rows,
@@ -1244,14 +1280,14 @@ fn stream_names_tables(
         humanify_ag_core::libindex::table::names_lookup_files_into(
             units, &names, &interner, &mut put,
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| MergeError::TableWrite(Box::new(e)))?;
     }
     Ok(())
 }
 
 /// Merge every shard at once (sorted into label order first) — the
 /// streaming merge on a list, one whole-space [`Segment`].
-pub fn merge(meta: MergeMeta, mut shards: Vec<Shard>) -> Result<IndexFiles, String> {
+pub fn merge(meta: MergeMeta, mut shards: Vec<Shard>) -> Result<IndexFiles, MergeError> {
     shards.sort_by(|a, b| a.label().cmp(&b.label()).then(a.key.cmp(&b.key)));
     let mut m = Merger::default();
     for s in shards {
@@ -1324,7 +1360,7 @@ impl WorkerStream<'_> {
     /// was added; false: done). A store stream records the task of every
     /// shard it reads, and takes the [`GIANT_GATE`] across a giant
     /// shard's read+parse+add so one worker at a time holds a giant.
-    fn next_into(&mut self, merger: &mut Merger) -> Result<bool, String> {
+    fn next_into(&mut self, merger: &mut Merger) -> Result<bool, MergeError> {
         match self {
             WorkerStream::Owned(iter) => match iter.next() {
                 Some(shard) => {
@@ -1351,11 +1387,7 @@ impl WorkerStream<'_> {
                             &inputs.version,
                         ))
                         .is_ok_and(|m| m.len() >= *giant))
-                    .then(|| {
-                        GIANT_GATE
-                            .lock()
-                            .map_err(|_| "the giant-shard gate lock is poisoned".to_string())
-                    })
+                    .then(|| GIANT_GATE.lock().map_err(|_| MergeError::GatePoisoned))
                     .transpose()?;
                     let Some(shard) = read_current(store, inputs) else {
                         drop(gate);
@@ -1412,7 +1444,7 @@ impl ShardFlow<'_> {
 /// concatenate in ([`finish_workers`]), which is what keeps the
 /// hash-map iteration order out of every output decision the house rule
 /// names.
-pub fn stream_parallel(flow: &ShardFlow, jobs: usize) -> Result<Vec<WorkerMerge>, String> {
+pub fn stream_parallel(flow: &ShardFlow, jobs: usize) -> Result<Vec<WorkerMerge>, MergeError> {
     let workers = humanify_ag_core::par::map_ordered(&key_ranges(jobs), |range| {
         let mut merger = Merger::filtered(*range);
         let mut stream = flow.worker();
@@ -1427,7 +1459,10 @@ pub fn stream_parallel(flow: &ShardFlow, jobs: usize) -> Result<Vec<WorkerMerge>
 
 /// The parallel merge's index, from the workers [`stream_parallel`]
 /// returned: their segments concatenated in range order.
-pub fn finish_workers(meta: MergeMeta, workers: Vec<WorkerMerge>) -> Result<IndexFiles, String> {
+pub fn finish_workers(
+    meta: MergeMeta,
+    workers: Vec<WorkerMerge>,
+) -> Result<IndexFiles, MergeError> {
     finish_segments(meta, workers.into_iter().map(|w| w.segment).collect())
 }
 
@@ -1439,7 +1474,7 @@ pub fn merge_parallel(
     meta: MergeMeta,
     shards: Vec<Shard>,
     jobs: usize,
-) -> Result<IndexFiles, String> {
+) -> Result<IndexFiles, MergeError> {
     let mut shards = shards;
     shards.sort_by(|a, b| a.label().cmp(&b.label()).then(a.key.cmp(&b.key)));
     let workers = stream_parallel(&ShardFlow::Owned(shards), jobs)?;

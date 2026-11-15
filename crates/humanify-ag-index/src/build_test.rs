@@ -1,7 +1,7 @@
 //! The plan: what an as-of build would index, and which shards it would
 //! reuse — no network (a recorded registry), no subprocess (no slices).
 
-use super::build::{BuildConfig, SpongeRegions, date_blocked, parse_package_spec, plan};
+use super::build::{BuildConfig, NpmError, SpongeRegions, parse_package_spec, plan};
 use super::shard::{Shard, write_shard};
 use crate::bun_node;
 
@@ -88,7 +88,9 @@ fn the_plan_lists_the_as_of_versions_and_the_shards_to_build() {
 fn an_offline_plan_refuses_a_package_it_has_no_snapshot_of() {
     let mut cfg = config("offline", "2020-12-01T23:59:59.999Z");
     cfg.packages.push("left-pad".into());
-    let err = plan(&cfg, Default::default()).expect_err("no snapshot");
+    let err = plan(&cfg, Default::default())
+        .expect_err("no snapshot")
+        .to_string();
     assert!(err.contains("left-pad"), "{err}");
 }
 
@@ -138,7 +140,9 @@ fn a_refuse_spec_for_a_version_the_plan_refuses_anyway_stays_single() {
 fn a_malformed_refuse_spec_is_an_error() {
     let mut cfg = config("refuse-bad", "2020-12-01T23:59:59.999Z");
     cfg.refuse = vec!["ms@2.1.1".into()]; // no :reason
-    let err = plan(&cfg, Default::default()).expect_err("no reason");
+    let err = plan(&cfg, Default::default())
+        .expect_err("no reason")
+        .to_string();
     assert!(err.contains("--refuse"), "{err}");
 }
 
@@ -1183,15 +1187,33 @@ fn only_a_date_blocked_install_is_retried_at_the_grace_cutoff() {
     // the 2026-11-04 build's own error text
     let late = "npm error code ETARGET\nnpm error notarget No matching version found for \
                 @aws-sdk/client-s3@3.1038.0 with a date before 4/27/2026, 8:10:59 PM.";
-    assert!(date_blocked(late));
+    let blocked = NpmError::from_stderr(late);
+    assert!(matches!(blocked, NpmError::DateBlocked(_)), "{blocked:?}");
+    assert!(blocked.date_blocked());
+    assert_eq!(blocked.to_string(), late, "the text is npm's own");
     // a version that never existed is not a date problem
-    assert!(!date_blocked(
-        "npm error code ETARGET\nnpm error notarget No matching version found for x@9.9.9."
-    ));
-    assert!(!date_blocked(
-        "npm error code ENOVERSIONS\nnpm error No versions available for y"
-    ));
-    assert!(!date_blocked("npm error code ERESOLVE"));
+    let failed = |text: &str| NpmError::from_stderr(text);
+    for other in [
+        "npm error code ETARGET\nnpm error notarget No matching version found for x@9.9.9.",
+        "npm error code ENOVERSIONS\nnpm error No versions available for y",
+        "npm error code ERESOLVE",
+    ] {
+        assert!(matches!(failed(other), NpmError::Failed(_)), "{other}");
+        assert!(!failed(other).date_blocked(), "{other}");
+    }
+    // the strict attempt, then the --legacy-peer-deps retry: blocked when
+    // either attempt was; a lock-guided restore carries its first error
+    let both = NpmError::Both(
+        Box::new(failed("npm error code ERESOLVE")),
+        Box::new(NpmError::from_stderr(late)),
+    );
+    assert!(both.date_blocked());
+    assert_eq!(
+        both.to_string(),
+        format!("npm error code ERESOLVE / {late}")
+    );
+    assert!(NpmError::LockChanged(Box::new(NpmError::from_stderr(late))).date_blocked());
+    assert!(!NpmError::LockIncomplete.date_blocked());
 }
 
 /// exp213 (exp210 §5b): Bun's map can file one package's statement under

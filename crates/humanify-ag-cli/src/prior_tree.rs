@@ -39,68 +39,54 @@ pub struct PriorInputs {
 }
 
 /// Why the prior could not be read.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum PriorLoadError {
     /// The `--prior-version` file itself.
+    #[error("{}", crate::util::node_fs_error(.source, "open", &.path.display().to_string()))]
     PriorFile {
         path: PathBuf,
         source: std::io::Error,
     },
     /// A folder or file of the prior tree.
+    #[error("cannot read the prior tree: {0}")]
     Tree(TreeError),
     /// What the tree holds is not what this binary reads.
+    #[error("{}", refused_text(.root, .error))]
     Refused {
         root: PathBuf,
         error: PriorTreeError,
     },
     /// The ledger file.
+    #[error("{}: {source}", .path.display())]
     LedgerRead {
         path: PathBuf,
         source: std::io::Error,
     },
     /// The ledger's text.
+    #[error("{}", ledger_text(.path, .error))]
     Ledger {
         path: PathBuf,
         error: LedgerParseError,
     },
 }
 
-impl std::fmt::Display for PriorLoadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PriorLoadError::PriorFile { path, source } => f.write_str(&crate::util::node_fs_error(
-                source,
-                "open",
-                &path.display().to_string(),
-            )),
-            PriorLoadError::Tree(e) => write!(f, "cannot read the prior tree: {e}"),
-            PriorLoadError::Refused {
-                root,
-                error: PriorTreeError::VendorManifest { why },
-            } => write!(
-                f,
-                "prior vendor manifest {} is not one this binary reads ({why}); \
-                 rebuild the prior release with this binary",
-                root.join(vendor_manifest_path()).display()
-            ),
-            PriorLoadError::Refused { root, error } => write!(f, "{}: {error}", root.display()),
-            PriorLoadError::LedgerRead { path, source } => {
-                write!(f, "{}: {source}", path.display())
-            }
-            PriorLoadError::Ledger {
-                path,
-                error: LedgerParseError::UnsupportedVersion,
-            } => write!(f, "Unsupported split ledger version in {}", path.display()),
-            PriorLoadError::Ledger { path, error } => write!(f, "{}: {error}", path.display()),
-        }
+fn refused_text(root: &Path, error: &PriorTreeError) -> String {
+    match error {
+        PriorTreeError::VendorManifest { why } => format!(
+            "prior vendor manifest {} is not one this binary reads ({why}); \
+             rebuild the prior release with this binary",
+            root.join(vendor_manifest_path()).display()
+        ),
+        error => format!("{}: {error}", root.display()),
     }
 }
 
-impl std::error::Error for PriorLoadError {}
-
-impl From<PriorLoadError> for String {
-    fn from(e: PriorLoadError) -> String {
-        e.to_string()
+fn ledger_text(path: &Path, error: &LedgerParseError) -> String {
+    match error {
+        LedgerParseError::UnsupportedVersion => {
+            format!("Unsupported split ledger version in {}", path.display())
+        }
+        error => format!("{}: {error}", path.display()),
     }
 }
 

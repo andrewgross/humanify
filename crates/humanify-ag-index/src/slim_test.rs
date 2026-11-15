@@ -155,7 +155,10 @@ fn a_hard_linked_map_is_rewritten_once_through_its_inode_and_stays_shared() {
         "journal cleared"
     );
     // idempotent: the second pass finds nothing to cut
-    assert_eq!(slim_map_file(&b, Some(&journal)), Ok(SlimOutcome::Absent));
+    assert_eq!(
+        slim_map_file(&b, Some(&journal)).expect("slims"),
+        SlimOutcome::Absent
+    );
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -193,7 +196,7 @@ fn an_interrupted_rewrite_is_finished_from_the_journal() {
     );
     // an entry never committed (still .tmp) means the original was never touched
     write(&journal.join("1-2.tmp"), "junk");
-    assert_eq!(recover(&journal), Ok(1));
+    assert_eq!(recover(&journal).expect("recovers"), 1);
     assert_eq!(std::fs::read_to_string(&p).unwrap(), stripped);
     assert_eq!(std::fs::read_dir(&journal).unwrap().count(), 0);
     std::fs::remove_dir_all(&root).ok();

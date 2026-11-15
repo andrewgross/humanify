@@ -18,6 +18,8 @@ use humanify_ag_core::libindex::recipe::Recipe;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::error::{FileError, op_at};
+
 pub const SHARD_FORMAT: &str = "humanify-index-shard/1";
 
 /// What a shard holds.
@@ -286,8 +288,17 @@ pub fn shard_path(store: &Path, kind: &str, package: &str, version: &str) -> Pat
         .join(format!("{}@{version}.json", package.replace('/', "__")))
 }
 
+/// Why a shard could not be written.
+#[derive(Debug, thiserror::Error)]
+pub enum ShardError {
+    #[error(transparent)]
+    File(#[from] FileError),
+    #[error("{0}")]
+    Encode(#[from] serde_json::Error),
+}
+
 /// Write `shard` with its rows sorted and deduplicated.
-pub fn write_shard(store: &Path, shard: &Shard) -> Result<(), String> {
+pub fn write_shard(store: &Path, shard: &Shard) -> Result<(), ShardError> {
     let mut shard = shard.clone();
     shard.modules.sort();
     shard.modules.dedup();
@@ -295,14 +306,15 @@ pub fn write_shard(store: &Path, shard: &Shard) -> Result<(), String> {
     shard.literals.dedup();
     let path = shard_path(store, &shard.kind, &shard.package, &shard.version);
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+        std::fs::create_dir_all(dir).map_err(op_at("mkdir ", dir))?;
     }
-    let mut bytes = serde_json::to_vec(&shard).map_err(|e| e.to_string())?;
+    let mut bytes = serde_json::to_vec(&shard)?;
     bytes.push(b'\n');
     // write-then-rename: a crashed build never leaves a half shard
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, bytes).map_err(|e| format!("write {}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, &path).map_err(|e| format!("rename {}: {e}", path.display()))
+    std::fs::write(&tmp, bytes).map_err(op_at("write ", &tmp))?;
+    std::fs::rename(&tmp, &path).map_err(op_at("rename ", &path))?;
+    Ok(())
 }
 
 /// Whether the store holds a shard for `inputs` with the SAME key — the

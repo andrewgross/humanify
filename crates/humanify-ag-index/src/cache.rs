@@ -33,8 +33,47 @@ use serde::{Deserialize, Serialize};
 
 use crate::asof::{VersionPolicy, parse_as_of, select_versions};
 use crate::build::{self, BuildConfig, Trace};
+use crate::error::{FileError, at, op_at};
 use crate::recipe::RecipeBuild;
-use crate::registry;
+use crate::registry::{self, RegistryError};
+
+/// Why the run-time build (its plan, the build, or the sidecar) failed.
+#[derive(Debug, thiserror::Error)]
+pub enum CacheError {
+    #[error("{0}")]
+    Encode(serde_json::Error),
+    #[error(transparent)]
+    File(#[from] FileError),
+    #[error("{}: {source}", .path.display())]
+    Sidecar {
+        path: PathBuf,
+        source: serde_json::Error,
+    },
+    #[error("{}: schema {schema} (this build reads {BUILD_SIDECAR_SCHEMA})", .path.display())]
+    SidecarSchema { path: PathBuf, schema: String },
+    #[error(
+        "the bundle reveals {count} package(s), over \
+         library.index_build_max_packages = {max}: the run-time \
+         build refuses to index that much — curate the bundle's evidence \
+         or raise the cap"
+    )]
+    TooMany { count: usize, max: usize },
+    #[error(transparent)]
+    AsOf(#[from] crate::asof::AsOfError),
+    #[error("the bundle reveals package {name}, but the registry answers nothing: {source}")]
+    Silent { name: String, source: RegistryError },
+    #[error(transparent)]
+    Plan(#[from] build::BuildError),
+    #[error("the run-time index build failed: {0}")]
+    Build(build::BuildError),
+    #[error("the run-time index build failed (install/bundle): no version could be indexed — {0}")]
+    NothingIndexed(String),
+    #[error("moving the fresh index into place ({}): {source}", .dir.display())]
+    Move {
+        dir: PathBuf,
+        source: std::io::Error,
+    },
+}
 
 /// The shard store's directory inside the cache root.
 pub const STORE_DIR: &str = "store";
@@ -186,27 +225,28 @@ pub struct BuildSidecar {
 }
 
 /// Write an index's sidecar (`<dir>/build.json`).
-pub fn write_build_sidecar(dir: &Path, side: &BuildSidecar) -> Result<(), String> {
-    let text = serde_json::to_string_pretty(side).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join(BUILD_SIDECAR), format!("{text}\n"))
-        .map_err(|e| format!("{}: {e}", dir.join(BUILD_SIDECAR).display()))
+pub fn write_build_sidecar(dir: &Path, side: &BuildSidecar) -> Result<(), CacheError> {
+    let text = serde_json::to_string_pretty(side).map_err(CacheError::Encode)?;
+    let path = dir.join(BUILD_SIDECAR);
+    std::fs::write(&path, format!("{text}\n")).map_err(at(&path))?;
+    Ok(())
 }
 
 /// Read an index's sidecar, if it has one.
-pub fn read_build_sidecar(dir: &Path) -> Result<Option<BuildSidecar>, String> {
+pub fn read_build_sidecar(dir: &Path) -> Result<Option<BuildSidecar>, CacheError> {
     let path = dir.join(BUILD_SIDECAR);
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Ok(None);
     };
-    let side: BuildSidecar =
-        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let side: BuildSidecar = match serde_json::from_str(&text) {
+        Ok(side) => side,
+        Err(source) => return Err(CacheError::Sidecar { path, source }),
+    };
     if side.schema != BUILD_SIDECAR_SCHEMA {
-        return Err(format!(
-            "{}: schema {} (this build reads {})",
-            path.display(),
-            side.schema,
-            BUILD_SIDECAR_SCHEMA
-        ));
+        return Err(CacheError::SidecarSchema {
+            path,
+            schema: side.schema,
+        });
     }
     Ok(Some(side))
 }
@@ -449,12 +489,6 @@ pub fn uncovered(sidecar: Option<&BuildSidecar>, seeds: &[Seed]) -> Vec<String> 
         .collect()
 }
 
-/// Whether a registry error says the package does not exist (npm's E404),
-/// as opposed to the registry or npm itself failing.
-fn is_not_found(error: &str) -> bool {
-    error.contains("E404") || error.contains("404 Not Found")
-}
-
 /// The run-time build's package list resolved into a [`BuildConfig`]:
 /// every seed becomes a PIN — the version the bundle declared, else the
 /// newest version at `as_of` (the registry snapshot answers; the plan
@@ -473,20 +507,17 @@ pub fn plan_runtime(
     as_of: &str,
     max_packages: usize,
     offline: bool,
-) -> Result<(BuildConfig, Vec<PlannedSeed>, Vec<DroppedSeed>), String> {
+) -> Result<(BuildConfig, Vec<PlannedSeed>, Vec<DroppedSeed>), CacheError> {
     if seeds.len() > max_packages {
-        return Err(format!(
-            "the bundle reveals {} package(s), over \
-             library.index_build_max_packages = {max_packages}: the run-time \
-             build refuses to index that much — curate the bundle's evidence \
-             or raise the cap",
-            seeds.len()
-        ));
+        return Err(CacheError::TooMany {
+            count: seeds.len(),
+            max: max_packages,
+        });
     }
     let as_of = parse_as_of(as_of)?;
     let registry_dir = root.join(REGISTRY_DIR);
     for dir in [&registry_dir, &root.join(STORE_DIR), &root.join(WORK_DIR)] {
-        std::fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+        std::fs::create_dir_all(dir).map_err(op_at("mkdir ", dir))?;
     }
     let mut pinned: Vec<String> = Vec::new();
     let mut planned: Vec<PlannedSeed> = Vec::new();
@@ -506,15 +537,11 @@ pub fn plan_runtime(
             None => {
                 let packument = match registry::load(&registry_dir, &seed.name, offline) {
                     Ok((packument, _)) => packument,
-                    Err(e) if !offline && is_not_found(&e) => {
-                        dropped.push(drop(&seed, "the npm registry does not know it".to_string()));
-                        continue;
-                    }
-                    Err(e) => {
-                        return Err(format!(
-                            "the bundle reveals package {}, but the registry answers nothing: {e}",
-                            seed.name
-                        ));
+                    Err(source) => {
+                        return Err(CacheError::Silent {
+                            name: seed.name.clone(),
+                            source,
+                        });
                     }
                 };
                 match select_versions(&packument, &as_of, &[], VersionPolicy::AsOf)
@@ -588,7 +615,7 @@ pub fn plan_build(
     as_of: &str,
     max_packages: usize,
     trace: Trace<'_>,
-) -> Result<RuntimePlan, String> {
+) -> Result<RuntimePlan, CacheError> {
     let (cfg, planned, dropped) = plan_runtime(root, seeds, recipes, as_of, max_packages, false)?;
     let plan = build::plan(&cfg, trace)?;
     let to_build = plan.tasks.iter().filter(|t| !t.missing.is_empty()).count();
@@ -684,7 +711,7 @@ pub fn build_planned(
     root: &Path,
     runtime: RuntimePlan,
     trace: Trace<'_>,
-) -> Result<RuntimeBuild, String> {
+) -> Result<RuntimeBuild, CacheError> {
     let RuntimePlan {
         cfg,
         planned,
@@ -704,12 +731,7 @@ pub fn build_planned(
         out: Some(temp.clone()),
         ..cfg
     };
-    let outcome = build::build(&cfg, false, trace)
-        .map_err(|e| format!("the run-time index build failed: {e}"))?;
-    let fail = |stage: &str, what: String| -> String {
-        let _ = std::fs::remove_dir_all(&temp);
-        format!("the run-time index build failed ({stage}): {what}")
-    };
+    let outcome = build::build(&cfg, false, trace).map_err(CacheError::Build)?;
     // exp171: a version that fails to install or bundle, or that the plan
     // refuses (unpublished, a pin past as-of), leaves the index without its
     // rows — recorded in the sidecar and the run's closing line — never a
@@ -750,18 +772,17 @@ pub fn build_planned(
             .map(|f| format!("{}: {}", f.name, f.reason))
             .collect::<Vec<_>>()
             .join("; ");
-        return Err(fail(
-            "install/bundle",
-            format!("no version could be indexed — {what}"),
-        ));
+        let _ = std::fs::remove_dir_all(&temp);
+        return Err(CacheError::NothingIndexed(what));
     }
     let dir = root.join(&outcome.index_id);
     if dir.is_dir() {
         // someone built these exact shards into this exact index already
         let _ = std::fs::remove_dir_all(&temp);
     } else {
-        std::fs::rename(&temp, &dir)
-            .map_err(|e| format!("moving the fresh index into place ({}): {e}", dir.display()))?;
+        if let Err(source) = std::fs::rename(&temp, &dir) {
+            return Err(CacheError::Move { dir, source });
+        }
     }
     // `versions_in_index` counts the version units (the "versions" of the
     // report's outcome line); `packages` the DISTINCT pinned packages.

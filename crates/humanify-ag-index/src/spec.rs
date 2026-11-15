@@ -249,66 +249,139 @@ struct RawRefusal {
     versions: Option<Vec<String>>,
 }
 
-fn policy(raw: &RawStrategy, ctx: &str) -> Result<Strategy, String> {
+/// Why an index spec is refused.
+#[derive(Debug, thiserror::Error)]
+pub enum SpecError {
+    #[error("spec: {0}")]
+    Toml(#[from] toml::de::Error),
+    #[error("spec: schema {0:?} (this builder reads {SPEC_SCHEMA:?})")]
+    Schema(String),
+    #[error("spec: {0}")]
+    AsOf(#[from] crate::asof::AsOfError),
+    #[error("spec: build.recipes: {0}")]
+    Recipe(humanify_ag_core::libindex::recipe::RecipeError),
+    #[error("spec: build.recipes: {0} given twice")]
+    RecipeTwice(String),
+    #[error("spec: build.sponge_regions {0:?} (drop, origin)")]
+    SpongeRegions(String),
+    #[error("spec: tools.{0}: not a recipe bundler")]
+    NotABundler(String),
+    #[error("spec: tools.{name} = {version:?}: not a version")]
+    ToolVersion { name: String, version: String },
+    #[error("spec: recipe {recipe} needs tools.{bundler} (its pinned version)")]
+    NoTool {
+        recipe: String,
+        bundler: &'static str,
+    },
+    #[error("spec: tools.{0} pins a bundler no recipe uses")]
+    UnusedTool(&'static str),
+    /// A rule that is wrong in itself: where, and what is wrong.
+    #[error("{ctx}: {why}")]
+    Invalid { ctx: String, why: &'static str },
+    #[error(
+        "{ctx}: unknown version policy {text:?} (as-of, latest[-<N>], \
+         recent-<N>mo, year-all+minor, year-all+major, \
+         year-last<N>+major[<M>])"
+    )]
+    UnknownPolicy { ctx: String, text: String },
+    #[error("{ctx}: policy {text:?} is listed twice")]
+    PolicyTwice { ctx: String, text: String },
+    #[error("{what} id {id:?}: use letters, digits, '-' and '_'")]
+    BadId { what: &'static str, id: String },
+    #[error("{what} id {id:?} given twice")]
+    IdTwice { what: &'static str, id: String },
+    #[error(
+        "{ctx}: name pattern {pattern:?} (an exact name, or a prefix ending in one '*'; \
+         a bare '*' is not a pattern)"
+    )]
+    NamePattern { ctx: String, pattern: String },
+    #[error("{file}: expected a quoted name, got {line:?}")]
+    ListLine { file: &'static str, line: String },
+    #[error("{0}: the list never closes")]
+    ListOpen(&'static str),
+    #[error("{ctx}: list {list:?} (top, top-download, top-dependent)")]
+    List { ctx: String, list: Option<String> },
+    #[error("{ctx}: sha256 {sha256:?} is not 64 hex digits")]
+    Sha256 { ctx: String, sha256: String },
+    #[error("{ctx}: `of` names {of:?}, not an earlier selection")]
+    NotEarlier { ctx: String, of: String },
+    #[error("{ctx}: source {given:?} (npm-high-impact, dependencies)")]
+    Source { ctx: String, given: String },
+    #[error("{ctx}: {spec:?} is not name@version")]
+    NotNameAtVersion { ctx: String, spec: String },
+    #[error("{ctx}: selection {selection:?} is not a selection id")]
+    NotASelection { ctx: String, selection: String },
+}
+
+fn invalid(ctx: &str, why: &'static str) -> SpecError {
+    SpecError::Invalid {
+        ctx: ctx.to_string(),
+        why,
+    }
+}
+
+fn policy(raw: &RawStrategy, ctx: &str) -> Result<Strategy, SpecError> {
     let names: Vec<&str> = match raw {
         RawStrategy::One(n) => vec![n.as_str()],
         RawStrategy::Many(ns) => ns.iter().map(String::as_str).collect(),
     };
     if names.is_empty() {
-        return Err(format!("{ctx}: a policy list needs at least one strategy"));
+        return Err(invalid(ctx, "a policy list needs at least one strategy"));
     }
     let mut out: Vec<VersionPolicy> = Vec::new();
     for text in names {
-        let p = VersionPolicy::from_name(text).ok_or_else(|| {
-            format!(
-                "{ctx}: unknown version policy {text:?} (as-of, latest[-<N>], \
-                 recent-<N>mo, year-all+minor, year-all+major, \
-                 year-last<N>+major[<M>])"
-            )
+        let p = VersionPolicy::from_name(text).ok_or_else(|| SpecError::UnknownPolicy {
+            ctx: ctx.to_string(),
+            text: text.to_string(),
         })?;
         if out.contains(&p) {
-            return Err(format!("{ctx}: policy {text:?} is listed twice"));
+            return Err(SpecError::PolicyTwice {
+                ctx: ctx.to_string(),
+                text: text.to_string(),
+            });
         }
         out.push(p);
     }
     Ok(Strategy(out))
 }
 
-fn check_id(id: &str, seen: &mut Vec<String>, what: &str) -> Result<(), String> {
+fn check_id(id: &str, seen: &mut Vec<String>, what: &'static str) -> Result<(), SpecError> {
     if id.is_empty()
         || !id
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
     {
-        return Err(format!(
-            "{what} id {id:?}: use letters, digits, '-' and '_'"
-        ));
+        return Err(SpecError::BadId {
+            what,
+            id: id.to_string(),
+        });
     }
     if seen.iter().any(|s| s == id) {
-        return Err(format!("{what} id {id:?} given twice"));
+        return Err(SpecError::IdTwice {
+            what,
+            id: id.to_string(),
+        });
     }
     seen.push(id.to_string());
     Ok(())
 }
 
 /// A depth cap of 0 would plan nothing: refused.
-fn check_max(max: Option<usize>, ctx: &str) -> Result<(), String> {
+fn check_max(max: Option<usize>, ctx: &str) -> Result<(), SpecError> {
     match max {
-        Some(0) => Err(format!(
-            "{ctx}: max must be at least 1 (omit it for no cap)"
-        )),
+        Some(0) => Err(invalid(ctx, "max must be at least 1 (omit it for no cap)")),
         _ => Ok(()),
     }
 }
 
-fn check_names(names: &[String], ctx: &str) -> Result<(), String> {
+fn check_names(names: &[String], ctx: &str) -> Result<(), SpecError> {
     for n in names {
         let stem = n.strip_suffix('*').unwrap_or(n);
         if n.is_empty() || stem.is_empty() || stem.contains('*') {
-            return Err(format!(
-                "{ctx}: name pattern {n:?} (an exact name, or a prefix ending in one '*'; \
-                 a bare '*' is not a pattern)"
-            ));
+            return Err(SpecError::NamePattern {
+                ctx: ctx.to_string(),
+                pattern: n.clone(),
+            });
         }
     }
     Ok(())
@@ -334,7 +407,7 @@ pub fn name_matches(pattern: &str, name: &str) -> bool {
 pub fn parse_high_impact_list(
     text: &str,
     list: HighImpactList,
-) -> Result<(Vec<String>, Vec<String>), String> {
+) -> Result<(Vec<String>, Vec<String>), SpecError> {
     let opener = format!("export const {} = [", list.const_name());
     let mut names = Vec::new();
     let mut rejects = Vec::new();
@@ -357,10 +430,10 @@ pub fn parse_high_impact_list(
         {
             Some(n) => n,
             None => {
-                return Err(format!(
-                    "{}: expected a quoted name, got {t:?}",
-                    list.file()
-                ));
+                return Err(SpecError::ListLine {
+                    file: list.file(),
+                    line: t.to_string(),
+                });
             }
         };
         if name.is_empty()
@@ -373,34 +446,35 @@ pub fn parse_high_impact_list(
         }
         names.push(name.to_string());
     }
-    Err(format!("{}: the list never closes", list.file()))
+    Err(SpecError::ListOpen(list.file()))
 }
 
-fn selection(r: RawSelection, earlier: &[Selection]) -> Result<Selection, String> {
+fn selection(r: RawSelection, earlier: &[Selection]) -> Result<Selection, SpecError> {
     let ctx = format!("select {:?}", r.id);
     let source = match r.source.as_str() {
         "npm-high-impact" => {
             if r.of.is_some() {
-                return Err(format!("{ctx}: `of` is for source = \"dependencies\""));
+                return Err(invalid(&ctx, "`of` is for source = \"dependencies\""));
             }
             let list = match r.list.as_deref() {
                 Some("top") => HighImpactList::Top,
                 Some("top-download") => HighImpactList::TopDownload,
                 Some("top-dependent") => HighImpactList::TopDependent,
                 other => {
-                    return Err(format!(
-                        "{ctx}: list {other:?} (top, top-download, top-dependent)"
-                    ));
+                    return Err(SpecError::List {
+                        ctx,
+                        list: other.map(str::to_string),
+                    });
                 }
             };
             let version = r
                 .version
-                .ok_or(format!("{ctx}: needs the list package's `version`"))?;
+                .ok_or_else(|| invalid(&ctx, "needs the list package's `version`"))?;
             let sha256 = r
                 .sha256
-                .ok_or(format!("{ctx}: needs the list file's `sha256`"))?;
+                .ok_or_else(|| invalid(&ctx, "needs the list file's `sha256`"))?;
             if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
-                return Err(format!("{ctx}: sha256 {sha256:?} is not 64 hex digits"));
+                return Err(SpecError::Sha256 { ctx, sha256 });
             }
             Source::NpmHighImpact {
                 list,
@@ -411,30 +485,31 @@ fn selection(r: RawSelection, earlier: &[Selection]) -> Result<Selection, String
         }
         "dependencies" => {
             if r.list.is_some() || r.version.is_some() || r.sha256.is_some() || r.limit.is_some() {
-                return Err(format!("{ctx}: a dependencies selection takes only `of`"));
+                return Err(invalid(&ctx, "a dependencies selection takes only `of`"));
             }
             let of =
-                r.of.ok_or(format!("{ctx}: needs `of` (earlier selection ids)"))?;
+                r.of.ok_or_else(|| invalid(&ctx, "needs `of` (earlier selection ids)"))?;
             for o in &of {
                 if !earlier.iter().any(|s| &s.id == o) {
-                    return Err(format!("{ctx}: `of` names {o:?}, not an earlier selection"));
+                    return Err(SpecError::NotEarlier { ctx, of: o.clone() });
                 }
             }
             Source::Dependencies { of }
         }
         other => {
-            return Err(format!(
-                "{ctx}: source {other:?} (npm-high-impact, dependencies)"
-            ));
+            return Err(SpecError::Source {
+                ctx,
+                given: other.to_string(),
+            });
         }
     };
     Ok(Selection { id: r.id, source })
 }
 
-fn refusal(r: RawRefusal) -> Result<Refusal, String> {
+fn refusal(r: RawRefusal) -> Result<Refusal, SpecError> {
     let ctx = format!("refuse {:?}", r.id);
     if r.reason.trim().is_empty() {
-        return Err(format!("{ctx}: needs a reason"));
+        return Err(invalid(&ctx, "needs a reason"));
     }
     let mut whens = Vec::new();
     if let Some(n) = r.names {
@@ -443,8 +518,9 @@ fn refusal(r: RawRefusal) -> Result<Refusal, String> {
     }
     if let Some(p) = r.platform {
         if !p {
-            return Err(format!(
-                "{ctx}: platform = false matches nothing; drop the rule"
+            return Err(invalid(
+                &ctx,
+                "platform = false matches nothing; drop the rule",
             ));
         }
         whens.push(RefusalMatch::Platform);
@@ -456,7 +532,10 @@ fn refusal(r: RawRefusal) -> Result<Refusal, String> {
         for spec in &v {
             let (name, version) = crate::build::parse_package_spec(spec);
             if version.is_none() || name.is_empty() {
-                return Err(format!("{ctx}: {spec:?} is not name@version"));
+                return Err(SpecError::NotNameAtVersion {
+                    ctx,
+                    spec: spec.clone(),
+                });
             }
         }
         whens.push(RefusalMatch::Versions(v));
@@ -464,8 +543,9 @@ fn refusal(r: RawRefusal) -> Result<Refusal, String> {
     let when = match whens.len() {
         1 => whens.pop().expect("one"),
         _ => {
-            return Err(format!(
-                "{ctx}: give exactly one of names, platform, unpacked_size_over, versions"
+            return Err(invalid(
+                &ctx,
+                "give exactly one of names, platform, unpacked_size_over, versions",
             ));
         }
     };
@@ -478,58 +558,50 @@ fn refusal(r: RawRefusal) -> Result<Refusal, String> {
 
 impl IndexSpec {
     /// Parse and validate a spec file's text.
-    pub fn parse(text: &str) -> Result<IndexSpec, String> {
-        let raw: RawSpec = toml::from_str(text).map_err(|e| format!("spec: {e}"))?;
+    pub fn parse(text: &str) -> Result<IndexSpec, SpecError> {
+        let raw: RawSpec = toml::from_str(text)?;
         if raw.schema != SPEC_SCHEMA {
-            return Err(format!(
-                "spec: schema {:?} (this builder reads {SPEC_SCHEMA:?})",
-                raw.schema
-            ));
+            return Err(SpecError::Schema(raw.schema));
         }
-        let as_of = parse_as_of(&raw.as_of).map_err(|e| format!("spec: {e}"))?;
+        let as_of = parse_as_of(&raw.as_of)?;
         let mut recipes = Vec::new();
         for text in &raw.build.recipes {
-            let r = Recipe::parse(text).map_err(|e| format!("spec: build.recipes: {e}"))?;
+            let r = Recipe::parse(text).map_err(SpecError::Recipe)?;
             if recipes.contains(&r) {
-                return Err(format!("spec: build.recipes: {text} given twice"));
+                return Err(SpecError::RecipeTwice(text.clone()));
             }
             recipes.push(r);
         }
         if recipes.is_empty() {
-            return Err("spec: build.recipes is empty".into());
+            return Err(invalid("spec", "build.recipes is empty"));
         }
-        let sponge_regions = SpongeRegions::parse(&raw.build.sponge_regions).ok_or_else(|| {
-            format!(
-                "spec: build.sponge_regions {:?} (drop, origin)",
-                raw.build.sponge_regions
-            )
-        })?;
+        let sponge_regions = SpongeRegions::parse(&raw.build.sponge_regions)
+            .ok_or_else(|| SpecError::SpongeRegions(raw.build.sponge_regions.clone()))?;
         let mut tools = BTreeMap::new();
         for (name, version) in &raw.tools {
-            let bundler = RecipeBundler::parse(name)
-                .ok_or(format!("spec: tools.{name}: not a recipe bundler"))?;
+            let bundler =
+                RecipeBundler::parse(name).ok_or_else(|| SpecError::NotABundler(name.clone()))?;
             if humanify_ag_core::libindex::format::Semver::parse(version).is_none() {
-                return Err(format!("spec: tools.{name} = {version:?}: not a version"));
+                return Err(SpecError::ToolVersion {
+                    name: name.clone(),
+                    version: version.clone(),
+                });
             }
             tools.insert(bundler, version.clone());
         }
         for r in &recipes {
             if !tools.contains_key(&r.bundler) {
-                return Err(format!(
-                    "spec: recipe {} needs tools.{} (its pinned version)",
-                    r.spelling(),
-                    r.bundler.name()
-                ));
+                return Err(SpecError::NoTool {
+                    recipe: r.spelling(),
+                    bundler: r.bundler.name(),
+                });
             }
         }
         if let Some(unused) = tools
             .keys()
             .find(|b| !recipes.iter().any(|r| r.bundler == **b))
         {
-            return Err(format!(
-                "spec: tools.{} pins a bundler no recipe uses",
-                unused.name()
-            ));
+            return Err(SpecError::UnusedTool(unused.name()));
         }
         let mut ids = Vec::new();
         let mut select = Vec::new();
@@ -542,7 +614,7 @@ impl IndexSpec {
             .iter()
             .any(|s| matches!(s.source, Source::NpmHighImpact { .. }))
         {
-            return Err("spec: no selection has a package source".into());
+            return Err(invalid("spec", "no selection has a package source"));
         }
         let default = policy(&raw.versions.policy, "spec: versions.policy")?;
         check_max(raw.versions.max, "spec: versions")?;
@@ -554,14 +626,18 @@ impl IndexSpec {
             if let Some(s) = &o.selection
                 && !select.iter().any(|x| &x.id == s)
             {
-                return Err(format!("{ctx}: selection {s:?} is not a selection id"));
+                return Err(SpecError::NotASelection {
+                    ctx,
+                    selection: s.clone(),
+                });
             }
             if o.rank_below.is_some() && o.selection.is_none() {
-                return Err(format!("{ctx}: rank_below needs `selection` (whose rank)"));
+                return Err(invalid(&ctx, "rank_below needs `selection` (whose rank)"));
             }
             if o.names.is_empty() && o.selection.is_none() {
-                return Err(format!(
-                    "{ctx}: matches every package; set versions.policy instead"
+                return Err(invalid(
+                    &ctx,
+                    "matches every package; set versions.policy instead",
                 ));
             }
             check_max(o.max, &ctx)?;

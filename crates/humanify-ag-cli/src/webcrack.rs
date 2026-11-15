@@ -39,7 +39,7 @@ impl ExternalUnpacker for WebcrackShim {
     /// the bundle on stdin. A non-zero exit or a shim past its deadline
     /// (killed) is an error; what it printed is core's to read.
     fn run(&self, code: &str, out_dir: &Path) -> Result<ShimRun, UnpackerError> {
-        let out_dir = shim_out_dir(out_dir).map_err(UnpackerError)?;
+        let out_dir = shim_out_dir(out_dir)?;
         let mut command = Command::new(&self.program);
         command.args(&self.args).arg(&out_dir);
         if let Some(cwd) = &self.cwd {
@@ -72,9 +72,11 @@ impl ExternalUnpacker for WebcrackShim {
 /// `out/deobfuscated.js`, which the run then read against its own working
 /// directory and did not find. Canonical, so the paths the shim reports
 /// (`path.join(outputDir, file)`, which normalizes) start with it.
-fn shim_out_dir(out_dir: &Path) -> Result<PathBuf, String> {
-    std::fs::create_dir_all(out_dir).map_err(|e| format!("mkdir {}: {e}", out_dir.display()))?;
-    std::fs::canonicalize(out_dir).map_err(|e| format!("resolve {}: {e}", out_dir.display()))
+fn shim_out_dir(out_dir: &Path) -> Result<PathBuf, UnpackerError> {
+    let failed =
+        |op: &str, e: std::io::Error| UnpackerError(format!("{op} {}: {e}", out_dir.display()));
+    std::fs::create_dir_all(out_dir).map_err(|e| failed("mkdir", e))?;
+    std::fs::canonicalize(out_dir).map_err(|e| failed("resolve", e))
 }
 
 #[cfg(test)]

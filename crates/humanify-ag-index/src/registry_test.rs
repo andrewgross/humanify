@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use super::registry::{registry_url, with_retry};
+use super::registry::{RegistryError, registry_url, with_retry};
 use crate::asof::Packument;
 
 /// A transient failure is retried ONCE: two attempts, then success.
@@ -14,7 +14,10 @@ fn a_transient_fetch_failure_is_retried_once() {
         || {
             calls += 1;
             if calls == 1 {
-                Err("npm view x: network error".to_string())
+                Err(RegistryError::Http {
+                    url: "x".into(),
+                    code: "503".into(),
+                })
             } else {
                 Ok(7)
             }
@@ -33,11 +36,15 @@ fn a_persistent_fetch_failure_fails_after_two_attempts() {
     let err = with_retry(
         || {
             calls += 1;
-            Err::<(), String>("registry timeout".to_string())
+            Err::<(), _>(RegistryError::CurlFailed {
+                url: "stub-pkg".into(),
+                stderr: "registry timeout".into(),
+            })
         },
         "npm view stub-pkg",
     )
-    .expect_err("fails loud");
+    .expect_err("fails loud")
+    .to_string();
     assert_eq!(calls, 2, "no third attempt");
     assert!(
         err.contains("stub-pkg") && err.contains("registry timeout"),
@@ -175,7 +182,11 @@ fn an_unpublished_tombstone_doc_reads_as_absent() {
     .expect("doc");
     let err = Packument::from_doc(&doc, None).expect_err("tombstone");
     assert!(
-        err.contains(crate::registry::NOT_FOUND),
-        "the error carries the not-found marker: {err}"
+        matches!(&err, crate::asof::PackumentError::Unpublished(name) if name == "ability-aloud"),
+        "the tombstone is its own variant: {err:?}"
+    );
+    assert_eq!(
+        err.to_string(),
+        "registry says 404 (E404) (unpublished tombstone: ability-aloud)"
     );
 }

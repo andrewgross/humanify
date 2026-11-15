@@ -33,6 +33,7 @@ use serde_json::{Value, json};
 
 use crate::config::{ConfigFile, Library, library_from_file};
 
+use crate::match_verb::VerbError;
 use crate::pipeline_config::enum_name;
 
 /// The output's schema; bump on a breaking shape change.
@@ -62,12 +63,12 @@ pub struct DiscoverArgs<'a> {
 
 /// The verb's `[library]` settings: the `--config` file's, else the
 /// compiled-in defaults. Any refused key fails the verb.
-pub fn library_settings(config: Option<&str>) -> Result<Library, String> {
+pub fn library_settings(config: Option<&str>) -> Result<Library, VerbError> {
     let file = config
         .map(ConfigFile::read)
         .transpose()
-        .map_err(|e| e.join("\n"))?;
-    library_from_file(file.as_ref()).map_err(|e| e.join("\n"))
+        .map_err(VerbError::Settings)?;
+    library_from_file(file.as_ref()).map_err(VerbError::Settings)
 }
 
 /// The rule's name in the output (`agreement` | `structural`).
@@ -81,7 +82,7 @@ fn rule_name(library: &Library) -> &'static str {
 
 /// Run the verb on `code`; the output document (`libraryDiscovery` null and
 /// `noDiscovery` saying why when the adapter ran none).
-pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
+pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, VerbError> {
     use humanify_ag_model::detection::{BundlerType, SELECTABLE_BUNDLERS};
     let detection = humanify_ag_core::detect::detect_bundle(code);
     let toolchain = humanify_ag_core::toolchain::resolve_toolchain(
@@ -107,20 +108,24 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
                 &recipe,
                 args.library.lookup.terser_slices,
             )
-            .map_err(|e| format!("library index {dir}: {e}"))?,
+            .map_err(|why| VerbError::Index {
+                dir: dir.to_string(),
+                why: Box::new(why),
+            })?,
         ),
         None => None,
     };
     let (work_dir, owned) = match args.work_dir {
         Some(dir) => (dir.to_string(), false),
         None => (
-            humanify_ag_io::scratch::temp_dir("humanify-discover")?
+            humanify_ag_io::scratch::temp_dir("humanify-discover")
+                .map_err(VerbError::Scratch)?
                 .display()
                 .to_string(),
             true,
         ),
     };
-    std::fs::create_dir_all(&work_dir).map_err(|e| format!("mkdir {work_dir}: {e}"))?;
+    std::fs::create_dir_all(&work_dir).map_err(|e| VerbError::Mkdir(work_dir.clone(), e))?;
     let adapter = toolchain.unpack.piece;
     let run = humanify_ag_core::unpack::AdapterRun {
         library_discovery: Some(humanify_ag_core::libdetect::discovery::DiscoveryRequest {
@@ -151,7 +156,7 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
             run,
         );
         // The work folder holds the unpacked tree, as the verb always left it.
-        crate::output_tree::write_tree(&tree).map_err(|e| e.to_string())?;
+        crate::output_tree::write_tree(&tree)?;
         outcome.map(|o| {
             bundle_order = match &o {
                 humanify_ag_core::unpack::AdapterOutcome::VendorRecord(vendor) => {
@@ -174,7 +179,7 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
     // A bundle that does not parse runs no discovery — nor does the
     // pipeline on it: said, not failed, so a score can count it as
     // "discovery never ran".
-    let report = report.map_err(|e| e.to_string())?;
+    let report = report.map_err(VerbError::Unpack)?;
     let no_discovery = report.is_none().then(|| {
         format!(
             "the {} adapter ran no library discovery (the input does not parse)",
@@ -212,17 +217,17 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
 }
 
 /// The verb: read the input, run, write `out` (or stdout).
-pub fn run_discover(args: &DiscoverArgs<'_>, out: Option<&str>) -> Result<(), String> {
+pub fn run_discover(args: &DiscoverArgs<'_>, out: Option<&str>) -> Result<(), VerbError> {
     let code = humanify_ag_core::unpack::input::read_input(
         std::path::Path::new(args.input),
         &crate::output_tree::Disk,
     )
-    .map_err(|e| e.to_string())?
+    .map_err(VerbError::Input)?
     .text;
     let doc = discover(&code, args)?;
-    let text = serde_json::to_string(&doc).map_err(|e| e.to_string())? + "\n";
+    let text = serde_json::to_string(&doc)? + "\n";
     match out {
-        Some(path) => std::fs::write(path, text).map_err(|e| format!("write {path}: {e}")),
+        Some(path) => std::fs::write(path, text).map_err(|e| VerbError::Write(path.into(), e)),
         None => {
             print!("{text}");
             Ok(())

@@ -92,7 +92,8 @@ pub fn parse(
     let m = cmd
         .try_get_matches_from(args)
         .map_err(|e| vec![e.render().to_string().trim_end().to_string()])?;
-    let given = flag_values(FLAGS.as_slice(), &m).map_err(|e| vec![e.trim_end().to_string()])?;
+    let given = flag_values(FLAGS.as_slice(), &m)
+        .map_err(|e| vec![e.to_string().trim_end().to_string()])?;
     let mut errors: Vec<String> = given
         .iter()
         .filter(|(dotted, _)| !accepts(accepted, dotted))
@@ -167,7 +168,7 @@ fn check_one(
             "{dotted} is set by the harness itself for this verb; use its own flag"
         ));
     }
-    let val = Registry::typed_text(key, dotted, raw)?;
+    let val = Registry::typed_text(key, dotted, raw).map_err(|e| e.to_string())?;
     if let Some(e) = check_range(key, dotted, &val) {
         return Err(e);
     }

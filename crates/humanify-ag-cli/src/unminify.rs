@@ -89,7 +89,7 @@ pub fn unpack_bundle(
     library_discovery: Option<humanify_ag_core::libdetect::discovery::DiscoveryRequest<'_>>,
     profiler: &Profiler,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<Unpacked, String> {
+) -> Result<Unpacked, humanify_ag_core::unpack::UnpackError> {
     // unified.ts loads both before unminify runs, whichever adapter is
     // selected — the carry-over line prints for any prior with a manifest.
     let prior_vendor = prior.and_then(|t| t.vendor.clone());
@@ -131,8 +131,7 @@ pub fn unpack_bundle(
             webcrack_shim: Some(&shim),
             library_discovery,
         },
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     let (
         files,
         vendor_record,
@@ -317,13 +316,13 @@ pub fn filter_libraries(
     detector: LibraryDetector,
     profiler: &Profiler,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<Filtered, String> {
+) -> Result<Filtered, humanify_ag_core::libdetect::DetectError> {
     let span = profiler.pipeline_span("library-detection");
     let read = |path: &Path| {
         tree.read(path)
             .map(|b| String::from_utf8_lossy(&b).into_owned())
     };
-    let detection = detect_libraries(detector, &files, &read).map_err(|e| e.to_string())?;
+    let detection = detect_libraries(detector, &files, &read)?;
     span.end(Some(
         Fields::new()
             .with("libraryCount", detection.library_files.len())

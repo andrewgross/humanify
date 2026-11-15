@@ -17,6 +17,18 @@ use std::collections::{BTreeMap, BTreeSet};
 use humanify_ag_core::libindex::format::Semver;
 use serde::{Deserialize, Serialize};
 
+/// Why a recorded packument or a registry document does not read.
+#[derive(Debug, thiserror::Error)]
+pub enum PackumentError {
+    #[error("packument: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("registry doc: no {0}")]
+    Missing(&'static str),
+    /// An unpublished package's tombstone: the registry does not know it.
+    #[error("registry says 404 (E404) (unpublished tombstone: {0})")]
+    Unpublished(String),
+}
+
 /// What the builder records of a package's registry document.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -91,8 +103,8 @@ impl VersionMeta {
 }
 
 impl Packument {
-    pub fn from_json(text: &str) -> Result<Packument, String> {
-        serde_json::from_str(text).map_err(|e| format!("packument: {e}"))
+    pub fn from_json(text: &str) -> Result<Packument, PackumentError> {
+        Ok(serde_json::from_str(text)?)
     }
 
     /// The registry document (`https://registry.npmjs.org/<name>` — what
@@ -108,11 +120,11 @@ impl Packument {
     pub fn from_doc(
         doc: &serde_json::Value,
         fetched_at: Option<String>,
-    ) -> Result<Packument, String> {
+    ) -> Result<Packument, PackumentError> {
         let name = doc
             .get("name")
             .and_then(|x| x.as_str())
-            .ok_or("registry doc: no `name`")?
+            .ok_or(PackumentError::Missing("`name`"))?
             .to_string();
         let time = doc
             .get("time")
@@ -122,7 +134,7 @@ impl Packument {
                     .filter_map(|(k, t)| Some((k.clone(), t.as_str()?.to_string())))
                     .collect()
             })
-            .ok_or("registry doc: no `time` map")?;
+            .ok_or(PackumentError::Missing("`time` map"))?;
         let versions_obj = doc.get("versions").and_then(|x| x.as_object());
         let versions_obj = match versions_obj {
             Some(v) => v,
@@ -132,13 +144,14 @@ impl Packument {
             // records it like any other 404.
             None => {
                 if doc.get("time").and_then(|t| t.get("unpublished")).is_some() {
-                    return Err(format!(
-                        "{} (unpublished tombstone: {})",
-                        crate::registry::NOT_FOUND,
-                        doc.get("name").and_then(|x| x.as_str()).unwrap_or("?")
+                    return Err(PackumentError::Unpublished(
+                        doc.get("name")
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("?")
+                            .to_string(),
                     ));
                 }
-                return Err("registry doc: no `versions` map".into());
+                return Err(PackumentError::Missing("`versions` map"));
             }
         };
         let mut versions: Vec<String> = versions_obj.keys().cloned().collect();
@@ -338,17 +351,20 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
+/// An `--as-of` that is neither a date nor a UTC time.
+#[derive(Debug, thiserror::Error)]
+#[error("--as-of {0}: expected YYYY-MM-DD or a UTC time YYYY-MM-DDTHH:MM:SS[.mmm]Z")]
+pub struct AsOfError(pub String);
+
 /// `--as-of`: a date `YYYY-MM-DD` is the END of that UTC day; otherwise a
 /// UTC timestamp.
-pub fn parse_as_of(s: &str) -> Result<String, String> {
+pub fn parse_as_of(s: &str) -> Result<String, AsOfError> {
     if s.len() == 10
         && let Some(t) = normalize_time(&format!("{s}T23:59:59.999Z"))
     {
         return Ok(t);
     }
-    normalize_time(s).ok_or_else(|| {
-        format!("--as-of {s}: expected YYYY-MM-DD or a UTC time YYYY-MM-DDTHH:MM:SS[.mmm]Z")
-    })
+    normalize_time(s).ok_or_else(|| AsOfError(s.to_string()))
 }
 
 /// The lab's policy over stable versions (any order): (role, version).

@@ -536,7 +536,7 @@ fn job(
     let started = std::time::Instant::now();
     let built = match build_planned(root, plan, trace) {
         Ok(built) => built,
-        Err(e) => return JobAnswer::Failed(e),
+        Err(e) => return JobAnswer::Failed(e.to_string()),
     };
     let s = &built.sidecar;
     notice(&format!(
@@ -647,7 +647,7 @@ pub(crate) fn build_notice(
 fn store_tool(
     root: &std::path::Path,
     bundler: humanify_ag_core::libindex::recipe::RecipeBundler,
-) -> Result<(Tool, bool), String> {
+) -> Result<(Tool, bool), humanify_ag_index::tools::ToolError> {
     if let Ok(tool) = find_tool(root, bundler) {
         return Ok((tool, false));
     }

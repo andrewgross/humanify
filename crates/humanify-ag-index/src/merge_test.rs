@@ -357,7 +357,7 @@ fn the_streaming_merge_refuses_a_shard_out_of_label_order() {
     // part of the bytes, so it is checked, never assumed
     let mut m = Merger::default();
     m.add(module_shard("2.0.0", &[])).expect("first");
-    let err = m.add(module_shard("1.0.0", &[])).unwrap_err();
+    let err = m.add(module_shard("1.0.0", &[])).unwrap_err().to_string();
     assert!(err.contains("out of label order"), "{err}");
 }
 

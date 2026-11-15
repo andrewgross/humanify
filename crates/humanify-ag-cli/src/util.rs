@@ -18,6 +18,15 @@ pub fn node_fs_error(e: &std::io::Error, syscall: &str, path: &str) -> String {
     }
 }
 
+/// A failed file operation, printed as [`node_fs_error`] words it.
+#[derive(Debug, thiserror::Error)]
+#[error("{}", node_fs_error(.source, .syscall, .path))]
+pub struct NodeFsError {
+    pub source: std::io::Error,
+    pub syscall: &'static str,
+    pub path: String,
+}
+
 /// Crash loudly with a red message on stderr (cli-error.ts:1-4).
 pub fn err(message: &str) -> ! {
     eprintln!("\x1b[31m{message}\x1b[0m");

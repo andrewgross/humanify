@@ -29,12 +29,25 @@ fn vlq_digit(c: u8) -> Option<i64> {
     Some(i64::from(v))
 }
 
+/// Why a source map does not read.
+#[derive(Debug, thiserror::Error)]
+pub enum MapError {
+    #[error("map: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("map: no sources")]
+    NoSources,
+    #[error("bad VLQ character {0:?}")]
+    BadVlq(char),
+    #[error("truncated VLQ")]
+    TruncatedVlq,
+}
+
 /// The fields of one segment.
-fn decode_segment(seg: &[u8]) -> Result<Vec<i64>, String> {
+fn decode_segment(seg: &[u8]) -> Result<Vec<i64>, MapError> {
     let mut out = Vec::new();
     let (mut value, mut shift) = (0i64, 0u32);
     for &c in seg {
-        let d = vlq_digit(c).ok_or_else(|| format!("bad VLQ character {:?}", c as char))?;
+        let d = vlq_digit(c).ok_or(MapError::BadVlq(c as char))?;
         value += (d & 31) << shift;
         if d & 32 != 0 {
             shift += 5;
@@ -49,14 +62,14 @@ fn decode_segment(seg: &[u8]) -> Result<Vec<i64>, String> {
         shift = 0;
     }
     if shift != 0 {
-        return Err("truncated VLQ".into());
+        return Err(MapError::TruncatedVlq);
     }
     Ok(out)
 }
 
 /// Source map v3 `mappings` → (line, column, source, original line) for
 /// every segment with a source.
-pub fn decode_mappings(mappings: &str) -> Result<Vec<(u32, u32, u32, u32)>, String> {
+pub fn decode_mappings(mappings: &str) -> Result<Vec<(u32, u32, u32, u32)>, MapError> {
     let mut out = Vec::new();
     let (mut src, mut orig): (i64, i64) = (0, 0);
     for (line, text) in mappings.split(';').enumerate() {
@@ -150,13 +163,13 @@ pub fn utf16_to_byte_offsets(text: &str, positions: &[(u32, u32)]) -> Vec<Option
 
 impl SourceMap {
     /// Parse a `.map` file's JSON (`sourceRoot` joined onto each source).
-    pub fn parse(json: &str) -> Result<SourceMap, String> {
-        let v: serde_json::Value = serde_json::from_str(json).map_err(|e| format!("map: {e}"))?;
+    pub fn parse(json: &str) -> Result<SourceMap, MapError> {
+        let v: serde_json::Value = serde_json::from_str(json)?;
         let root = v.get("sourceRoot").and_then(|r| r.as_str()).unwrap_or("");
         let sources = v
             .get("sources")
             .and_then(|s| s.as_array())
-            .ok_or("map: no sources")?
+            .ok_or(MapError::NoSources)?
             .iter()
             .map(|s| {
                 let s = s.as_str().unwrap_or("");

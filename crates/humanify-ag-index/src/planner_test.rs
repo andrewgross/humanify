@@ -6,7 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::asof::{Packument, VersionMeta};
 use super::build::PackageSelection;
-use super::planner::{self, Loader, ResolvedSpec};
+use super::planner::{self, ListError, Loader, ResolvedSpec};
+use super::registry::RegistryError;
 use super::spec::IndexSpec;
 
 const SPEC: &str = r#"
@@ -81,7 +82,7 @@ fn absent_packument(name: &str) -> Packument {
 }
 
 impl Loader for TestRegistry {
-    fn prefetch(&mut self, names: &BTreeSet<String>) -> Result<(), String> {
+    fn prefetch(&mut self, names: &BTreeSet<String>) -> Result<(), RegistryError> {
         self.asked.extend(names.iter().cloned());
         Ok(())
     }
@@ -91,7 +92,7 @@ impl Loader for TestRegistry {
         }
         self.packs.get(name).cloned()
     }
-    fn get(&mut self, name: &str) -> Result<(Packument, String), String> {
+    fn get(&mut self, name: &str) -> Result<(Packument, String), RegistryError> {
         if self.absent.contains(name) || self.absent_files.contains(name) {
             return Ok((absent_packument(name), "test".to_string()));
         }
@@ -99,7 +100,10 @@ impl Loader for TestRegistry {
             .get(name)
             .cloned()
             .map(|p| (p, "test".to_string()))
-            .ok_or(format!("{name}: no packument in the test registry"))
+            .ok_or_else(|| RegistryError::Offline {
+                name: name.to_string(),
+                path: "the test registry".into(),
+            })
     }
 }
 
@@ -187,7 +191,7 @@ fn top_list(
     _list: super::spec::HighImpactList,
     _version: &str,
     _sha: &str,
-) -> Result<String, String> {
+) -> Result<String, ListError> {
     Ok(TOP.to_string())
 }
 
@@ -221,7 +225,7 @@ fn reordered_list(
     _list: super::spec::HighImpactList,
     _version: &str,
     _sha: &str,
-) -> Result<String, String> {
+) -> Result<String, ListError> {
     Ok(REORDERED.to_string())
 }
 
@@ -598,7 +602,9 @@ fn a_spec_whose_dependency_rules_meet_an_old_snapshot_fails_loud() {
     }
     let spec = IndexSpec::parse(SPEC).expect("spec");
     let mut src = sources(&mut r);
-    let err = planner::resolve(&spec, &mut src).expect_err("loud");
+    let err = planner::resolve(&spec, &mut src)
+        .expect_err("loud")
+        .to_string();
     assert!(
         err.contains("per-version") && err.contains("snapshot"),
         "{err}"
@@ -611,7 +617,9 @@ fn a_missing_packument_fails_loud() {
     r.packs.remove("chalk").expect("removed");
     let spec = IndexSpec::parse(SPEC).expect("spec");
     let mut src = sources(&mut r);
-    let err = planner::resolve(&spec, &mut src).expect_err("loud");
+    let err = planner::resolve(&spec, &mut src)
+        .expect_err("loud")
+        .to_string();
     assert!(err.contains("chalk"), "{err}");
 }
 
@@ -628,7 +636,9 @@ fn a_list_members_absence_fails_loud() {
     r.absent.insert("left-pad".to_string());
     let spec = IndexSpec::parse(SPEC).expect("spec");
     let mut src = sources(&mut r);
-    let err = planner::resolve(&spec, &mut src).expect_err("loud");
+    let err = planner::resolve(&spec, &mut src)
+        .expect_err("loud")
+        .to_string();
     assert!(err.contains("left-pad"), "{err}");
     assert!(err.contains("list"), "{err}");
 }
@@ -665,17 +675,17 @@ fn a_closure_members_absence_is_data() {
 #[test]
 fn the_list_absence_outage_rule_boundaries() {
     // the measured legitimate tail
-    assert_eq!(planner::list_absence_outage(213, 17_338), None);
+    assert!(!planner::list_absence_outage(213, 17_338));
     // a third of a 3-name list is not a tail
-    assert!(planner::list_absence_outage(1, 3).is_some());
+    assert!(planner::list_absence_outage(1, 3));
     // the outage shape the classifier used to catch
-    assert!(planner::list_absence_outage(10_000, 17_338).is_some());
+    assert!(planner::list_absence_outage(10_000, 17_338));
     // exact boundary at 2%: 17338 * 1/50 = 346.76 → 347 is the first
     // failing count
-    assert_eq!(planner::list_absence_outage(346, 17_338), None);
-    assert!(planner::list_absence_outage(347, 17_338).is_some());
+    assert!(!planner::list_absence_outage(346, 17_338));
+    assert!(planner::list_absence_outage(347, 17_338));
     // zero absent is always fine
-    assert_eq!(planner::list_absence_outage(0, 17_338), None);
+    assert!(!planner::list_absence_outage(0, 17_338));
 }
 
 /// An absentee the walk never CONSULTS is not recorded. The wave's
@@ -914,7 +924,7 @@ fn an_override_carries_its_own_max() {
 #[test]
 fn a_max_of_zero_is_refused() {
     let spec = SPEC.replace("policy = \"as-of\"", "policy = \"as-of\"\nmax = 0");
-    let err = IndexSpec::parse(&spec).expect_err("max = 0");
+    let err = IndexSpec::parse(&spec).expect_err("max = 0").to_string();
     assert!(err.contains("max must be at least 1"), "{err}");
 }
 
@@ -947,6 +957,6 @@ fn a_policy_list_plans_the_union_of_its_strategies() {
 #[test]
 fn an_empty_policy_list_is_refused() {
     let spec = SPEC.replace("policy = \"as-of\"", "policy = []");
-    let err = IndexSpec::parse(&spec).expect_err("empty list");
+    let err = IndexSpec::parse(&spec).expect_err("empty list").to_string();
     assert!(err.contains("at least one strategy"), "{err}");
 }

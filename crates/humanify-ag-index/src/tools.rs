@@ -31,7 +31,47 @@ use humanify_ag_core::libindex::format::compare_versions;
 use humanify_ag_core::libindex::recipe::{Recipe, RecipeBundler};
 
 use crate::cache::TOOLS_DIR;
-use crate::recipe::{RecipeBuild, bundler_version_of};
+use crate::error::{FileError, op_at};
+use crate::recipe::{RecipeBuild, RecipeRunError, bundler_version_of};
+
+/// Why the store has no usable tool for a bundler.
+#[derive(Debug, thiserror::Error)]
+pub enum ToolError {
+    #[error(transparent)]
+    File(#[from] FileError),
+    #[error(
+        "no {label} under {} (by hand: npm install {specs} --before={TOOLS_BEFORE} --prefix {} \
+         --ignore-scripts)",
+        .tools.display(),
+        .dir.display()
+    )]
+    NotInstalled {
+        label: &'static str,
+        tools: PathBuf,
+        specs: String,
+        dir: PathBuf,
+    },
+    #[error("fetching {label} {version} into {}: {why}", .dir.display())]
+    Fetch {
+        label: &'static str,
+        version: String,
+        dir: PathBuf,
+        why: Box<ToolError>,
+    },
+    #[error("{0}")]
+    Io(std::io::Error),
+    #[error("npm install: {0}")]
+    NpmRun(humanify_ag_io::subprocess::SubprocessError),
+    /// npm's stderr.
+    #[error("npm install: {0}")]
+    Npm(String),
+    #[error("{0}")]
+    Version(RecipeRunError),
+    #[error("{} --version answered {said:?}", .bin.display())]
+    Answered { bin: PathBuf, said: String },
+    #[error("no platform binary under {}", .0.display())]
+    NoPlatformBinary(PathBuf),
+}
 
 /// Every recipe bundler, in [`RecipeBundler`]'s order.
 pub const ALL_RECIPE_BUNDLERS: [RecipeBundler; 4] = [
@@ -186,7 +226,7 @@ fn installed(dir: &Path, bundler: RecipeBundler) -> bool {
 }
 
 /// The tool in `dir`, its recipe script (re)written to this binary's bytes.
-fn tool_in(dir: &Path, bundler: RecipeBundler, version: &str) -> Result<Tool, String> {
+fn tool_in(dir: &Path, bundler: RecipeBundler, version: &str) -> Result<Tool, ToolError> {
     let bin = match recipe_script(bundler) {
         None => dir
             .join("node_modules/.bin")
@@ -194,8 +234,7 @@ fn tool_in(dir: &Path, bundler: RecipeBundler, version: &str) -> Result<Tool, St
         Some((name, bytes)) => {
             let path = dir.join(name);
             if std::fs::read_to_string(&path).ok().as_deref() != Some(bytes) {
-                std::fs::write(&path, bytes)
-                    .map_err(|e| format!("writing {}: {e}", path.display()))?;
+                std::fs::write(&path, bytes).map_err(op_at("writing ", &path))?;
             }
             path
         }
@@ -211,7 +250,7 @@ fn tool_in(dir: &Path, bundler: RecipeBundler, version: &str) -> Result<Tool, St
 /// (semver order; the run does not know the bundle's own bundler version).
 /// Err: none installed — the error names the store directory and the exact
 /// command that fetches the pinned one by hand ([`fetch_tool`] does it).
-pub fn find_tool(root: &Path, bundler: RecipeBundler) -> Result<Tool, String> {
+pub fn find_tool(root: &Path, bundler: RecipeBundler) -> Result<Tool, ToolError> {
     let tools = root.join(TOOLS_DIR);
     let prefix = format!("{}-", bundler.name());
     let mut versions: Vec<String> = std::fs::read_dir(&tools)
@@ -225,14 +264,12 @@ pub fn find_tool(root: &Path, bundler: RecipeBundler) -> Result<Tool, String> {
     versions.sort_by(|a, b| compare_versions(b, a));
     match versions.first() {
         Some(v) => tool_in(&tool_dir(root, bundler, v), bundler, v),
-        None => Err(format!(
-            "no {} under {} (by hand: npm install {} --before={TOOLS_BEFORE} --prefix {} \
-             --ignore-scripts)",
-            pin(bundler).label,
-            tools.display(),
-            fetch_specs(bundler).join(" "),
-            tool_dir(root, bundler, pin(bundler).version).display()
-        )),
+        None => Err(ToolError::NotInstalled {
+            label: pin(bundler).label,
+            tools,
+            specs: fetch_specs(bundler).join(" "),
+            dir: tool_dir(root, bundler, pin(bundler).version),
+        }),
     }
 }
 
@@ -240,7 +277,7 @@ pub fn find_tool(root: &Path, bundler: RecipeBundler) -> Result<Tool, String> {
 /// is there, else a fetch of it. The spec-mode builder's tool lookup — a
 /// spec pins the version, so "the newest install" ([`find_tool`]) is the
 /// wrong question.
-pub fn tool_at(root: &Path, bundler: RecipeBundler, version: &str) -> Result<Tool, String> {
+pub fn tool_at(root: &Path, bundler: RecipeBundler, version: &str) -> Result<Tool, ToolError> {
     let dir = tool_dir(root, bundler, version);
     if installed(&dir, bundler) {
         tool_in(&dir, bundler, version)
@@ -250,7 +287,7 @@ pub fn tool_at(root: &Path, bundler: RecipeBundler, version: &str) -> Result<Too
 }
 
 /// The build that runs `recipe` with the store's tool for its bundler.
-pub fn recipe_build(root: &Path, recipe: Recipe) -> Result<(RecipeBuild, Tool), String> {
+pub fn recipe_build(root: &Path, recipe: Recipe) -> Result<(RecipeBuild, Tool), ToolError> {
     let tool = find_tool(root, recipe.bundler)?;
     Ok((
         RecipeBuild {
@@ -272,7 +309,7 @@ const FETCH_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15 * 
 /// package's placeholder; webpack, rollup: the recipe script beside the
 /// install). The tool must answer `--version` with its pin, else the fetch
 /// fails loudly and leaves nothing behind.
-pub fn fetch_tool(root: &Path, bundler: RecipeBundler) -> Result<Tool, String> {
+pub fn fetch_tool(root: &Path, bundler: RecipeBundler) -> Result<Tool, ToolError> {
     fetch_tool_at(root, bundler, pin(bundler).version)
 }
 
@@ -280,20 +317,24 @@ pub fn fetch_tool(root: &Path, bundler: RecipeBundler) -> Result<Tool, String> {
 /// own tools; the runtime path calls this with [`pin`]'s version). The
 /// npm packages installed are still [`fetch_specs`]' (the recipe script's
 /// own plugin pins).
-pub fn fetch_tool_at(root: &Path, bundler: RecipeBundler, version: &str) -> Result<Tool, String> {
+pub fn fetch_tool_at(
+    root: &Path,
+    bundler: RecipeBundler,
+    version: &str,
+) -> Result<Tool, ToolError> {
     let p = pin(bundler);
     let dir = tool_dir(root, bundler, version);
-    let fail = |what: String| -> String {
+    let fail = |why: ToolError| -> ToolError {
         let _ = std::fs::remove_dir_all(&dir);
-        format!(
-            "fetching {} {} into {}: {what}",
-            p.label,
-            version,
-            dir.display()
-        )
+        ToolError::Fetch {
+            label: p.label,
+            version: version.to_string(),
+            dir: dir.clone(),
+            why: Box::new(why),
+        }
     };
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).map_err(|e| fail(e.to_string()))?;
+    std::fs::create_dir_all(&dir).map_err(|e| fail(ToolError::Io(e)))?;
     let out = humanify_ag_io::subprocess::run(
         Command::new("npm")
             .arg("install")
@@ -310,23 +351,23 @@ pub fn fetch_tool_at(root: &Path, bundler: RecipeBundler, version: &str) -> Resu
         None,
         FETCH_DEADLINE,
     )
-    .map_err(|e| fail(format!("npm install: {e}")))?;
+    .map_err(|e| fail(ToolError::NpmRun(e)))?;
     if !out.status.success() {
-        return Err(fail(format!(
-            "npm install: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
+        return Err(fail(ToolError::Npm(
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
         )));
     }
     if let Some((scope, binary, placeholder)) = native_placeholder(bundler) {
         place_platform_binary(&dir, scope, binary, placeholder).map_err(fail)?;
     }
     let tool = tool_in(&dir, bundler, version).map_err(fail)?;
-    let said = bundler_version_of(bundler, &tool.bin, FETCH_DEADLINE).map_err(fail)?;
+    let said = bundler_version_of(bundler, &tool.bin, FETCH_DEADLINE)
+        .map_err(|e| fail(ToolError::Version(e)))?;
     if said != version {
-        return Err(fail(format!(
-            "{} --version answered {said:?}",
-            tool.bin.display()
-        )));
+        return Err(fail(ToolError::Answered {
+            bin: tool.bin,
+            said,
+        }));
     }
     Ok(tool)
 }
@@ -352,7 +393,7 @@ fn place_platform_binary(
     scope: &str,
     binary: &str,
     placeholder: &str,
-) -> Result<(), String> {
+) -> Result<(), ToolError> {
     let scope_dir = dir.join("node_modules").join(scope);
     let platform = std::fs::read_dir(&scope_dir)
         .into_iter()
@@ -360,10 +401,10 @@ fn place_platform_binary(
         .filter_map(|e| e.ok())
         .map(|e| e.path().join(binary))
         .find(|p| p.is_file())
-        .ok_or_else(|| format!("no platform binary under {}", scope_dir.display()))?;
+        .ok_or(ToolError::NoPlatformBinary(scope_dir))?;
     let target = dir.join("node_modules").join(placeholder);
     let _ = std::fs::remove_file(&target);
     std::fs::hard_link(&platform, &target)
         .or_else(|_| std::fs::copy(&platform, &target).map(|_| ()))
-        .map_err(|e| format!("placing {}: {e}", platform.display()))
+        .map_err(|e| op_at("placing ", &platform)(e).into())
 }

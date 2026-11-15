@@ -4,6 +4,7 @@ pub mod build;
 pub mod cache;
 pub mod cli;
 pub mod confirm;
+pub mod error;
 pub mod merge;
 pub mod names;
 pub mod planner;
@@ -29,6 +30,8 @@ mod cache_test;
 mod confirm_test;
 #[cfg(test)]
 mod edges_test;
+#[cfg(test)]
+mod error_text_pin_test;
 #[cfg(test)]
 mod merge_test;
 #[cfg(test)]
