@@ -71,7 +71,8 @@ use crate::matching::{FingerprintIndex, IndexNode};
 
 /// TS `PropagationRungCounts` (types.ts :693) — how many resolutions each
 /// rung closed. The five fields sum to the outcome's `resolved`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PropagationRungCounts {
     pub matched_callee: usize,
     pub matched_caller: usize,

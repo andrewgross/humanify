@@ -774,12 +774,7 @@ pub fn classify_bun_modules<'a>(
             .collect();
 
     let comments = semantic.comments();
-    let mut line_starts: Vec<u32> = vec![0];
-    for (i, b) in source.bytes().enumerate() {
-        if b == b'\n' {
-            line_starts.push(i as u32 + 1);
-        }
-    }
+    let line_starts = crate::babel_view::line_starts(source);
 
     let mut factories: Vec<FactoryRecord> = Vec::new();
     // ONE pass over the nodes: a linear `nodes.iter().find` per container
@@ -873,8 +868,8 @@ pub fn classify_bun_modules<'a>(
                 span: declarator_span,
                 body_span,
                 line_range: (
-                    line_of(declarator_span.start, &line_starts),
-                    line_of(declarator_span.end, &line_starts),
+                    crate::babel_view::line_number(&line_starts, declarator_span.start),
+                    crate::babel_view::line_number(&line_starts, declarator_span.end),
                 ),
                 content_hash,
                 structural_hash,
@@ -907,15 +902,6 @@ pub fn classify_bun_modules<'a>(
         container: container_stmts.clone(),
         name_counts: None,
     })
-}
-
-/// The container-body node kinds: a function's body (oxc FunctionBody;
-/// Babel BlockStatement) or a bare block.
-fn line_of(offset: u32, line_starts: &[u32]) -> u32 {
-    match line_starts.binary_search(&offset) {
-        Ok(i) => i as u32 + 1,
-        Err(i) => i as u32,
-    }
 }
 
 /// The statement-level banner (the TS collectBanner): the LAST bang-block

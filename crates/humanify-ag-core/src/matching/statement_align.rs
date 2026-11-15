@@ -174,6 +174,7 @@
 //! remnant only — a few pairs per version hop — so the clone cost is
 //! noise.
 
+use crate::ingest::node_type;
 use std::collections::{BTreeSet, HashMap};
 
 use oxc_ast::AstKind;
@@ -273,7 +274,7 @@ impl<'a, 'j> AlignSide<'a, 'j> {
 /// (owning-scope span ≠ the property's span) and dropped ALL of the
 /// method's local transfers and hints.
 fn row_function_span(row_json: &Value, row_span: Span) -> Span {
-    let ty = json_type(row_json);
+    let ty = node_type(row_json);
     if matches!(ty, "MethodDefinition" | "ObjectProperty" | "Property")
         && let Some(span) = json_span_opt(row_json.get("value"))
     {
@@ -320,10 +321,6 @@ struct AlignedUnitPair<'v> {
     next: HashedUnit<'v>,
 }
 
-fn json_type(value: &Value) -> &str {
-    value.get("type").and_then(Value::as_str).unwrap_or("")
-}
-
 fn json_span_opt(value: Option<&Value>) -> Option<Span> {
     let value = value?;
     let start = value.get("start").and_then(Value::as_u64)? as u32;
@@ -346,13 +343,13 @@ fn alignment_units(row_json: &Value) -> Vec<&Value> {
     let Some(body) = body else {
         return vec![];
     };
-    if json_type(body) != "BlockStatement" {
+    if node_type(body) != "BlockStatement" {
         return vec![body]; // expression body
     }
     let Some(statements) = body.get("body").and_then(Value::as_array) else {
         return vec![];
     };
-    if statements.len() == 1 && json_type(&statements[0]) == "ReturnStatement" {
+    if statements.len() == 1 && node_type(&statements[0]) == "ReturnStatement" {
         // TS `if (!Array.isArray(argument) && argument.node)` — a bare
         // `return;` (argument null/absent) keeps the statement.
         let argument = statements[0].get("argument");
@@ -381,7 +378,7 @@ fn hash_units<'v>(units: Vec<&'v Value>, tables: &SymbolTables) -> Vec<HashedUni
         // contents share.
         let walk = walk_unit(value, tables, &ALIGN_UNIT);
         let span = json_span_opt(Some(value)).unwrap_or(Span::new(u32::MAX, 0));
-        let type_name = json_type(value).to_string();
+        let type_name = node_type(value).to_string();
         let mut slot_index = HashMap::with_capacity(walk.mapping.len());
         for (i, (slot, _, _)) in walk.mapping.iter().enumerate() {
             slot_index.insert(slot.clone(), i);
@@ -830,7 +827,7 @@ fn units_of(value: Option<&Value>) -> Vec<&Value> {
     if value.is_null() {
         return vec![];
     }
-    if json_type(value) == "BlockStatement" {
+    if node_type(value) == "BlockStatement" {
         return value
             .get("body")
             .and_then(Value::as_array)
@@ -870,8 +867,8 @@ fn corresponding_blocks<'v>(
     fn zip<'v>(a: Option<&'v Value>, b: Option<&'v Value>) -> (Vec<&'v Value>, Vec<&'v Value>) {
         (units_of(a), units_of(b))
     }
-    let ptype = json_type(prior);
-    let ntype = json_type(next);
+    let ptype = node_type(prior);
+    let ntype = node_type(next);
     if ptype == "IfStatement" && ntype == "IfStatement" {
         return vec![
             zip(child(prior, "consequent"), child(next, "consequent")),
@@ -1583,7 +1580,7 @@ pub fn row_json_in<'j>(
         .get(&(row_span.start, row_span.end))?
         .iter()
         .copied()
-        .find(|v| types.contains(&json_type(v)))
+        .find(|v| types.contains(&node_type(v)))
 }
 
 /// Find a JSON node by its (start, end) span in the side's index —
@@ -1600,7 +1597,7 @@ fn find_json_by_span_index<'j>(
         .get(&(span.start, span.end))?
         .iter()
         .copied()
-        .find(|v| want_type.is_none_or(|w| json_type(v) == w))
+        .find(|v| want_type.is_none_or(|w| node_type(v) == w))
 }
 
 /// Whether a hint's new binding still plays its prior role (TS

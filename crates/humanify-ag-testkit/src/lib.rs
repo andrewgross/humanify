@@ -9,7 +9,9 @@
 //!   policy), derived from the request bytes alone;
 //! - [`fake`]: the seeded-shuffled fake name provider, whose
 //!   `run_pipelined` completes calls in a seeded random order the way the
-//!   real provider completes them out of order.
+//!   real provider completes them out of order;
+//! - [`helpers`]: the small helpers every test file wrote its own copy of
+//!   (an owned string list, a scratch directory removed on drop).
 //!
 //! Lane L4 ported the product crates' seven hand-written stub servers and
 //! their in-order fake providers onto this crate. It depends on
@@ -18,4 +20,10 @@
 
 pub mod answers;
 pub mod fake;
+pub mod helpers;
 pub mod stub_server;
+
+pub use helpers::{ScratchDir, strings};
+
+#[cfg(test)]
+mod helpers_test;

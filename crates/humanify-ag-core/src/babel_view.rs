@@ -9,6 +9,16 @@
 
 use oxc_ast::ast::Expression;
 
+/// A node's parent in oxc's node table, or None at the root (whose
+/// parent id is itself).
+pub fn parent(
+    nodes: &oxc_semantic::AstNodes<'_>,
+    id: oxc_semantic::NodeId,
+) -> Option<oxc_semantic::NodeId> {
+    let p = nodes.parent_id(id);
+    (p != id).then_some(p)
+}
+
 /// The expression with every paren wrapper skipped — what Babel's AST
 /// holds at this position.
 pub fn unparen<'a>(expr: &'a Expression<'a>) -> &'a Expression<'a> {
@@ -17,6 +27,32 @@ pub fn unparen<'a>(expr: &'a Expression<'a>) -> &'a Expression<'a> {
         e = &p.expression;
     }
     e
+}
+
+/// The start of every line of `code`, breaking on `\n` only (the
+/// sourcemap's and `diff`'s line model).
+pub fn line_starts(code: &str) -> Vec<u32> {
+    let mut starts = vec![0u32];
+    starts.extend(
+        code.match_indices('\n')
+            .map(|(i, _)| u32::try_from(i + 1).expect("line start fits u32")),
+    );
+    starts
+}
+
+/// The 0-based line a byte offset of `code` is on (`starts` from
+/// [`line_starts`]).
+pub fn line_of(starts: &[u32], at: u32) -> u32 {
+    match starts.partition_point(|&s| s <= at) {
+        0 => 0,
+        n => u32::try_from(n - 1).expect("line index fits u32"),
+    }
+}
+
+/// The 1-based line a byte offset is on (`starts` from [`line_starts`]:
+/// `\n` breaks only, the `diff` model — not [`BabelLines`]).
+pub fn line_number(starts: &[u32], at: u32) -> u32 {
+    line_of(starts, at) + 1
 }
 
 /// The line model of a text: where each line starts, and the (1-based

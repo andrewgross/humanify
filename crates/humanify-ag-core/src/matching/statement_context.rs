@@ -27,6 +27,7 @@
 //! lines from byte offsets over the SAME text the graph's session ids were
 //! computed from (babel loc lines and newline counts agree by construction).
 
+use crate::babel_view::{line_number, line_starts};
 use std::collections::{HashMap, HashSet};
 
 use oxc_ast::AstKind;
@@ -97,17 +98,9 @@ pub fn statement_usability(stmt_span: Option<Span>, line_starts: &[u32]) -> Stmt
     StmtUsability::Ok { lines }
 }
 
-/// 1-based line of a byte offset (the babel loc convention).
-fn line_of(offset: u32, line_starts: &[u32]) -> u32 {
-    match line_starts.binary_search(&offset) {
-        Ok(i) => i as u32 + 1,
-        Err(i) => i as u32, // line_starts[i] is the last start <= offset
-    }
-}
-
 /// `loc.end.line - loc.start.line + 1` from byte offsets.
 fn line_span(span: Span, line_starts: &[u32]) -> u32 {
-    line_of(span.end, line_starts) - line_of(span.start, line_starts) + 1
+    line_number(line_starts, span.end) - line_number(line_starts, span.start) + 1
 }
 
 /// The contexts of one function row (parallel to `graph.functions`).
@@ -197,7 +190,7 @@ impl StatementContexts {
         text: &str,
     ) -> StatementContexts {
         let nodes = semantic.nodes();
-        let line_starts = line_starts_of(text);
+        let line_starts = line_starts(text);
         let row_ids = super::row_node_ids(&graph.functions, nodes);
 
         // The binding identifiers' arena nodes — one sweep over the semantic
@@ -335,17 +328,6 @@ impl StatementContexts {
     pub fn binding_rows(&self) -> &[BindingStmtContext] {
         &self.bindings
     }
-}
-
-/// Line starts of `text` (offset 0 first; every position after a newline).
-fn line_starts_of(text: &str) -> Vec<u32> {
-    let mut starts = vec![0u32];
-    for (i, b) in text.bytes().enumerate() {
-        if b == b'\n' {
-            starts.push((i + 1) as u32);
-        }
-    }
-    starts
 }
 
 /// TS `hashStatementPath` (:58) for every wanted statement span: the

@@ -1,17 +1,14 @@
 use super::{parse_entry_modules, read_prior_entry_order, stable_entry_order};
-
-fn paths(v: &[&str]) -> Vec<String> {
-    v.iter().map(|s| s.to_string()).collect()
-}
+use humanify_ag_testkit::strings;
 
 #[test]
 fn files_still_in_the_prior_keep_its_order() {
-    let files = paths(&["a.js", "b.js", "c.js", "d.js"]);
+    let files = strings(&["a.js", "b.js", "c.js", "d.js"]);
     // bundle order moved d before b; the prior had b, c, d.
     let got = stable_entry_order(
         &[0, 3, 1, 2],
         &files,
-        &paths(&["a.js", "b.js", "c.js", "d.js"]),
+        &strings(&["a.js", "b.js", "c.js", "d.js"]),
         &[false; 4],
     );
     assert_eq!(got, vec![0, 1, 2, 3]);
@@ -19,12 +16,12 @@ fn files_still_in_the_prior_keep_its_order() {
 
 #[test]
 fn a_new_file_follows_its_bundle_predecessor() {
-    let files = paths(&["a.js", "b.js", "c.js", "new.js"]);
+    let files = strings(&["a.js", "b.js", "c.js", "new.js"]);
     // prior: c, a, b. Bundle: a, new, b, c — new follows a.
     let got = stable_entry_order(
         &[0, 3, 1, 2],
         &files,
-        &paths(&["c.js", "a.js", "b.js"]),
+        &strings(&["c.js", "a.js", "b.js"]),
         &[false; 4],
     );
     assert_eq!(got, vec![2, 0, 3, 1]);
@@ -32,12 +29,12 @@ fn a_new_file_follows_its_bundle_predecessor() {
 
 #[test]
 fn pinned_files_keep_their_bundle_order_relative_to_each_other() {
-    let files = paths(&["a.js", "b.js", "c.js", "d.js"]);
+    let files = strings(&["a.js", "b.js", "c.js", "d.js"]);
     // prior reversed everything; a and c have load-time effects.
     let got = stable_entry_order(
         &[0, 1, 2, 3],
         &files,
-        &paths(&["d.js", "c.js", "b.js", "a.js"]),
+        &strings(&["d.js", "c.js", "b.js", "a.js"]),
         &[true, false, true, false],
     );
     // Unconstrained b, d take prior order (d before b); the constrained
@@ -57,7 +54,7 @@ fn the_entry_parser_reads_only_an_emitted_entry() {
                  require(\"./src/x.js\");\nrequire(\"./vendor/p/y.js\");\n";
     assert_eq!(
         parse_entry_modules(entry),
-        Some(paths(&["src/x.js", "vendor/p/y.js"]))
+        Some(strings(&["src/x.js", "vendor/p/y.js"]))
     );
     assert_eq!(parse_entry_modules("require(\"./src/x.js\");\n"), None);
 }
@@ -71,7 +68,7 @@ fn the_prior_entry_may_carry_an_underscore_prefix() {
         }
         _ => None,
     };
-    assert_eq!(read_prior_entry_order(read), Some(paths(&["index.js"])));
+    assert_eq!(read_prior_entry_order(read), Some(strings(&["index.js"])));
 }
 
 use super::{effect_run_order, pinned_entry_order};
@@ -93,12 +90,12 @@ fn effect_run_order_follows_node_header_first_loading() {
 
 #[test]
 fn pinning_keeps_every_effect_in_bundle_order() {
-    let files = paths(&["a.js", "b.js", "c.js", "d.js", "e.js"]);
+    let files = strings(&["a.js", "b.js", "c.js", "d.js", "e.js"]);
     // c loads e in its header; b and e have effects. The prior reversed
     // everything: taken as is, e (through c) would run before b.
     let headers = vec![vec![], vec![], vec![4], vec![], vec![]];
     let effect = [false, true, false, false, true];
-    let prior = paths(&["e.js", "d.js", "c.js", "b.js", "a.js"]);
+    let prior = strings(&["e.js", "d.js", "c.js", "b.js", "a.js"]);
     let bundle = [0, 1, 2, 3, 4];
     let got = pinned_entry_order(&bundle, &files, &prior, &headers, &effect).expect("an order");
     assert_eq!(
@@ -116,12 +113,12 @@ fn pinning_keeps_every_effect_in_bundle_order() {
 
 #[test]
 fn without_effects_the_prior_order_is_taken_whole() {
-    let files = paths(&["a.js", "b.js", "c.js"]);
+    let files = strings(&["a.js", "b.js", "c.js"]);
     let headers = vec![vec![1], vec![], vec![]];
     let got = pinned_entry_order(
         &[0, 1, 2],
         &files,
-        &paths(&["c.js", "b.js", "a.js"]),
+        &strings(&["c.js", "b.js", "a.js"]),
         &headers,
         &[false; 3],
     );

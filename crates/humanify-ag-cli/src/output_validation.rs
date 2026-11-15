@@ -54,8 +54,6 @@ pub struct FreeNameMeasure {
 const EXCERPT_CONTEXT_LINES: u32 = 2;
 const MIN_LINE_NUMBER_WIDTH: usize = 2;
 const FAILURE_NAME_SAMPLE: usize = 5;
-/// Tokens of context shown either side of the first divergence.
-const DIVERGENCE_CONTEXT: usize = 6;
 
 /// A thrown parser error as `describeParseError` sees it: its message
 /// (`error.message ?? String(err)`) and its `loc`, when it has one.
@@ -198,37 +196,6 @@ pub fn compare_semantics(
         binding_count_before: count_changed.then_some(baseline.total_binding_count),
         binding_count_after: count_changed.then_some(after.total_binding_count),
     })
-}
-
-/// `describeStructuralDivergence`'s text over the two serialized token
-/// streams, or `None` when they are equal. The serializer that produces the
-/// streams arrives with the rename stage (see the module docs).
-pub fn format_divergence(before: &[String], after: &[String]) -> Option<String> {
-    let n = before.len().min(after.len());
-    let first = (0..n)
-        .find(|&i| before[i] != after[i])
-        .or((before.len() != after.len()).then_some(n))?;
-    let window = |toks: &[String]| {
-        let lo = first.saturating_sub(DIVERGENCE_CONTEXT);
-        let hi = (first + DIVERGENCE_CONTEXT + 1).min(toks.len());
-        toks.get(lo..hi).map(|s| s.join(" ")).unwrap_or_default()
-    };
-    let tok = |toks: &[String]| {
-        let t = toks.get(first).map_or("<end>", String::as_str);
-        humanify_ag_model::js::stringify(&humanify_ag_model::js::JsValue::str(t))
-    };
-    let lengths = if before.len() == after.len() {
-        format!("{} tokens each", before.len())
-    } else {
-        format!("{} tokens before vs {} after", before.len(), after.len())
-    };
-    Some(format!(
-        "  first divergence at token {first} of {lengths}\n    original: {}\n    output:   {}\n    original context: {}\n    output context:   {}",
-        tok(before),
-        tok(after),
-        window(before),
-        window(after)
-    ))
 }
 
 /// The re-parse validity check with oxc: `None` when the code parses as a

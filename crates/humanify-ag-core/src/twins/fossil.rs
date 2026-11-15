@@ -11,6 +11,7 @@
 //! values — the same subtrees the statement hashes were computed from),
 //! not a babel AST; the walk reads node types the JSON carries verbatim.
 
+use crate::ingest::node_type;
 use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
@@ -208,7 +209,7 @@ fn is_esm_helper(d: &Value) -> bool {
 /// searched by, and the per-segment `declared` export list (:105).
 pub fn declared_names(stmt: &Value) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
-    let stmt_type = stmt.get("type").and_then(Value::as_str).unwrap_or("");
+    let stmt_type = node_type(stmt);
     match stmt_type {
         "FunctionDeclaration" | "ClassDeclaration" => {
             if let Some(name) = stmt
@@ -253,7 +254,7 @@ fn init_function_of(arg: Option<&Value>) -> (Option<&Value>, Option<String>) {
         return (None, None);
     };
     let arg = unwrap_paren(arg);
-    let arg_type = arg.get("type").and_then(Value::as_str).unwrap_or("");
+    let arg_type = node_type(arg);
     if arg_type == "ArrowFunctionExpression" || arg_type == "FunctionExpression" {
         return (Some(arg), None);
     }
@@ -267,7 +268,7 @@ fn init_function_of(arg: Option<&Value>) -> (Option<&Value>, Option<String>) {
         return (None, None);
     }
     let prop = &properties[0];
-    let prop_type = prop.get("type").and_then(Value::as_str).unwrap_or("");
+    let prop_type = node_type(prop);
     // The ESTree JSON's spelling is `Property` (the oxc-native
     // `ObjectProperty`/`ObjectMethod` names are the babel spellings the TS
     // original walked — both accepted here for the port's clarity).
@@ -558,7 +559,7 @@ impl MarkerCoverage {
 /// `__lazy(…)`), which store the function and return.
 fn is_inert(e: &Value) -> bool {
     let e = unwrap_paren(e);
-    match e.get("type").and_then(Value::as_str).unwrap_or("") {
+    match node_type(e) {
         "Literal"
         | "Identifier"
         | "ArrowFunctionExpression"
@@ -666,7 +667,7 @@ pub(crate) fn export_registration_target(stmt: &Value) -> Option<&str> {
 
 /// Can a lazily loaded module's top level hold this statement?
 fn is_lazy_module_shaped(stmt: &Value) -> bool {
-    match stmt.get("type").and_then(Value::as_str).unwrap_or("") {
+    match node_type(stmt) {
         "FunctionDeclaration" | "ClassDeclaration" => true,
         "VariableDeclaration" => all_of(stmt.get("declarations"), |d| {
             d.get("init").is_none_or(|i| i.is_null() || is_inert(i))

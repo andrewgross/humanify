@@ -32,6 +32,7 @@
 //! precedes the record); the parity dump writes it whenever the tier runs —
 //! absent-on-both is agreement in the engine.
 
+use crate::ingest::node_type;
 use std::collections::HashMap;
 
 use oxc_ast::AstKind;
@@ -440,18 +441,13 @@ fn stats_row_bump(stats: &mut CloseStatsRow, verdict: &str) {
     }
 }
 
-/// A row JSON node's type name (empty when absent).
-fn row_type(row: &Value) -> &str {
-    row.get("type").and_then(Value::as_str).unwrap_or("")
-}
-
 /// TS `computePartialTransfer` (:1300) over the two rows' ESTree JSON: the
 /// fn name (declarations/expressions only — methods carry none, matching
 /// the TS's `getFunctionNameId`) and parameter i to parameter i, keyed by
 /// the NEW name (an occupied key is OVERWRITTEN in place, insertion order
 /// kept — the TS Record semantics). Only differing names transfer.
 fn partial_transfer(prior_row: &Value, fresh_row: &Value) -> Vec<(String, String)> {
-    let row_kind = row_type;
+    let row_kind = node_type;
     let mut transfers: Vec<(String, String)> = Vec::new();
     let mut index_of: HashMap<String, usize> = HashMap::new();
     let mut record = |new_name: String, prior_name: String| match index_of.get(&new_name) {
@@ -508,13 +504,13 @@ fn signature_params(row: &Value) -> Vec<Option<String>> {
 
 /// `getParamIdentifier` (TS :1272): the three simple binding forms.
 fn param_identifier(param: &Value) -> Option<String> {
-    let ident = match row_type(param) {
+    let ident = match node_type(param) {
         "Identifier" => Some(param),
         "AssignmentPattern" => param.get("left"),
         "RestElement" => param.get("argument"),
         _ => None,
     }?;
-    if row_type(ident) != "Identifier" {
+    if node_type(ident) != "Identifier" {
         return None;
     }
     ident

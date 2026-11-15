@@ -10,27 +10,23 @@
 //!    the key registry (the bijection test);
 //! 3. the commander ACCIDENTS, each now refused loudly (exit 1, the error
 //!    names the option) instead of silently resolving;
-//! 4. the retired and renamed flags, refused naming their replacement;
+//! 4. removed and renamed flags, refused by the parser as unknown;
 //! 5. the usage-error contract: exit 1, never clap's default 2.
 //!
 //! Launch parity with the commander port is `launch_parity_test.rs`.
 
+use humanify_ag_testkit::strings;
 use serde_json::Value;
 
 use crate::config::file::{Kind, Val};
 use crate::config::keys::KEYS;
 use crate::surface::CommandOptions;
 use crate::surface::{
-    FLAGS, PipelineParse, RENAMED_FLAGS, RETIRED_FLAGS, help_text, package_version, parse_pipeline,
-    short_help_text,
+    FLAGS, PipelineParse, help_text, package_version, parse_pipeline, short_help_text,
 };
 
-fn argv(a: &[&str]) -> Vec<String> {
-    a.iter().map(|s| s.to_string()).collect()
-}
-
 fn parse_opts(a: &[&str]) -> CommandOptions {
-    match parse_pipeline(&argv(a)) {
+    match parse_pipeline(&strings(a)) {
         PipelineParse::Run { opts, .. } => *opts,
         PipelineParse::Exit { code, stderr, .. } => {
             panic!("{a:?} did not parse (exit {code}):\n{stderr}")
@@ -41,7 +37,7 @@ fn parse_opts(a: &[&str]) -> CommandOptions {
 /// A refused argv: exit 1 (usage errors keep the pipeline's exit-1
 /// contract) and the stderr, which must name `names` (the bad option).
 fn refusal(a: &[&str], names: &str) -> String {
-    match parse_pipeline(&argv(a)) {
+    match parse_pipeline(&strings(a)) {
         PipelineParse::Exit {
             code,
             stdout,
@@ -125,28 +121,6 @@ fn a_count_flag_is_typed() {
     );
 }
 
-/// The library decision (config sweep step 6): `--skip-libraries` and
-/// `--no-skip-libraries` are ONE setting now, `[library] unnamed`; both
-/// spellings (and `--library-discovery-units`) are refused naming its flag.
-#[test]
-fn the_skip_libraries_spellings_moved_to_one_setting() {
-    let skip = refusal(&["in.js", "--skip-libraries"], "--skip-libraries");
-    assert!(
-        skip.contains("renamed: use --library-unnamed leave"),
-        "{skip}"
-    );
-    let model = refusal(&["in.js", "--no-skip-libraries"], "--no-skip-libraries");
-    assert!(
-        model.contains("renamed: use --library-unnamed model"),
-        "{model}"
-    );
-    let units = refusal(
-        &["in.js", "--library-discovery-units"],
-        "--library-discovery-units",
-    );
-    assert!(units.contains("--library-report-units"), "{units}");
-}
-
 /// An unknown option, a missing or extra input, a boolean given a value:
 /// all exit 1, naming what was wrong.
 #[test]
@@ -163,41 +137,24 @@ fn usage_errors_exit_1_naming_the_problem() {
     refusal(&["env-reads", "dir"], "dir");
 }
 
-// --- retired flags --------------------------------------------------------
+// --- removed flags --------------------------------------------------------
 
-/// Config sweep 2026-10-13, no backwards compatibility: a renamed or
-/// deleted flag is refused, naming what replaced it — in both spellings.
+/// A removed or renamed flag has no list of its own: the parser's one
+/// unknown-argument error refuses it (no backwards compatibility).
 #[test]
-fn a_retired_flag_is_refused_naming_its_replacement() {
-    let pipeline: Vec<_> = RETIRED_FLAGS.iter().filter(|r| r.0.is_none()).collect();
-    assert!(!pipeline.is_empty());
-    for (_, flag, note) in pipeline {
-        let err = refusal(&["in.js", flag], flag);
-        assert!(err.contains(note), "{flag}: {err}");
-        let err = refusal(&["in.js", &format!("{flag}=x")], flag);
-        assert!(err.contains(note), "{flag}=x: {err}");
-    }
-    let line = refusal(&["in.js", "--profile", "p.json"], "--profile");
-    assert!(line.contains("renamed: use --perf-trace"), "{line}");
-}
-
-/// Every renamed spelling (the config sweep's moved flags, exp179's
-/// one-to-one names) is refused naming a replacement that parses — and
-/// is never itself a flag again.
-#[test]
-fn every_renamed_flag_is_refused_naming_a_flag_that_parses() {
-    for (old, new) in RENAMED_FLAGS {
+fn a_removed_flag_gets_the_parsers_unknown_argument_error() {
+    for old in [
+        "--api-key",
+        "--sequential",
+        "--concurrency",
+        "--stats-json",
+        "-c",
+    ] {
         let err = refusal(&["in.js", old, "x"], old);
-        assert!(err.contains(&format!("renamed: use {new}")), "{old}: {err}");
-        let flag = new.split_whitespace().next().unwrap();
+        assert!(err.contains("unexpected argument"), "{old}: {err}");
         assert!(
-            FLAGS.iter().any(|f| format!("--{}", f.long) == flag
-                || f.negated.as_ref().is_some_and(|n| format!("--{n}") == flag)),
-            "{old} -> {new}: not a flag"
-        );
-        assert!(
-            FLAGS.iter().all(|f| format!("--{}", f.long) != *old),
-            "{old} is renamed AND a flag"
+            !err.contains("renamed") && !err.contains("removed"),
+            "{old}: {err}"
         );
     }
 }
@@ -334,7 +291,7 @@ fn help_matches_the_golden_and_prints_to_stdout() {
         ("--help", "humanify-ag.txt"),
         ("-h", "humanify-ag-short.txt"),
     ] {
-        match parse_pipeline(&argv(&[flag])) {
+        match parse_pipeline(&strings(&[flag])) {
             PipelineParse::Exit {
                 code,
                 stdout,
@@ -349,8 +306,8 @@ fn help_matches_the_golden_and_prints_to_stdout() {
 }
 
 /// What the help lists: every key's flag (`--help`; `-h` leaves out the
-/// library tuning sections) with its config key; no renamed or retired
-/// flag, no deleted TS file, no `.env`.
+/// library tuning sections) with its config key; no deleted TS file, no
+/// `.env`.
 #[test]
 fn help_lists_every_flag_and_its_key() {
     let help = help_text();
@@ -377,17 +334,8 @@ fn help_lists_every_flag_and_its_key() {
         );
     }
     assert!(!help.contains(".env"), "no .env is read");
-    for (flag, _) in RENAMED_FLAGS {
-        assert!(
-            !help.contains(&format!("{flag} ")) && !help.contains(&format!("{flag}\n")),
-            "{flag} is listed"
-        );
-    }
     for stale in [".ts", "parity-era", "07 §2", "env-reads"] {
         assert!(!help.contains(stale), "help mentions {stale:?}:\n{help}");
-    }
-    for (_, flag, _) in RETIRED_FLAGS.iter().filter(|r| r.0.is_none()) {
-        assert!(!help.contains(&format!("{flag} ")), "{flag} is listed");
     }
 }
 
@@ -397,7 +345,7 @@ fn version_is_package_json_version() {
     let pkg: Value =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("package.json")).unwrap();
     assert_eq!(Some(package_version().as_str()), pkg["version"].as_str());
-    match parse_pipeline(&argv(&["-V"])) {
+    match parse_pipeline(&strings(&["-V"])) {
         PipelineParse::Exit { code, stdout, .. } => {
             assert_eq!(code, 0);
             assert!(stdout.contains(&package_version()), "{stdout}");

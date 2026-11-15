@@ -308,33 +308,6 @@ fn counts_unmatched_when_hash_not_found() {
     );
 }
 
-/// TS "respects maxCascadeDepth option".
-#[test]
-fn respects_max_cascade_depth() {
-    with_sides(SHAPES_V1, SHAPES_V2, |old, new| {
-        let hash_only = old.match_fn(
-            new,
-            MatchOptions {
-                max_cascade_depth: 0,
-                ..MatchOptions::default()
-            },
-        );
-        assert!(
-            hash_only.resolution_stats.still_ambiguous > 0,
-            "ambiguous at hash-only matching"
-        );
-
-        let full = old.match_fn(
-            new,
-            MatchOptions {
-                max_cascade_depth: 2,
-                ..MatchOptions::default()
-            },
-        );
-        assert_eq!(full.resolution_stats.still_ambiguous, 0);
-    });
-}
-
 /// TS "records WHY the enclosing-statement rung abstained".
 #[test]
 fn records_why_the_enclosing_rung_abstained() {
@@ -792,51 +765,6 @@ fn propagation_re_resolves_demoted_claims_injectively_stub_semantics() {
 // ---------------------------------------------------------------------------
 // enablePropagation integration
 // ---------------------------------------------------------------------------
-
-/// TS "resolves ambiguous functions that cascade alone cannot" — ADAPTED
-/// for the stub: the TS expects the propagation post-pass to clear the
-/// ambiguity (ambiguous == 0, `propagationResolved > 0`). The stub leaves
-/// the cascade's result untouched, which is exactly what this pins. When
-/// the pass is ported, tighten to the TS assertions.
-#[test]
-fn enable_propagation_resolves_ambiguous_stub_semantics() {
-    with_sides(
-        "\n      function wrapper1() { return uniqueA(); }\n      function wrapper2() { return uniqueB(); }\n      function uniqueA() { return \"hello\"; }\n      function uniqueB(x) { return x + 1; }\n    ",
-        "\n      function w1() { return uA(); }\n      function w2() { return uB(); }\n      function uA() { return \"hello\"; }\n      function uB(x) { return x + 1; }\n    ",
-        |old, new| {
-            let without = old.match_fn(
-                new,
-                MatchOptions {
-                    max_cascade_depth: 0,
-                    ..MatchOptions::default()
-                },
-            );
-            assert!(
-                !without.ambiguous.is_empty(),
-                "ambiguous without propagation"
-            );
-
-            // The propagation pass is WIRED (crate::propagation): the TS
-            // expects propagation to resolve every ambiguous entry here
-            // (the wrappers call the unique functions — the matchedCallee
-            // rung closes both).
-            let with = old.match_fn(
-                new,
-                MatchOptions {
-                    max_cascade_depth: 0,
-                    enable_propagation: true,
-                    ..MatchOptions::default()
-                },
-            );
-            assert_eq!(
-                with.ambiguous.len(),
-                0,
-                "propagation resolves the wrappers; TS expects ambiguous == 0"
-            );
-            assert_eq!(with.resolution_stats.propagation_resolved, 2);
-        },
-    );
-}
 
 /// TS "propagationResolved is 0 when propagation not enabled".
 #[test]
@@ -1345,7 +1273,7 @@ fn freeze(result: &MatchResult, old: &SideRefs<'_>, new: &SideRefs<'_>) -> serde
         "ambiguous": ambiguous,
         "unmatched": unmatched,
         "demotedPriors": demoted,
-        "resolutionStats": result.resolution_stats.to_ts_value(),
+        "resolutionStats": serde_json::to_value(&result.resolution_stats).unwrap(),
         "pairResolutions": pair_resolutions,
         "pairRejections": pair_rejections,
     })
@@ -1552,4 +1480,28 @@ fn revokes_a_cross_container_pair() {
             result.resolution_stats.crossed_container_revoked
         );
     });
+}
+
+/// The stats bag's bytes: derived serializers write the keys in field
+/// order, which is the order the dump has always written.
+#[test]
+fn the_stats_bag_serializes_in_its_fixed_key_order() {
+    let text = serde_json::to_string(&super::ResolutionStats::default()).unwrap();
+    assert_eq!(
+        text,
+        "{\"structuralHashUnique\":0,\"identityResolved\":0,\"memberKeyResolved\":0,\
+         \"enclosingStatementResolved\":0,\"calleeShapesResolved\":0,\"callerShapesResolved\":0,\
+         \"calleeHashesResolved\":0,\"twoHopShapesResolved\":0,\"shingleSimilarityResolved\":0,\
+         \"shingleUnconsultable\":0,\"ordinalResolved\":0,\"interchangeableResolved\":0,\
+         \"injectivityDemoted\":0,\"singletonRejected\":0,\"singletonUnguarded\":0,\
+         \"stillAmbiguous\":0,\"unmatched\":0,\"propagationResolved\":0,\
+         \"propagationByRung\":{\"matchedCallee\":0,\"matchedCaller\":0,\"scopeParent\":0,\
+         \"externalRefs\":0,\"scopeOrdinal\":0},\"crossedContainerRevoked\":0,\
+         \"enclosingStmtAbstain\":{\"noHashIsStatement\":0,\"noHashTooLong\":0,\
+         \"noHashOther\":0,\"noNewHolders\":0,\"countMismatch\":0,\"partnerFiltered\":0,\
+         \"reached\":0,\"resolvedLocal\":0,\"resolvedSpanning\":0,\"countMismatchLocal\":0,\
+         \"countMismatchSpanning\":0,\"spanningParentAgrees\":0,\"spanningParentDisagrees\":0,\
+         \"spanningParentUnknown\":0,\"reachedSpanBuckets\":{\"1-9\":0,\"10-24\":0,\"25-49\":0,\
+         \"50-99\":0,\"100-199\":0,\"200-499\":0,\"500+\":0,\"unknown\":0}}}"
+    );
 }

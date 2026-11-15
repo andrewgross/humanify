@@ -151,7 +151,8 @@ impl MatchedResolution {
 /// TS `EnclosingStmtAbstainCounts` (types.ts) — why the enclosing-statement
 /// rung did not resolve, plus where its arrivals sat (`reachedSpanBuckets`,
 /// indexed by [`STMT_SPAN_BUCKETS`]; the "unknown" slot is last).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EnclosingStmtAbstainCounts {
     pub no_hash_is_statement: usize,
     pub no_hash_too_long: usize,
@@ -167,62 +168,20 @@ pub struct EnclosingStmtAbstainCounts {
     pub spanning_parent_agrees: usize,
     pub spanning_parent_disagrees: usize,
     pub spanning_parent_unknown: usize,
+    #[serde(serialize_with = "span_buckets")]
     pub reached_span_buckets: [usize; STMT_SPAN_BUCKETS.len()],
 }
 
-impl EnclosingStmtAbstainCounts {
-    /// The TS bag, byte-for-value (the gate compares the whole bag).
-    pub fn to_ts_value(&self) -> serde_json::Value {
-        serde_json::to_value(self).expect("the stats bag serializes")
-    }
-}
-
-/// The TS object literal's key order (a serialized bag writes it; a
-/// `serde_json::Value` of it sorts).
-impl serde::Serialize for EnclosingStmtAbstainCounts {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::SerializeMap;
-        let mut m = s.serialize_map(Some(15))?;
-        m.serialize_entry("noHashIsStatement", &self.no_hash_is_statement)?;
-        m.serialize_entry("noHashTooLong", &self.no_hash_too_long)?;
-        m.serialize_entry("noHashOther", &self.no_hash_other)?;
-        m.serialize_entry("noNewHolders", &self.no_new_holders)?;
-        m.serialize_entry("countMismatch", &self.count_mismatch)?;
-        m.serialize_entry("partnerFiltered", &self.partner_filtered)?;
-        m.serialize_entry("reached", &self.reached)?;
-        m.serialize_entry("resolvedLocal", &self.resolved_local)?;
-        m.serialize_entry("resolvedSpanning", &self.resolved_spanning)?;
-        m.serialize_entry("countMismatchLocal", &self.count_mismatch_local)?;
-        m.serialize_entry("countMismatchSpanning", &self.count_mismatch_spanning)?;
-        m.serialize_entry("spanningParentAgrees", &self.spanning_parent_agrees)?;
-        m.serialize_entry("spanningParentDisagrees", &self.spanning_parent_disagrees)?;
-        m.serialize_entry("spanningParentUnknown", &self.spanning_parent_unknown)?;
-        m.serialize_entry(
-            "reachedSpanBuckets",
-            &SpanBuckets(&self.reached_span_buckets),
-        )?;
-        m.end()
-    }
-}
-
 /// `reachedSpanBuckets`: bucket name → count, in [`STMT_SPAN_BUCKETS`] order.
-struct SpanBuckets<'a>(&'a [usize]);
-
-impl serde::Serialize for SpanBuckets<'_> {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::SerializeMap;
-        let mut m = s.serialize_map(Some(self.0.len()))?;
-        for (name, count) in STMT_SPAN_BUCKETS.iter().zip(self.0) {
-            m.serialize_entry(name, count)?;
-        }
-        m.end()
-    }
+fn span_buckets<S: serde::Serializer>(counts: &[usize], s: S) -> Result<S::Ok, S::Error> {
+    s.collect_map(STMT_SPAN_BUCKETS.iter().zip(counts))
 }
 
 /// TS `ResolutionStats` (types.ts) — the whole matching pass's counters.
 /// Not used to steer the pipeline; consumed by the parity gate (whole-bag
 /// equality against the TS) and the experiment harnesses.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolutionStats {
     pub structural_hash_unique: usize,
     pub identity_resolved: usize,
@@ -247,68 +206,6 @@ pub struct ResolutionStats {
     pub enclosing_stmt_abstain: EnclosingStmtAbstainCounts,
 }
 
-impl ResolutionStats {
-    /// The TS bag, byte-for-value (`emptyResolutionStats` :43's shape).
-    pub fn to_ts_value(&self) -> serde_json::Value {
-        serde_json::to_value(self).expect("the stats bag serializes")
-    }
-}
-
-/// The TS object literal's key order (a serialized bag writes it; a
-/// `serde_json::Value` of it sorts).
-impl serde::Serialize for ResolutionStats {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::SerializeMap;
-        let r = &self.propagation_by_rung;
-        let mut m = s.serialize_map(Some(21))?;
-        m.serialize_entry("structuralHashUnique", &self.structural_hash_unique)?;
-        m.serialize_entry("identityResolved", &self.identity_resolved)?;
-        m.serialize_entry("memberKeyResolved", &self.member_key_resolved)?;
-        m.serialize_entry(
-            "enclosingStatementResolved",
-            &self.enclosing_statement_resolved,
-        )?;
-        m.serialize_entry("calleeShapesResolved", &self.callee_shapes_resolved)?;
-        m.serialize_entry("callerShapesResolved", &self.caller_shapes_resolved)?;
-        m.serialize_entry("calleeHashesResolved", &self.callee_hashes_resolved)?;
-        m.serialize_entry("twoHopShapesResolved", &self.two_hop_shapes_resolved)?;
-        m.serialize_entry(
-            "shingleSimilarityResolved",
-            &self.shingle_similarity_resolved,
-        )?;
-        m.serialize_entry("shingleUnconsultable", &self.shingle_unconsultable)?;
-        m.serialize_entry("ordinalResolved", &self.ordinal_resolved)?;
-        m.serialize_entry("interchangeableResolved", &self.interchangeable_resolved)?;
-        m.serialize_entry("injectivityDemoted", &self.injectivity_demoted)?;
-        m.serialize_entry("singletonRejected", &self.singleton_rejected)?;
-        m.serialize_entry("singletonUnguarded", &self.singleton_unguarded)?;
-        m.serialize_entry("stillAmbiguous", &self.still_ambiguous)?;
-        m.serialize_entry("unmatched", &self.unmatched)?;
-        m.serialize_entry("propagationResolved", &self.propagation_resolved)?;
-        m.serialize_entry("propagationByRung", &RungCounts(r))?;
-        m.serialize_entry("crossedContainerRevoked", &self.crossed_container_revoked)?;
-        m.serialize_entry("enclosingStmtAbstain", &self.enclosing_stmt_abstain)?;
-        m.end()
-    }
-}
-
-/// `propagationByRung` in the TS literal's order.
-struct RungCounts<'a>(&'a PropagationRungCounts);
-
-impl serde::Serialize for RungCounts<'_> {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::SerializeMap;
-        let r = self.0;
-        let mut m = s.serialize_map(Some(5))?;
-        m.serialize_entry("matchedCallee", &r.matched_callee)?;
-        m.serialize_entry("matchedCaller", &r.matched_caller)?;
-        m.serialize_entry("scopeParent", &r.scope_parent)?;
-        m.serialize_entry("externalRefs", &r.external_refs)?;
-        m.serialize_entry("scopeOrdinal", &r.scope_ordinal)?;
-        m.end()
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Options + result shapes (fingerprint-index.ts :746, types.ts MatchResult)
 // ---------------------------------------------------------------------------
@@ -319,19 +216,12 @@ impl serde::Serialize for RungCounts<'_> {
 /// exists here because clippy reads the bare form as a very complex type.
 pub type AmbiguityResolver<'o> = &'o dyn Fn(&str, &[String]) -> Option<String>;
 
-/// TS `MatchOptions` (:746). The DEFAULT is the TS's optionless call:
-/// depth 2, no exclusions, no resolver, propagation off.
+/// How one matching pass runs. The DEFAULT is the full cascade with no
+/// resolver and propagation off.
+#[derive(Default)]
 pub struct MatchOptions<'o> {
-    /// Maximum cascade depth (0 = uniqueHash + memberKey only, 1 = also
-    /// calleeShapes + callerShapes, 2 = also calleeHashes + twoHopShapes +
-    /// shingle). Default 2.
-    pub max_cascade_depth: u8,
-    /// SessionIds to exclude from matching (e.g., Bun CJS wrapper functions
-    /// that always change between versions).
-    pub exclude_session_ids: Option<&'o HashSet<String>>,
     /// Enable call-graph propagation to resolve ambiguous functions using
-    /// confirmed matches as constraints. Default false. STUB — see the
-    /// module doc and `match_functions`.
+    /// confirmed matches as constraints. Default false.
     pub enable_propagation: bool,
     /// Caller-supplied disambiguator, tried before all fingerprint stages:
     /// given an ambiguous old-side id and its candidates, return the single
@@ -339,28 +229,8 @@ pub struct MatchOptions<'o> {
     pub resolve_ambiguous_candidate: Option<AmbiguityResolver<'o>>,
     /// Matched-binding reference evidence for propagation (see
     /// `propagation::ExternalRefEvidence`). Only consulted when
-    /// `enable_propagation` is set; the stub never reads it.
+    /// `enable_propagation` is set.
     pub external_ref_evidence: Option<crate::propagation::ExternalRefEvidence>,
-}
-
-impl Default for MatchOptions<'_> {
-    fn default() -> Self {
-        MatchOptions {
-            max_cascade_depth: 2,
-            exclude_session_ids: None,
-            enable_propagation: false,
-            resolve_ambiguous_candidate: None,
-            external_ref_evidence: None,
-        }
-    }
-}
-
-impl MatchOptions<'_> {
-    /// TS `options?.maxCascadeDepth ?? 2` — the pipeline only ever passes
-    /// 0/1/2 (the TS type is the literal union), so anything above clamps.
-    fn depth(&self) -> u8 {
-        self.max_cascade_depth.min(2)
-    }
 }
 
 /// TS `MatchResult` (types.ts). `matches` is keyed by the PRIOR session id
@@ -961,7 +831,6 @@ struct RungCtx<'c, 's, 'a, 'g> {
     matches: &'c mut MatchMap,
     stats: &'c mut ResolutionStats,
     resolver: Option<AmbiguityResolver<'s>>,
-    max_cascade_depth: u8,
 }
 
 type Rung = fn(&mut RungCtx<'_, '_, '_, '_>, &[String]) -> Step;
@@ -1012,15 +881,6 @@ fn rung_enclosing_statement(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) ->
     }
 }
 
-/// Below depth 1 the shape rungs never run.
-fn rung_depth_gate(c: &mut RungCtx<'_, '_, '_, '_>, _pool: &[String]) -> Step {
-    if c.max_cascade_depth < 1 {
-        Step::Park
-    } else {
-        Step::Pass
-    }
-}
-
 /// calleeShapes: blurred callee structural shapes.
 fn rung_callee_shapes(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) -> Step {
     filtered(
@@ -1041,9 +901,6 @@ fn rung_caller_shapes(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) -> Step 
 /// twoHopShapes as ONE rung (a contradiction at either parks the pool the
 /// rung started from).
 fn rung_callee_hashes(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) -> Step {
-    if c.max_cascade_depth < 2 {
-        return Step::Pass;
-    }
     match try_callee_hash_cascade(pool, c.old_fp, c.new_side) {
         CalleeHashOutcome::Match { id, resolution } => Step::Match(
             id,
@@ -1074,17 +931,16 @@ fn rung_shingle_similarity(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) -> 
 /// whose specs say what each reads), paired with their code, in the TS
 /// `resolveMatch` (:597) + `resolveDeepStages` (:703) order. THE ORDER IS
 /// LOAD-BEARING; `rules_test` holds this list and the spec list in step.
-const RESOLVE_RUNGS: [(&crate::matching::rules::RuleSpec, Rung); 8] = {
+const RESOLVE_RUNGS: [(&crate::matching::rules::RuleSpec, Rung); 7] = {
     use crate::matching::rules::RESOLVE;
     [
         (&RESOLVE[0], rung_identity),
         (&RESOLVE[1], rung_member_key),
         (&RESOLVE[2], rung_enclosing_statement),
-        (&RESOLVE[3], rung_depth_gate),
-        (&RESOLVE[4], rung_callee_shapes),
-        (&RESOLVE[5], rung_caller_shapes),
-        (&RESOLVE[6], rung_callee_hashes),
-        (&RESOLVE[7], rung_shingle_similarity),
+        (&RESOLVE[3], rung_callee_shapes),
+        (&RESOLVE[4], rung_caller_shapes),
+        (&RESOLVE[5], rung_callee_hashes),
+        (&RESOLVE[6], rung_shingle_similarity),
     ]
 };
 
@@ -1106,7 +962,6 @@ fn resolve_match(
     new_side: &Side<'_, '_>,
     matches: &mut MatchMap,
     ambiguous: &mut AmbiguousMatches,
-    max_cascade_depth: u8,
     stats: &mut ResolutionStats,
     resolver: Option<AmbiguityResolver<'_>>,
 ) -> Resolution {
@@ -1118,7 +973,6 @@ fn resolve_match(
         matches,
         stats,
         resolver,
-        max_cascade_depth,
     };
     // The caller's pool is borrowed until a rung narrows it: the cascade
     // copies a pool only to park it (most priors match or narrow first).
@@ -1203,8 +1057,6 @@ fn singleton_verdict(
 struct MatchingState<'s, 'a, 'g> {
     old: Side<'a, 'g>,
     new: Side<'a, 'g>,
-    max_cascade_depth: u8,
-    exclude_ids: Option<&'s HashSet<String>>,
     resolver: Option<AmbiguityResolver<'s>>,
     matches: MatchMap,
     /// TS `ambiguous: Map<string, string[]>` — ORDERED (see module doc):
@@ -1221,17 +1073,9 @@ struct MatchingState<'s, 'a, 'g> {
 }
 
 /// TS `candidatesForHash` (:1367): new-side hash-bucket candidates for an
-/// old fingerprint, minus exclusions.
-fn candidates_for_hash(
-    structural_hash: &str,
-    new_side: &Side<'_, '_>,
-    exclude_ids: Option<&HashSet<String>>,
-) -> Vec<String> {
-    let raw = bucket_session_ids(new_side.index, structural_hash);
-    match exclude_ids {
-        None => raw,
-        Some(exclude) => raw.into_iter().filter(|id| !exclude.contains(id)).collect(),
-    }
+/// old fingerprint.
+fn candidates_for_hash(structural_hash: &str, new_side: &Side<'_, '_>) -> Vec<String> {
+    bucket_session_ids(new_side.index, structural_hash)
 }
 
 /// TS `runMatchingPass` (:1377): the per-old-id matching loop — uniqueHash
@@ -1240,13 +1084,7 @@ fn run_matching_pass(state: &mut MatchingState<'_, '_, '_>) {
     for entry_idx in 0..state.old.index.entries.len() {
         let old_id = state.old.index.entries[entry_idx].session_id.clone();
         let old_fp = &state.old.index.entries[entry_idx].fingerprint;
-        // Skip excluded functions (e.g., Bun CJS wrapper).
-        if state.exclude_ids.is_some_and(|set| set.contains(&old_id)) {
-            continue;
-        }
-
-        let candidates =
-            candidates_for_hash(old_fp.structural_hash(), &state.new, state.exclude_ids);
+        let candidates = candidates_for_hash(old_fp.structural_hash(), &state.new);
 
         if candidates.is_empty() {
             state.unmatched.push(old_id);
@@ -1293,7 +1131,6 @@ fn run_matching_pass(state: &mut MatchingState<'_, '_, '_>) {
             &state.new,
             &mut state.matches,
             &mut state.ambiguous,
-            state.max_cascade_depth,
             &mut state.stats,
             state.resolver,
         );
@@ -1338,7 +1175,7 @@ fn demote_non_injective_matches(state: &mut MatchingState<'_, '_, '_>) {
                 .old
                 .fingerprint(old_id)
                 .map(|fp| fp.structural_hash().to_string())
-                .map(|hash| candidates_for_hash(&hash, &state.new, state.exclude_ids))
+                .map(|hash| candidates_for_hash(&hash, &state.new))
                 .unwrap_or_default();
             state.ambiguous.insert(old_id.clone(), candidates);
             state.stats.injectivity_demoted += 1;
@@ -1417,16 +1254,11 @@ pub fn match_functions(
     new_ctx: &StatementContexts,
     options: MatchOptions<'_>,
 ) -> MatchResult {
-    let max_cascade_depth = options.depth();
-    let exclude_ids = options.exclude_session_ids;
-
     // Resolution stage per matched old id. Stats are accumulated only after
     // injectivity enforcement so demoted matches never count as resolved.
     let mut state = MatchingState {
         old: Side::new(old_index, old_ctx),
         new: Side::new(new_index, new_ctx),
-        max_cascade_depth,
-        exclude_ids,
         resolver: options.resolve_ambiguous_candidate,
         matches: MatchMap::new(),
         ambiguous: AmbiguousMatches::new(),

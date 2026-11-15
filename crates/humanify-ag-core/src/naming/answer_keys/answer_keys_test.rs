@@ -1,4 +1,5 @@
 use humanify_ag_model::llm::Renames;
+use humanify_ag_testkit::strings;
 
 use super::{key_answer, normalize};
 
@@ -8,10 +9,6 @@ fn answer(pairs: &[(&str, &str)]) -> Renames {
             .iter()
             .map(|(k, v)| (k.to_string(), Some(v.to_string()))),
     )
-}
-
-fn ids(names: &[&str]) -> Vec<String> {
-    names.iter().map(|s| s.to_string()).collect()
 }
 
 const NO_NAMES: &dyn Fn(&str) -> bool = &|_| false;
@@ -42,7 +39,7 @@ fn a_mangled_key_lands_on_its_one_asked_identifier() {
             ("CbH", "errorHandler"),
             ("V$$_", "isEnded"),
         ]),
-        &ids(&["y$_", "CbH", "V$_"]),
+        &strings(&["y$_", "CbH", "V$_"]),
         NO_NAMES,
     );
     assert_eq!(keyed.renames.get("y$_"), Some("messageHandler"));
@@ -64,7 +61,11 @@ fn a_mangled_key_lands_on_its_one_asked_identifier() {
 /// either, so it is neither — stray, and both stay unanswered.
 #[test]
 fn a_key_two_asked_ids_could_own_is_matched_to_neither() {
-    let keyed = key_answer(&answer(&[("a$", "first")]), &ids(&["a$_", "a_$"]), NO_NAMES);
+    let keyed = key_answer(
+        &answer(&[("a$", "first")]),
+        &strings(&["a$_", "a_$"]),
+        NO_NAMES,
+    );
     assert!(keyed.tolerant.is_empty());
     assert_eq!(keyed.stray, ["a$"]);
     assert!(!keyed.answered("a$_") && !keyed.answered("a_$"));
@@ -75,7 +76,7 @@ fn a_key_two_asked_ids_could_own_is_matched_to_neither() {
 fn two_keys_for_one_asked_id_are_both_stray() {
     let keyed = key_answer(
         &answer(&[("y$", "first"), ("y$$_", "second")]),
-        &ids(&["y$_"]),
+        &strings(&["y$_"]),
         NO_NAMES,
     );
     assert!(keyed.tolerant.is_empty());
@@ -89,7 +90,7 @@ fn two_keys_for_one_asked_id_are_both_stray() {
 fn an_exactly_answered_id_takes_no_tolerant_key() {
     let keyed = key_answer(
         &answer(&[("y$_", "exact"), ("y$", "other")]),
-        &ids(&["y$_"]),
+        &strings(&["y$_"]),
         NO_NAMES,
     );
     assert_eq!(keyed.renames.get("y$_"), Some("exact"));
@@ -102,7 +103,7 @@ fn an_exactly_answered_id_takes_no_tolerant_key() {
 #[test]
 fn a_key_that_is_another_name_in_the_program_is_stray() {
     let is_name = |k: &str| k == "y$";
-    let keyed = key_answer(&answer(&[("y$", "handler")]), &ids(&["y$_"]), &is_name);
+    let keyed = key_answer(&answer(&[("y$", "handler")]), &strings(&["y$_"]), &is_name);
     assert!(keyed.tolerant.is_empty());
     assert_eq!(keyed.stray, ["y$"]);
 }
@@ -113,7 +114,7 @@ fn a_key_that_is_another_name_in_the_program_is_stray() {
 fn unrelated_and_case_changed_keys_are_stray() {
     let keyed = key_answer(
         &answer(&[("getValue", "x"), ("XIU", "y")]),
-        &ids(&["_", "XIu"]),
+        &strings(&["_", "XIu"]),
         NO_NAMES,
     );
     assert!(keyed.tolerant.is_empty());

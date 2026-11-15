@@ -911,7 +911,7 @@ fn identifier_names_by_file(
             AstKind::LabelIdentifier(l) => add(l.span, &l.name),
             AstKind::PrivateIdentifier(p) => add(p.span, &p.name),
             AstKind::IdentifierName(n) => {
-                let property = babel::parent(nodes, node.id()).is_some_and(|p| {
+                let property = crate::babel_view::parent(nodes, node.id()).is_some_and(|p| {
                     matches!(
                         nodes.kind(p),
                         AstKind::StaticMemberExpression(_)

@@ -4,7 +4,7 @@
 //! the example file is the registry, byte for byte; the record carries the
 //! file's path and hash.
 
-use crate::config::file::{RETIRED_KEYS, Source, render_example};
+use crate::config::file::{Source, render_example};
 use crate::config::keys::KEYS;
 use crate::config::{API_KEY_VAR, Config, ConfigFile};
 use crate::config_test::file;
@@ -161,15 +161,22 @@ fn an_out_of_range_value_is_refused_naming_the_key() {
     );
 }
 
+/// A removed key has no list of its own: the one unknown-key error
+/// refuses it (no backwards compatibility).
 #[test]
-fn a_retired_key_is_refused_naming_its_replacement() {
-    assert!(!RETIRED_KEYS.is_empty());
-    for (dotted, note) in RETIRED_KEYS {
-        let (section, name) = dotted.rsplit_once('.').unwrap();
+fn a_removed_key_gets_the_unknown_key_error() {
+    for (section, name) in [
+        ("llm", "api_key"),
+        ("perf", "profile"),
+        ("naming", "sequential"),
+    ] {
         let errs = parse_refusals(&format!("[{section}]\n{name} = \"x\"\n"));
-        assert_eq!(errs, [format!("cfg.toml: {dotted} is retired ({note})")]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert!(
+            errs[0].starts_with(&format!("cfg.toml: unknown key {section}.{name}")),
+            "{errs:?}"
+        );
     }
-    assert!(parse_refusals("[llm]\napi_key = \"sk\"\n")[0].contains("HUMANIFY_API_KEY"));
 }
 
 #[test]

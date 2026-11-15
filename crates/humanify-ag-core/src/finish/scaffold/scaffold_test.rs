@@ -3,6 +3,7 @@
 //! test/parity/wp54-scaffold-probe.ts), plus the ported unit cases of
 //! src/split/runnable-scaffold.test.ts.
 
+use humanify_ag_testkit::ScratchDir;
 use std::fs;
 use std::path::PathBuf;
 
@@ -27,25 +28,12 @@ fn strings(v: &Value) -> Vec<String> {
         .collect()
 }
 
-struct Scratch(PathBuf);
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-fn scratch(tag: &str) -> Scratch {
-    let p = std::env::temp_dir().join(format!("humanify-wp54-{tag}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&p);
-    fs::create_dir_all(&p).unwrap();
-    Scratch(p)
-}
-
 /// The probe's scratch tree: node_modules at the root, lookups two down.
-fn installed_tree(fx: &Value, tag: &str) -> (Scratch, PathBuf) {
-    let root = scratch(tag);
+fn installed_tree(fx: &Value, tag: &str) -> (ScratchDir, PathBuf) {
+    let root = ScratchDir::new(tag);
     for pair in fx["installed"].as_array().unwrap() {
         let (name, version) = (pair[0].as_str().unwrap(), pair[1].as_str().unwrap());
-        let dir = root.0.join("node_modules").join(name);
+        let dir = root.path().join("node_modules").join(name);
         fs::create_dir_all(&dir).unwrap();
         fs::write(
             dir.join("package.json"),
@@ -53,7 +41,7 @@ fn installed_tree(fx: &Value, tag: &str) -> (Scratch, PathBuf) {
         )
         .unwrap();
     }
-    let deep = root.0.join("a").join("b");
+    let deep = root.path().join("a").join("b");
     fs::create_dir_all(&deep).unwrap();
     (root, deep)
 }
@@ -101,14 +89,14 @@ fn the_walk_up_starts_from_the_resolved_directory() {
     // parent walk from there visits `$REPO` (which HAS node_modules).
     let fx = fixture();
     let (root, _deep) = installed_tree(&fx, "dotdot");
-    let decoy = root.0.join("x");
+    let decoy = root.path().join("x");
     fs::create_dir_all(decoy.join("node_modules").join("ws")).unwrap();
     fs::write(
         decoy.join("node_modules").join("ws").join("package.json"),
         "{\"version\":\"9.9.9\"}",
     )
     .unwrap();
-    let from = root.0.join("x").join("..").join("a").join("b");
+    let from = root.path().join("x").join("..").join("a").join("b");
     assert_eq!(
         resolve_external_versions(&["ws".into(), "ajv".into()], Some(&from)),
         vec![
@@ -127,9 +115,9 @@ fn scaffold_files_are_the_ts_bytes() {
         let entry = case["entry"].as_str().unwrap();
         let externals = strings(&case["externals"]);
         let from = case["resolve"].as_bool().unwrap().then_some(deep.as_path());
-        let out = scratch(&format!("out-{name}"));
-        write_runnable_scaffold(&out.0, entry, &externals, from).unwrap();
-        let read = |f: &str| fs::read_to_string(out.0.join(f)).unwrap();
+        let out = ScratchDir::new(&format!("out-{name}"));
+        write_runnable_scaffold(out.path(), entry, &externals, from).unwrap();
+        let read = |f: &str| fs::read_to_string(out.path().join(f)).unwrap();
         assert_eq!(
             read("package.json"),
             case["packageJson"].as_str().unwrap(),

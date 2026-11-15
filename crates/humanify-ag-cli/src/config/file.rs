@@ -12,10 +12,9 @@
 //! byte-equal).
 //!
 //! Refusals are loud and collected, before any work (§3.1): a file that is
-//! missing or not TOML, an unknown key (with a "did you mean"), a retired
-//! key (naming its replacement), a wrong type, an out-of-range value, and a
-//! flag that disagrees with the file. A flag and the file agreeing is fine,
-//! and the record says both set it.
+//! missing or not TOML, an unknown key (with a "did you mean"), a wrong
+//! type, an out-of-range value, and a flag that disagrees with the file. A
+//! flag and the file agreeing is fine, and the record says both set it.
 //!
 //! The file is parsed into a plain `toml::Table` and walked here; nothing
 //! else in the workspace reads TOML (tests/env_guard.rs).
@@ -32,25 +31,6 @@ fn registry() -> &'static Registry {
     &super::keys::PIPELINE
 }
 
-/// Keys that were renamed or never belong in the file: `(dotted key, what
-/// to do instead)`. Refused by name, never aliased.
-pub const RETIRED_KEYS: &[(&str, &str)] = &[
-    (
-        "llm.api_key",
-        "a secret never goes in the config file (it lands in launch records): set \
-         HUMANIFY_API_KEY in the environment",
-    ),
-    ("perf.profile", "renamed: perf.perf_trace"),
-    (
-        "naming.sequential",
-        "moved: naming.schedule = \"sequential\"",
-    ),
-    (
-        "io.input",
-        "the input is the positional argument, not a setting",
-    ),
-];
-
 /// The parsed, checked config file: where it came from and what it set.
 #[derive(Clone, Debug)]
 pub struct ConfigFile {
@@ -60,7 +40,7 @@ pub struct ConfigFile {
     pub sha256: String,
     /// Every key it set ACCEPTABLY, dotted.
     pub values: BTreeMap<String, Val>,
-    /// Every key it set that was refused (unknown, retired, wrong type,
+    /// Every key it set that was refused (unknown, wrong type,
     /// out of range), as messages — reported by `Config::build` together
     /// with every other refusal, so the user sees all of them at once.
     pub problems: Vec<String>,
@@ -103,10 +83,6 @@ fn walk(
         } else {
             format!("{prefix}.{name}")
         };
-        if let Some((_, note)) = RETIRED_KEYS.iter().find(|(k, _)| *k == dotted) {
-            errors.push(format!("{label}: {dotted} is retired ({note})"));
-            continue;
-        }
         if let (toml::Value::Table(inner), true) = (v, registry().is_section(&dotted)) {
             walk(label, &dotted, inner, values, errors);
             continue;
@@ -194,8 +170,8 @@ const HEADER: &str = "\
 #
 # Every line below is commented out at its default: uncomment what this
 # file should set. A key left out keeps its default. Unknown keys, wrong
-# types, out-of-range values and retired keys are refused before any work,
-# naming the key. Every key is also a command-line flag (shown above it;
+# types and out-of-range values are refused before any work, naming the
+# key. Every key is also a command-line flag (shown above it;
 # a boolean's `--no-` form turns it off); a flag and this file that
 # DISAGREE are refused, naming both. The API key is never a setting: it is
 # read from HUMANIFY_API_KEY in the environment.

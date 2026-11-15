@@ -15,7 +15,7 @@ pub mod trace_events;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use humanify_ag_model::profiling::{
     ConcurrencyCounts, ConcurrencySnapshot, JsNumber, JsObject, ProfileMeta, ProfileReport,
@@ -103,7 +103,11 @@ impl Profiler {
         Self {
             enabled,
             start: Instant::now(),
-            started_at: if enabled { iso_now() } else { String::new() },
+            started_at: if enabled {
+                humanify_ag_model::time::iso_now()
+            } else {
+                String::new()
+            },
             recorded: Arc::default(),
             sampler: Mutex::new(None),
         }
@@ -384,36 +388,4 @@ pub fn compute_percentile(sorted: &[f64], p: f64) -> f64 {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let idx = rank.max(0.0) as usize;
     sorted[idx.min(sorted.len() - 1)]
-}
-
-/// `new Date().toISOString()`: UTC, millisecond precision, `Z`.
-fn iso_now() -> String {
-    let since = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    iso_from_unix_ms(since.as_millis())
-}
-
-/// Formats a Unix-epoch millisecond count as `YYYY-MM-DDTHH:MM:SS.mmmZ`
-/// (Howard Hinnant's days-to-civil; valid for any post-1970 instant).
-pub fn iso_from_unix_ms(ms: u128) -> String {
-    let secs = ms / 1000;
-    let days = secs / 86_400;
-    let rem = secs % 86_400;
-    let z = days + 719_468;
-    let era = z / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + u128::from(month <= 2);
-    format!(
-        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{:03}Z",
-        rem / 3600,
-        rem % 3600 / 60,
-        rem % 60,
-        ms % 1000
-    )
 }

@@ -17,6 +17,7 @@
 //! declarator/function/class ids and no parameters: a different question
 //! with a different answer, both declared here.
 
+use crate::ingest::node_type;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
@@ -44,10 +45,6 @@ fn binding_keys(estree_type: &str) -> &'static [&'static str] {
         "VariableDeclarator" => &["id"],
         _ => &[],
     }
-}
-
-fn node_type(v: &Value) -> &str {
-    v.get("type").and_then(Value::as_str).unwrap_or("")
 }
 
 /// Is `v` an ESTree `Property` that babel would model as an ObjectMethod

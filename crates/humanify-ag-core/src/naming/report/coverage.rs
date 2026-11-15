@@ -252,22 +252,9 @@ pub fn binding_provenance_record(
     }
 }
 
-/// `n.toLocaleString("en-US")` for a non-negative integer.
-pub fn locale_int(n: f64) -> String {
-    let digits = format!("{}", n as u64);
-    let mut out = String::new();
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
-
 /// `fmt(n)`: locale digits right-aligned to 8.
 fn fmt(n: f64) -> String {
-    format!("{:>8}", locale_int(n))
+    format!("{:>8}", humanify_ag_model::numfmt::thousands(n as i64))
 }
 
 fn pad_end(s: &str, width: usize) -> String {

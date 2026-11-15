@@ -606,14 +606,13 @@ fn functions_section(
         "unmatched": unmatched,
         "ambiguous": ambiguous,
         "rejections": rejections,
-        "stats": result.resolution_stats.to_ts_value(),
+        "stats": result.resolution_stats,
         "bindingPairs": binding_pairs,
         "bindingUnmatched": binding_unmatched,
         "bindingAmbiguous": binding_ambiguous,
         "bindingStats": stage
             .binding_result
-            .map(|r| r.resolution_stats.to_ts_value())
-            .unwrap_or(Value::Null),
+            .map(|r| &r.resolution_stats),
     });
     if !include_prior {
         // The multi-file shape: the prior inventory lives ONCE at the

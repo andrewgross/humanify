@@ -21,6 +21,7 @@
 //!
 //! Iterative (an explicit stack): statements nest thousands deep.
 
+use crate::ingest::node_type;
 use serde_json::{Map, Value};
 
 /// @babel/types 7.29.7 `VISITOR_KEYS` for every non-TS/Flow/JSX node type
@@ -120,10 +121,6 @@ fn visitor_keys(babel_type: &str) -> &'static [&'static str] {
 fn node_span(v: &Value) -> Option<(u32, u32)> {
     let at = |k: &str| v.get(k)?.as_u64().and_then(|n| u32::try_from(n).ok());
     Some((at("start")?, at("end")?))
-}
-
-fn node_type(v: &Value) -> &str {
-    v.get("type").and_then(Value::as_str).unwrap_or("")
 }
 
 /// A child of a babel-shaped node: a real ESTree subtree, or a node the

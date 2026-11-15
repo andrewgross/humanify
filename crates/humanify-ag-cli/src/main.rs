@@ -21,8 +21,7 @@
 //! The migration verbs that rebuilt one stage's rows from a TS dump for the
 //! parity gates were deleted at the cutover (docs/rust-port/19-cutover.md);
 //! `libdetect` (no caller) went in the config sweep, 2026-10-13. A renamed
-//! or deleted verb flag is refused naming its replacement
-//! (`surface::RETIRED_FLAGS`, checked before clap parses).
+//! or deleted verb flag is simply unknown to clap.
 
 /// mimalloc, not glibc malloc: the parallel stages allocate from many
 /// threads at once and glibc's arenas contend (00-control §3, 2026-09-24),
@@ -240,22 +239,10 @@ fn is_stage_verb(arg: &str) -> bool {
         .any(|c| c.get_name() == arg)
 }
 
-/// A retired flag on a stage verb (`surface::RETIRED_FLAGS`, the one
-/// list): the refusal naming what replaced it, or None.
-fn retired_verb_flag(argv: &[String]) -> Option<String> {
-    let (verb, rest) = argv.split_first()?;
-    humanify_ag_cli::surface::retired_flag(Some(verb.as_str()), rest)
-}
-
 fn main() {
     let argv = humanify_ag_cli::env::user_args();
     if !argv.first().is_some_and(|a| is_stage_verb(a)) {
         std::process::exit(humanify_ag_cli::pipeline_main(&argv));
-    }
-    if let Some(refusal) = retired_verb_flag(&argv) {
-        // clap's usage-error exit code, as an unknown argument gets.
-        eprint!("{refusal}");
-        std::process::exit(2);
     }
     let cli = Cli::parse();
     match cli.command {
@@ -753,45 +740,9 @@ fn format_check_verb(path: &str, show: usize, plant: Option<&str>) {
 use clap::CommandFactory;
 
 #[cfg(test)]
-mod retired_verb_flag_test {
-    use super::{Cli, is_stage_verb, retired_verb_flag};
+mod verb_parse_test {
+    use super::{Cli, is_stage_verb};
     use clap::Parser;
-
-    fn argv(a: &[&str]) -> Vec<String> {
-        a.iter().map(|s| s.to_string()).collect()
-    }
-
-    /// Config sweep 2026-10-13, no backwards compatibility: a renamed
-    /// verb flag's old spelling is refused, naming the new one; a deleted
-    /// one is refused saying so.
-    #[test]
-    fn a_retired_verb_flag_is_refused_naming_its_replacement() {
-        for (args, want) in [
-            (
-                &["detect", "in.js", "--profile", "p.json"][..],
-                "--perf-trace",
-            ),
-            (&["detect", "in.js", "--profile=p.json"][..], "--perf-trace"),
-            (
-                &["unpack", "in.js", "out", "--index", "i.json"][..],
-                "--bundle-order",
-            ),
-            (
-                &["match", "in.js", "--prior-version", "p.js", "--sequential"][..],
-                "removed",
-            ),
-        ] {
-            let msg = retired_verb_flag(&argv(args))
-                .unwrap_or_else(|| panic!("{args:?} was not refused"));
-            assert!(msg.contains(want), "{args:?}: {msg}");
-        }
-        // The pipeline's own flags are not the verbs' business.
-        assert_eq!(retired_verb_flag(&argv(&["in.js", "--index"])), None);
-        assert_eq!(
-            retired_verb_flag(&argv(&["unpack", "in.js", "out", "--carries", "c"])),
-            None
-        );
-    }
 
     #[test]
     fn the_new_verb_spellings_parse() {
@@ -860,8 +811,6 @@ mod retired_verb_flag_test {
         assert!(
             Cli::try_parse_from(["humanify-ag", "index", "slim-cache", "--work", "w"]).is_err()
         );
-        // the verb's flags are not refused as retired flags
-        assert_eq!(retired_verb_flag(&argv(&build[1..])), None);
     }
 
     /// `libdetect` had no caller (config sweep 2026-10-13): no longer a verb.

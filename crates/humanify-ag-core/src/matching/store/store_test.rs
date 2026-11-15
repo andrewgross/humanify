@@ -229,18 +229,13 @@ fn on_disk_named(
     with_edges: bool,
     with_names: bool,
 ) -> Result<LibraryIndex, String> {
-    use crate::libindex::format::{
-        INDEX_FORMAT_NO_EDGES, Manifest, RECIPE_VERSION, SliceRecord, fingerprint_versions,
-    };
+    use crate::libindex::format::{Manifest, RECIPE_VERSION, SliceRecord, fingerprint_versions};
     use crate::libindex::recipe::{TerserSlices, detect_recipe};
     use humanify_ag_model::detection::{BundlerType, MinifierType};
     let dir = std::env::temp_dir().join(format!("humanify-store-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let mut fingerprints = fingerprint_versions();
-    if format == INDEX_FORMAT_NO_EDGES {
-        fingerprints.edges = None;
-    }
+    let fingerprints = fingerprint_versions();
     let mut m = Manifest {
         format: format.into(),
         as_of: "2026-10-12".into(),
@@ -359,8 +354,8 @@ fn a_names_index_on_disk_answers_restore_and_a_plain_one_absence() {
 }
 
 #[test]
-fn a_format_4_index_answers_its_edges_and_a_format_3_index_still_loads_without() {
-    use crate::libindex::format::{INDEX_FORMAT, INDEX_FORMAT_NO_EDGES};
+fn a_format_4_index_answers_its_edges_and_an_older_format_is_refused() {
+    use crate::libindex::format::INDEX_FORMAT;
     let ix = on_disk("v4", INDEX_FORMAT, true).expect("a /4 index loads");
     assert!(ix.has_edges());
     assert_eq!(
@@ -368,15 +363,13 @@ fn a_format_4_index_answers_its_edges_and_a_format_3_index_still_loads_without()
         Some(vec![("zod".to_string(), key("cc"))])
     );
     assert_eq!(callees(&ix, "cc", "zod", Scope::Inside), Some(vec![]));
-    let old = on_disk("v3", INDEX_FORMAT_NO_EDGES, false).expect("a /3 index still loads");
-    assert!(!old.has_edges());
-    for scope in [Scope::Inside, Scope::OutOf] {
-        assert_eq!(
-            callees(&old, "aa", "zod", scope),
-            None,
-            "a /3 index records no edges: absence, never evidence"
-        );
-    }
+    let old = on_disk("v3", "humanify-library-index/3", false)
+        .err()
+        .expect("a /3 index is refused");
+    assert!(
+        old.contains("this binary reads humanify-library-index/4"),
+        "{old}"
+    );
     let err = on_disk("v4-no-table", INDEX_FORMAT, false)
         .err()
         .expect("a /4 index without its edge table is refused");

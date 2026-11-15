@@ -75,7 +75,8 @@ pub struct RestorationOutcome {
 }
 
 /// Why a wanted name was not applied, as the diagnostics spell it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum SiteSkip {
     /// A binding the validated path already settled (the transfer, or the
     /// library freeze's carried mark) keeps its name.
@@ -93,12 +94,6 @@ impl SiteSkip {
             SiteSkip::Conflict => "conflict",
             SiteSkip::Failed => "failed",
         }
-    }
-}
-
-impl serde::Serialize for SiteSkip {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
     }
 }
 

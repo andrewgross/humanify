@@ -24,8 +24,7 @@
 //! comma-separated), the help (the key's doc, grouped by section). The
 //! config sweep's operational/config split is gone; its rule stays: a flag
 //! that disagrees with the `--config` file is refused, naming both. A
-//! spelling the sweep or exp179 renamed is refused naming its replacement
-//! ([`RENAMED_FLAGS`]).
+//! removed or renamed spelling is simply unknown to the parser.
 //!
 //! Every launch the harness makes parses to the settings the commander
 //! port gave it (launch_parity_test.rs, captured from the port at
@@ -122,95 +121,6 @@ fn pipeline_command() -> clap::Command {
     add_flags(cmd, FLAGS.as_slice())
 }
 
-/// Spellings renamed by the config sweep (2026-10-13) or by exp179's
-/// one-to-one flags (no backwards compatibility): `(old spelling, what to
-/// write instead)`. Each is refused naming its replacement, never aliased.
-/// A replacement is today's flag (and, for an old switch, its value).
-pub const RENAMED_FLAGS: &[(&str, &str)] = &[
-    ("-c", "--llm-concurrency"),
-    ("--concurrency", "--llm-concurrency"),
-    ("--module-concurrency", "--llm-module-concurrency"),
-    ("--max-tokens", "--llm-max-tokens"),
-    ("--context-tokens", "--llm-context-tokens"),
-    ("--retries", "--llm-retries"),
-    ("--timeout", "--llm-timeout-ms"),
-    ("--llm-cache", "--llm-cache-dir"),
-    ("--reasoning-effort", "--llm-reasoning-effort"),
-    ("--disable", "--switches-disable"),
-    ("--probe", "--switches-probe"),
-    ("--log-file", "--diagnostics-log-file"),
-    ("--diagnostics", "--diagnostics-file"),
-    ("--stats-json", "--diagnostics-stats-json"),
-    ("--dump-artifacts", "--diagnostics-dump-artifacts"),
-    ("--dump-asks", "--diagnostics-dump-asks"),
-    ("--rename-ledger", "--diagnostics-rename-ledger"),
-    ("--batch-size", "--naming-batch-size"),
-    ("--max-retries", "--naming-max-retries"),
-    ("--rename-retries", "--naming-rename-retries"),
-    ("--max-free-retries", "--naming-max-free-retries"),
-    ("--lane-threshold", "--naming-lane-threshold"),
-    ("--sequential", "--naming-schedule sequential"),
-    ("--relaxed-levers", "--naming-relaxed-levers"),
-    ("--reconcile-prior-diff", "--matching-reconcile-prior-diff"),
-    (
-        "--no-reconcile-prior-diff",
-        "--no-matching-reconcile-prior-diff",
-    ),
-    ("--simulate-llm-latency", "--perf-simulate-llm-latency"),
-    ("--profile", "--perf-trace"),
-    // The library decision (config sweep step 6): one setting, not two
-    // flags (docs/library-matching-config.md §2).
-    ("--skip-libraries", "--library-unnamed leave"),
-    ("--no-skip-libraries", "--library-unnamed model"),
-    ("--library-discovery-units", "--library-report-units"),
-];
-
-/// Flags deleted by the config sweep (2026-10-13; no backwards
-/// compatibility), and the stage verbs' renamed flags: `(verb, old
-/// spelling, what to say instead)`, `None` for the pipeline program,
-/// `Some(verb)` for a clap stage verb (main.rs). The old spelling is
-/// refused, naming its replacement, never aliased. (The pipeline's renamed
-/// spellings: [`RENAMED_FLAGS`].)
-pub const RETIRED_FLAGS: &[(Option<&str>, &str, &str)] = &[
-    (
-        None,
-        "--api-key",
-        "removed: set HUMANIFY_API_KEY in the environment — a secret never goes on the \
-         command line",
-    ),
-    (Some("detect"), "--profile", "renamed: use --perf-trace"),
-    (
-        Some("discover"),
-        "--rule",
-        "moved: set library.lookup.agreement in a --config file (false = the structural \
-         rule)",
-    ),
-    (Some("unpack"), "--index", "renamed: use --bundle-order"),
-    (
-        Some("match"),
-        "--sequential",
-        "removed: it was inert and never changed the dump",
-    ),
-];
-
-/// A retired flag in `args` (`verb`'s own arguments; `None` = the
-/// pipeline's): the refusal naming what replaced it, or None. `--flag=value`
-/// counts too; nothing after `--` is a flag.
-pub fn retired_flag(verb: Option<&str>, args: &[String]) -> Option<String> {
-    let renamed: Vec<(&str, String)> = RENAMED_FLAGS
-        .iter()
-        .filter(|_| verb.is_none())
-        .map(|(flag, new)| (*flag, format!("renamed: use {new}")))
-        .collect();
-    let table: Vec<(&str, &str)> = RETIRED_FLAGS
-        .iter()
-        .filter(|(v, _, _)| *v == verb)
-        .map(|(_, flag, note)| (*flag, *note))
-        .chain(renamed.iter().map(|(flag, note)| (*flag, note.as_str())))
-        .collect();
-    crate::registry::retired_in(&table, args)
-}
-
 /// Every long flag the command accepts (`--x` and `--no-x` alike), as
 /// clap holds it — for the bijection test against the registry.
 pub fn accepted_longs() -> Vec<String> {
@@ -258,7 +168,7 @@ fn usage_error(stderr: String) -> PipelineParse {
 /// Parse the pipeline program's argv (no program name). Help and version
 /// go to stdout with exit 0; every usage error goes to stderr with exit 1.
 pub fn parse_pipeline(argv: &[String]) -> PipelineParse {
-    if let Some(refusal) = retired_flag(None, argv).or_else(|| attached_short(argv)) {
+    if let Some(refusal) = attached_short(argv) {
         return usage_error(refusal);
     }
     let full = std::iter::once("humanify-ag".to_string()).chain(argv.iter().cloned());

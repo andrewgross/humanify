@@ -496,7 +496,7 @@ fn a_refused_library_decision_creates_nothing() {
         ),
         (
             vec!["--no-skip-libraries"],
-            "renamed: use --library-unnamed model",
+            "unexpected argument '--no-skip-libraries'",
         ),
     ] {
         let o = run(
@@ -822,7 +822,7 @@ fn a_refused_configuration_creates_nothing() {
             &common,
             &[&sinks[..], &["llm.api_key = \"sk\""]].concat(),
         ),
-        "llm.api_key is retired",
+        "unknown key llm.api_key",
     );
     let missing = Command::new(env!("CARGO_BIN_EXE_humanify-ag"))
         .current_dir(&s.0)
@@ -839,7 +839,7 @@ fn a_refused_configuration_creates_nothing() {
             &[&common[..], &["--stats-json", "s.json"]].concat(),
             &sinks,
         ),
-        "'--stats-json' (renamed: use --diagnostics-stats-json)",
+        "unexpected argument '--stats-json'",
     );
     for p in side_effects {
         assert!(!s.0.join(p).exists(), "{p} was created by a refused run");

@@ -4,10 +4,7 @@
 //! plus the builder's own rules, each pinned to the TS source line.
 
 use super::*;
-
-fn strs(v: &[&str]) -> Vec<String> {
-    v.iter().map(|s| s.to_string()).collect()
-}
+use humanify_ag_testkit::strings;
 
 fn view() -> ContextView {
     ContextView {
@@ -23,9 +20,9 @@ fn view() -> ContextView {
 fn used_identifiers_include_free_names_ancestors_and_own_bindings() {
     // "var top1 = 1; function f(p) { return myAppGlobal.title + p + top1; }"
     let v = ContextView {
-        scope_chain: vec![strs(&["p"])],
-        program_bindings: strs(&["top1", "f"]),
-        program_globals: strs(&["myAppGlobal"]),
+        scope_chain: vec![strings(&["p"])],
+        program_bindings: strings(&["top1", "f"]),
+        program_globals: strings(&["myAppGlobal"]),
         ..view()
     };
     let ctx = build_context(&v, &[], |_| true);
@@ -37,13 +34,16 @@ fn used_identifiers_include_free_names_ancestors_and_own_bindings() {
 #[test]
 fn used_identifiers_are_an_ordered_union_inner_to_outer_then_globals() {
     let v = ContextView {
-        scope_chain: vec![strs(&["b", "a"]), strs(&["c", "a"])],
-        program_bindings: strs(&["z", "b", "y"]),
-        program_globals: strs(&["g", "z"]),
+        scope_chain: vec![strings(&["b", "a"]), strings(&["c", "a"])],
+        program_bindings: strings(&["z", "b", "y"]),
+        program_globals: strings(&["g", "z"]),
         ..view()
     };
     let ctx = build_context(&v, &[], |_| true);
-    assert_eq!(ctx.used_identifiers, strs(&["b", "a", "c", "z", "y", "g"]));
+    assert_eq!(
+        ctx.used_identifiers,
+        strings(&["b", "a", "c", "z", "y", "g"])
+    );
 }
 
 fn callee(
@@ -86,7 +86,7 @@ fn callee_names_follow_the_ts_precedence() {
         .collect();
     assert_eq!(
         names,
-        strs(&["decl", "expr", "viaDeclarator", "arrowVar", "anonymous"])
+        strings(&["decl", "expr", "viaDeclarator", "arrowVar", "anonymous"])
     );
 }
 
@@ -111,14 +111,17 @@ fn callee_params_and_snippet() {
         ..view()
     };
     let sig = &build_context(&v, &[], |_| true).callee_signatures[0];
-    assert_eq!(sig.params, strs(&["a", "...rest", "d", "{\n  x,\n  y\n}"]));
+    assert_eq!(
+        sig.params,
+        strings(&["a", "...rest", "d", "{\n  x,\n  y\n}"])
+    );
     // getBodySnippet(body, 3): the first three lines of the generated body
     assert_eq!(sig.snippet.as_deref(), Some("{\n  one;\n  two;"));
 }
 
 #[test]
 fn callsites_pass_through() {
-    let sites = strs(&["a(1)", "b(a)"]);
+    let sites = strings(&["a(1)", "b(a)"]);
     assert_eq!(build_context(&view(), &sites, |_| true).callsites, sites);
 }
 

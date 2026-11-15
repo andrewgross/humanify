@@ -10,12 +10,7 @@ use oxc_ast::ast::{BindingPattern, CallExpression, Expression, PropertyKind, Una
 use oxc_semantic::{AstNodes, NodeId};
 use oxc_span::{GetSpan, Span};
 
-use crate::babel_view::unparen;
-
-pub(crate) fn parent(nodes: &AstNodes<'_>, id: NodeId) -> Option<NodeId> {
-    let p = nodes.parent_id(id);
-    (p != id).then_some(p)
-}
+use crate::babel_view::{parent, unparen};
 
 /// `path.parentPath` in Babel: the first non-paren ancestor.
 pub(crate) fn babel_parent(nodes: &AstNodes<'_>, id: NodeId) -> Option<NodeId> {

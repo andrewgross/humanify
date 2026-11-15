@@ -2,6 +2,7 @@
 //! the oxc walk has to translate (parens, chains, meta properties, labels,
 //! private names).
 
+use humanify_ag_testkit::strings;
 use std::collections::HashSet;
 
 use oxc_allocator::Allocator;
@@ -37,10 +38,6 @@ fn bundle_facts(src: &str) -> Vec<LoadOrderFacts> {
     bundle_load_order_facts(&ingest.program.body, &lazy, false)
 }
 
-fn v(xs: &[&str]) -> Vec<String> {
-    xs.iter().map(|s| s.to_string()).collect()
-}
-
 #[test]
 fn a_function_declaration_is_hoisted_with_no_reads_writes_or_effects() {
     let f = &facts("function render(x) { return helper(x) + sideEffect(); }")[0];
@@ -53,7 +50,7 @@ fn a_function_declaration_is_hoisted_with_no_reads_writes_or_effects() {
 fn a_literal_declaration_is_a_pure_write() {
     let f = &facts("var TAG = \"[enforce]\";")[0];
     assert!(!f.hoisted && !f.effects);
-    assert_eq!(f.writes, v(&["TAG"]));
+    assert_eq!(f.writes, strings(&["TAG"]));
     assert!(f.reads.is_empty());
 }
 
@@ -61,11 +58,11 @@ fn a_literal_declaration_is_a_pure_write() {
 fn a_function_body_is_not_read_but_an_initializer_is() {
     let f = &facts("var run = () => { return moduleState + other(); };")[0];
     assert!(!f.effects);
-    assert_eq!(f.writes, v(&["run"]));
+    assert_eq!(f.writes, strings(&["run"]));
     assert!(f.reads.is_empty());
     let g = &facts("var derived = base.field;")[0];
-    assert_eq!(g.writes, v(&["derived"]));
-    assert_eq!(g.reads, v(&["base"]));
+    assert_eq!(g.writes, strings(&["derived"]));
+    assert_eq!(g.reads, strings(&["base"]));
 }
 
 #[test]
@@ -76,8 +73,8 @@ fn an_unknown_call_is_an_effect_and_a_verified_pure_one_is_not() {
         &["lazyInitializer"],
     )[0];
     assert!(!f.effects);
-    assert_eq!(f.writes, v(&["cfg"]));
-    assert_eq!(f.reads, v(&["lazyInitializer"]));
+    assert_eq!(f.writes, strings(&["cfg"]));
+    assert_eq!(f.reads, strings(&["lazyInitializer"]));
 }
 
 #[test]
@@ -87,7 +84,7 @@ fn the_pure_wrapper_is_recognised_through_the_sequence_callee_form() {
         &["lazyInitializer"],
     )[0];
     assert!(!f.effects);
-    assert_eq!(f.reads, v(&["resourceLifecycle"]));
+    assert_eq!(f.reads, strings(&["resourceLifecycle"]));
     let g = &facts_with(
         "var cfg = (0, resourceLifecycle.runNow)(() => build());",
         &["lazyInitializer"],
@@ -100,7 +97,7 @@ fn bare_var_is_free_and_bare_let_is_a_write() {
     let f = &facts("var pending, queued;")[0];
     assert!(!f.effects);
     assert!(f.writes.is_empty());
-    assert_eq!(facts("let pending;")[0].writes, v(&["pending"]));
+    assert_eq!(facts("let pending;")[0].writes, strings(&["pending"]));
 }
 
 #[test]
@@ -110,7 +107,7 @@ fn registration_calls_assignments_and_spreads() {
     assert!(f.reads.contains(&"memoryModule".to_string()));
     let g = &facts("cachedValue = 1;")[0];
     assert!(!g.effects);
-    assert_eq!(g.writes, v(&["cachedValue"]));
+    assert_eq!(g.writes, strings(&["cachedValue"]));
     assert!(facts("target.field = 1;")[0].effects);
     assert!(facts("var merged = { ...source };")[0].effects);
 }
@@ -119,8 +116,8 @@ fn registration_calls_assignments_and_spreads() {
 fn classes_and_control_flow() {
     let f = &facts("class Panel extends Base { render() { return sideFx(); } }")[0];
     assert!(!f.effects);
-    assert_eq!(f.writes, v(&["Panel"]));
-    assert_eq!(f.reads, v(&["Base"]));
+    assert_eq!(f.writes, strings(&["Panel"]));
+    assert_eq!(f.reads, strings(&["Base"]));
     assert!(facts("class Registry { static all = collectAll(); }")[0].effects);
     assert!(facts("if (flag) { boot(); }")[0].effects);
     assert!(facts("try { boot(); } catch {}")[0].effects);
@@ -132,9 +129,9 @@ fn babel_identifiers_the_oxc_shape_hides_are_reads() {
     // A label, a catch param and a nested declarator id are all Babel
     // Identifier nodes the generic walk reaches.
     let f = &facts("outer: for (var k of list) { break outer; }")[0];
-    assert_eq!(f.reads, v(&["outer", "k", "list"]));
+    assert_eq!(f.reads, strings(&["outer", "k", "list"]));
     let g = &facts("try { a(); } catch (err) { b(err); }")[0];
-    assert_eq!(g.reads, v(&["a", "err", "b"]));
+    assert_eq!(g.reads, strings(&["a", "err", "b"]));
 }
 
 #[test]
@@ -143,17 +140,17 @@ fn parens_and_optional_chains_are_transparent() {
     assert!(!f.effects);
     let g = &facts_with("var y = ns?.lazy(() => 1);", &["lazy"])[0];
     assert!(!g.effects);
-    assert_eq!(g.reads, v(&["ns"]));
+    assert_eq!(g.reads, strings(&["ns"]));
 }
 
 #[test]
 fn destructuring_targets_read_and_destructuring_declarations_are_effects() {
     let f = &facts("({ a, b: c } = src);")[0];
     assert!(f.effects);
-    assert_eq!(f.reads, v(&["a", "c", "src"]));
+    assert_eq!(f.reads, strings(&["a", "c", "src"]));
     let g = &facts("var { p, q } = obj;")[0];
     assert!(g.effects);
-    assert_eq!(g.writes, v(&["p", "q"]));
+    assert_eq!(g.writes, strings(&["p", "q"]));
 }
 
 const HELPER: &str = "var qz = (gen, cached) => () => (gen && (cached = gen(gen = 0)), cached);";
@@ -163,7 +160,7 @@ fn the_lazy_init_helper_is_verified_by_shape_not_by_name() {
     let src = format!("{HELPER}\nvar mod = qz(() => loadHeavyThing());");
     let f = bundle_facts(&src);
     assert!(!f[1].effects);
-    assert_eq!(f[1].writes, v(&["mod"]));
+    assert_eq!(f[1].writes, strings(&["mod"]));
     let src2 = "var qz = makeThing;\nvar mod = qz(() => loadHeavyThing());";
     assert!(bundle_facts(src2)[1].effects);
 }
@@ -180,7 +177,7 @@ fn esbuilds_lazy_init_helper_is_admitted_by_the_same_shape() {
     );
     let f = bundle_facts(&src);
     assert!(!f[1].effects);
-    assert_eq!(f[1].writes, v(&["init_mod"]));
+    assert_eq!(f[1].writes, strings(&["init_mod"]));
 }
 
 const REGISTRAR: &str = "var defineModuleExports = (targetObject, sourceObject) => {

@@ -6,8 +6,8 @@
 #
 # Every line below is commented out at its default: uncomment what this
 # file should set. A key left out keeps its default. Unknown keys, wrong
-# types, out-of-range values and retired keys are refused before any work,
-# naming the key. Every key is also a command-line flag (shown above it;
+# types and out-of-range values are refused before any work, naming the
+# key. Every key is also a command-line flag (shown above it;
 # a boolean's `--no-` form turns it off); a flag and this file that
 # DISAGREE are refused, naming both. The API key is never a setting: it is
 # read from HUMANIFY_API_KEY in the environment.

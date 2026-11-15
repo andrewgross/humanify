@@ -21,6 +21,7 @@
 //! consensus, then small-folder collapse — each pass sequential in module
 //! order, exactly as the TS mutates its placement array.
 
+use crate::ingest::node_type;
 use std::collections::{HashMap, HashSet};
 
 use humanify_ag_model::js::{cmp_utf16, utf16_len};
@@ -111,10 +112,6 @@ impl OrderedSet {
             self.order.push(s.to_string());
         }
     }
-}
-
-fn node_type(v: &Value) -> &str {
-    v.get("type").and_then(Value::as_str).unwrap_or("")
 }
 
 /// oxc keeps `ParenthesizedExpression` nodes Babel drops (lesson 2).

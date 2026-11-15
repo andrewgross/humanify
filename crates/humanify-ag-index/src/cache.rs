@@ -826,5 +826,5 @@ pub fn now_iso() -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    humanify_ag_core::profiling::iso_from_unix_ms(ms)
+    humanify_ag_model::time::iso_from_unix_ms(ms)
 }
