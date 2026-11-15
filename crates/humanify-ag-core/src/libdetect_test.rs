@@ -12,10 +12,21 @@ use std::path::{Path, PathBuf};
 use crate::detect::js_text::utf16_offset;
 use crate::libdetect::function_carry::library_at_offset;
 use crate::libdetect::{
-    CommentRegion, DetectedBy, LibraryDetector, detect_libraries, extract_library_name_from_path,
-    find_comment_regions, is_library_path, normalize_library_name, relative_posix,
+    CommentRegion, DetectedBy, LibraryDetectionResult, LibraryDetector,
+    extract_library_name_from_path, find_comment_regions, is_library_path, normalize_library_name,
+    relative_posix,
 };
 use crate::unpack::{UnpackAdapter, UnpackedFile};
+
+/// `detect_libraries` over the files the test wrote, read the way the
+/// shell reads them (invalid bytes become U+FFFD).
+fn detect_libraries(
+    detector: LibraryDetector,
+    files: &[UnpackedFile],
+) -> Result<LibraryDetectionResult, String> {
+    let read = |path: &Path| fs::read(path).map(|b| String::from_utf8_lossy(&b).into_owned());
+    crate::libdetect::detect_libraries(detector, files, &read)
+}
 
 struct TempDir(PathBuf);
 

@@ -8,6 +8,7 @@ pub mod config;
 pub mod discover_verb;
 pub mod env;
 pub mod failed_output;
+pub mod index_files;
 pub mod kill_switches;
 pub mod llm_sim;
 pub mod log;

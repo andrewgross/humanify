@@ -303,9 +303,7 @@ fn literals_sharing_one_key_are_told_apart_by_their_strings() {
 }
 
 #[test]
-fn the_files_on_disk_read_the_same_as_memory_and_a_truncated_table_is_refused() {
-    let dir = std::env::temp_dir().join(format!("humanify-table-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+fn a_paged_table_reads_the_same_as_memory_and_a_truncated_table_is_refused() {
     let units: BTreeMap<String, Vec<UnitRow>> =
         [("bun-bun-cjs-min".to_string(), vec![unit(5, "zod", 3)])]
             .into_iter()
@@ -317,19 +315,14 @@ fn the_files_on_disk_read_the_same_as_memory_and_a_truncated_table_is_refused() 
         names,
         vec![LITERALS_FILE, PACKAGES_FILE, &units_file("bun-bun-cjs-min")]
     );
-    for (name, bytes) in &files {
-        std::fs::write(dir.join(name), bytes).unwrap();
-    }
-    let path = dir.join(units_file("bun-bun-cjs-min"));
-    let table = UnitTable::open(Source::open(&path).expect("opens")).expect("reads");
+    let bytes = files[&units_file("bun-bun-cjs-min")].clone();
+    let table = UnitTable::open(Source::paged(Box::new(bytes.clone()))).expect("reads");
     assert_eq!(table.hits(&format!("{:016x}", 5)).len(), 1);
-    let bytes = &files[&units_file("bun-bun-cjs-min")];
-    std::fs::write(&path, &bytes[..bytes.len() - 1]).unwrap();
-    let err = UnitTable::open(Source::open(&path).expect("opens"))
+    let short = bytes[..bytes.len() - 1].to_vec();
+    let err = UnitTable::open(Source::paged(Box::new(short)))
         .err()
         .expect("a short table is refused");
     assert!(err.contains("bytes"), "{err}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]

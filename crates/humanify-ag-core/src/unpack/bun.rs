@@ -1102,7 +1102,7 @@ fn place_factories_from_index(
     let keys = fresh_content_keys(code, &c.factories, require_var, &declared, &VENDOR_CONTENT);
     let wanted: std::collections::BTreeSet<String> = keys.iter().flatten().cloned().collect();
     let answers =
-        crate::libindex::module_answers::read_module_answers(source.dir, source.slice, &wanted)?;
+        crate::libindex::module_answers::read_module_answers(source.files, source.slice, &wanted)?;
     let regions: Vec<RegionInput> = c
         .factories
         .iter()

@@ -22,6 +22,7 @@
 
 pub mod callctx;
 pub mod families;
+pub mod files;
 pub mod format;
 pub mod literals;
 pub mod lookup;
@@ -37,6 +38,9 @@ mod callctx_test;
 #[cfg(test)]
 #[path = "libindex/families_test.rs"]
 mod families_test;
+#[cfg(test)]
+#[path = "libindex/files_test.rs"]
+pub(crate) mod files_test;
 #[cfg(test)]
 #[path = "libindex/format_test.rs"]
 mod format_test;

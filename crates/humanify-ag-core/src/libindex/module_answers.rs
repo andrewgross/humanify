@@ -19,7 +19,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::BufRead;
-use std::path::Path;
+
+use super::files::{IndexFiles, Sequential};
 
 use super::format::ModuleRow;
 use crate::place::library_layout::ModuleAnswer;
@@ -31,11 +32,10 @@ pub fn modules_file(slice: &str) -> String {
 
 /// The planner's answers for `keys`: one entry per key the index holds.
 /// Keys the index lacks are simply absent (a miss is a synthetic name,
-/// not an error). An empty `keys` reads nothing.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
+/// not an error). An empty `keys` reads nothing. The file is streamed
+/// line by line, never held whole.
 pub fn read_module_answers(
-    dir: &Path,
+    files: &dyn IndexFiles,
     slice: &str,
     keys: &BTreeSet<String>,
 ) -> Result<BTreeMap<String, ModuleAnswer>, String> {
@@ -43,10 +43,12 @@ pub fn read_module_answers(
         return Ok(BTreeMap::new());
     }
     let file = modules_file(slice);
-    let path = dir.join(&file);
-    let handle = std::fs::File::open(&path).map_err(|e| format!("{file}: {e}"))?;
+    let reader = files.open(&file).map_err(|e| format!("{file}: {e}"))?;
     let mut rows: BTreeMap<String, Vec<ModuleRow>> = BTreeMap::new();
-    for (n, line) in std::io::BufReader::new(handle).lines().enumerate() {
+    for (n, line) in std::io::BufReader::new(Sequential::new(reader))
+        .lines()
+        .enumerate()
+    {
         let line = line.map_err(|e| format!("{file}: {e}"))?;
         if line.is_empty() {
             continue;

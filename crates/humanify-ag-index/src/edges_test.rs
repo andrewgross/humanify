@@ -170,7 +170,14 @@ fn load_merged(dir: &Path, shards: Vec<Shard>) -> (LibraryIndex, BTreeMap<String
         std::fs::write(dir.join(name), bytes).expect("write");
     }
     let target_node = detect_recipe("var a;", BundlerType::Bun, MinifierType::Bun);
-    let ix = LibraryIndex::load(dir, &target_node, TerserSlices::Off).expect("loads");
+    let ix = LibraryIndex::load(
+        Box::new(humanify_ag_core::libindex::files::MemoryIndexFiles(
+            files.clone(),
+        )),
+        &target_node,
+        TerserSlices::Off,
+    )
+    .expect("loads");
     (ix, files)
 }
 

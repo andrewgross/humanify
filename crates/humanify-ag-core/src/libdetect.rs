@@ -26,7 +26,6 @@ mod discovery_test;
 mod scope_fixture_test;
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use crate::detect::js_text::{is_js_space, js_prefix, skip_js_space};
@@ -145,24 +144,25 @@ impl LibraryDetector {
     }
 }
 
-/// `detector.detectLibraries(files)`.
+/// How detection reads a file's text: the shell's reader (Node's
+/// `fs.readFile(path, "utf-8")`, invalid bytes become U+FFFD).
+pub type ReadText<'a> = &'a dyn Fn(&Path) -> std::io::Result<String>;
+
+/// `path`'s text through `read`; the error names the path.
+fn read_text(read: ReadText<'_>, path: &Path) -> Result<String, String> {
+    read(path).map_err(|e| format!("read {}: {e}", path.display()))
+}
+
+/// `detector.detectLibraries(files)`, reading each file through `read`.
 pub fn detect_libraries(
     detector: LibraryDetector,
     files: &[UnpackedFile],
+    read: ReadText<'_>,
 ) -> Result<LibraryDetectionResult, String> {
     match detector {
-        LibraryDetector::VendorRecord => detect_vendor_record(files),
-        LibraryDetector::Default => detect_default(files),
+        LibraryDetector::VendorRecord => detect_vendor_record(files, read),
+        LibraryDetector::Default => detect_default(files, read),
     }
-}
-
-/// `fs.readFile(path, "utf-8")`: invalid bytes become U+FFFD.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-fn read_utf8(path: &Path) -> Result<String, String> {
-    fs::read(path)
-        .map(|b| String::from_utf8_lossy(&b).into_owned())
-        .map_err(|e| format!("read {}: {e}", path.display()))
 }
 
 // ---------------------------------------------------------------------------
@@ -408,7 +408,10 @@ pub fn extract_library_name_from_path(module_path: &str) -> String {
     module_path.split('/').next().unwrap_or("").to_string()
 }
 
-fn detect_default(files: &[UnpackedFile]) -> Result<LibraryDetectionResult, String> {
+fn detect_default(
+    files: &[UnpackedFile],
+    read: ReadText<'_>,
+) -> Result<LibraryDetectionResult, String> {
     let mut result = LibraryDetectionResult::default();
     for file in files {
         // Layer 1: the module path webcrack reported.
@@ -425,7 +428,7 @@ fn detect_default(files: &[UnpackedFile]) -> Result<LibraryDetectionResult, Stri
             map_set(&mut result.library_files, &file.path, detection);
             continue;
         }
-        let code = read_utf8(&file.path)?;
+        let code = read_text(read, &file.path)?;
         // Layer 2: a banner in the first ~1KB.
         if let Some(name) = first_banner_name(js_prefix(&code, SCAN_LIMIT)) {
             let detection = LibraryDetection {
@@ -511,10 +514,13 @@ fn parse_manifest(raw: &str) -> Option<Result<Manifest, String>> {
 /// the run's own.
 // default: legacy, untriaged: a Result error becomes a value here
 #[allow(clippy::disallowed_methods)]
-fn load_manifest(files: &[UnpackedFile]) -> Option<Result<(Manifest, PathBuf), String>> {
+fn load_manifest(
+    files: &[UnpackedFile],
+    read: ReadText<'_>,
+) -> Option<Result<(Manifest, PathBuf), String>> {
     let start = files.first()?.path.parent()?;
     start.ancestors().find_map(|dir| {
-        let raw = read_utf8(&bun_manifest_path(dir)).ok()?;
+        let raw = read(&bun_manifest_path(dir)).ok()?;
         let parsed = parse_manifest(&raw)?;
         Some(parsed.map(|m| (m, dir.to_path_buf())))
     })
@@ -543,9 +549,12 @@ pub fn relative_posix(from: &Path, to: &Path) -> String {
     parts.join("/")
 }
 
-fn detect_vendor_record(files: &[UnpackedFile]) -> Result<LibraryDetectionResult, String> {
+fn detect_vendor_record(
+    files: &[UnpackedFile],
+    read: ReadText<'_>,
+) -> Result<LibraryDetectionResult, String> {
     let mut result = LibraryDetectionResult::default();
-    if let Some(found) = load_manifest(files) {
+    if let Some(found) = load_manifest(files, read) {
         let (manifest, root) = found?;
         for file in files {
             let rel = relative_posix(&root, &file.path);
@@ -570,7 +579,7 @@ fn detect_vendor_record(files: &[UnpackedFile]) -> Result<LibraryDetectionResult
     // No manifest: every file with a banner ANYWHERE is library (a Bun
     // factory is one module).
     for file in files {
-        let code = read_utf8(&file.path)?;
+        let code = read_text(read, &file.path)?;
         match first_banner_name(&code) {
             Some(name) => {
                 let detection = LibraryDetection {

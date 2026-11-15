@@ -2714,17 +2714,17 @@ pub struct DiscoveryRequest<'x> {
     pub restoration: bool,
     /// Where the index's whole-module answers live (library-names plan
     /// step 4): a names-mode run reads `modules.<slice>.jsonl` out of the
-    /// loaded index's directory and lets the placement planner move wholly
+    /// loaded index's files and lets the placement planner move wholly
     /// claimed factories to `vendor/<package>/<file>`. None: no names mode.
     pub module_answers: Option<ModuleAnswersSource<'x>>,
 }
 
-/// The index directory a names-mode run reads whole-module answers from,
+/// The index files a names-mode run reads whole-module answers from,
 /// and the slice whose `modules.<slice>.jsonl` holds them
 /// ([`crate::libindex::module_answers`]). Copy: the request is Copy.
 #[derive(Clone, Copy)]
 pub struct ModuleAnswersSource<'x> {
-    pub dir: &'x std::path::Path,
+    pub files: &'x dyn crate::libindex::files::IndexFiles,
     pub slice: &'x str,
 }
 

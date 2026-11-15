@@ -110,6 +110,36 @@
       "role": "shell"
     },
     {
+      "file": "crates/humanify-ag-cli/src/index_files.rs",
+      "scope": "FileReadAt::open",
+      "construct": "fs",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-cli/src/index_files.rs",
+      "scope": "FileReadAt::read_exact_at",
+      "construct": "fs",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-cli/src/index_files.rs",
+      "scope": "IndexDir::read_text",
+      "construct": "fs",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-cli/src/index_files.rs",
+      "scope": "read_utf8",
+      "construct": "fs",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-cli/src/index_files.rs",
+      "scope": "struct FileReadAt",
+      "construct": "fs",
+      "role": "shell"
+    },
+    {
       "file": "crates/humanify-ag-cli/src/kill_switches.rs",
       "scope": "SwitchState::configure",
       "construct": "result-string",
@@ -831,12 +861,6 @@
     },
     {
       "file": "crates/humanify-ag-core/src/libdetect.rs",
-      "scope": "read_utf8",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/libdetect.rs",
       "scope": "detect_libraries",
       "construct": "result-string",
       "role": "legacy"
@@ -890,18 +914,6 @@
       "role": "legacy"
     },
     {
-      "file": "crates/humanify-ag-core/src/libindex/lookup.rs",
-      "scope": "LibraryIndex::load",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/libindex/module_answers.rs",
-      "scope": "read_module_answers",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
       "file": "crates/humanify-ag-core/src/libindex/module_answers.rs",
       "scope": "read_module_answers",
       "construct": "result-string",
@@ -917,24 +929,6 @@
       "file": "crates/humanify-ag-core/src/libindex/recipe.rs",
       "scope": "choose_slice",
       "construct": "result-string",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/libindex/table.rs",
-      "scope": "Source::open",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/libindex/table.rs",
-      "scope": "read_at",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/libindex/table.rs",
-      "scope": "struct PagedFile",
-      "construct": "fs",
       "role": "legacy"
     },
     {
@@ -994,12 +988,6 @@
     {
       "file": "crates/humanify-ag-core/src/libindex/table.rs",
       "scope": "NameTable::open",
-      "construct": "result-string",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/libindex/table.rs",
-      "scope": "Source::open",
       "construct": "result-string",
       "role": "legacy"
     },

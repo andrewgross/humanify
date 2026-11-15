@@ -4,9 +4,7 @@
 //! function hashes covering half the unit, with neighbour support), the
 //! specificity rule, and agreement with the literal rule.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::path::Path;
-
+use super::files::{IndexFiles, MemoryIndexFiles};
 use super::format::{EdgeRow, HelperRow, LiteralRow, Manifest, UnitRow};
 use super::literals::{LiteralMode, code_literals};
 use super::table::{
@@ -15,6 +13,7 @@ use super::table::{
 };
 use super::units::{StatementPrints, UnitPrint};
 use crate::matching::store::ReferenceStore;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// One indexed occurrence of a unit hash: the index store's piece
 /// (`matching::store`).
@@ -40,10 +39,10 @@ pub struct LibraryIndex {
     /// The recipe slice read (`bun-bun-cjs-min`) and why it was chosen;
     /// empty when built from rows.
     pub slice: String,
-    /// The directory the index was loaded from: where a names-mode run
+    /// The index's files, as the shell opened them: where a names-mode run
     /// reads its whole-module answers (`modules.<slice>.jsonl`, exp156);
-    /// empty when built from rows — no answers file exists beside rows.
-    pub dir: std::path::PathBuf,
+    /// none when built from rows — no answers file exists beside rows.
+    pub files: Box<dyn IndexFiles>,
     slice_reason: String,
     /// Every owner package, sorted: an owner id is its position.
     packages: Vec<String>,
@@ -140,7 +139,7 @@ impl LibraryIndex {
         LibraryIndex {
             id: String::new(),
             slice: String::new(),
-            dir: std::path::PathBuf::new(),
+            files: Box::new(MemoryIndexFiles::default()),
             slice_reason: String::new(),
             units: UnitTable::open(Source::Memory(units)).expect("an encoded unit table opens"),
             terser_units: Vec::new(),
@@ -270,7 +269,7 @@ impl LibraryIndex {
         hits.next().is_none().then(|| first.clone())
     }
 
-    /// Open `dir`'s slice for the bundle's `recipe` (`units.<slice>.bin`)
+    /// Open `files`' slice for the bundle's `recipe` (`units.<slice>.bin`)
     /// and the literal table, refusing an index any of whose compatibility
     /// stamps differs from this build's ([`Manifest::check_compatible`]: a
     /// half-matching index would silently half-claim). The slice is chosen
@@ -278,16 +277,12 @@ impl LibraryIndex {
     /// slice for the recipe is [`LoadError::NoSlice`]. Only the tables'
     /// headers and fences are read here. `terser` names the slices read
     /// beside the chosen one ([`super::recipe::terser_slices`]).
-    // io: legacy effect site, listed in dev/census/effects-allowlist.json
-    #[allow(clippy::disallowed_methods)]
     pub fn load(
-        dir: &Path,
+        files: Box<dyn IndexFiles>,
         recipe: &super::recipe::DetectedRecipe,
         terser: super::recipe::TerserSlices,
     ) -> Result<LibraryIndex, LoadError> {
-        let read = |name: &str| {
-            std::fs::read_to_string(dir.join(name)).map_err(|e| format!("{name}: {e}"))
-        };
+        let read = |name: &str| files.read_text(name).map_err(|e| format!("{name}: {e}"));
         let manifest_text = read("manifest.json")?;
         super::format::check_manifest_stamps(&manifest_text)?;
         let manifest: Manifest =
@@ -303,7 +298,12 @@ impl LibraryIndex {
         let slice = chosen.slice_name();
         let packages: Vec<String> = serde_json::from_str(&read(table::PACKAGES_FILE)?)
             .map_err(|e| format!("{}: {e}", table::PACKAGES_FILE))?;
-        let open = |name: &str| Source::open(&dir.join(name)).map_err(|e| format!("{name}: {e}"));
+        let open = |name: &str| {
+            files
+                .open(name)
+                .map(Source::paged)
+                .map_err(|e| format!("{name}: {e}"))
+        };
         let units_name = table::units_file(&slice);
         let units =
             UnitTable::open(open(&units_name)?).map_err(|e| format!("{units_name}: {e}"))?;
@@ -389,7 +389,7 @@ impl LibraryIndex {
         Ok(LibraryIndex {
             id,
             slice,
-            dir: dir.to_path_buf(),
+            files,
             slice_reason: reason,
             known,
             packages,

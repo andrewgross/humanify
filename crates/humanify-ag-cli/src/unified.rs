@@ -933,7 +933,11 @@ fn load_library_index(
             None,
         ),
     };
-    let load = match LibraryIndex::load(&dir, recipe, config.library.lookup.terser_slices) {
+    let load = match LibraryIndex::load(
+        crate::index_files::IndexDir::boxed(&dir),
+        recipe,
+        config.library.lookup.terser_slices,
+    ) {
         Ok(index) => LibraryLoad {
             index_id: Some(index.id.clone()),
             index: Some(index),
