@@ -28,9 +28,6 @@ fn empty() -> Option<Val> {
     Some(Val::List(Vec::new()))
 }
 
-fn base_modes() -> Vec<String> {
-    ["scratch", "seeded", "archive"].map(String::from).to_vec()
-}
 fn rules() -> Vec<String> {
     ["agreement", "structural"].map(String::from).to_vec()
 }
@@ -169,18 +166,6 @@ pub static HARNESS_KEYS: &[Key] = &[
     // [eval]
     Key {
         section: "eval",
-        name: "base_mode",
-        kind: Kind::Choice(base_modes),
-        flag: Some("--base-mode"),
-        default: || text("scratch"),
-        unset: "",
-        doc: "How each v-1 base is built: scratch (rebuilt by the current pipeline with no \
-              prior; the default since 2026-10-03), seeded (rebuilt with the archive as its \
-              prior; every reference before 2026-10-03), archive (no rebuild: reads ~3.7x \
-              worse).",
-    },
-    Key {
-        section: "eval",
         name: "pairs",
         kind: Kind::List(None),
         flag: Some("--pairs"),
@@ -242,13 +227,6 @@ pub static HARNESS_KEYS: &[Key] = &[
         Some("--inputs-base"),
         "pairs.json inputsBase",
         "Where the walked versions' input bundles are.",
-    ),
-    path_key(
-        "eval",
-        "priors_base",
-        Some("--priors-base"),
-        "pairs.json priorsBase",
-        "Where the archive priors are.",
     ),
     path_key(
         "eval",
@@ -640,73 +618,12 @@ pub static HARNESS_KEYS: &[Key] = &[
         doc: "The git ref the slop and comment censuses measure against (at its merge-base \
               with HEAD).",
     },
-    path_key(
-        "dev",
-        "prior",
-        Some("--prior"),
-        "a cold run",
-        "ask-trace: run with --prior-version <path>.",
-    ),
-    path_key(
-        "dev",
-        "collide",
-        Some("--collide"),
-        "every identifier is answered <id>Renamed",
-        "ask-trace: the stub names EVERY identifier this one name, forcing collisions.",
-    ),
-    switch(
-        "dev",
-        "sequential",
-        "--sequential",
-        off,
-        "ask-trace: the conservative naming schedule.",
-    ),
     count_key(
         "dev",
         "port",
         Some("--port"),
         "a free port, printed",
         "The port `stub-llm serve` listens on (127.0.0.1).",
-    ),
-    path_key(
-        "dev",
-        "corpus_dir",
-        Some("--corpus-dir"),
-        "/work/match-truth-corpus",
-        "match-truth: where the pinned npm corpus is cached.",
-    ),
-];
-
-/// Retired spellings, refused naming what replaced them (eval.ts
-/// `RETIRED_FLAGS`, run.sh, and the base-mode flags this registry folded
-/// into one key).
-pub const RETIRED_FLAGS: &[(&str, &str)] = &[
-    (
-        "--no-vendor",
-        "removed: scorer v2 always scores vendor/ when both trees have one (rule 8)",
-    ),
-    (
-        "--no-vendor-score",
-        "removed: scorer v2 always scores vendor/ when both trees have one (rule 8)",
-    ),
-    (
-        "--no-layout",
-        "removed: scorer v2 always scores the layout block when both trees have src/",
-    ),
-    (
-        "--pipeline-arg",
-        "retired: the pipeline's settings are --config keys now (config sweep step 5) — use \
-         --pipeline-set <section.key=value>",
-    ),
-    (
-        "--heap-mb",
-        "removed: it was inert (the pipeline is a Rust binary, not a Node process)",
-    ),
-    ("--seeded-base", "renamed: use --base-mode seeded"),
-    ("--archive-prior", "renamed: use --base-mode archive"),
-    (
-        "--skip-preflight",
-        "removed: the matcher preflight retired with the TS matcher",
     ),
 ];
 
@@ -727,7 +644,7 @@ const SECTION_TITLES: &[(&str, &str)] = &[
 pub static HARNESS: Registry = Registry {
     keys: HARNESS_KEYS,
     retired_keys: &[],
-    retired_flags: RETIRED_FLAGS,
+    retired_flags: &[],
     short_flags: &[],
     counted_flag: None,
     repeatable: &["run.pipeline_set"],

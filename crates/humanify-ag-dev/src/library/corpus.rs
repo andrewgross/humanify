@@ -32,7 +32,6 @@ pub const PRIVATE: &[&str] = &["test", "test2", "remin2", "bun-held"];
 pub struct Corpus {
     pub loaded: LoadedCorpus,
     pub data: PathBuf,
-    pub repo: PathBuf,
 }
 
 impl Corpus {
@@ -43,11 +42,7 @@ impl Corpus {
             Some(d) => PathBuf::from(d),
             None => PathBuf::from(&library::data_roots(repo)?.value.roots[name]),
         };
-        Ok(Corpus {
-            loaded,
-            data,
-            repo: repo.to_path_buf(),
-        })
+        Ok(Corpus { loaded, data })
     }
 
     pub fn name(&self) -> &'static str {

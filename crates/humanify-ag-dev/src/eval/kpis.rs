@@ -62,12 +62,12 @@ pub struct Kpi {
 
 impl Kpi {
     /// The per-pair value; None when the card did not score it.
-    pub fn from_card(&self, card: &JsValue) -> Option<f64> {
+    pub fn of_card(&self, card: &JsValue) -> Option<f64> {
         number_at(card, &self.path)
     }
 
     /// The label total; None when no card carried it.
-    pub fn from_totals(&self, totals: &JsValue) -> Option<f64> {
+    pub fn of_totals(&self, totals: &JsValue) -> Option<f64> {
         match totals.as_object()?.get(&self.total)? {
             JsValue::Number(n) => Some(*n),
             _ => None,

@@ -111,6 +111,7 @@ impl Ctx {
     }
 
     /// Everything said so far, one line each.
+    #[cfg(test)]
     pub fn transcript(&self) -> String {
         self.said.lock().expect("the transcript").join("\n")
     }
@@ -137,11 +138,6 @@ impl Ctx {
         let mut env = vec![("PATH".to_string(), self.host.child_path())];
         env.extend(self.child_env.iter().cloned());
         crate::bin_build::build_with_env(root, &env)
-    }
-
-    /// The repo-relative path of a committed file.
-    pub fn repo_path(&self, rel: &str) -> PathBuf {
-        self.repo.join(rel)
     }
 }
 

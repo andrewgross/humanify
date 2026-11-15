@@ -44,16 +44,12 @@ fn repeats_over_different_pair_sets_are_refused() {
     let _ = std::fs::remove_dir_all(&root);
     let src = Path::new("/work/dev-harness-proof/oracles/a/ref-scratch-0f338ffa-r1");
     for name in ["r1", "r2"] {
-        let dir = root.join(name);
-        std::fs::create_dir_all(&dir).unwrap();
-        for e in std::fs::read_dir(src).expect("the frozen reference cards") {
-            let p = e.unwrap().path();
-            std::fs::copy(&p, dir.join(p.file_name().unwrap())).unwrap();
-        }
+        crate::eval::test_support::frozen_label(src, &root.join(name), 2);
     }
     // r2 lacks a pair r1 scored.
     for f in [
         "2.1.198.json",
+        "2.1.198.identity.json",
         "2.1.198-run.json",
         "2.1.198-run-status.json",
     ] {
@@ -85,16 +81,12 @@ fn a_measured_slot_records_the_pairs_it_was_measured_over() {
     assert_eq!(pairs, ["2.1.85->2.1.86"]);
 }
 
-/// Copy frozen labels into a scratch results dir.
+/// Copy frozen labels into a scratch results dir (as scorer-2 labels with
+/// their identity records).
 fn frozen(root: &Path, names: &[&str]) {
     for name in names {
         let src = Path::new("/work/dev-harness-proof/oracles/a").join(name);
-        let dir = root.join(name);
-        std::fs::create_dir_all(&dir).unwrap();
-        for e in std::fs::read_dir(&src).expect("the frozen reference cards") {
-            let p = e.unwrap().path();
-            std::fs::copy(&p, dir.join(p.file_name().unwrap())).unwrap();
-        }
+        crate::eval::test_support::frozen_label(&src, &root.join(name), 2);
     }
 }
 
@@ -125,7 +117,7 @@ fn the_repeats_cold_self_hops_become_their_modes_reference_range() {
     let names_slot = &r.by_mode["names"];
     assert_eq!(names_slot.version, "2.1.216");
     assert_eq!(names_slot.cold_diff_lines.len(), 3);
-    assert_eq!(names_slot.commits[names[0]], "0357696e");
+    assert_eq!(names_slot._commits[names[0]], "0357696e");
     // The off range is kept.
     assert_eq!(r.range("off"), Some((2, 182)));
 }
@@ -186,7 +178,7 @@ fn the_repeats_matching_spreads_are_written_beside_the_kpi_bands() {
     });
     assert!(said.unwrap().contains("matching"));
     let b = read_bands(&file);
-    let m = b.matching_bands(1, "names").unwrap();
+    let m = b.matching_bands(2, "names").unwrap();
     // Four pairs: mbLLMRenamed 16 vs 24; fnAsked equal.
     assert_eq!(m.get("mbLLMRenamed"), Some(&8.0));
     assert_eq!(m.get("fnAsked"), Some(&0.0));
@@ -213,5 +205,5 @@ fn repeats_without_matching_counts_still_get_kpi_bands_and_say_so() {
     let (said, file) = bands_over("match-none", |_, _| {});
     let said = said.unwrap();
     assert!(said.contains("matching counts NOT measured"), "{said}");
-    assert!(read_bands(&file).matching_bands(1, "names").is_none());
+    assert!(read_bands(&file).matching_bands(2, "names").is_none());
 }

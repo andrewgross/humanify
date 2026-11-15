@@ -12,13 +12,13 @@
 //!   has no pipeline binary, and it is refused.
 //! - The record carries the binary's sha256, the commit it was built from
 //!   and whether the tree was dirty — the binary block of the identity.
-//! - A legacy leg (a baseline binary with no `--config` flag) is detected
-//!   by probing its `--help`, as neutrality.sh's `leg_flags` does.
+//! - A legacy leg (a baseline binary with no `--config` flag) is told by
+//!   its `--help` text (`is_legacy_help`; neutrality probes it).
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::proc::{Spawn, git, run, run_ok};
+use crate::proc::{Spawn, git, run_ok};
 
 /// The pipeline crates, newest first: (crate directory, package).
 const PIPELINE_CRATES: &[&str] = &["humanify-ag-cli", "humanify-cli"];
@@ -176,16 +176,6 @@ pub fn describe(root: &Path, bin: &Path) -> Result<BinRecord, String> {
 /// option (a baseline from before config sweep step 5 takes flags only).
 pub fn is_legacy_help(help: &str) -> bool {
     !help.contains("--config")
-}
-
-/// Whether the binary is a LEGACY leg (probes its `--help`).
-pub fn is_legacy_leg(bin: &Path) -> Result<bool, String> {
-    let done = run(&Spawn::new(
-        &bin.display().to_string(),
-        &["--help"],
-        HELP_DEADLINE,
-    ))?;
-    Ok(is_legacy_help(&String::from_utf8_lossy(&done.stdout)))
 }
 
 /// `--help` answers at once.

@@ -112,16 +112,6 @@ fn a_launch_is_logged_in_the_recorder_shape_with_its_config_lines() {
 }
 
 #[test]
-fn the_port_is_normalized_everywhere_and_only_in_an_endpoint() {
-    assert_eq!(
-        normalize_port(
-            "a http://127.0.0.1:4242/v1 b http://127.0.0.1:99/v1\nhttp://127.0.0.1:x/v1"
-        ),
-        "a http://127.0.0.1:<PORT>/v1 b http://127.0.0.1:<PORT>/v1\nhttp://127.0.0.1:x/v1"
-    );
-}
-
-#[test]
 fn first_difference_names_the_line() {
     assert_eq!(
         first_difference("a\nb\n", "a\nc\n"),

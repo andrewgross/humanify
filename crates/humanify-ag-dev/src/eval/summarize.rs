@@ -298,16 +298,6 @@ fn self_hop_of(j: &JsValue) -> Option<JsValue> {
     Some(JsValue::Object(o))
 }
 
-fn preflight_of(j: &JsValue) -> Option<JsValue> {
-    let v = at(j, "preflight.verdict")?.as_str()?;
-    let st = number_at(j, "preflight.status")?;
-    let mut o = vec![("verdict", text(v)), ("status", JsValue::Number(st))];
-    if let Some(c) = at(j, "preflight.covers").and_then(JsValue::as_str) {
-        o.push(("covers", text(c)));
-    }
-    Some(obj(o))
-}
-
 fn pipeline_of(j: &JsValue) -> Option<JsValue> {
     let kind = at(j, "pipeline.kind")?.as_str()?;
     let mut o = vec![("kind", text(kind))];
@@ -325,7 +315,7 @@ fn pipeline_of(j: &JsValue) -> Option<JsValue> {
     Some(obj(o))
 }
 
-/// Boot, self-hop, preflight and pipeline verdicts.
+/// Boot, self-hop and pipeline verdicts.
 pub fn verdicts(dir: &Path) -> JsValue {
     let (mut boots, mut hops, mut extra) = (Vec::new(), Vec::new(), Vec::new());
     for f in files(dir) {
@@ -336,8 +326,6 @@ pub fn verdicts(dir: &Path) -> JsValue {
             boots.extend(boot_of(&j));
         } else if f.ends_with("-self-hop.json") {
             hops.extend(self_hop_of(&j));
-        } else if f == "preflight-status.json" {
-            extra.extend(preflight_of(&j).map(|p| ("preflight", p)));
         } else if f == "pipeline.json" {
             extra.extend(pipeline_of(&j).map(|p| ("pipeline", p)));
         }
@@ -509,7 +497,7 @@ fn warm_line(s: &JsValue) -> Option<String> {
     ))
 }
 
-/// The pipeline and preflight lines.
+/// The pipeline line.
 fn pipeline_banner(v: &JsValue) -> Vec<String> {
     let mut lines = Vec::new();
     if str_at(v, "pipeline.kind") == Some("rust-bin") {
@@ -532,16 +520,6 @@ fn pipeline_banner(v: &JsValue) -> Vec<String> {
         };
         lines.push(format!(
             "NOTE: scored by the Rust binary {sha} built from {commit}{dirty}."
-        ));
-        if str_at(v, "preflight.covers") == Some("ts-matcher") {
-            lines.push("NOTE: the matcher preflight validated the TS matcher (test/e2e/harness), not the binary that scored these pairs.".into());
-        }
-    }
-    if let Some(p) = str_at(v, "preflight.verdict")
-        && p != "ok"
-    {
-        lines.push(format!(
-            "NOTE: matcher preflight '{p}' — these pairs were scored WITHOUT a validated fingerprint matcher. Usually the fixture builds are absent (a frozen worktree); it is not a matcher finding, but it is not a clean bill of health either."
         ));
     }
     lines
@@ -592,32 +570,8 @@ fn sorted_unique(mut xs: Vec<String>) -> Vec<String> {
     xs
 }
 
-/// The run manifests' base mode (`baseModeOf`).
-fn base_mode_of(m: &JsValue) -> String {
-    if let Some(b) = str_at(m, "inputs.baseMode") {
-        return b.to_string();
-    }
-    let prior = str_at(m, "inputs.prior").unwrap_or("");
-    let kind = str_at(m, "inputs.priorKind")
-        .map(str::to_string)
-        .unwrap_or_else(|| {
-            if prior.is_empty() {
-                "unknown".into()
-            } else if prior.contains("-rebased/") || prior.ends_with("-rebased") {
-                "rebased".into()
-            } else {
-                "archive".into()
-            }
-        });
-    match kind.as_str() {
-        "rebased" => "seeded".into(),
-        "archive" => "archive".into(),
-        _ => "unknown".into(),
-    }
-}
-
 /// What produced a label's numbers: its manifests' models, endpoints and
-/// efforts, its base modes and naming modes.
+/// efforts and naming modes.
 pub fn provenance(dir: &Path) -> JsValue {
     let manifests: Vec<JsValue> = files(dir)
         .iter()
@@ -633,12 +587,10 @@ pub fn provenance(dir: &Path) -> JsValue {
                 .collect(),
         )
     };
-    let base = sorted_unique(manifests.iter().map(base_mode_of).collect());
     obj(vec![
         ("models", texts(&pick("config.model"))),
         ("endpoints", texts(&pick("config.endpoint"))),
         ("reasoningEfforts", texts(&pick("config.reasoningEffort"))),
-        ("baseModes", texts(&base)),
         ("namingModes", texts(&naming_modes(dir, &manifests))),
     ])
 }
@@ -743,6 +695,13 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
     if cards.is_empty() {
         return Err(format!("no scorecards in {}", dir.display()));
     }
+    if let Some(c) = cards.iter().find(|c| scorer_version(c).is_none()) {
+        return Err(format!(
+            "{}: the card for {} records no scorerVersion — not a card this harness's scorer wrote",
+            dir.display(),
+            at(c, "pair").and_then(JsValue::as_str).unwrap_or("?")
+        ));
+    }
     let t = summarize_cards(&cards);
     let totals = JsValue::Object(t.totals.clone());
     let statuses = run_statuses(dir);
@@ -775,7 +734,7 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
         banner_lines.push(format!("NOTE: the clean-diff totals cover {} of the {} scored pairs — the rest predate the breakdown (2026-10-02), and their clean numbers are missing from the total rather than counted as zero.", t.clean_cards, t.layout_cards));
     }
     let versions: Vec<u64> = {
-        let mut v: Vec<u64> = cards.iter().map(scorer_version).collect();
+        let mut v: Vec<u64> = cards.iter().filter_map(scorer_version).collect();
         v.sort();
         v.dedup();
         v
@@ -790,17 +749,8 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
             .collect::<Vec<_>>(),
         _ => Vec::new(),
     };
-    let base = list("baseModes");
     let naming = list("namingModes");
     let mut head = vec![
-        match base.len() {
-            1 => format!("BASE: {}", base[0]),
-            0 => "BASE: UNKNOWN (no run manifests)".into(),
-            _ => format!(
-                "!! BASE: MIXED ({}) — this label's pairs were scored on different bases",
-                base.join(" + ")
-            ),
-        },
         if naming.len() == 1 {
             format!("NAMING: {}", naming[0])
         } else {
@@ -859,7 +809,7 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
         out.push(churn_row(
             str_at(c, "pair").unwrap_or(""),
             &shown,
-            |k| k.from_card(c),
+            |k| k.of_card(c),
             number_at(c, "churn.statements.total").unwrap_or(0.0),
             number_at(c, "churn.relocations.freshNames").unwrap_or(0.0),
             &d("determinism.functions.pctDeterministic"),
@@ -871,7 +821,7 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
     out.push(churn_row(
         "TOTAL",
         &shown,
-        |k| k.from_totals(&totals),
+        |k| k.of_totals(&totals),
         tot("stmts"),
         tot("freshNames"),
         "",

@@ -45,7 +45,7 @@ use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
-use humanify_ag_core::libindex::format::{LiteralFileRow, LiteralRow};
+use humanify_ag_core::libindex::format::LiteralFileRow;
 use humanify_ag_core::libindex::table::{LITERALS_FILE, LiteralTable, PACKAGES_FILE, Source};
 use serde_json::Value;
 
@@ -119,7 +119,8 @@ impl LiteralIndex {
     }
 
     /// A literal index over `rows` (file id = row position), in memory.
-    pub fn from_rows(rows: &[LiteralRow]) -> LiteralIndex {
+    #[cfg(test)]
+    pub fn from_rows(rows: &[humanify_ag_core::libindex::format::LiteralRow]) -> LiteralIndex {
         let mut packages: Vec<String> = rows.iter().map(|r| r.owner.clone()).collect();
         packages.sort();
         packages.dedup();

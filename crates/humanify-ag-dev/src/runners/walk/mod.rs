@@ -321,10 +321,14 @@ fn get<'a>(v: &'a JsValue, path: &[&str]) -> Option<&'a JsValue> {
 /// resumed walk may be EXTENDED (the versions union, semver order).
 fn record_manifest(w: &Walk, fresh: JsValue) -> Result<(), String> {
     let path = w.cfg.dir.join("manifest.json");
-    let Some(old) = std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|t| JsValue::parse(&t).ok())
-    else {
+    let old = match std::fs::read_to_string(&path) {
+        Ok(t) => {
+            Some(JsValue::parse(&t).map_err(|e| format!("{}: unreadable ({e})", text(&path)))?)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(format!("{}: unreadable ({e})", text(&path))),
+    };
+    let Some(old) = old else {
         let mut m = fresh;
         if let JsValue::Object(o) = &mut m {
             o.insert("startedAt", JsValue::str(humanify_ag_model::js::iso_now()));
@@ -449,10 +453,10 @@ fn preflight(ctx: &Ctx, frozen: &Path, dir: &Path) -> Result<(), String> {
     let done = crate::proc::run(&s);
     let ok = matches!(&done, Ok(d) if d.status.success());
     if let Ok(d) = &done {
-        let _ = write(
+        write(
             &dir.join("preflight.log"),
             &String::from_utf8_lossy(&d.stdout),
-        );
+        )?;
     }
     if ok {
         Ok(())
@@ -500,7 +504,9 @@ fn boot_record(w: &Walk, tree: &Path, v: &str, dest: &Path) -> JsValue {
         ("ok", JsValue::Bool(vok && pok)),
         ("model", JsValue::str(cfg.boot_model.as_str())),
     ]);
-    let _ = write(dest, &format!("{}\n", js_pretty(&rec)));
+    if let Err(e) = write(dest, &format!("{}\n", js_pretty(&rec))) {
+        ctx.say(format!("  !! boot record NOT written: {e}"));
+    }
     ctx.say(format!(
         "  boot: {}  --version={vok} -p={pok}",
         if vok && pok { "OK" } else { "FAIL" }
@@ -582,11 +588,11 @@ fn hop(w: &Walk, v: &str, prior: Option<&str>) -> Result<(), String> {
     };
     leg::write_spec(&spec, &runs.join(format!("{v}.runcfg.json")))?;
     remove(&runs.join(format!("{v}-run.json")));
-    let outcome = leg::run_leg_with_prior_kind(
+    let outcome = leg::run_leg(
         ctx,
         &spec,
         &w.pairs.llm.api_key,
-        prior.map(|_| WALK_PRIOR_KIND),
+        prior.map_or("unknown", |_| WALK_PRIOR_KIND),
     );
     let rc = outcome.as_ref().map_or(-1, |o| o.exit_code);
     let tree_ok = tree.join(".humanify/humanified.js").is_file()

@@ -71,10 +71,7 @@ fn repo_file(rel: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
-const GOLDENS: [&str; 2] = [
-    "dev/eval/goldens/run-launch.golden.txt",
-    "dev/eval/goldens/run-launch.seeded-base.golden.txt",
-];
+const GOLDENS: [&str; 1] = ["dev/eval/goldens/run-launch.golden.txt"];
 
 /// One launch: its argv and the TOML of the `--config` file it passed
 /// (empty: none).
@@ -210,7 +207,7 @@ fn recorded_corpus() -> Vec<(String, Launch)> {
         .unwrap_or_else(|e| panic!("{dir}: {e}"))
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .filter(|n| n.ends_with(".golden.txt"))
-        // the two run-launch goldens share the directory but are run.sh's
+        // the run-launch golden shares the directory but is run.sh's
         // format, read through GOLDENS above
         .filter(|n| !GOLDENS.iter().any(|g| g.ends_with(n.as_str())))
         .collect();
@@ -515,7 +512,7 @@ fn every_golden_launch_resolves_to_a_captured_launchs_settings() {
         .collect();
     let launches = golden_corpus();
     assert!(
-        launches.len() >= 14,
+        launches.len() >= 12,
         "the goldens shrank: {}",
         launches.len()
     );

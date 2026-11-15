@@ -284,3 +284,57 @@ fn a_cache_another_live_run_holds_is_refused() {
         rec.calls()
     );
 }
+
+/// The prior is the pair's REBASED tree, never a non-rebased tree of the
+/// same version under the prior root: with no `<from>-rebased` the run is
+/// refused, naming the one path it read.
+#[test]
+fn a_prior_root_without_the_rebased_tree_is_refused_never_substituted() {
+    let rec = Rec::new("neutrality-no-rebased");
+    corpus(&rec);
+    let priors = rec.root.join("priors");
+    std::fs::rename(priors.join("2.1.85-rebased"), priors.join("2.1.85")).unwrap();
+    let repo = sandbox(&rec, Baseline::New);
+    let ctx = rec.ctx(&repo);
+    let parsed = crate::settings::parse("eval neutrality", ACCEPTS, &[], &args(&rec, &[])).unwrap();
+    let pairs = crate::committed::eval::pairs(&repo).unwrap().value;
+    let cfg = config_from(&parsed, &pairs).unwrap();
+    let status = run(&ctx, &cfg, &pairs, &JsValue::Null);
+    let said = ctx.transcript();
+    assert_ne!(status, 0, "{said}");
+    assert!(
+        said.contains(&format!(
+            "no prior bundle at {}/2.1.85-rebased/.humanify/humanified.js",
+            priors.display()
+        )),
+        "{said}"
+    );
+    assert!(
+        !rec.calls().contains(" :: "),
+        "nothing launched: {}",
+        rec.calls()
+    );
+}
+
+/// A leg binary whose `--help` does not run is refused: an empty help text
+/// is never read as a legacy binary's (which would launch it with flags).
+#[test]
+fn a_leg_whose_help_probe_fails_is_refused_never_read_as_legacy() {
+    let rec = Rec::new("neutrality-help-fails");
+    corpus(&rec);
+    let repo = sandbox(&rec, Baseline::New);
+    let bin = crate::runners::recording_test::BIN_RECORDER.replace(
+        "if [[ \"${1:-}\" == \"--help\" ]]; then\n",
+        "if [[ \"${1:-}\" == \"--help\" ]]; then\n  exit 1\n",
+    );
+    crate::runners::recording_test::write_exec(&rec.root.join("bin-recorder"), &bin);
+    let ctx = rec.ctx(&repo);
+    let parsed = crate::settings::parse("eval neutrality", ACCEPTS, &[], &args(&rec, &[])).unwrap();
+    let pairs = crate::committed::eval::pairs(&repo).unwrap().value;
+    let cfg = config_from(&parsed, &pairs).unwrap();
+    let status = run(&ctx, &cfg, &pairs, &JsValue::Null);
+    let said = ctx.transcript();
+    assert_ne!(status, 0, "{said}");
+    assert!(said.contains("--help did not run"), "{said}");
+    assert!(!rec.calls().contains("--split"), "{}", rec.calls());
+}

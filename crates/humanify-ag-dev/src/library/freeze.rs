@@ -3,7 +3,7 @@
 //! under `<DATA>/truth/`, and write its manifest (`corpus-<corpus>.json`)
 //! with every sha256 — exactly as the Python freezers did:
 //! experiments/096 `corpus.py` (`map_truth`, `sources_table`,
-//! `install_versions`, `pnpm_version`, `cc_truth`, `freeze_cc`),
+//! `install_versions`, `cc_truth`, `freeze_cc`),
 //! experiments/181 `kind_corpus.py freeze` (the `kind-*` corpora) and
 //! experiments/150 `bun_corpus.py freeze` (`bun-dev`, `bun-held`).
 //!
@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::decoder::{self, Inner};
+use super::decoder;
 use super::py::{compact, dict, from_json, int, kv, opt_s, s};
 use super::pypath;
 use crate::json::py::PyValue;
@@ -27,8 +27,6 @@ use crate::json::py::PyValue;
 pub enum How {
     /// Source-map truth; versions from the install under `base`.
     Install { base: String, app: Option<String> },
-    /// Source-map truth through an inner map; versions from pnpm paths.
-    Pnpm { inner: String },
     /// Claude Code's labelled sample.
     Cc { neg: String },
 }
@@ -115,25 +113,6 @@ fn install_version(base: &str, root: &str, cache: &mut BTreeMap<String, PyValue>
     v
 }
 
-/// corpus.py `pnpm_version` (`re.search(r"\.pnpm/([^/]+)/node_modules/", root)`).
-fn pnpm_version(root: &str) -> PyValue {
-    let mut from = 0;
-    while let Some(i) = root[from..].find(".pnpm/") {
-        let at = from + i + ".pnpm/".len();
-        let seg_end = root[at..].find('/').map_or(root.len(), |j| at + j);
-        if seg_end > at && root[seg_end..].starts_with("/node_modules/") {
-            let at = root[at..seg_end].replace('+', "/");
-            let at = at.split('_').next().unwrap_or("");
-            return match at.get(1..).and_then(|x| x.rfind('@')) {
-                Some(i) => s(&at[i + 2..]),
-                None => PyValue::Null,
-            };
-        }
-        from = from + i + 1;
-    }
-    PyValue::Null
-}
-
 /// Python's text-mode read: UTF-8, universal newlines.
 fn read_text(p: &Path) -> Result<String, String> {
     let t = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
@@ -158,20 +137,6 @@ fn map_truth(js: &str, how: &How) -> Result<PyValue, String> {
     let text = read_text(Path::new(js))?;
     let smap = super::corpus::read_map(Path::new(&format!("{js}.map")))?;
     let (segs, sources, app, mut version_of): (_, _, Option<String>, VersionOf) = match how {
-        How::Pnpm { inner } => {
-            let imap = super::corpus::read_map(Path::new(inner))?;
-            let inner_lines = Inner {
-                lines: decoder::decode(&imap.mappings, false)?,
-                offset: 1,
-            };
-            let segs = decoder::segments(&text, &smap.mappings, Some(&inner_lines), false, false)?;
-            (
-                segs,
-                imap.sources,
-                None,
-                Box::new(|root: &str, _: &str| pnpm_version(root)),
-            )
-        }
         How::Install { base, app } => {
             let segs = decoder::segments(&text, &smap.mappings, None, false, false)?;
             let base = base.clone();

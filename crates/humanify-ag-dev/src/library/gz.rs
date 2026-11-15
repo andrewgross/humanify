@@ -45,6 +45,7 @@ pub fn write_gz(path: &Path, data: &[u8]) -> Result<(), String> {
 }
 
 /// The decompressed bytes of a gzip file.
+#[cfg(test)]
 pub fn read_gz(path: &Path) -> Result<Vec<u8>, String> {
     use std::io::Read;
     let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;

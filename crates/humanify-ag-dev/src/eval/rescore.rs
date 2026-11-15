@@ -2,10 +2,10 @@
 //! (TS: `170-app-vendor-split/rescore.ts`) — nothing re-runs, no binary is
 //! involved. Writes the new cards, each pair's report page, and copies of
 //! the label's run records (statuses, verdicts, manifests, provenance) to
-//! the output label directory, then summarizes it. For every pair with an
-//! old card it prints the old -> new value of each headline KPI (a v1 card
-//! re-scored by v2 is the scorer-version comparison), and it checks every
-//! partition of the new card.
+//! the output label directory, and an identity record beside every new
+//! card, then summarizes it. For every pair with an old card it prints the
+//! old -> new value of each headline KPI (the scorer-version comparison),
+//! and it checks every partition of the new card.
 
 use std::path::{Path, PathBuf};
 
@@ -19,7 +19,6 @@ use super::kpis::KPIS;
 fn is_run_record(name: &str) -> bool {
     name == "commit.txt"
         || name == "pipeline.json"
-        || name == "preflight-status.json"
         || [
             "-run.json",
             "-run-status.json",
@@ -140,7 +139,7 @@ fn jobs(cards: &Path, out: &Path) -> Result<Vec<Job>, String> {
 fn kpi_delta(old: &JsValue, new: &JsValue) -> Vec<String> {
     KPIS.iter()
         .filter_map(|k| {
-            let (a, b) = (k.from_card(old)?, k.from_card(new)?);
+            let (a, b) = (k.of_card(old)?, k.of_card(new)?);
             Some(format!(
                 "{}={}->{}{}",
                 k.key,
@@ -185,10 +184,11 @@ pub fn rescore(cards: &Path, work: &Path, out: &Path) -> Result<(Vec<String>, bo
             t0.elapsed().as_secs()
         ));
         if let Some(old) = &job.old {
+            let v = |c: &JsValue| scorer_version(c).map_or("?".into(), |n| n.to_string());
             lines.push(format!(
                 "  v{} -> v{}: {}",
-                scorer_version(old),
-                scorer_version(&card),
+                v(old),
+                v(&card),
                 kpi_delta(old, &card).join(" ")
             ));
         }
@@ -212,7 +212,43 @@ pub fn rescore(cards: &Path, work: &Path, out: &Path) -> Result<(Vec<String>, bo
             ));
         }
     }
+    lines.extend(identities(cards, out)?);
     Ok((lines, ok))
+}
+
+/// An identity record beside every card in `out`: the old label's record
+/// (`cards/<v>.identity.json`) with this scorer's version, or, for a card
+/// scored before identities, one derived from the copied records. Returns
+/// a line per derived record.
+fn identities(cards: &Path, out: &Path) -> Result<Vec<String>, String> {
+    let derived = crate::identity::derive::eval_label(out)?;
+    let mut lines = Vec::new();
+    for mut id in derived {
+        let v = id
+            .corpus
+            .entry
+            .rsplit("->")
+            .next()
+            .unwrap_or("")
+            .to_string();
+        let old = cards.join(format!("{v}.identity.json"));
+        if old.is_file() {
+            let text =
+                std::fs::read_to_string(&old).map_err(|e| format!("{}: {e}", old.display()))?;
+            let mut kept = crate::identity::Identity::from_text(&text)
+                .map_err(|e| format!("{}: {e}", old.display()))?;
+            kept.scorer.version = id.scorer.version.clone();
+            id = kept;
+        } else {
+            lines.push(format!(
+                "{}: identity derived from its records (the label was scored before identities)",
+                id.corpus.entry
+            ));
+        }
+        let path = out.join(format!("{v}.identity.json"));
+        std::fs::write(&path, id.to_text()).map_err(|e| format!("{}: {e}", path.display()))?;
+    }
+    Ok(lines)
 }
 
 #[cfg(test)]

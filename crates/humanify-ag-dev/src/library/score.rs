@@ -1942,12 +1942,6 @@ fn timing_doc(timing: &[(String, PyValue)], private: bool) -> PyValue {
     dict(e)
 }
 
-/// Read a written card back (determinism, leaderboard).
-pub fn read_card(path: &Path) -> Result<PyValue, String> {
-    let t = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    PyValue::parse(&t).map_err(|e| format!("{}: {e}", path.display()))
-}
-
 /// Proof (b) as a self-test: re-score `label` into `scratch` and compare
 /// its cards and summary byte for byte with the committed ones (a private
 /// corpus's cards: the ones beside its reports). Ok: one verdict line.

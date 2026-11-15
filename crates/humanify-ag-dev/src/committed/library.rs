@@ -56,7 +56,8 @@ const fn corpus(name: &'static str, suffix: &'static str) -> Corpus {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DataRoots {
-    pub about: String,
+    #[serde(rename = "about")]
+    pub _about: String,
     pub roots: BTreeMap<String, String>,
 }
 
@@ -102,7 +103,6 @@ pub fn bundev_list(repo: &Path) -> Result<Loaded<Vec<(String, PathBuf)>>, String
     Ok(Loaded {
         value: rows,
         path: text.path,
-        sha256: text.sha256,
     })
 }
 
@@ -118,11 +118,15 @@ pub fn corpus_named(name: &str) -> Result<&'static Corpus, String> {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CorpusManifest {
-    pub schema: String,
+    #[serde(rename = "schema")]
+    pub _schema: String,
     /// Absent on the original `dev` manifest.
-    pub corpus: Option<String>,
-    pub frozen: Option<Value>,
-    pub note: Option<String>,
+    #[serde(rename = "corpus")]
+    pub _corpus: Option<String>,
+    #[serde(rename = "frozen")]
+    pub _frozen: Option<Value>,
+    #[serde(rename = "note")]
+    pub _note: Option<String>,
     pub entries: Vec<CorpusEntry>,
 }
 
@@ -133,15 +137,21 @@ pub struct CorpusEntry {
     pub id: String,
     pub set: String,
     pub bundler: String,
-    pub description: String,
+    #[serde(rename = "description")]
+    pub _description: String,
     pub files: CorpusFiles,
     pub truth: Truth,
-    pub app_package: Option<String>,
+    #[serde(rename = "appPackage")]
+    pub _app_package: Option<String>,
     pub built_with: Option<String>,
-    pub kind: Option<String>,
-    pub minifier: Option<String>,
-    pub stratum: Option<String>,
-    pub target: Option<String>,
+    #[serde(rename = "kind")]
+    pub _kind: Option<String>,
+    #[serde(rename = "minifier")]
+    pub _minifier: Option<String>,
+    #[serde(rename = "stratum")]
+    pub _stratum: Option<String>,
+    #[serde(rename = "target")]
+    pub _target: Option<String>,
 }
 
 /// An entry's frozen files.
@@ -380,30 +390,4 @@ pub fn load_corpus(repo: &Path, name: &str) -> Result<LoadedCorpus, String> {
         layers,
         layer_ids,
     })
-}
-
-/// `bands.json`: the library score's band (zero) and its provenance.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct LibraryBands {
-    pub band: f64,
-    pub meaning: String,
-    pub provenance: LibraryBandsProvenance,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct LibraryBandsProvenance {
-    pub binary_sha256: String,
-    pub build_commit: String,
-    pub corpus_sha256: String,
-    pub index_id: String,
-    pub labels: Vec<String>,
-    pub method: String,
-    pub rule: String,
-}
-
-/// Load `bands.json`.
-pub fn bands(repo: &Path) -> Result<Loaded<LibraryBands>, String> {
-    load_json(&repo.join(LIBRARY_DIR).join("bands.json"))
 }

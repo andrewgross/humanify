@@ -11,7 +11,6 @@ pub mod audit15;
 #[rustfmt::skip]
 mod acorn_tables;
 pub mod chained;
-pub mod cjs_placement;
 pub mod copies2;
 pub mod copy_credit;
 pub mod corpus;

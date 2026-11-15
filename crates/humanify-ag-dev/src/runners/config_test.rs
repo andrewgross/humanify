@@ -93,10 +93,8 @@ fn every_score_default_is_resolved_once() {
     let p = pairs();
     let parsed = parse("eval score", SCORE, &[], &a(&["lbl"])).unwrap();
     let c = score_config(&parsed, &p, &ctx()).unwrap();
-    assert_eq!(c.base_mode, "scratch");
     assert_eq!(c.workdir, PathBuf::from(super::score::DEFAULT_WORKDIR));
     assert_eq!(c.inputs_base, p.inputs_base);
-    assert_eq!(c.priors_base, p.priors_base);
     assert!(c.boot_prompt && c.self_hop);
     assert_eq!(c.llm_cache, None, "no cache by default (rule 10)");
     assert_eq!(c.pairs, None);
@@ -107,8 +105,6 @@ fn every_score_default_is_resolved_once() {
         &[],
         &a(&[
             "lbl",
-            "--base-mode",
-            "archive",
             "--no-self-hop",
             "--pairs",
             "85->86,215->216",
@@ -120,7 +116,6 @@ fn every_score_default_is_resolved_once() {
     )
     .unwrap();
     let c = score_config(&parsed, &p, &ctx()).unwrap();
-    assert_eq!(c.base_mode, "archive");
     assert!(!c.self_hop);
     assert_eq!(c.pairs, Some(a(&["85->86", "215->216"])));
     assert_eq!(

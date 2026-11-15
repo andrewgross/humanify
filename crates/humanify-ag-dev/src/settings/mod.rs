@@ -20,7 +20,7 @@ use humanify_ag_cli::registry::flags::{FlagSpec, add_flags, flag_values, specs};
 use humanify_ag_cli::registry::{Registry, Resolved, Val, check_range, resolve};
 use humanify_ag_model::js::{JsObject, JsValue};
 
-pub use keys::{HARNESS, HARNESS_KEYS};
+pub use keys::HARNESS;
 
 static FLAGS: LazyLock<Vec<FlagSpec>> = LazyLock::new(|| specs(&HARNESS));
 

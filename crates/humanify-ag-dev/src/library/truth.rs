@@ -61,7 +61,6 @@ impl Src {
 #[derive(Clone, Debug, Deserialize)]
 pub struct SampleRow {
     pub s: i64,
-    pub e: i64,
     pub b: i64,
     pub stratum: String,
     pub label: String,

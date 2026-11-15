@@ -89,3 +89,139 @@ fn the_fallback_strings_stop_at_400_units() {
         ]
     );
 }
+
+// The test vectors' JSON (strings kept as UTF-16 units).
+#[derive(Debug)]
+enum J {
+    Str(Vec<u16>),
+    List(Vec<J>),
+    Obj(Vec<(String, J)>),
+    Other,
+}
+
+impl J {
+    fn get(&self, k: &str) -> Option<&J> {
+        match self {
+            J::Obj(m) => m.iter().find(|(x, _)| x == k).map(|(_, v)| v),
+            _ => None,
+        }
+    }
+    fn list(&self) -> Option<&[J]> {
+        match self {
+            J::List(xs) => Some(xs),
+            _ => None,
+        }
+    }
+    fn str16(&self) -> Option<&[u16]> {
+        match self {
+            J::Str(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
+struct JParser<'a> {
+    b: &'a [u8],
+    k: usize,
+}
+
+impl JParser<'_> {
+    fn ws(&mut self) {
+        while self.k < self.b.len() && self.b[self.k].is_ascii_whitespace() {
+            self.k += 1;
+        }
+    }
+    fn value(&mut self) -> Result<J, String> {
+        self.ws();
+        let c = *self.b.get(self.k).ok_or("unexpected end of JSON")?;
+        match c {
+            b'{' => {
+                self.k += 1;
+                let mut m = Vec::new();
+                loop {
+                    self.ws();
+                    if self.b.get(self.k) == Some(&b'}') {
+                        self.k += 1;
+                        return Ok(J::Obj(m));
+                    }
+                    let J::Str(key) = self.value()? else {
+                        return Err("a JSON key is not a string".into());
+                    };
+                    self.ws();
+                    self.k += 1; // ':'
+                    let v = self.value()?;
+                    m.push((String::from_utf16_lossy(&key), v));
+                    self.ws();
+                    if self.b.get(self.k) == Some(&b',') {
+                        self.k += 1;
+                    }
+                }
+            }
+            b'[' => {
+                self.k += 1;
+                let mut xs = Vec::new();
+                loop {
+                    self.ws();
+                    if self.b.get(self.k) == Some(&b']') {
+                        self.k += 1;
+                        return Ok(J::List(xs));
+                    }
+                    xs.push(self.value()?);
+                    self.ws();
+                    if self.b.get(self.k) == Some(&b',') {
+                        self.k += 1;
+                    }
+                }
+            }
+            b'"' => {
+                self.k += 1;
+                let mut out: Vec<u16> = Vec::new();
+                let mut run = self.k;
+                loop {
+                    let c = *self.b.get(self.k).ok_or("unterminated JSON string")?;
+                    if c == b'"' || c == b'\\' {
+                        let raw =
+                            std::str::from_utf8(&self.b[run..self.k]).map_err(|e| e.to_string())?;
+                        out.extend(raw.encode_utf16());
+                    }
+                    if c == b'"' {
+                        self.k += 1;
+                        return Ok(J::Str(out));
+                    }
+                    if c == b'\\' {
+                        let e = *self.b.get(self.k + 1).ok_or("bad JSON escape")?;
+                        self.k += 2;
+                        match e {
+                            b'u' => {
+                                let h = std::str::from_utf8(&self.b[self.k..self.k + 4])
+                                    .map_err(|e| e.to_string())?;
+                                out.push(u16::from_str_radix(h, 16).map_err(|e| e.to_string())?);
+                                self.k += 4;
+                            }
+                            b'n' => out.push(10),
+                            b'r' => out.push(13),
+                            b't' => out.push(9),
+                            b'b' => out.push(8),
+                            b'f' => out.push(12),
+                            other => out.push(other as u16),
+                        }
+                        run = self.k;
+                        continue;
+                    }
+                    self.k += 1;
+                }
+            }
+            _ => {
+                // a number, true, false or null: skipped (the vectors read
+                // only strings, lists and objects)
+                while self.k < self.b.len()
+                    && !b",]}".contains(&self.b[self.k])
+                    && !self.b[self.k].is_ascii_whitespace()
+                {
+                    self.k += 1;
+                }
+                Ok(J::Other)
+            }
+        }
+    }
+}

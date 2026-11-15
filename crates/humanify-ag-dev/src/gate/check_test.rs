@@ -79,44 +79,10 @@ fn an_unknown_stage_in_only_is_refused_naming_the_known_ones() {
     assert_eq!(selection(&[]).unwrap(), None);
 }
 
-/// The TS gate's 13 stages, frozen: the stage list `scripts/check.ts`
-/// held when this gate replaced it.
-const TS_STAGES: &[&str] = &[
-    "typecheck",
-    "lint",
-    "rust:fmt",
-    "rust:clippy",
-    "knip",
-    "knip:prod",
-    "census:clones",
-    "census:concurrency",
-    "unit",
-    "rust:unit",
-    "rust:build",
-    "rust:format-golden",
-    "e2e",
-];
-
-/// docs/dev-harness.md §4 (d): every stage of the old gate has a
-/// successor here, or is MOOT with the reason; every successor is a real
-/// stage; and the new stages the design adds are present.
+/// The stages the gate added beside the old ones are present, and the
+/// advisory ones are exactly the reviews.
 #[test]
-fn every_ts_gate_stage_maps_to_a_successor() {
-    let mapped: Vec<&str> = SUCCESSORS.iter().map(|(old, _)| *old).collect();
-    assert_eq!(
-        mapped, TS_STAGES,
-        "the mapping covers the TS gate, in order"
-    );
-    for (old, new) in SUCCESSORS {
-        if let Some(why) = new.strip_prefix("MOOT: ") {
-            assert!(!why.trim().is_empty(), "{old}: MOOT without a reason");
-        } else {
-            assert!(
-                STAGES.iter().any(|s| s.name == *new),
-                "{old} -> {new}: not a stage"
-            );
-        }
-    }
+fn the_added_stages_are_present_and_the_reviews_are_advisory() {
     for new in ["no-private-addresses", "census:slop", "census:comments"] {
         assert!(
             STAGES.iter().any(|s| s.name == new),

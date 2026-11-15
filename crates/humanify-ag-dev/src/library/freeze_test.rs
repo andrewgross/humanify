@@ -28,28 +28,6 @@ fn package_root_is_python_s() {
 }
 
 #[test]
-fn pnpm_version_is_python_s() {
-    let v = |r: &str| match pnpm_version(r) {
-        PyValue::Str(s) => Some(s),
-        _ => None,
-    };
-    assert_eq!(
-        v("/x/.pnpm/foo@1.2.3/node_modules/foo").as_deref(),
-        Some("1.2.3")
-    );
-    assert_eq!(
-        v("/x/.pnpm/@s+b@2.0.0_peer@1/node_modules/@s/b").as_deref(),
-        Some("2.0.0")
-    );
-    assert_eq!(v("/x/.pnpm/nover/node_modules/nover"), None);
-    assert_eq!(v("/x/node_modules/foo"), None);
-    assert_eq!(
-        v("/a/.pnpm/x/y/node_modules/z/.pnpm/q@9/node_modules/q").as_deref(),
-        Some("9")
-    );
-}
-
-#[test]
 fn a_corpus_without_inputs_has_no_recipe() {
     assert!(plan("dev").is_err());
     assert!(plan("test").is_err());

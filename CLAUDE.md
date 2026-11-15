@@ -31,8 +31,7 @@ artifact), run through the alias in `.cargo/config.toml`. It replaced the
 TypeScript / Python / bash harness (`npm run check`, `scripts/check.ts`,
 `experiments/lib/`, the 034 TS scorer, the 096 Python scorer) in harness
 lanes L1-L5 (exp195-exp199, exp203); tag `experiments-code-final` is the last
-tree that has the old harness and the old experiments' code. The old gate's
-13 stages map onto these 12 in `SUCCESSORS` (`gate/check.rs`).
+tree that has the old harness and the old experiments' code.
 
 **Setup, once per clone:**
 
@@ -120,7 +119,6 @@ cargo dev e2e                      # needs rust:build
 
 Dev tools beside the gate (each a `cargo dev` verb; `cargo dev` with no
 arguments prints every verb with what it proves and what it CANNOT prove):
-`ask-trace`, `diff-asks`, `match-truth`, `env-check [--endpoint URL]`,
 `stub-llm serve [--port N]`, `build-bin <ref>`, `run stub`.
 
 ## Validating cross-version changes
@@ -259,14 +257,13 @@ The matcher preflight (the TS fingerprint matcher against real npm packages)
 is RETIRED with the TS matcher it tested; the Rust
 matcher's replacement is an open follow-up
 (`git show 6c4b4d13f:docs/rust-port/19-cutover.md`).
-`--skip-preflight` is refused, naming why.
 
-There is no heap flag: the binary is not a Node process (`--heap-mb`, which
-was inert, is refused). `--no-vendor-score` / `--no-vendor` and `--no-layout`
-are refused too: scorer v2 always scores `vendor/` and the layout block when
-both trees have them (rule 8). There is no host-wide lock (exp205): the coordinating agent decides what runs together, from each verb's `footprint` that `cargo dev` prints (memory, LLM use, time, folders written). Two runs never share a folder by accident: a verb claims the folder it writes (`<folder>.live-run`) and a second run on it is refused at once, naming the first. Run an eval ALONE — a parallel heavy job (a gate batch, another
-eval) has OOM-killed a rebase before and silently degraded a label to the
-archive prior (`ts-control-fec64e5` r1; check eval logs for "rebase FAILED").
+Scorer v2 always scores `vendor/` and the layout block when both trees have
+them (rule 8); a retired flag is an unknown flag, refused. There is no host-wide lock (exp205): the coordinating agent decides what runs together, from each verb's `footprint` that `cargo dev` prints (memory, LLM use, time, folders written). Two runs never share a folder by accident: a verb claims the folder it writes (`<folder>.live-run`) and a second run on it is refused at once, naming the first. Run an eval ALONE — a parallel heavy job (a gate batch, another
+eval) has OOM-killed a rebase before. A failed rebase (or any failed pair)
+fails the run: `eval score` never falls back, names every failed pair in a
+closing `!! eval score FAILED` verdict and exits 1; a missing input for a
+selected pair is refused before anything builds.
 `eval score` already runs its five pairs in parallel lanes
 (`--parallel-pairs`, default 5) with ONE rebase at a time
 (`--parallel-rebases`, default 1): a rebase at 472 requests in flight
@@ -284,8 +281,8 @@ is not the label's, is unknown, or came from a dirty tree; `--force-mixed`
 overrides that, and binary cards never join a pre-cutover TS label. The
 label's `pipeline.json` and every run manifest record the binary's sha256 and
 build commit, and the dev crate's recorder tests (`runners::score_test`) hold
-the launch lines byte-identical to `dev/eval/goldens/run-launch.golden.txt`
-(and `run-launch.seeded-base.golden.txt`), the ones the binary-scored
+the launch lines byte-identical to `dev/eval/goldens/run-launch.golden.txt`,
+the ones the binary-scored
 references ran with. Its default work dir is `/work/eval-work`. A TS-era
 prior is brought across (ledger re-derived, vendor names carried by content)
 or refused with a WARNING line. Details:
@@ -338,9 +335,9 @@ cache or on another version.
 cargo dev eval score <label>    # score current tree on 5 pairs (~95 min names mode, parallel lanes; ~119 min with --parallel-pairs 1, exp207)
 cargo dev eval leaderboard ref-names-40921b9f-r1 <label>
 #   ^ the current reference (names mode, five pairs, scratch bases, scorer v2;
-#     the off-mode one is ref-scratch-0f338ffa-r1-s2, four pairs). Comparing against a SEEDED-base label
-#     (everything before 2026-10-03) needs --base-mode seeded on <label>, or the
-#     leaderboard refuses the mix (--force-mixed to show it anyway)
+#     the off-mode one is ref-scratch-0f338ffa-r1-s2, four pairs). The leaderboard
+#     and bands read each card's <v>.identity.json; a label scored before
+#     identities is refused until `cargo dev eval rescore` re-scores it
 ```
 
 Confirm the **reducible** KPIs (`noise`, `reloc`, `mints`) went **down** and that
@@ -569,30 +566,11 @@ and live on this host only.
 A label that says "current main" ages silently. Re-score and re-point it rather
 than trusting the name.
 
-The eval diffs a freshly-humanified `v` against a base `v-1`, and **how that
-base is built is the run's BASE MODE** (recorded in `pipeline.json` and every
-run manifest; `summarize` prints it first):
-
-- **scratch — the DEFAULT since 2026-10-03.** `cargo dev eval score <label>`
-  rebuilds each `v-1` with the current pipeline and **no prior**, so both
-  sides of every comparison are pure current-pipeline output. A full cold run
-  per base, heavier than the old rebuild.
-- **seeded — `--base-mode seeded`.** Rebuilds `v-1` with the ARCHIVE (July-era TS
-  output) as `--prior-version`, so the base INHERITS the archive's names by
-  exact match — junk half-renames, raw minifier letters. This was the old
-  default, and it was called a "fresh base" when it was not one. Kept,
-  byte-for-byte (`dev/eval/goldens/run-launch.seeded-base.golden.txt`), for
-  comparability.
-- **archive — `--base-mode archive`.** No rebuild; reads ~3.7x worse, warns per pair.
-
-**Every recorded reference was scored on a SEEDED base** — `main-2026-09-18`,
-`rust-relaxed-default-843826be`, `control-843826be-8gpu`,
-`candidate-8af0574f-8gpu` and every label before them that rebuilt its base —
-so each is comparable ONLY to seeded runs. The leaderboard prints each label's
-base and REFUSES labels on different modes unless `--force-mixed` (then a loud
-`MIXED BASE MODES` line); `eval score` refuses to add one mode's cards to a
-label holding another. To compare against those references, score with
-`--base-mode seeded`, or score a scratch control at the base commit. All harness
+The eval diffs a freshly-humanified `v` against a base `v-1` that it
+rebuilds with the current pipeline and **no prior** (a scratch base), so both
+sides of every comparison are pure current-pipeline output. The seeded and
+archive base modes are retired (exp237): labels scored on them (everything
+before 2026-10-03) cannot be compared with current ones. All harness
 configuration is flags parsed upfront (see `cargo dev` with no args);
 ambient env vars are gone and a guard test (`env_guard`) keeps them gone.
 

@@ -225,3 +225,26 @@ fn a_walk_dir_another_live_walk_writes_is_refused() {
         "nothing launched"
     );
 }
+
+/// `--resume` checks the walk's manifest; one that is there but unreadable
+/// is refused, never replaced by a fresh one.
+#[test]
+fn resume_refuses_an_unreadable_manifest_instead_of_starting_over() {
+    let (rec, repo) = setup();
+    let ctx = rec.ctx(&repo);
+    let pairs = crate::committed::eval::pairs(&repo).unwrap().value;
+    let mut c = cfg(&rec, "names", false);
+    c.report = false;
+    assert_eq!(run(&ctx, &c, &pairs), 0, "{}", ctx.transcript());
+    let manifest = c.dir.join("manifest.json");
+    std::fs::write(&manifest, "{ not json").unwrap();
+    let mut again = cfg(&rec, "names", true);
+    again.report = false;
+    assert_eq!(run(&ctx, &again, &pairs), 2, "{}", ctx.transcript());
+    assert!(
+        ctx.transcript().contains("manifest.json: unreadable"),
+        "{}",
+        ctx.transcript()
+    );
+    assert_eq!(read(&manifest), "{ not json", "left as it was");
+}

@@ -343,12 +343,11 @@ pub fn refreeze_misattr13(
 
 /// What the unit-reading builders need beyond the corpus: the run
 /// label(s) whose units they read and copies2's evidence index (each
-/// defaults to what the committed manifest names), and copies2's workers.
+/// defaults to what the committed manifest names).
 #[derive(Clone, Debug, Default)]
 pub struct Options {
     pub units: Option<Vec<String>>,
     pub index: Option<PathBuf>,
-    pub jobs: usize,
 }
 
 /// Every layer kind a builder re-freezes, in build order (layers.sh, then

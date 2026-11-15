@@ -71,16 +71,6 @@ impl Differ {
             .filter(|l| is_marker(l))
             .count())
     }
-
-    /// The changed lines themselves, marker stripped (`< x` -> `x`).
-    pub fn changed_line_texts(&self, a: &Path, b: &Path) -> Result<Vec<String>, String> {
-        Ok(self
-            .normal_diff(a, b)?
-            .split('\n')
-            .filter(|l| is_marker(l))
-            .map(|l| l.get(2..).unwrap_or("").to_string())
-            .collect())
-    }
 }
 
 /// `path` itself, or a CRLF-normalised copy of it in a private scratch dir

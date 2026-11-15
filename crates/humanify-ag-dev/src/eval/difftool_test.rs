@@ -14,12 +14,6 @@ fn changed_lines_count_both_sides_of_a_modified_line() {
     std::fs::write(d.join("b"), "x\nY\nz\nw\n").unwrap();
     let differ = Differ;
     assert_eq!(differ.changed_lines(&d.join("a"), &d.join("b")).unwrap(), 3);
-    assert_eq!(
-        differ
-            .changed_line_texts(&d.join("a"), &d.join("b"))
-            .unwrap(),
-        ["y", "Y", "w"]
-    );
     assert_eq!(differ.changed_lines(&d.join("a"), &d.join("a")).unwrap(), 0);
 }
 
@@ -51,13 +45,6 @@ fn a_long_file_is_charged_its_minimal_edit_not_the_speed_heuristics() {
     let differ = Differ;
     assert_eq!(
         differ.changed_lines(&d.join("a"), &d.join("b")).unwrap(),
-        minimal
-    );
-    assert_eq!(
-        differ
-            .changed_line_texts(&d.join("a"), &d.join("b"))
-            .unwrap()
-            .len(),
         minimal
     );
 }

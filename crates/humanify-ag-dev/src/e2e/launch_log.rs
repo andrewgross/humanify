@@ -134,10 +134,6 @@ impl LaunchLog {
         self.entries.len()
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
     /// The log with each `(from, to)` replaced, in order.
     pub fn normalized(&self, replacements: &[(String, String)]) -> String {
         let mut text = self.entries.concat();
@@ -163,27 +159,6 @@ pub fn first_difference(actual: &str, expected: &str) -> String {
         }
     }
     "no line differs".into()
-}
-
-/// `http://127.0.0.1:<digits>/v1` → `http://127.0.0.1:<PORT>/v1`, every
-/// occurrence.
-pub fn normalize_port(text: &str) -> String {
-    const HEAD: &str = "http://127.0.0.1:";
-    let mut out = String::new();
-    let mut rest = text;
-    while let Some(i) = rest.find(HEAD) {
-        out.push_str(&rest[..i + HEAD.len()]);
-        let after = &rest[i + HEAD.len()..];
-        let digits = after.chars().take_while(char::is_ascii_digit).count();
-        if digits > 0 && after[digits..].starts_with("/v1") {
-            out.push_str("<PORT>");
-            rest = &after[digits..];
-        } else {
-            rest = after;
-        }
-    }
-    out.push_str(rest);
-    out
 }
 
 #[cfg(test)]
