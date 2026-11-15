@@ -5,15 +5,16 @@
 //! (`env`), the one subprocess helper (`proc`), the pipeline-binary builder
 //! (`bin_build`) and the JSON spellings of the records (`json`).
 //!
-//! Only `cli` is public: every other module is crate-private, so rustc's
-//! dead-code lint sees every item nothing reaches.
+//! Only `cli` and `env` (main reads the command line through it) are
+//! public: every other module is crate-private, so rustc's dead-code lint
+//! sees every item nothing reaches.
 
 pub(crate) mod bin_build;
 pub(crate) mod census;
 pub mod cli;
 pub(crate) mod committed;
 pub(crate) mod e2e;
-pub(crate) mod env;
+pub mod env;
 pub(crate) mod eval;
 pub(crate) mod gate;
 pub(crate) mod identity;

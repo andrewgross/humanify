@@ -956,9 +956,9 @@ fn build_bin(parsed: &settings::Parsed) -> (u8, String, String) {
     }
 }
 
-/// The binary's entry: run the verb the command line names.
-pub fn main() -> ExitCode {
-    let (code, stdout, stderr) = dispatch(&env::user_args());
+/// The binary's entry: run the verb `args` names.
+pub fn main(args: &[String]) -> ExitCode {
+    let (code, stdout, stderr) = dispatch(args);
     print!("{stdout}");
     eprint!("{stderr}");
     ExitCode::from(code)
