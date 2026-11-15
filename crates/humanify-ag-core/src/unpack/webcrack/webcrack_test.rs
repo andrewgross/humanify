@@ -5,6 +5,7 @@
 //! of its input — the parent blocks writing, the child blocks writing, and
 //! neither ever returns (concurrency audit 2026-10, finding W1).
 
+use humanify_ag_testkit::ScratchDir;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -99,26 +100,6 @@ fn the_production_deadline_is_thirty_minutes() {
     assert_eq!(WEBCRACK_DEADLINE, Duration::from_secs(30 * 60));
 }
 
-/// A scratch directory, removed on drop.
-struct Scratch(std::path::PathBuf);
-impl Scratch {
-    fn new(tag: &str) -> Self {
-        let p = std::env::temp_dir().join(format!(
-            "humanify-webcrack-{tag}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&p);
-        std::fs::create_dir_all(&p).unwrap();
-        Scratch(p)
-    }
-}
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 /// `target` spelled RELATIVE to this process's working directory (up to
 /// the root, then down), without changing the working directory — tests
 /// run in parallel threads of one process.
@@ -160,12 +141,12 @@ fn webcrack_like_shim(cwd: &std::path::Path) -> WebcrackShim {
 /// written.
 #[test]
 fn a_relative_out_dir_lands_in_the_runs_out_dir_not_the_shims_cwd() {
-    let repo = Scratch::new("repo");
-    let run = Scratch::new("run");
-    let out_abs = run.0.join("out");
+    let repo = ScratchDir::new("repo");
+    let run = ScratchDir::new("run");
+    let out_abs = run.path().join("out");
     let out_rel = relative_to_cwd(&out_abs);
     assert!(out_rel.is_relative());
-    let unpacked = unpack_webcrack("x", &out_rel, &webcrack_like_shim(&repo.0))
+    let unpacked = unpack_webcrack("x", &out_rel, &webcrack_like_shim(repo.path()))
         .expect("the shim's contract line parses");
     assert_eq!(unpacked.files.len(), 1);
     let file = &unpacked.files[0].path;
@@ -175,7 +156,7 @@ fn a_relative_out_dir_lands_in_the_runs_out_dir_not_the_shims_cwd() {
         out_abs.join("deobfuscated.js").is_file(),
         "written in the run's out dir"
     );
-    let stray: Vec<_> = std::fs::read_dir(&repo.0).unwrap().collect();
+    let stray: Vec<_> = std::fs::read_dir(repo.path()).unwrap().collect();
     assert!(
         stray.is_empty(),
         "nothing written in the shim's cwd: {stray:?}"
@@ -187,8 +168,8 @@ fn a_relative_out_dir_lands_in_the_runs_out_dir_not_the_shims_cwd() {
 /// it, never a file the run reads.
 #[test]
 fn a_shim_file_outside_the_out_dir_is_refused() {
-    let run = Scratch::new("outside");
-    let out = run.0.join("out");
+    let run = ScratchDir::new("outside");
+    let out = run.path().join("out");
     let shim = WebcrackShim {
         program: "sh".to_string(),
         args: vec![

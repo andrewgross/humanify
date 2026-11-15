@@ -162,6 +162,13 @@ pub fn describe_structural_divergence(original: &str, generated: &str) -> Option
     let Some(after) = signature_tokens(generated) else {
         return Some("could not recover the token streams to localise the divergence".into());
     };
+    format_divergence(&before, &after)
+}
+
+/// The first-divergence text over two token streams, or `None` when they
+/// are equal: the token index, both tokens quoted, and the context either
+/// side.
+pub fn format_divergence(before: &[String], after: &[String]) -> Option<String> {
     let n = before.len().min(after.len());
     let first = (0..n)
         .find(|&i| before[i] != after[i])
@@ -181,10 +188,10 @@ pub fn describe_structural_divergence(original: &str, generated: &str) -> Option
     };
     Some(format!(
         "  first divergence at token {first} of {lengths}\n    original: {}\n    output:   {}\n    original context: {}\n    output context:   {}",
-        tok(&before),
-        tok(&after),
-        window(&before),
-        window(&after)
+        tok(before),
+        tok(after),
+        window(before),
+        window(after)
     ))
 }
 

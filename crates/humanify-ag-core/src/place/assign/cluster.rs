@@ -14,6 +14,7 @@
 //! `traverseFast` order the references were found in), so the sums add in
 //! the same order.
 
+use crate::ingest::node_type;
 use std::collections::{HashMap, HashSet};
 
 use humanify_ag_model::js::{is_js_whitespace, math_log};
@@ -127,10 +128,6 @@ pub fn scaled_cluster_config(app_lines: usize) -> ClusterConfig {
         folder_window: scaled(reference.folder_window),
         ..reference
     }
-}
-
-fn node_type(v: &Value) -> &str {
-    v.get("type").and_then(Value::as_str).unwrap_or("")
 }
 
 /// `referenceIndices`: per statement, the indices of wrapper-body

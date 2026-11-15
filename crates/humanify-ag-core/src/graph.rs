@@ -35,6 +35,7 @@ mod edges_test;
 #[cfg(test)]
 mod references_test;
 
+use crate::ingest::node_type;
 use std::collections::{BTreeSet, HashMap};
 
 use oxc_ast::AstKind;
@@ -304,7 +305,7 @@ fn index_entry_json<'v>(root: &'v Value, out: &mut HashMap<(u32, u32), Vec<&'v V
     match root {
         Value::Object(fields) => {
             if let (true, Some(s), Some(e)) = (
-                ENTRY_JSON_TYPES.contains(&json_type_of(root)),
+                ENTRY_JSON_TYPES.contains(&node_type(root)),
                 fields.get("start").and_then(Value::as_u64),
                 fields.get("end").and_then(Value::as_u64),
             ) {
@@ -328,10 +329,6 @@ const ENTRY_JSON_TYPES: [&str; 5] = [
     "Property",
 ];
 
-fn json_type_of(value: &Value) -> &str {
-    value.get("type").and_then(Value::as_str).unwrap_or("")
-}
-
 /// An entry's node in the program JSON: the first in pre-order with the
 /// entry's span and one of its kind's types.
 fn find_entry_json<'v>(
@@ -344,7 +341,7 @@ fn find_entry_json<'v>(
         .get(&(entry.span.start, entry.span.end))?
         .iter()
         .copied()
-        .find(|v| types.contains(&json_type_of(v)))
+        .find(|v| types.contains(&node_type(v)))
 }
 
 /// One entry's row outputs: the canonical hash, the placeholder mapping

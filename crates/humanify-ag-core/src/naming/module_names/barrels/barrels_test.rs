@@ -1,10 +1,7 @@
 //! The barrel rule on real barrels of the run-2 eval trees (finding #94).
 
 use super::{evidence_words, rule_candidates, shared_phrase};
-
-fn names(list: &[&str]) -> Vec<String> {
-    list.iter().map(|s| s.to_string()).collect()
-}
+use humanify_ag_testkit::strings;
 
 #[test]
 fn a_barrel_takes_the_words_its_loaded_modules_share() {
@@ -39,7 +36,7 @@ fn a_barrel_takes_the_words_its_loaded_modules_share() {
         (&["error-classes"][..], "error-classes"),
     ] {
         assert_eq!(
-            shared_phrase(&names(loaded)).as_deref(),
+            shared_phrase(&strings(loaded)).as_deref(),
             Some(want),
             "{loaded:?}"
         );
@@ -65,7 +62,7 @@ fn a_barrel_whose_modules_share_nothing_has_no_rule_name() {
         // Nothing but filler and counters.
         &["do-nothing13", "initialize-module", "setup-modules5"][..],
     ] {
-        assert_eq!(shared_phrase(&names(loaded)), None, "{loaded:?}");
+        assert_eq!(shared_phrase(&strings(loaded)), None, "{loaded:?}");
     }
 }
 
@@ -75,15 +72,15 @@ fn filler_and_a_loaded_barrels_index_are_not_evidence() {
     assert_eq!(evidence_words("module-gamma"), None);
     assert_eq!(
         evidence_words("otlp-log-exporter-index"),
-        Some(names(&["otlp", "log", "exporter"]))
+        Some(strings(&["otlp", "log", "exporter"]))
     );
     assert_eq!(
-        shared_phrase(&names(&["otlp-log-exporter-index", "initialize-module"])).as_deref(),
+        shared_phrase(&strings(&["otlp-log-exporter-index", "initialize-module"])).as_deref(),
         Some("otlp-log-exporter")
     );
     assert_eq!(
         rule_candidates("error-classes"),
-        names(&[
+        strings(&[
             "error-classes",
             "error-classes-index",
             "error-classes-exports"

@@ -18,6 +18,7 @@
 //! [`MAX_STRINGS`] strings, and a code excerpt of about
 //! [`EXCERPT_CHARS`] characters.
 
+use crate::ingest::node_type;
 use std::collections::{HashMap, HashSet};
 
 use oxc_span::Span;
@@ -75,10 +76,6 @@ pub struct EvidenceSource<'a, 's> {
     pub helpers: &'a HashSet<BindingId>,
     /// Which module each wrapper binding belongs to.
     wrapper_of: HashMap<BindingId, usize>,
-}
-
-fn node_type(v: &Value) -> &str {
-    v.get("type").and_then(Value::as_str).unwrap_or("")
 }
 
 fn span_of(v: &Value) -> Option<Span> {

@@ -124,3 +124,16 @@ fn an_infinite_number_literal_parses_as_a_number() {
     assert_eq!(init_of(&program, 1)["value"], "1e+400");
     assert_eq!(init_of(&program, 2)["value"], 5);
 }
+
+#[test]
+fn a_json_node_type_is_its_type_string_or_empty() {
+    use crate::ingest::node_type;
+    use serde_json::json;
+    assert_eq!(
+        node_type(&json!({"type": "Identifier", "name": "a"})),
+        "Identifier"
+    );
+    assert_eq!(node_type(&json!({"name": "a"})), "");
+    assert_eq!(node_type(&json!({"type": 3})), "");
+    assert_eq!(node_type(&json!([1, 2])), "");
+}

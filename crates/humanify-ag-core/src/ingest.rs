@@ -60,6 +60,14 @@ pub fn program_estree_json(program: &oxc_ast::ast::Program<'_>) -> serde_json::V
     parse_estree_json(&program.to_estree_json(false, true))
 }
 
+/// An ESTree JSON node's `type` (empty when absent): the one reader every
+/// JSON walk uses.
+pub fn node_type(node: &serde_json::Value) -> &str {
+    node.get("type")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("")
+}
+
 /// Parse oxc's ESTree JSON text. The AST nests hundreds deep, past
 /// serde_json's default recursion limit; unbounded depth is safe (the
 /// input is oxc's own serialization of a program that parsed). Malformed

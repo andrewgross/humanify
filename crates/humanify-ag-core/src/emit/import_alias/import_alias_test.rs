@@ -1,13 +1,10 @@
+use humanify_ag_testkit::strings;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::{
     ImportScope, PriorImportAliases, build_import_aliases, parse_require_aliases,
     read_prior_import_aliases,
 };
-
-fn files(paths: &[&str]) -> Vec<String> {
-    paths.iter().map(|s| s.to_string()).collect()
-}
 
 fn scope(imports: &[(usize, &[usize])], names: &[(usize, &[&str])]) -> ImportScope {
     ImportScope {
@@ -65,7 +62,7 @@ fn the_prior_is_read_per_importer_from_each_files_own_lines() {
     ]
     .into_iter()
     .collect();
-    let got = read_prior_import_aliases(&files(&["src/a.js", "src/b.js", "src/c.js"]), |f| {
+    let got = read_prior_import_aliases(&strings(&["src/a.js", "src/b.js", "src/c.js"]), |f| {
         tree.get(f).map(|s| s.to_string())
     });
     assert_eq!(got["src/a.js"]["src/flags.js"], "srcFlags");
@@ -76,7 +73,7 @@ fn the_prior_is_read_per_importer_from_each_files_own_lines() {
 #[test]
 fn a_name_in_one_importer_widens_only_that_importer() {
     // 0 = src/validatePathVal.js; 1, 2, 3 import it; 3 uses the name.
-    let fs = files(&[
+    let fs = strings(&[
         "src/validatePathVal.js",
         "src/a.js",
         "src/b.js",
@@ -95,7 +92,7 @@ fn a_name_in_one_importer_widens_only_that_importer() {
 #[test]
 fn a_basename_contest_is_settled_per_importer() {
     // Two config.js files: only the importer that requires BOTH widens.
-    let fs = files(&[
+    let fs = strings(&[
         "src/auth/config.js",
         "src/net/config.js",
         "src/x.js",
@@ -110,7 +107,7 @@ fn a_basename_contest_is_settled_per_importer() {
 
 #[test]
 fn a_prior_alias_is_carried_per_importer() {
-    let fs = files(&["src/flags.js", "src/a.js", "src/b.js"]);
+    let fs = strings(&["src/flags.js", "src/a.js", "src/b.js"]);
     let s = scope(&[(1, &[0]), (2, &[0])], &[]);
     let mut prior = PriorImportAliases::new();
     prior.insert(
@@ -130,7 +127,7 @@ fn a_prior_alias_is_carried_per_importer() {
 
 #[test]
 fn a_prior_alias_now_shadowed_or_contested_falls_to_the_ladder() {
-    let fs = files(&["src/a/flags.js", "src/b/flags.js", "src/x.js", "src/y.js"]);
+    let fs = strings(&["src/a/flags.js", "src/b/flags.js", "src/x.js", "src/y.js"]);
     let s = scope(&[(2, &[0, 1]), (3, &[0])], &[(3, &["flags"])]);
     let mut prior = PriorImportAliases::new();
     prior.insert(

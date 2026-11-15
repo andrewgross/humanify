@@ -5,12 +5,9 @@
 use humanify_ag_model::llm::{
     BatchRenameRequest, CalleeSignature, PriorReject, PriorRejects, RenameFailures, StrMap,
 };
+use humanify_ag_testkit::strings;
 
 use super::*;
-
-fn strs(v: &[&str]) -> Vec<String> {
-    v.iter().map(|s| s.to_string()).collect()
-}
 
 fn map(pairs: &[(&str, &str)]) -> StrMap {
     StrMap(
@@ -23,10 +20,10 @@ fn map(pairs: &[(&str, &str)]) -> StrMap {
 
 fn failures(dup: &[&str], inv: &[&str], miss: &[&str], unch: &[&str]) -> RenameFailures {
     RenameFailures {
-        duplicates: strs(dup),
-        invalid: strs(inv),
-        missing: strs(miss),
-        unchanged: strs(unch),
+        duplicates: strings(dup),
+        invalid: strings(inv),
+        missing: strings(miss),
+        unchanged: strings(unch),
         stray_keys: Vec::new(),
     }
 }
@@ -34,8 +31,8 @@ fn failures(dup: &[&str], inv: &[&str], miss: &[&str], unch: &[&str]) -> RenameF
 fn request(code: &str, ids: &[&str], used: &[&str]) -> BatchRenameRequest {
     BatchRenameRequest {
         code: code.into(),
-        identifiers: strs(ids),
-        used_names: strs(used),
+        identifiers: strings(ids),
+        used_names: strings(used),
         ..Default::default()
     }
 }
@@ -49,8 +46,8 @@ fn retry(
     prior: Option<&str>,
     renamed: Option<&StrMap>,
 ) -> String {
-    let ids = strs(ids);
-    let used = strs(used);
+    let ids = strings(ids);
+    let used = strings(used);
     build_batch_rename_retry_prompt(&RetryInput {
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         code,
@@ -173,7 +170,7 @@ fn module_body_caps_used_names() {
         declarations: map(&[("ab", "var ab = 1;")]),
         assignment_context: ArrayRecord(vec![("ab".into(), vec![])]),
         usage_examples: ArrayRecord(vec![("ab".into(), vec![])]),
-        identifiers: strs(&["ab"]),
+        identifiers: strings(&["ab"]),
         used_names: used,
         suggested_names: None,
     };
@@ -436,7 +433,7 @@ fn batch_omits_prior_version_without_context() {
 fn batch_lists_prior_names_for_mechanical_reuse() {
     let mut r = request("function a(b, c) { return b; }", &["a", "b", "c"], &[]);
     r.prior_version_code = Some("function handleError(error) { return error; }".into());
-    r.prior_version_names = Some(strs(&["handleError", "error", "currentFiber"]));
+    r.prior_version_names = Some(strings(&["handleError", "error", "currentFiber"]));
     let p = build_batch_rename_prompt(&r);
     assert!(p.contains("handleError, error, currentFiber"));
     assert!(p.to_lowercase().contains("reuse these names"));
@@ -541,11 +538,11 @@ fn snapshot_first_round_function_prompt() {
     let mut r = request("function a(b) {\n  return b;\n}", &["a", "b"], &["x", "y"]);
     r.callee_signatures = vec![CalleeSignature {
         name: "g".into(),
-        params: strs(&["p", "...q"]),
+        params: strings(&["p", "...q"]),
         snippet: Some("return p;".into()),
     }];
-    r.callsites = strs(&["a(1);"]);
-    r.context_vars = Some(strs(&["var k = 1;"]));
+    r.callsites = strings(&["a(1);"]);
+    r.context_vars = Some(strings(&["var k = 1;"]));
     assert_eq!(
         build_batch_rename_prompt(&r),
         "Analyze this function and suggest descriptive names for ALL listed identifiers:\n\n\
@@ -590,10 +587,10 @@ Names already in use (MUST avoid ALL of these): taken\n\
 fn snapshot_module_level_prompt() {
     let input = ModuleLevelInput {
         declarations: map(&[("ab", "var ab = 1;")]),
-        assignment_context: ArrayRecord(vec![("ab".into(), strs(&["ab = 2;"]))]),
-        usage_examples: ArrayRecord(vec![("ab".into(), strs(&["f(ab)"]))]),
-        identifiers: strs(&["ab"]),
-        used_names: strs(&["ab", "fetchThing"]),
+        assignment_context: ArrayRecord(vec![("ab".into(), strings(&["ab = 2;"]))]),
+        usage_examples: ArrayRecord(vec![("ab".into(), strings(&["f(ab)"]))]),
+        identifiers: strings(&["ab"]),
+        used_names: strings(&["ab", "fetchThing"]),
         suggested_names: Some(map(&[("ab", "count")])),
     };
     assert_eq!(

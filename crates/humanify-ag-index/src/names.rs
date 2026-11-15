@@ -10,13 +10,12 @@
 //!
 //! Builder-only: the pipeline never has a sourcemap.
 
+use humanify_ag_core::babel_view::{line_of, line_starts};
 use std::collections::HashMap;
 use std::path::Path;
 
 use humanify_ag_core::ingest::Ingest;
-use humanify_ag_core::libindex::names::{
-    OrigDecl, RestoredName, declared_decls, line_of, line_starts, names_for_print,
-};
+use humanify_ag_core::libindex::names::{OrigDecl, RestoredName, declared_decls, names_for_print};
 use oxc_span::Span;
 
 use crate::sourcemap::SourceMap;

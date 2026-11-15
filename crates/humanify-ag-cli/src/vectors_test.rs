@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::output_validation::{
     FreeNameMeasure, OutputParseFailure, OutputSemanticFailure, ParserError, build_excerpt,
-    compare_semantics, describe_parse_error, format_divergence,
+    compare_semantics, describe_parse_error,
 };
 use crate::pipeline_config::pipeline_selection_record;
 use crate::progress::{LineRenderer, ProgressRenderer, TtyRenderer};
@@ -21,6 +21,7 @@ use crate::report::{
 };
 use crate::surface::CommandOptions;
 use crate::writers::{PlacementStats, StageHashes, stage_fingerprint};
+use humanify_ag_core::naming::driver::validate::format_divergence;
 use humanify_ag_model::jsshape::JsType;
 
 fn vectors() -> Value {

@@ -3,6 +3,7 @@
 //! extract-then-parallel snapshot's byte-identity pins (perf-inventory
 //! item 2: the module lanes' per-group windowing).
 
+use humanify_ag_testkit::strings;
 use std::collections::HashMap;
 
 use super::{ProximityBinding, ProximityWindow, get_proximate_used_names};
@@ -14,10 +15,6 @@ fn binding(line: u32, refs: &[u32]) -> ProximityBinding {
     }
 }
 
-fn names(list: &[&str]) -> Vec<String> {
-    list.iter().map(|s| s.to_string()).collect()
-}
-
 fn run(
     all: &[&str],
     lines: &[u32],
@@ -26,7 +23,7 @@ fn run(
     eligible: impl Fn(&str) -> bool,
 ) -> Vec<String> {
     get_proximate_used_names(
-        &names(all),
+        &strings(all),
         lines,
         |n| bindings.get(n).cloned(),
         total,
@@ -64,21 +61,21 @@ fn excludes_eligible_names() {
         ("myVar", binding(50, &[])),
     ]);
     let out = run(&["a", "b", "c", "myVar"], &[50], &b, 200, |n| n.len() == 1);
-    assert_eq!(out, names(&["myVar"]));
+    assert_eq!(out, strings(&["myVar"]));
 }
 
 #[test]
 fn includes_names_within_the_radius_only() {
     let b = HashMap::from([("nearVar", binding(55, &[])), ("farVar", binding(500, &[]))]);
     let out = run(&["nearVar", "farVar"], &[50], &b, 200, |n| n.len() == 1);
-    assert_eq!(out, names(&["nearVar"]));
+    assert_eq!(out, strings(&["nearVar"]));
 }
 
 #[test]
 fn includes_a_name_whose_reference_is_near() {
     let b = HashMap::from([("refVar", binding(500, &[45]))]);
     let out = run(&["refVar"], &[50], &b, 200, |n| n.len() == 1);
-    assert_eq!(out, names(&["refVar"]));
+    assert_eq!(out, strings(&["refVar"]));
 }
 
 #[test]
@@ -89,7 +86,7 @@ fn returns_every_preserved_name_below_the_threshold() {
         ("a", binding(50, &[])),
     ]);
     let out = run(&["nearVar", "farVar", "a"], &[50], &b, 50, |n| n.len() == 1);
-    assert_eq!(out, names(&["nearVar", "farVar"]));
+    assert_eq!(out, strings(&["nearVar", "farVar"]));
 }
 
 #[test]
@@ -100,7 +97,7 @@ fn an_absent_binding_is_included_even_when_named_after_object_prototype() {
     // it).
     let b: HashMap<&str, ProximityBinding> = HashMap::new();
     let out = run(&["missingVar", "toString"], &[50], &b, 200, |_| false);
-    assert_eq!(out, names(&["missingVar", "toString"]));
+    assert_eq!(out, strings(&["missingVar", "toString"]));
 }
 
 // ---------------------------------------------------------------------
@@ -127,7 +124,7 @@ fn serial_windowed(
     droppable: impl Fn(&str) -> bool + Clone,
 ) -> Vec<String> {
     get_proximate_used_names(
-        &names(all),
+        &strings(all),
         lines,
         |n| bindings.get(n).cloned(),
         total,
@@ -142,7 +139,7 @@ fn snapshot_over(
     total: usize,
     droppable: impl Fn(&str) -> bool + Clone,
 ) -> ProximityWindow {
-    ProximityWindow::new(names(all), total, droppable, |n| bindings.get(n).cloned())
+    ProximityWindow::new(strings(all), total, droppable, |n| bindings.get(n).cloned())
 }
 
 #[test]

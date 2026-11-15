@@ -26,11 +26,11 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use oxc_ast::AstKind;
 use oxc_ast::ast::{BindingPattern, PropertyKey};
-use oxc_semantic::{AstNodes, NodeId, Semantic};
+use oxc_semantic::{NodeId, Semantic};
 use oxc_span::GetSpan;
 
 use super::hunks::PositionCandidate;
-use crate::babel_view::DiffLines;
+use crate::babel_view::{DiffLines, parent};
 use crate::rename::validated::RenameState;
 use crate::rename::validated::scopes::{BScopeId, BindingId, SiteType};
 
@@ -130,11 +130,6 @@ pub fn identifier_sites<'a>(semantic: &'a Semantic<'_>, state: &RenameState) -> 
     }
     out.sort_by_key(|(rank, s)| (s.start, *rank));
     out.into_iter().map(|(_, s)| s).collect()
-}
-
-fn parent(nodes: &AstNodes<'_>, id: NodeId) -> Option<NodeId> {
-    let p = nodes.parent_id(id);
-    (p != id).then_some(p)
 }
 
 fn key_name(key: &PropertyKey<'_>) -> Option<String> {

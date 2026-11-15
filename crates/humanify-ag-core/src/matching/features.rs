@@ -48,6 +48,7 @@
 //! symbol tables: an identifier occurrence is bound iff its span start
 //! holds a declaration or a resolved reference.
 
+use crate::ingest::node_type;
 use serde_json::Value;
 
 use super::StructuralFeatures;
@@ -90,7 +91,7 @@ pub fn structural_features_of(root: &Value, tables: &SymbolTables) -> Structural
         .or_else(|| root.get("params"));
     if let Some(Value::Array(items)) = params {
         walk.features.arity = items.len() as u32;
-        walk.features.has_rest_param = items.iter().any(|p| type_of(p) == Some("RestElement"));
+        walk.features.has_rest_param = items.iter().any(|p| node_type(p) == "RestElement");
     }
 
     collect(root, None, &mut walk);
@@ -136,9 +137,10 @@ fn collect(value: &Value, parent: Option<&Value>, walk: &mut FeatureWalk<'_>) {
     let Some(map) = value.as_object() else {
         return;
     };
-    let Some(ntype) = type_of(value) else {
+    let ntype = node_type(value);
+    if ntype.is_empty() {
         return;
-    };
+    }
     collect_control_flow(ntype, map, walk);
     collect_literals(ntype, map, parent, walk);
     collect_property_access(ntype, map, walk);
@@ -164,10 +166,6 @@ fn visit_value(value: &Value, parent: Option<&Value>, walk: &mut FeatureWalk<'_>
         Value::Object(_) => collect(value, parent, walk),
         _ => {}
     }
-}
-
-fn type_of(value: &Value) -> Option<&str> {
-    value.get("type").and_then(Value::as_str)
 }
 
 fn is_true(map: &serde_json::Map<String, Value>, key: &str) -> bool {
@@ -236,7 +234,7 @@ fn collect_literals(
     match map.get("value") {
         Some(Value::String(s)) => {
             let parent_is_directive = parent
-                .map(|p| type_of(p) == Some("ExpressionStatement") && p.get("directive").is_some())
+                .map(|p| node_type(p) == "ExpressionStatement" && p.get("directive").is_some())
                 .unwrap_or(false);
             if !parent_is_directive {
                 walk.features.string_literals.push(s.clone());
@@ -287,10 +285,10 @@ fn collect_call_patterns(
         return;
     }
     let callee = json_unparen(map.get("callee").unwrap_or(&Value::Null));
-    match type_of(callee) {
+    match node_type(callee) {
         // A bound callee whose name collides with a known global must not
         // leak its current name into the feature (:233-236).
-        Some("Identifier") => {
+        "Identifier" => {
             if let Some(name) = identifier_name(callee)
                 && is_fingerprint_global(name)
                 && !is_bound(walk, callee)
@@ -298,7 +296,7 @@ fn collect_call_patterns(
                 walk.features.external_calls.push(name.to_string());
             }
         }
-        Some("MemberExpression") => collect_member_callee(callee, walk),
+        "MemberExpression" => collect_member_callee(callee, walk),
         _ => {}
     }
 }
@@ -316,7 +314,7 @@ fn collect_member_callee(callee: &Value, walk: &mut FeatureWalk<'_>) {
         return;
     };
     let object = json_unparen(map.get("object").unwrap_or(&Value::Null));
-    if type_of(object) == Some("Identifier")
+    if node_type(object) == "Identifier"
         && let Some(obj_name) = identifier_name(object)
         && is_fingerprint_global(obj_name)
         && !is_bound(walk, object)
@@ -343,7 +341,7 @@ fn is_bound(walk: &FeatureWalk<'_>, identifier: &Value) -> bool {
 }
 
 fn identifier_name(value: &Value) -> Option<&str> {
-    if type_of(value) == Some("Identifier") {
+    if node_type(value) == "Identifier" {
         value.get("name").and_then(Value::as_str)
     } else {
         None
@@ -354,7 +352,7 @@ fn identifier_name(value: &Value) -> Option<&str> {
 /// babel's parser never produces them.
 fn json_unparen(value: &Value) -> &Value {
     let mut cur = value;
-    while type_of(cur) == Some("ParenthesizedExpression") {
+    while node_type(cur) == "ParenthesizedExpression" {
         match cur.get("expression") {
             Some(e) => cur = e,
             None => break,
@@ -381,7 +379,7 @@ fn spine_optional(map: &serde_json::Map<String, Value>) -> bool {
 fn spine_child(child: Option<&Value>) -> bool {
     match child {
         // A paren breaks the optional chain.
-        Some(c) if type_of(c) == Some("ParenthesizedExpression") => false,
+        Some(c) if node_type(c) == "ParenthesizedExpression" => false,
         Some(c) => c.as_object().map(spine_optional).unwrap_or(false),
         None => false,
     }
@@ -400,7 +398,7 @@ pub fn cfg_shape(root: &Value) -> String {
         .and_then(|v| v.get("body"))
         .unwrap_or_else(|| root.get("body").unwrap_or(&Value::Null));
     let mut shapes: Vec<&'static str> = Vec::new();
-    if type_of(body) == Some("BlockStatement") {
+    if node_type(body) == "BlockStatement" {
         walk_statements(body.get("body"), &mut shapes);
     } else if body.is_object() {
         // Arrow function with expression body (:456-459).
@@ -431,8 +429,8 @@ fn walk_statement(stmt: &Value, shapes: &mut Vec<&'static str>) {
         let Some(map) = stmt.as_object() else {
             return;
         };
-        match type_of(stmt) {
-            Some("IfStatement") => {
+        match node_type(stmt) {
+            "IfStatement" => {
                 shapes.push("if");
                 walk_block(map.get("consequent"), shapes);
                 // alternate is `null` when absent.
@@ -441,15 +439,15 @@ fn walk_statement(stmt: &Value, shapes: &mut Vec<&'static str>) {
                     walk_block(map.get("alternate"), shapes);
                 }
             }
-            Some("DoWhileStatement") => {
+            "DoWhileStatement" => {
                 shapes.push("do");
                 walk_block(map.get("body"), shapes);
             }
-            Some("ForStatement" | "WhileStatement" | "ForOfStatement" | "ForInStatement") => {
+            "ForStatement" | "WhileStatement" | "ForOfStatement" | "ForInStatement" => {
                 shapes.push("loop");
                 walk_block(map.get("body"), shapes);
             }
-            Some("TryStatement") => {
+            "TryStatement" => {
                 shapes.push("try");
                 walk_block(map.get("block"), shapes);
                 if map.get("handler").map(|h| h.is_object()).unwrap_or(false) {
@@ -461,7 +459,7 @@ fn walk_statement(stmt: &Value, shapes: &mut Vec<&'static str>) {
                     walk_block(map.get("finalizer"), shapes);
                 }
             }
-            Some("SwitchStatement") => {
+            "SwitchStatement" => {
                 shapes.push("switch");
                 if let Some(Value::Array(cases)) = map.get("cases") {
                     for case in cases {
@@ -475,7 +473,7 @@ fn walk_statement(stmt: &Value, shapes: &mut Vec<&'static str>) {
                     }
                 }
             }
-            _ => encode_simple_statement(type_of(stmt), shapes),
+            _ => encode_simple_statement(node_type(stmt), shapes),
         }
     }
 }
@@ -484,7 +482,7 @@ fn walk_statement(stmt: &Value, shapes: &mut Vec<&'static str>) {
 /// wrapped in a one-element list.
 fn walk_block(node: Option<&Value>, shapes: &mut Vec<&'static str>) {
     match node {
-        Some(block) if type_of(block) == Some("BlockStatement") => {
+        Some(block) if node_type(block) == "BlockStatement" => {
             walk_statements(block.get("body"), shapes);
         }
         Some(stmt) if stmt.is_object() => walk_statement(stmt, shapes),
@@ -495,12 +493,12 @@ fn walk_block(node: Option<&Value>, shapes: &mut Vec<&'static str>) {
 /// TS `encodeSimpleStatement` (:386): only the four abrupt-completion
 /// statements contribute; everything else (expression statements, labels,
 /// declarations, class/function declarations) contributes nothing.
-fn encode_simple_statement(ntype: Option<&str>, shapes: &mut Vec<&'static str>) {
+fn encode_simple_statement(ntype: &str, shapes: &mut Vec<&'static str>) {
     match ntype {
-        Some("ReturnStatement") => shapes.push("ret"),
-        Some("ThrowStatement") => shapes.push("throw"),
-        Some("BreakStatement") => shapes.push("break"),
-        Some("ContinueStatement") => shapes.push("cont"),
+        "ReturnStatement" => shapes.push("ret"),
+        "ThrowStatement" => shapes.push("throw"),
+        "BreakStatement" => shapes.push("break"),
+        "ContinueStatement" => shapes.push("cont"),
         _ => {}
     }
 }

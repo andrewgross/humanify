@@ -15,6 +15,7 @@
 //!
 //! Launch parity with the commander port is `launch_parity_test.rs`.
 
+use humanify_ag_testkit::strings;
 use serde_json::Value;
 
 use crate::config::file::{Kind, Val};
@@ -24,12 +25,8 @@ use crate::surface::{
     FLAGS, PipelineParse, help_text, package_version, parse_pipeline, short_help_text,
 };
 
-fn argv(a: &[&str]) -> Vec<String> {
-    a.iter().map(|s| s.to_string()).collect()
-}
-
 fn parse_opts(a: &[&str]) -> CommandOptions {
-    match parse_pipeline(&argv(a)) {
+    match parse_pipeline(&strings(a)) {
         PipelineParse::Run { opts, .. } => *opts,
         PipelineParse::Exit { code, stderr, .. } => {
             panic!("{a:?} did not parse (exit {code}):\n{stderr}")
@@ -40,7 +37,7 @@ fn parse_opts(a: &[&str]) -> CommandOptions {
 /// A refused argv: exit 1 (usage errors keep the pipeline's exit-1
 /// contract) and the stderr, which must name `names` (the bad option).
 fn refusal(a: &[&str], names: &str) -> String {
-    match parse_pipeline(&argv(a)) {
+    match parse_pipeline(&strings(a)) {
         PipelineParse::Exit {
             code,
             stdout,
@@ -294,7 +291,7 @@ fn help_matches_the_golden_and_prints_to_stdout() {
         ("--help", "humanify-ag.txt"),
         ("-h", "humanify-ag-short.txt"),
     ] {
-        match parse_pipeline(&argv(&[flag])) {
+        match parse_pipeline(&strings(&[flag])) {
             PipelineParse::Exit {
                 code,
                 stdout,
@@ -348,7 +345,7 @@ fn version_is_package_json_version() {
     let pkg: Value =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("package.json")).unwrap();
     assert_eq!(Some(package_version().as_str()), pkg["version"].as_str());
-    match parse_pipeline(&argv(&["-V"])) {
+    match parse_pipeline(&strings(&["-V"])) {
         PipelineParse::Exit { code, stdout, .. } => {
             assert_eq!(code, 0);
             assert!(stdout.contains(&package_version()), "{stdout}");

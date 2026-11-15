@@ -1,6 +1,7 @@
 //! The TS spec (src/split/placement-trail.test.ts), case for case.
 
 use super::{PlacementEvidence, PlacementTrail, TrailEntry};
+use humanify_ag_testkit::strings;
 use serde_json::json;
 
 fn entry(index: usize, placed_by: &str, file: &str) -> TrailEntry {
@@ -11,10 +12,6 @@ fn entry(index: usize, placed_by: &str, file: &str) -> TrailEntry {
         file: file.into(),
         ..TrailEntry::default()
     }
-}
-
-fn strings(v: &[&str]) -> Vec<String> {
-    v.iter().map(|s| s.to_string()).collect()
 }
 
 #[test]

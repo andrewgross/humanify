@@ -6,6 +6,7 @@
 //! discovery (`libdetect::discovery`) computes them on the bundle a run
 //! processes, so the two can never disagree about what a unit is.
 
+use crate::ingest::node_type;
 use std::collections::BTreeSet;
 
 use oxc_span::Span;
@@ -124,14 +125,10 @@ fn span_of(node: &Value) -> Span {
     Span::new(at("start"), at("end"))
 }
 
-fn node_type(node: &Value) -> Option<&str> {
-    node.get("type").and_then(Value::as_str)
-}
-
 fn is_function(node: &Value) -> bool {
     matches!(
         node_type(node),
-        Some("FunctionDeclaration" | "FunctionExpression" | "ArrowFunctionExpression")
+        "FunctionDeclaration" | "FunctionExpression" | "ArrowFunctionExpression"
     )
 }
 
@@ -168,7 +165,7 @@ fn count_nodes(node: &Value) -> u32 {
 /// A non-computed key's name (`a.name`, `{name: …}`, `name() {}`).
 fn static_key(key: Option<&Value>) -> Option<&str> {
     let key = key?;
-    match node_type(key)? {
+    match node_type(key) {
         "Identifier" => key.get("name")?.as_str(),
         _ => None,
     }
@@ -185,24 +182,22 @@ fn content_tokens(node: &Value, tables: &SymbolTables, out: &mut BTreeSet<String
         Value::Object(map) => {
             let computed = map.get("computed").and_then(Value::as_bool) == Some(true);
             let key_field = match node_type(node) {
-                Some("MemberExpression") if !computed => Some("property"),
-                Some("Property" | "MethodDefinition" | "PropertyDefinition") if !computed => {
-                    Some("key")
-                }
+                "MemberExpression" if !computed => Some("property"),
+                "Property" | "MethodDefinition" | "PropertyDefinition" if !computed => Some("key"),
                 _ => None,
             };
             if let Some(name) = key_field.and_then(|f| static_key(map.get(f))) {
                 out.insert(format!("P:{name}"));
             }
             match node_type(node) {
-                Some("Literal") => {
+                "Literal" => {
                     if let Some(re) = map.get("regex").and_then(|r| r.get("pattern")) {
                         out.insert(format!("R:{}", re.as_str().unwrap_or_default()));
                     } else if let Some(s) = map.get("value").and_then(Value::as_str) {
                         out.insert(format!("S:{s}"));
                     }
                 }
-                Some("TemplateElement") => {
+                "TemplateElement" => {
                     if let Some(s) = map
                         .get("value")
                         .and_then(|v| v.get("cooked"))
@@ -212,7 +207,7 @@ fn content_tokens(node: &Value, tables: &SymbolTables, out: &mut BTreeSet<String
                         out.insert(format!("S:{s}"));
                     }
                 }
-                Some("Identifier") => {
+                "Identifier" => {
                     let start = span_of(node).start;
                     let bound = tables.decl_by_start.contains_key(&start)
                         || tables.ref_by_start.contains_key(&start);

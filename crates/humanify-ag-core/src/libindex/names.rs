@@ -16,6 +16,7 @@
 //! sourcemap (`humanify-ag-index/src/sourcemap.rs`), so this module holds the
 //! data shapes and the pure join, and `humanify-ag-index` drives it.
 
+use crate::babel_view::{line_of, line_starts};
 use oxc_ast::AstKind;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
@@ -120,25 +121,6 @@ pub fn classify(kind: AstKind<'_>) -> NameKind {
         | AstKind::ImportNamespaceSpecifier(_)
         | AstKind::ImportSpecifier(_) => NameKind::Import,
         _ => NameKind::Other,
-    }
-}
-
-/// The start of every line of `code` (0-based line numbers, the sourcemap's).
-pub fn line_starts(code: &str) -> Vec<u32> {
-    let mut starts = vec![0u32];
-    starts.extend(
-        code.match_indices('\n')
-            .map(|(i, _)| u32::try_from(i + 1).expect("line start fits u32")),
-    );
-    starts
-}
-
-/// The 0-based line a byte offset of `code` is on (`starts` from
-/// [`line_starts`]).
-pub fn line_of(starts: &[u32], at: u32) -> u32 {
-    match starts.partition_point(|&s| s <= at) {
-        0 => 0,
-        n => u32::try_from(n - 1).expect("line index fits u32"),
     }
 }
 

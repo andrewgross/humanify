@@ -6,6 +6,7 @@
 //! The ask-trace pins (the `--dump-asks` record): every re-ask records its
 //! reask class, and the record is bounded — exactly one retry per scope.
 
+use humanify_ag_testkit::strings;
 use std::cell::Cell;
 
 use humanify_ag_testkit::fake::{ShuffledFake, names, reply};
@@ -518,10 +519,6 @@ fn every_retried_identifier_survives_the_snippet_budget() {
         "both retried identifiers are shown:\n{out}"
     );
     assert!(out.contains("var zz = make();"));
-}
-
-fn strings(names: &[&str]) -> Vec<String> {
-    names.iter().map(|s| s.to_string()).collect()
 }
 
 /// The retry do-not list's ORDER (Andrew, 2026-10-06: "prioritize the

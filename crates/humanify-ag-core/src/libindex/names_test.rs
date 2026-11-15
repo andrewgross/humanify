@@ -5,10 +5,11 @@ use oxc_estree::ESTree;
 use oxc_span::Span;
 use oxc_syntax::symbol::SymbolId;
 
+use crate::babel_view::{line_number, line_of, line_starts};
 use crate::ingest::Ingest;
 use crate::libindex::names::{
-    MinDecl, NameKind, OrigDecl, RestoredName, classify, declared_decls, join, line_of,
-    line_starts, names_for_print, slot_decls,
+    MinDecl, NameKind, OrigDecl, RestoredName, classify, declared_decls, join, names_for_print,
+    slot_decls,
 };
 
 fn min(slot: u32, line: u32, at: u32) -> MinDecl {
@@ -302,4 +303,10 @@ fn line_starts_and_line_of_agree() {
     assert_eq!(line_of(&starts, 0), 0);
     assert_eq!(line_of(&starts, 4), 1);
     assert_eq!(line_of(&starts, 9), 3);
+    // the 1-based line: a line's first byte is on that line
+    let babel: Vec<u32> = [0, 2, 3, 4, 7, 8, 9]
+        .iter()
+        .map(|&at| line_number(&starts, at))
+        .collect();
+    assert_eq!(babel, vec![1, 1, 2, 2, 3, 4, 4]);
 }

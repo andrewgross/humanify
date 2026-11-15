@@ -12,9 +12,11 @@ pub mod hash_keys;
 pub mod js;
 pub mod jsshape;
 pub mod llm;
+pub mod numfmt;
 pub mod pipeline;
 pub mod profiling;
 pub mod stats;
+pub mod time;
 pub use dump::*;
 
 #[cfg(test)]
@@ -22,4 +24,8 @@ mod call_ledger_test;
 #[cfg(test)]
 mod js_test;
 #[cfg(test)]
+mod numfmt_test;
+#[cfg(test)]
 mod stats_test;
+#[cfg(test)]
+mod time_test;

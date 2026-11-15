@@ -14,9 +14,7 @@ use humanify_ag_model::profiling::{
 };
 use serde_json::{Value, json};
 
-use crate::profiling::{
-    Profiler, compute_percentile, format_profile_summary, iso_from_unix_ms, to_trace_events,
-};
+use crate::profiling::{Profiler, compute_percentile, format_profile_summary, to_trace_events};
 
 // ---- layer 1a: profiler.test.ts --------------------------------------------
 
@@ -188,23 +186,6 @@ fn compute_percentile_matches_ts_cases() {
     assert_eq!(compute_percentile(&sorted, 50.0), 5.0);
     assert_eq!(compute_percentile(&sorted, 90.0), 9.0);
     assert_eq!(compute_percentile(&sorted, 100.0), 10.0);
-}
-
-#[test]
-fn started_at_is_js_iso_format() {
-    assert_eq!(iso_from_unix_ms(0), "1970-01-01T00:00:00.000Z");
-    assert_eq!(
-        iso_from_unix_ms(1_704_067_200_000),
-        "2024-01-01T00:00:00.000Z"
-    );
-    assert_eq!(
-        iso_from_unix_ms(1_709_210_096_789),
-        "2024-02-29T12:34:56.789Z"
-    );
-    assert_eq!(
-        iso_from_unix_ms(4_102_444_799_999),
-        "2099-12-31T23:59:59.999Z"
-    );
 }
 
 // ---- layer 1b: trace-events.test.ts ----------------------------------------
