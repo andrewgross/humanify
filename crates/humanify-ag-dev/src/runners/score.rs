@@ -5,8 +5,8 @@
 //! (a scratch base), run the scored leg (`leg::run_leg`: the run
 //! manifest), record the run status (and REFUSE the card when a run lost
 //! LLM answers or skipped library matching), score the card (`scoring`),
-//! write the evidence page, boot the tree. Then the self-hop on the last
-//! attempted pair — COLD into a fresh cache, then WARM replaying a copy of
+//! write the evidence page, boot the tree. Then the self-hop on the
+//! `selfHop` pair (the last attempted one when `--pairs` left it out) — COLD into a fresh cache, then WARM replaying a copy of
 //! it, which must be byte-identical with 0 cache writes — and the summary.
 //!
 //! The binary runs at ALL THREE launch sites (rebase, scored leg,
@@ -610,6 +610,8 @@ struct Planned {
     to: String,
     input: String,
     from_input: String,
+    /// pairs.json `selfHop`.
+    self_hop: bool,
 }
 
 /// What one pair will do, decided before anything launches (so the
@@ -653,6 +655,7 @@ fn plan_pairs(cfg: &ScoreConfig, pairs: &Pairs) -> Result<Vec<PairPlan>, String>
                 to: to.clone(),
                 input,
                 from_input,
+                self_hop: p.self_hop,
             })
         })
         .collect();
@@ -685,8 +688,8 @@ fn work_order(n: usize, hop: Option<usize>, jobs: usize) -> Vec<usize> {
 }
 
 /// Every pair, `parallel_pairs` at a time, each in its own lane; the
-/// self-hop in the lane of the LAST attempted pair (never pairs.json's
-/// last TO when `--pairs` skipped it), right after its scored leg. Each
+/// self-hop in the lane of [`self_hop_index`]'s pair, right after its
+/// scored leg. Each
 /// lane says into its own slot of one ordered transcript (pairs in
 /// pairs.json order, the self-hop after them), and writes only its own
 /// pair's files: completion order reaches nothing (rule 6).
@@ -701,10 +704,7 @@ fn work_order(n: usize, hop: Option<usize>, jobs: usize) -> Vec<usize> {
 /// Returns every failure, `<pair>: <reason>`, in pairs.json order.
 fn run_lanes(run: &Run, plans: &[PairPlan]) -> Vec<String> {
     let (ctx, cfg) = (run.ctx, run.cfg);
-    let hop = cfg
-        .self_hop
-        .then(|| plans.iter().rposition(|p| p.go().is_some()))
-        .flatten();
+    let hop = cfg.self_hop.then(|| self_hop_index(plans)).flatten();
     let n = plans.len();
     let lanes_n = cfg.parallel_pairs.min(n.max(1));
     let gated = cfg.parallel_rebases < lanes_n;
@@ -731,6 +731,16 @@ fn run_lanes(run: &Run, plans: &[PairPlan]) -> Vec<String> {
     ctx.absorb(lanes.close());
     outcomes.sort_by_key(|(i, _)| *i);
     outcomes.into_iter().flat_map(|(_, f)| f).collect()
+}
+
+/// The pair the self-hop runs on: the `selfHop` pair when it is
+/// selected (the version the self-hop reference was measured on), else
+/// the last selected pair (a `--pairs` subset without it).
+fn self_hop_index(plans: &[PairPlan]) -> Option<usize> {
+    plans
+        .iter()
+        .position(|p| p.go().is_some_and(|g| g.self_hop))
+        .or_else(|| plans.iter().rposition(|p| p.go().is_some()))
 }
 
 /// The planned pairs' rebase order: the self-hop's pair first (its chain
