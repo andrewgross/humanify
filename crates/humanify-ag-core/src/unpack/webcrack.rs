@@ -26,7 +26,8 @@ pub struct ShimRun {
 
 /// Why the external unpacker gave nothing: the shell's message, word for
 /// word (a non-zero exit, a deadline, a directory it could not make).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
 pub struct UnpackerError(pub String);
 
 /// The webcrack shim as core sees it: given the bundle and the run's
@@ -37,32 +38,24 @@ pub trait ExternalUnpacker {
 }
 
 /// Why the webcrack adapter gave no files.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum WebcrackError {
     /// The shim did not run to completion.
+    #[error(transparent)]
     Run(UnpackerError),
     /// The shim printed nothing.
+    #[error("webcrack shim: no output")]
     NoOutput,
     /// The shim's contract line is not the expected JSON.
+    #[error("webcrack shim output: {0}")]
     Json(serde_json::Error),
     /// The shim named a file outside its output directory.
+    #[error(
+        "webcrack shim reported {}, outside its output directory {}",
+        path.display(),
+        out_dir.display()
+    )]
     Outside { path: PathBuf, out_dir: PathBuf },
-}
-
-impl std::fmt::Display for WebcrackError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Run(e) => f.write_str(&e.0),
-            Self::NoOutput => f.write_str("webcrack shim: no output"),
-            Self::Json(e) => write!(f, "webcrack shim output: {e}"),
-            Self::Outside { path, out_dir } => write!(
-                f,
-                "webcrack shim reported {}, outside its output directory {}",
-                path.display(),
-                out_dir.display()
-            ),
-        }
-    }
 }
 
 #[derive(serde::Deserialize)]

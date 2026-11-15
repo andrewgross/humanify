@@ -405,7 +405,8 @@ pub enum LlmErrorKind {
 
 /// An LLM call failure: the message and status the TS retry classifier
 /// reads (`isRetryableError` matches on both).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
+#[error("{message}")]
 pub struct LlmError {
     pub kind: LlmErrorKind,
     pub message: String,
@@ -421,14 +422,6 @@ impl LlmError {
         }
     }
 }
-
-impl std::fmt::Display for LlmError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for LlmError {}
 
 /// A request plus the prompts rendered for it. The TS provider renders the
 /// user prompt itself (`buildBatchUserPrompt`, prompts.ts — WP4.2); in the

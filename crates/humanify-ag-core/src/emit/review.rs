@@ -113,29 +113,19 @@ fn file_statement_slices(content: &str) -> Vec<&str> {
 }
 
 /// Why the review tree does not reconstruct the bundle's statements.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ReconstructError {
     /// The ledger asks `file` for a statement it does not hold.
+    #[error("reconstruct: {file} is short of statement {at}")]
     Short { file: String, at: usize },
     /// `file` holds statements the ledger does not ask for.
+    #[error("reconstruct: {file} has {extra} statement(s) beyond the ledger")]
     Beyond { file: String, extra: usize },
     /// The statements differ from the bundle's.
+    #[error(
+        "stable split: emitted tree does not reconstruct the source statements (tree/ledger invariant violated)"
+    )]
     Mismatch,
-}
-
-impl std::fmt::Display for ReconstructError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Short { file, at } => write!(f, "reconstruct: {file} is short of statement {at}"),
-            Self::Beyond { file, extra } => write!(
-                f,
-                "reconstruct: {file} has {extra} statement(s) beyond the ledger"
-            ),
-            Self::Mismatch => f.write_str(
-                "stable split: emitted tree does not reconstruct the source statements (tree/ledger invariant violated)",
-            ),
-        }
-    }
 }
 
 /// `assertConcatEquivalence` (+ `reconstructBodyParts`): the review tree,

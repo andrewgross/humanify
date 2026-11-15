@@ -1767,96 +1767,59 @@ impl From<EmitError> for EmitDecline {
 /// Why the runnable emit declined: the review tree is written instead.
 /// Each variant prints the text the emit reported before the error was
 /// typed (the decline reason reaches the run's stats).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum EmitError {
     /// No namespace alias for a module in a reader (an internal step).
+    #[error("runnable emit: no alias for {module} in {reader} (internal)")]
     NoAlias { module: String, reader: String },
     /// No identifier node at a reference's span.
+    #[error("runnable emit: no identifier node at {0:?}")]
     NoIdentifier(Span),
     /// A cross-file function redeclaration.
+    #[error(
+        "runnable emit: cross-file function redeclaration of \"{name}\" cannot preserve hoisting"
+    )]
     FunctionRedeclaration { name: String },
     /// A cross-file redeclaration through a destructuring declarator.
+    #[error(
+        "runnable emit: cross-file redeclaration of \"{name}\" through a destructuring declarator is not supported"
+    )]
     PatternRedeclaration { name: String },
     /// A wrapper parameter is redeclared.
+    #[error("runnable emit: wrapper parameter \"{param}\" is redeclared")]
     ParamRedeclared { param: String },
     /// A load-time reference cycle through these files.
+    #[error("runnable emit: load-time reference cycle: {}", .0.join(" -> "))]
     Cycle(Vec<String>),
     /// A file reads another at load before that one's body runs.
+    #[error("runnable emit: load-order hazard: {reader} reads {read} at load before its body runs")]
     LoadOrderHazard { reader: String, read: String },
     /// A step that holds by construction did not (the text names it).
+    #[error("{0}")]
     Internal(&'static str),
     /// No cross-file record for a name.
+    #[error("runnable emit: no cross record for {name}")]
     NoCrossRecord { name: String },
     /// Cross-file var redeclarations in a position the emit cannot rewrite.
+    #[error(
+        "runnable emit: cross-file var redeclaration of \"{}\" in an unsupported position",
+        .0.join(", ")
+    )]
     UnsupportedRedeclaration(Vec<String>),
     /// The ledger's order and the wrapper disagree on the statement count.
+    #[error(
+        "runnable emit: ledger.order has {order} entries but the wrapper has {statements} statements"
+    )]
     OrderLength { order: usize, statements: usize },
     /// The ledger's order names a file the ledger does not list.
+    #[error("runnable emit: ledger.order references \"{file}\" missing from ledger.files")]
     OrderMissing { file: String },
     /// No free namespace variable for a module in an importer.
+    #[error("runnable emit: no free namespace variable for {module} in {importer}")]
     NoNamespaceVariable { module: String, importer: String },
     /// A vendor bridge's owner file is not emitted.
+    #[error("vendor bridge: no emitted file {file} to export {name} from")]
     BridgeNoFile { file: String, name: String },
-}
-
-impl std::fmt::Display for EmitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NoAlias { module, reader } => write!(
-                f,
-                "runnable emit: no alias for {module} in {reader} (internal)"
-            ),
-            Self::NoIdentifier(span) => {
-                write!(f, "runnable emit: no identifier node at {span:?}")
-            }
-            Self::FunctionRedeclaration { name } => write!(
-                f,
-                "runnable emit: cross-file function redeclaration of \"{name}\" cannot preserve hoisting"
-            ),
-            Self::PatternRedeclaration { name } => write!(
-                f,
-                "runnable emit: cross-file redeclaration of \"{name}\" through a destructuring declarator is not supported"
-            ),
-            Self::ParamRedeclared { param } => write!(
-                f,
-                "runnable emit: wrapper parameter \"{param}\" is redeclared"
-            ),
-            Self::Cycle(files) => write!(
-                f,
-                "runnable emit: load-time reference cycle: {}",
-                files.join(" -> ")
-            ),
-            Self::LoadOrderHazard { reader, read } => write!(
-                f,
-                "runnable emit: load-order hazard: {reader} reads {read} at load before its body runs"
-            ),
-            Self::Internal(what) => f.write_str(what),
-            Self::NoCrossRecord { name } => {
-                write!(f, "runnable emit: no cross record for {name}")
-            }
-            Self::UnsupportedRedeclaration(names) => write!(
-                f,
-                "runnable emit: cross-file var redeclaration of \"{}\" in an unsupported position",
-                names.join(", ")
-            ),
-            Self::OrderLength { order, statements } => write!(
-                f,
-                "runnable emit: ledger.order has {order} entries but the wrapper has {statements} statements"
-            ),
-            Self::OrderMissing { file } => write!(
-                f,
-                "runnable emit: ledger.order references \"{file}\" missing from ledger.files"
-            ),
-            Self::NoNamespaceVariable { module, importer } => write!(
-                f,
-                "runnable emit: no free namespace variable for {module} in {importer}"
-            ),
-            Self::BridgeNoFile { file, name } => write!(
-                f,
-                "vendor bridge: no emitted file {file} to export {name} from"
-            ),
-        }
-    }
 }
 
 pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, EmitDecline> {

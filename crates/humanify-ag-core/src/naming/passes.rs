@@ -60,14 +60,9 @@ use crate::trail::{Anchor, StrategyTrail};
 use census::{MintedCensus, collect_free_references, collect_minted_bindings, summarize_census};
 
 /// The shipped text does not parse: the parser's first diagnostic.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("shipped text does not parse: {0}")]
 pub struct ShippedParseError(pub String);
-
-impl std::fmt::Display for ShippedParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "shipped text does not parse: {}", self.0)
-    }
-}
 
 /// The end-of-run census of the shipped text (plugin.ts: after the
 /// permute's traverse-cache clear, so the walk sees a FRESH crawl — scope

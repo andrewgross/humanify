@@ -41,64 +41,35 @@ pub fn assert_prior_looks_like_same_program(
 
 /// A side's text that does not parse: `name` (`input.js` / `prior.js`),
 /// how many diagnostics, the first one.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("oxc failed to parse {name}: {count} diagnostic(s) — {first}")]
 pub struct SideParseError {
     pub name: String,
     pub count: usize,
     pub first: String,
 }
 
-impl std::fmt::Display for SideParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "oxc failed to parse {}: {} diagnostic(s) — {}",
-            self.name, self.count, self.first
-        )
-    }
-}
-
 /// Why the match stage stopped before its consumer ran.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum PriorMatchError {
     /// A side's text does not parse.
-    Parse(SideParseError),
+    #[error(transparent)]
+    Parse(#[from] SideParseError),
     /// The prior shares (nearly) no structural hashes with the new version
     /// ([`assert_prior_looks_like_same_program`]).
+    #[error(
+        "prior version does not appear to be the same program: only {present} of {prior_functions} prior functions have a matching structural hash in the new version. Check the --prior-version file; drop the flag to run without transfer."
+    )]
     NotSameProgram {
         present: usize,
         prior_functions: usize,
     },
     /// The close tier's dump could not be built.
+    #[error(transparent)]
     CloseDump(crate::matching::close_dump::CloseDumpError),
     /// A side's statement inventory could not be built.
+    #[error(transparent)]
     Inventory(crate::twins::InventoryError),
-}
-
-impl std::fmt::Display for PriorMatchError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Parse(e) => e.fmt(f),
-            Self::NotSameProgram {
-                present,
-                prior_functions,
-            } => write!(
-                f,
-                "prior version does not appear to be the same program: only {present} of \
-                 {prior_functions} prior functions have a matching structural hash in \
-                 the new version. Check the --prior-version file; drop the flag to run \
-                 without transfer."
-            ),
-            Self::CloseDump(e) => e.fmt(f),
-            Self::Inventory(e) => e.fmt(f),
-        }
-    }
-}
-
-impl From<SideParseError> for PriorMatchError {
-    fn from(e: SideParseError) -> Self {
-        Self::Parse(e)
-    }
 }
 
 /// For a consumer whose own errors are still text (the match verb).

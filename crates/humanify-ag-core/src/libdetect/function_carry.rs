@@ -104,75 +104,54 @@ pub fn functions_in_tree_order(program: &Value) -> Vec<TreeFunction> {
 
 /// Why the library classification of a mixed file failed. Each variant
 /// prints the text the stage reported before the error was typed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum CarryError {
     /// A function of the beautified tree has no raw start: beautify
     /// synthesized it, so raw offsets cannot identify it.
+    #[error(
+        "library carry: a {babel_type} in the beautified tree has no raw start — beautify synthesized a function, so raw offsets no longer identify it"
+    )]
     Synthesized { babel_type: String },
     /// The re-parsed text holds a different number of functions than the
     /// carry.
+    #[error(
+        "library carry: {carried} functions carried across beautify, {found} found in the re-parsed text"
+    )]
     CountMismatch { carried: usize, found: usize },
     /// Function `ordinal` changed type across the re-parse.
+    #[error("library carry: function #{ordinal} is a {before} before re-parse and a {after} after")]
     TypeMismatch {
         ordinal: usize,
         before: String,
         after: String,
     },
     /// Banner regions reached the naming stage with no classification.
+    #[error(
+        "library regions reached the naming stage without a function classification — raw offsets cannot classify beautified functions (#32)"
+    )]
     Missing,
     /// No graph function sits at a classified span.
+    #[error(
+        "library classification: no function at fresh span {}..{}{}",
+        span.start,
+        span.end,
+        session_id.as_ref().map_or(String::new(), |s| format!(" ({s})"))
+    )]
     NoFunctionAt {
         span: Span,
         session_id: Option<String>,
     },
     /// The graph and the classification name different functions at one span.
+    #[error(
+        "library classification: fresh span {}..{} is {graph} in the graph, {classified} in the classification",
+        span.start,
+        span.end
+    )]
     SessionMismatch {
         span: Span,
         graph: String,
         classified: String,
     },
-}
-
-impl std::fmt::Display for CarryError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Synthesized { babel_type } => write!(
-                f,
-                "library carry: a {babel_type} in the beautified tree has no raw start — beautify synthesized a function, so raw offsets no longer identify it"
-            ),
-            Self::CountMismatch { carried, found } => write!(
-                f,
-                "library carry: {carried} functions carried across beautify, {found} found in the re-parsed text"
-            ),
-            Self::TypeMismatch {
-                ordinal,
-                before,
-                after,
-            } => write!(
-                f,
-                "library carry: function #{ordinal} is a {before} before re-parse and a {after} after"
-            ),
-            Self::Missing => f.write_str(
-                "library regions reached the naming stage without a function classification — raw offsets cannot classify beautified functions (#32)",
-            ),
-            Self::NoFunctionAt { span, session_id } => write!(
-                f,
-                "library classification: no function at fresh span {}..{}{}",
-                span.start,
-                span.end,
-                session_id.as_ref().map_or(String::new(), |s| format!(" ({s})"))
-            ),
-            Self::SessionMismatch {
-                span,
-                graph,
-                classified,
-            } => write!(
-                f,
-                "library classification: fresh span {}..{} is {graph} in the graph, {classified} in the classification",
-                span.start, span.end
-            ),
-        }
-    }
 }
 
 /// Per-ordinal library (None = app code) plus the node type as a checksum

@@ -187,15 +187,10 @@ pub fn name_profile_named(name: &str) -> Result<NameProfile, UnknownProfile> {
 }
 
 /// No name profile is registered under `name`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("No name profile named \"{name}\"")]
 pub struct UnknownProfile {
     pub name: String,
-}
-
-impl std::fmt::Display for UnknownProfile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "No name profile named \"{}\"", self.name)
-    }
 }
 
 #[cfg(test)]

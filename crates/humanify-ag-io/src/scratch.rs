@@ -6,15 +6,10 @@
 
 /// No scratch directory could be made: 100 fresh names in a row were
 /// refused (the temp dir is missing, full or not writable).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("cannot create a {prefix} temp dir")]
 pub struct ScratchError {
     pub prefix: String,
-}
-
-impl std::fmt::Display for ScratchError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "cannot create a {} temp dir", self.prefix)
-    }
 }
 
 impl From<ScratchError> for String {

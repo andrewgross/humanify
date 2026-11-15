@@ -186,3 +186,10 @@ fn js_numbers_print_as_javascript_does() {
     }
     assert_eq!(serde_json::to_string(&N(f64::NAN)).unwrap(), "null");
 }
+
+#[test]
+fn an_llm_error_prints_its_message_only() {
+    let mut e = crate::llm::LlmError::new(crate::llm::LlmErrorKind::Status, "Bad gateway");
+    e.status = Some(502);
+    assert_eq!(e.to_string(), "Bad gateway");
+}

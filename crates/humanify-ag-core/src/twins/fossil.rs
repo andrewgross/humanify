@@ -442,20 +442,11 @@ pub fn lazy_init_helper_names(body: &[Value]) -> HashSet<String> {
 
 /// The fossil map was handed a different number of statement hashes
 /// than statements.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("fossil map: {hashes} hashes for {statements} statements")]
 pub struct FossilMapError {
     pub hashes: usize,
     pub statements: usize,
-}
-
-impl std::fmt::Display for FossilMapError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "fossil map: {} hashes for {} statements",
-            self.hashes, self.statements
-        )
-    }
 }
 
 /// Extract the fossil modules of a wrapper body (:298). `hashes` is the

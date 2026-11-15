@@ -15,14 +15,9 @@ pub const DIFF_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10
 
 /// Why `diff` gave no answer, in the words the run prints (a WARNING
 /// line, or the post-split pass's `diff_failed` count and warning).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
 pub struct DiffError(pub String);
-
-impl std::fmt::Display for DiffError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
 
 /// `computeNormalDiff(prior, new)`: `diff prior new` (normal format) over
 /// CRLF-normalized copies, under [`DIFF_DEADLINE`]. Err on a real `diff`

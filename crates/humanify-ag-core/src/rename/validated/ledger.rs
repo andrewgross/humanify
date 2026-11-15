@@ -220,31 +220,20 @@ pub fn parse_clears_scope_cache(text: &str) -> bool {
 }
 
 /// Why a ledger cannot be replayed.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, thiserror::Error)]
 pub enum LedgerError {
     /// The source is not the snapshot the stage was recorded against.
+    #[error("rename ledger: source does not match the ledger's sourceSha256")]
     SourceMismatch,
     /// Two edits overlap (an internal inconsistency).
+    #[error("rename ledger: overlapping edits (internal)")]
     Overlap,
     /// An edit leaves the text or cuts a character.
+    #[error("rename ledger: an edit leaves its text (internal)")]
     OutOfRange,
     /// The chain ran but did not reach the pinned output.
+    #[error("rename ledger: the replay does not reach the ledger's outputSha256")]
     OutputMismatch,
-}
-
-impl std::fmt::Display for LedgerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            LedgerError::SourceMismatch => {
-                "rename ledger: source does not match the ledger's sourceSha256"
-            }
-            LedgerError::Overlap => "rename ledger: overlapping edits (internal)",
-            LedgerError::OutOfRange => "rename ledger: an edit leaves its text (internal)",
-            LedgerError::OutputMismatch => {
-                "rename ledger: the replay does not reach the ledger's outputSha256"
-            }
-        })
-    }
 }
 
 /// sha256 of a text, lowercase hex.

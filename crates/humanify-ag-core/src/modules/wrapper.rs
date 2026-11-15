@@ -202,27 +202,16 @@ fn is_function_kind(kind: AstKind<'_>) -> bool {
 }
 
 /// Why the run's input is not a bundled app the split can cut.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum InputGateError {
     /// The input does not parse.
+    #[error("oxc failed to parse the input bundle: {diagnostics} diagnostic(s)")]
     Parse { diagnostics: usize },
     /// The input has no wrapper the frozen gate recognises.
+    #[error(
+        "the run's input bundle has no recognizable bundle wrapper (the frozen ≥50-binding gate is measured on the input)"
+    )]
     NoWrapper,
-}
-
-impl std::fmt::Display for InputGateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Parse { diagnostics } => write!(
-                f,
-                "oxc failed to parse the input bundle: {diagnostics} diagnostic(s)"
-            ),
-            Self::NoWrapper => f.write_str(
-                "the run's input bundle has no recognizable bundle wrapper (the frozen \
-≥50-binding gate is measured on the input)",
-            ),
-        }
-    }
 }
 
 /// The run's input-bundle gate: is the ORIGINAL text — the input the

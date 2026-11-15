@@ -95,26 +95,17 @@ pub fn join_bodies<'b>(bodies: impl IntoIterator<Item = &'b str>) -> String {
 }
 
 /// Why the named text does not split back into its bodies.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum SplitBodiesError {
     /// The joined text does not parse: the parser's first diagnostic.
+    #[error("the joined bodies do not parse: {0}")]
     Parse(String),
     /// A top-level statement is not an expression statement.
+    #[error("a joined body is not an expression statement")]
     NotExpression,
     /// The text holds a different number of bodies.
+    #[error("{expected} bodies expected, {found} found")]
     Count { expected: usize, found: usize },
-}
-
-impl std::fmt::Display for SplitBodiesError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Parse(e) => write!(f, "the joined bodies do not parse: {e}"),
-            Self::NotExpression => f.write_str("a joined body is not an expression statement"),
-            Self::Count { expected, found } => {
-                write!(f, "{expected} bodies expected, {found} found")
-            }
-        }
-    }
 }
 
 /// The joined text split back into its bodies: each top-level statement's

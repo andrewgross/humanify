@@ -34,14 +34,9 @@ pub trait Differ: Sync {
 
 /// Why a [`Differ`] gave no diff: the shell's message, word for word (it
 /// reaches the run's WARNING lines unchanged).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
 pub struct DiffError(pub String);
-
-impl std::fmt::Display for DiffError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
 
 impl<F, E> Differ for F
 where

@@ -88,19 +88,12 @@ impl Plant {
 }
 
 /// A plant spelling [`Plant::parse`] does not know.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum UnknownPlant {
+    #[error("unknown visitor {0}")]
     Visitor(String),
+    #[error("unknown plant {0}")]
     Plant(String),
-}
-
-impl std::fmt::Display for UnknownPlant {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Visitor(name) => write!(f, "unknown visitor {name}"),
-            Self::Plant(name) => write!(f, "unknown plant {name}"),
-        }
-    }
 }
 
 /// What [`format`] runs.

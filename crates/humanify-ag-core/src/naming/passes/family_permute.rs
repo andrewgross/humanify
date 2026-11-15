@@ -233,27 +233,17 @@ fn wrapper_scope(
 }
 
 /// Why the family permute did not run (the caller ships its input).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum PermuteError {
     /// The prior text does not parse: the parser's first diagnostic.
+    #[error("prior text does not parse: {0}")]
     PriorParse(String),
     /// The text does not parse: the parser's first diagnostic.
+    #[error("text does not parse: {0}")]
     Parse(String),
     /// A member's declaring statement is not in the ESTree JSON.
+    #[error("declaring statement {start}..{end} is absent from the estree json")]
     Absent { start: u64, end: u64 },
-}
-
-impl std::fmt::Display for PermuteError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::PriorParse(e) => write!(f, "prior text does not parse: {e}"),
-            Self::Parse(e) => write!(f, "text does not parse: {e}"),
-            Self::Absent { start, end } => write!(
-                f,
-                "declaring statement {start}..{end} is absent from the estree json"
-            ),
-        }
-    }
 }
 
 /// `collectMembers`: the wrapper scope's bindings, then the program's, each

@@ -138,30 +138,14 @@ pub(crate) fn parse_or_err<'a>(
 }
 
 /// Why an extracted factory could not be wrapped.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RelinkError {
     /// The text does not parse.
-    Parse(ParseError),
+    #[error(transparent)]
+    Parse(#[from] ParseError),
     /// A bridged read sits where a local binding shadows `require`.
+    #[error("the bridged read of {name} sits in a scope that shadows `require`")]
     ShadowedRequire { name: String },
-}
-
-impl std::fmt::Display for RelinkError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Parse(e) => e.fmt(f),
-            Self::ShadowedRequire { name } => write!(
-                f,
-                "the bridged read of {name} sits in a scope that shadows `require`"
-            ),
-        }
-    }
-}
-
-impl From<ParseError> for RelinkError {
-    fn from(e: ParseError) -> Self {
-        Self::Parse(e)
-    }
 }
 
 /// One free reference to a factory id.

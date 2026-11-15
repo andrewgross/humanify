@@ -11,3 +11,6 @@ pub mod diff;
 pub mod scratch;
 pub mod subprocess;
 pub mod tree;
+
+#[cfg(test)]
+mod error_text_pin_test;

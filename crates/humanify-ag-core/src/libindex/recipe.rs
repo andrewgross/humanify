@@ -126,7 +126,10 @@ pub struct Recipe {
 }
 
 /// A recipe spelling that does not parse.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "--recipe {text:?}: {why} (form: <bun|esbuild|webpack|rollup>:target=<bun|node>,format=<cjs|esm>[,minify][,production])"
+)]
 pub struct RecipeError {
     /// The spelling as given.
     pub text: String,
@@ -134,44 +137,24 @@ pub struct RecipeError {
 }
 
 /// What is wrong with a recipe spelling.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RecipeFault {
+    #[error("no `:`")]
     NoColon,
+    #[error("unknown bundler")]
     UnknownBundler,
+    #[error("unknown setting {0:?}")]
     UnknownSetting(String),
+    #[error("no target")]
     NoTarget,
+    #[error("no format")]
     NoFormat,
     /// A bundler whose recipe script decides NODE_ENV itself.
+    #[error("{0}'s recipe script decides NODE_ENV (production is a Bun / esbuild setting)")]
     ProductionUnsupported(&'static str),
     /// A bundler with no bun platform asked for target=bun.
+    #[error("{0} has no bun platform")]
     NoBunPlatform(&'static str),
-}
-
-impl std::fmt::Display for RecipeFault {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NoColon => f.write_str("no `:`"),
-            Self::UnknownBundler => f.write_str("unknown bundler"),
-            Self::UnknownSetting(part) => write!(f, "unknown setting {part:?}"),
-            Self::NoTarget => f.write_str("no target"),
-            Self::NoFormat => f.write_str("no format"),
-            Self::ProductionUnsupported(bundler) => write!(
-                f,
-                "{bundler}'s recipe script decides NODE_ENV (production is a Bun / esbuild setting)"
-            ),
-            Self::NoBunPlatform(bundler) => write!(f, "{bundler} has no bun platform"),
-        }
-    }
-}
-
-impl std::fmt::Display for RecipeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "--recipe {:?}: {} (form: <bun|esbuild|webpack|rollup>:target=<bun|node>,format=<cjs|esm>[,minify][,production])",
-            self.text, self.why
-        )
-    }
 }
 
 impl Recipe {
@@ -349,23 +332,13 @@ impl DetectedRecipe {
 }
 
 /// An index holds no slice for the detected recipe.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("no slice for recipe {detected} (has: {})", has.join(", "))]
 pub struct NoSlice {
     /// The detected recipe, described.
     pub detected: String,
     /// The index's recipes, spelled.
     pub has: Vec<String>,
-}
-
-impl std::fmt::Display for NoSlice {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "no slice for recipe {} (has: {})",
-            self.detected,
-            self.has.join(", ")
-        )
-    }
 }
 
 /// The slice a detected recipe reads from `slices` (an index's recipes, in

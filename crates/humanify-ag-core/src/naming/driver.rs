@@ -252,36 +252,17 @@ pub struct NamingOutcome {
 }
 
 /// Why the naming stage failed.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum NamingError {
     /// Matching against the prior version failed.
+    #[error(transparent)]
     Prior(crate::prior::PriorMatchError),
     /// The naming era failed.
-    Era(era::EraError),
+    #[error(transparent)]
+    Era(#[from] era::EraError),
     /// The shipped text does not parse for the end-of-run census.
-    Census(crate::naming::passes::ShippedParseError),
-}
-
-impl std::fmt::Display for NamingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Prior(e) => e.fmt(f),
-            Self::Era(e) => e.fmt(f),
-            Self::Census(e) => e.fmt(f),
-        }
-    }
-}
-
-impl From<era::EraError> for NamingError {
-    fn from(e: era::EraError) -> Self {
-        Self::Era(e)
-    }
-}
-
-impl From<crate::naming::passes::ShippedParseError> for NamingError {
-    fn from(e: crate::naming::passes::ShippedParseError) -> Self {
-        Self::Census(e)
-    }
+    #[error(transparent)]
+    Census(#[from] crate::naming::passes::ShippedParseError),
 }
 
 /// Run the naming stage.
