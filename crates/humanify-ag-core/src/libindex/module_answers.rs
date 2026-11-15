@@ -33,7 +33,7 @@ pub fn modules_file(slice: &str) -> String {
 /// The planner's answers for `keys`: one entry per key the index holds.
 /// Keys the index lacks are simply absent (a miss is a synthetic name,
 /// not an error). An empty `keys` reads nothing. The file is streamed
-/// line by line, never held whole.
+/// line by line, not held whole.
 pub fn read_module_answers(
     files: &dyn IndexFiles,
     slice: &str,

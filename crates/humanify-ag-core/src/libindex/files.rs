@@ -5,7 +5,7 @@
 //!
 //! The tables stay lazily read: [`super::table::Source`] keeps its own page
 //! cache over a [`ReadAt`] and asks only for the pages a lookup touches,
-//! never the whole table. [`MemoryIndexFiles`] is the in-memory set (an
+//! not the whole table. [`MemoryIndexFiles`] is the in-memory set (an
 //! index built from rows, the tests').
 
 use std::collections::BTreeMap;
@@ -72,7 +72,7 @@ impl IndexFiles for MemoryIndexFiles {
 }
 
 /// A [`ReadAt`] read front to back, as `std::io::Read` (a row file
-/// streamed line by line, never held whole).
+/// streamed line by line, not held whole).
 pub struct Sequential {
     reader: Box<dyn ReadAt>,
     at: u64,

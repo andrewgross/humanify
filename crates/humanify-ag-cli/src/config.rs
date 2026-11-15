@@ -429,7 +429,7 @@ impl Library {
             // exp156): ONE builder decides this for the pipeline and the
             // discover verb alike, so the verb's instrument sees the same
             // placement a run performs. A rows-built index (tests) has no
-            // files; the answers read then fails loud, as it must.
+            // files; the answers read then fails loud.
             module_answers: index
                 .filter(|_| self.matching == LibraryMatching::Names)
                 .map(
