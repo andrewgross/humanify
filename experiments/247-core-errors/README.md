@@ -1,33 +1,32 @@
 # exp247 — typed errors in the core
 
-STATUS: BUILT, GATED (`cargo dev check`, all 13 stages), NEUTRALITY:
-see "Neutrality" below. Branch `exp247-core-errors`, not merged. Step C,
+STATUS: BUILT, GATED (`cargo dev check`, all 13 stages), NEUTRAL on two
+pairs (warm, 0 / 0 cache writes); rebased onto origin/main `aa665e91f`.
+Branch `exp247-core-errors`, not merged. Step C,
 core half, of the functional-core migration
 (experiments/243-effects-ratchet/README.md, "Refined step order").
 
 ## Totals
 
-- **The core's functions no longer return `Result<_, String>`, except the
-  eight that load the prior release.** census:effects listed 125
-  `result-string` entries in `humanify-ag-core`; 117 are gone, 8 remain.
-  The 8 are the prior-loading functions the PriorTree step (exp248, running
-  at the same time) rewrites, left alone so the two branches do not edit
-  the same signatures: `prior.rs` (`match_prior_version`,
-  `match_stage_with_prior`, `with_prior_match_side`, `parse_side`,
-  `assert_prior_looks_like_same_program`), `unpack::bun::load_prior_vendor`,
-  `modules::vendor_names::PriorManifest::parse` and
-  `place::ledger::read_ledger`. Private helpers that read the prior
-  (`placement_dump::read_carry` / `read_json`) are left for the same reason.
-- **census:effects: 413 entries before, 296 after** (origin/main
-  `a78ab2ef3`). 117 `legacy` `result-string` entries deleted; nothing added.
-  The 8 core, 42 index and 14 cli `result-string` entries remain (index and
-  cli are the next halves of step C).
+- **The core's functions no longer return `Result<_, String>`, except six
+  around the prior release.** census:effects listed 125 `result-string`
+  entries in `humanify-ag-core`; this lane removed 117. Of the 8 it left to
+  the PriorTree step (exp248, which ran at the same time), exp248 removed 2
+  (`load_prior_vendor`, `read_ledger`); 6 remain with exp248's signatures:
+  `prior.rs` (`match_prior_version`, `match_stage_with_prior`,
+  `with_prior_match_side`, `parse_side`,
+  `assert_prior_looks_like_same_program`) and
+  `modules::vendor_names::PriorManifest::parse`.
+- **census:effects: 399 entries before, 282 after** (origin/main
+  `aa665e91f`, exp248 merged; rebased). 117 `legacy` `result-string`
+  entries deleted; nothing added. Remaining `result-string`: core 6, index
+  42, cli 14 (index and cli are the next halves of step C).
 - **Every private `Result<_, String>` in the core went too** (the census
   counts only non-private functions): the formatter's `R<T>` aliases, the
   runnable emit's planner, the chunk linker's passes, the reconcile step's
   and the deferred sweep's `(String, trail)` errors. A `grep` for
-  `Result<…, String>` in the core's non-test sources now finds only the
-  prior-loading functions above.
+  `Result<…, String>` in the core's non-test sources now finds only
+  `prior.rs` and `PriorManifest::parse`.
 - **Each module or edge has its own error type, and each prints exactly
   the text the site printed before.** About 50 types: one per stage
   edge (`FormatError`, `CarryError`, `UsingError`, `FinishError`,
@@ -53,25 +52,26 @@ core half, of the functional-core migration
   `Display` arm and give each variant fields and a doc line, where a
   string site was one `format!`. See the table.
 
-Raw diff lines against origin/main `a78ab2ef3` (comments included):
+Raw diff lines against origin/main `aa665e91f` (comments included):
 
 | | added | removed |
 | --- | ---: | ---: |
-| product code (core, cli, index, dev) | 2,992 | 917 |
+| product code (core, cli, index, dev) | 2,982 | 915 |
 | tests (incl. the new pin test) | 611 | 79 |
-| `dev/census/effects-allowlist.json` | 44 | 746 |
-| docs (responsibility.md, this README) | 126 (incl. this README; numbers from the first commit) | 0 |
+| `dev/census/effects-allowlist.json` | 38 | 740 |
+| docs (responsibility.md, this README) | 142 (incl. this README) | 0 |
 
 ## Gate
 
-`cargo dev check` on the committed tree: ALL 13 STAGES PASSED.
+`cargo dev check` on the rebased commit: ALL 13 STAGES PASSED (also
+before the rebase).
 
 | stage | result |
 | --- | --- |
 | shims, no-private-addresses, rust:fmt, rust:clippy | PASS |
 | census:clones | REVIEW (advisory; no new twin from this lane) |
 | census:concurrency | PASS |
-| census:effects | PASS (296 sites, 296 entries) |
+| census:effects | PASS (282 sites, 282 entries) |
 | census:slop | PASS |
 | census:comments | REVIEW (advisory; 0 new findings after two comment rewrites) |
 | rust:unit | PASS |
@@ -79,12 +79,19 @@ Raw diff lines against origin/main `a78ab2ef3` (comments included):
 | format-golden | PASS |
 | e2e | PASS (22 fixture pairs, 88 launches equal to the golden) |
 
-The allowlist JSON diff shows 44 "added" lines: git's alignment of the
-remaining entries, not new entries (413 → 296, nothing added).
+The allowlist JSON diff shows 38 "added" lines: git's alignment of the
+remaining entries, not new entries (399 → 282, nothing added).
 
 ## Neutrality
 
-NEUTRALITY
+Run on the pre-rebase commit `ce2dbea6c` against origin/main
+`a78ab2ef3`, warm, `--priors /work/neutrality-priors --cache
+/work/neutrality-cache`, under the shared lock:
+
+| pair | differing files | differing lines | exit codes | cache writes (candidate / baseline) | verdict |
+| --- | ---: | ---: | --- | --- | --- |
+| 2.1.118→2.1.119 | 0 | 0 | 0 / 0 | +0 / +0 | NEUTRAL |
+| 2.1.197→2.1.198 | 0 | 0 | 0 / 0 | +0 / +0 | NEUTRAL |
 
 ## Design notes
 
@@ -96,8 +103,8 @@ NEUTRALITY
   was raised.
 - **Text held as text only when it comes from outside.** A parser's first
   diagnostic, the shell's diff or shim message, and the prior-loading
-  functions' messages (`NamingError::Prior`, `EraError::Parse`,
-  `PlaceError::PriorCarry`) stay `String` inside a typed variant. Fixed
+  functions' messages (`NamingError::Prior`, `EraError::Parse`) stay
+  `String` inside a typed variant. Fixed
   messages are `&'static str` in a named variant (`Refused`, `Internal`,
   `Unsupported`, `Traverse`).
 - **The prior boundary.** `prior::match_prior_version` still takes a
@@ -130,11 +137,12 @@ NEUTRALITY
 - index (42) and cli (14) `result-string` entries: the next halves of
   step C. The index's text-matched control flow (`ETARGET`, `E404`,
   `NOT_FOUND`) belongs there.
-- The 8 core prior-loading entries: typed by exp248 (PriorTree) or right
-  after it merges.
-- Exp248 edits several of the same files (`emit/stable_split.rs`,
-  `finish/driver.rs`, `naming/vendor_bodies.rs`, `place/ledger.rs`,
-  `place/placement_dump.rs`, `prior.rs`, `unpack/bun.rs`, cli
-  `unified.rs` / `split_stage.rs` / `unminify.rs` / `main.rs`, the effects
-  allowlist, responsibility.md). The overlaps are error types next to
-  prior reads; whichever branch merges second rebases.
+- The 6 core entries left (`prior.rs`, `PriorManifest::parse`): a small
+  follow-up now that exp248 has merged (the prior match closure's
+  `Result<T, String>` would become generic over the consumer's error).
+- Rebase onto `aa665e91f` (exp248): conflicts in `emit/stable_split.rs`,
+  `place/placement_dump.rs` (exp248 deleted `read_carry` / `read_json` and
+  the fossil-modules write, so `PlaceError` lost its `PriorCarry` and
+  `WriteFossilModules` variants), cli `unified.rs` and the allowlist; all
+  were conflict resolution only, so neutrality was not re-run on the
+  rebased commit.
