@@ -1,11 +1,8 @@
-//! The JS-JSON rules, pinned to vectors recorded from the real TS
-//! functions: test/parity/wp41-js-vectors.json (generator
-//! test/parity/wp41-js-probe.ts). The cache key's TS vectors (`keys`,
-//! cache-key-vectors.jsonl) were retired by exp233: the key is no longer
-//! the TS `cacheKeyOf` but what the endpoint receives.
+//! The JS runtime rules, pinned to vectors recorded from JavaScript:
+//! test/parity/wp41-js-vectors.json. The cache key's pins live in
+//! `llm_test.rs`.
 
-use crate::js::{JsValue, canonical, math_round, number_to_string, stringify, to_fixed};
-use crate::llm::{CacheKeyParams, cache_key_material, cache_key_of};
+use crate::js::{math_round, number_to_string, to_fixed};
 
 fn parity_file(name: &str) -> String {
     let path = format!("{}/../../test/parity/{name}", env!("CARGO_MANIFEST_DIR"));
@@ -23,110 +20,6 @@ fn f64_from_bits_hex(hex: &str) -> f64 {
         *byte = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).unwrap();
     }
     f64::from_le_bytes(bytes)
-}
-
-/// `canonicalJson` on adversarial objects: index-like keys first
-/// ("9" before "10", "-1"/"01" are ordinary), UTF-16 order (U+FF5E after
-/// U+1F600), control/U+2028 escaping, JS number formatting (-0 → 0, 1e+21).
-#[test]
-fn canonical_matches_the_ts_on_every_probe_case() {
-    let v = vectors();
-    for case in v["canonical"].as_array().unwrap() {
-        let input = JsValue::parse(case["input"].as_str().unwrap()).unwrap();
-        assert_eq!(
-            canonical(&input),
-            case["canonical"].as_str().unwrap(),
-            "case {}",
-            case["name"]
-        );
-    }
-}
-
-/// The cache key (version 2, exp233) is the canonical JSON of what the
-/// endpoint receives: key version, both messages, the model parameters,
-/// the response format. Pinned byte for byte, so a change to the key is a
-/// deliberate act (it invalidates every standing cache).
-#[test]
-fn cache_key_material_is_the_wire_content_and_nothing_else() {
-    let params = CacheKeyParams {
-        model: "m".to_string(),
-        temperature: Some(-0.0),
-        max_tokens: None,
-        reasoning_effort: Some("low".to_string()),
-    };
-    assert_eq!(
-        cache_key_material("sys", "user: f(a, b)", &params),
-        "{\"cacheVersion\":2,\"messages\":[{\"content\":\"sys\",\"role\":\"system\"},\
-         {\"content\":\"user: f(a, b)\",\"role\":\"user\"}],\
-         \"params\":{\"model\":\"m\",\"reasoningEffort\":\"low\",\"temperature\":0},\
-         \"responseFormat\":\"json_object\"}"
-    );
-    let key = cache_key_of("sys", "user: f(a, b)", &params);
-    assert_eq!(key.len(), 64);
-    assert!(
-        key.bytes()
-            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
-    );
-}
-
-/// Every input the endpoint receives moves the key: each prompt, and each
-/// model parameter (an absent temperature differs from 0; 0 and -0 agree,
-/// as JS numbers do).
-#[test]
-fn every_wire_input_moves_the_key() {
-    let base = CacheKeyParams {
-        model: "m".to_string(),
-        temperature: Some(0.0),
-        max_tokens: None,
-        reasoning_effort: None,
-    };
-    let key = |s: &str, u: &str, p: &CacheKeyParams| cache_key_of(s, u, p);
-    let k0 = key("s", "u", &base);
-    assert_ne!(k0, key("s2", "u", &base));
-    assert_ne!(k0, key("s", "u2", &base));
-    assert_ne!(k0, key("u", "s", &base), "the roles are part of the key");
-    let variants = [
-        CacheKeyParams {
-            model: "m2".to_string(),
-            ..base.clone()
-        },
-        CacheKeyParams {
-            temperature: None,
-            ..base.clone()
-        },
-        CacheKeyParams {
-            temperature: Some(0.7),
-            ..base.clone()
-        },
-        CacheKeyParams {
-            max_tokens: Some(6000),
-            ..base.clone()
-        },
-        CacheKeyParams {
-            reasoning_effort: Some("low".to_string()),
-            ..base.clone()
-        },
-    ];
-    for p in &variants {
-        assert_ne!(k0, key("s", "u", p), "{p:?}");
-    }
-    let neg_zero = CacheKeyParams {
-        temperature: Some(-0.0),
-        ..base.clone()
-    };
-    assert_eq!(k0, key("s", "u", &neg_zero));
-}
-
-/// `JSON.stringify(JSON.parse(raw))` — the cache write path's byte shape:
-/// index keys move to the front, a duplicate key keeps its first slot and
-/// its last value.
-#[test]
-fn stringify_of_a_parsed_entry_matches_the_ts() {
-    let v = vectors();
-    for case in v["stringify"].as_array().unwrap() {
-        let parsed = JsValue::parse(case["raw"].as_str().unwrap()).unwrap();
-        assert_eq!(stringify(&parsed), case["stringified"].as_str().unwrap());
-    }
 }
 
 /// `String(x)` for the probe's numbers (bit patterns, so the parse is exact).
@@ -271,32 +164,6 @@ fn utf16_prefix_counts_code_units_like_js_slice() {
     // A cut inside a surrogate pair: JS keeps a lone high surrogate, which
     // a Rust String cannot hold — the prefix stops before the pair.
     assert_eq!(crate::js::utf16_prefix("a😀", 2), "a");
-}
-
-/// `Object.fromEntries` over a Map: index keys first (ascending), ordinary
-/// keys in insertion order — the bulk constructor and the one-at-a-time
-/// insert must agree, including on a repeated key.
-#[test]
-fn from_entries_matches_insert_order() {
-    use crate::js::JsObject;
-    let rows = |keys: &[&str]| -> Vec<(String, JsValue)> {
-        keys.iter()
-            .enumerate()
-            .map(|(i, k)| (k.to_string(), JsValue::Number(i as f64)))
-            .collect()
-    };
-    for keys in [
-        &["b", "10", "a", "2", "__proto__", "01"][..],
-        &["x", "y", "x", "3"][..],
-        &[][..],
-    ] {
-        let bulk = JsObject::from_entries(rows(keys));
-        let one: JsObject = rows(keys).into_iter().collect();
-        assert_eq!(bulk, one, "{keys:?}");
-    }
-    let o = JsObject::from_entries(rows(&["b", "10", "a", "2"]));
-    let keys: Vec<&str> = o.entries().iter().map(|(k, _)| k.as_str()).collect();
-    assert_eq!(keys, ["2", "10", "b", "a"]);
 }
 
 /// Exact ties at the shortest digit: ECMA-262 picks the EVEN digit (V8:

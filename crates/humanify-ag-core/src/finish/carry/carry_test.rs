@@ -2,7 +2,6 @@
 //! layout (review R9, 2026-10-04) — never by "the first function whose
 //! body has exactly N statements", the rule it used to carry its own.
 
-use humanify_ag_model::js::JsValue;
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
 use oxc_ast::ast::{ArrowFunctionBody, FunctionBody};
@@ -129,10 +128,7 @@ fn rename(from: &str, to: &str) -> PostSplitRename {
 #[test]
 fn a_wrapper_whose_count_disagrees_with_the_ledger_abstains_instead_of_guessing() {
     let bundle = "(function () {\n  var a = 1;\n  var b = 2;\n  var c = 3;\n  function inner() {\n    var x = 1;\n    return x;\n  }\n})();\n";
-    let ledger = JsValue::parse(
-        "{\"files\":[\"a.js\"],\"order\":[\"a.js\",\"a.js\"],\"emitIndexes\":[0,1]}",
-    )
-    .unwrap();
+    let ledger = two_statement_ledger();
     // The retired rule's guess on this text is the inner function.
     let allocator = Allocator::default();
     let ingest = crate::finish::relink::parse_or_err(&allocator, bundle).unwrap();
@@ -157,10 +153,7 @@ fn a_wrapper_whose_count_disagrees_with_the_ledger_abstains_instead_of_guessing(
 #[test]
 fn a_bundle_without_a_wrapper_abstains_wrapper_body_not_found() {
     let bundle = "var a = 1;\nvar b = 2;\n";
-    let ledger = JsValue::parse(
-        "{\"files\":[\"a.js\"],\"order\":[\"a.js\",\"a.js\"],\"emitIndexes\":[0,1]}",
-    )
-    .unwrap();
+    let ledger = two_statement_ledger();
     let carry =
         carry_renames_into_bundle(bundle, &ledger, &[rename("a", "alpha")], LAYOUT).unwrap();
     assert_eq!(carry.code, None);
@@ -168,4 +161,14 @@ fn a_bundle_without_a_wrapper_abstains_wrapper_body_not_found() {
         carry.abstained,
         vec![("wrapper-body-not-found".to_string(), 1)]
     );
+}
+
+/// A ledger of one file holding two statements laid out in order.
+fn two_statement_ledger() -> crate::place::ledger::SplitLedger {
+    crate::place::ledger::SplitLedger {
+        files: vec!["a.js".into()],
+        order: vec!["a.js".into(), "a.js".into()],
+        emit_indexes: Some(vec![0, 1]),
+        ..Default::default()
+    }
 }

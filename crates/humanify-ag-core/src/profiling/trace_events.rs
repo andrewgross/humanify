@@ -3,9 +3,7 @@
 //! event, one thread-name event per tid in first-USE order over the spans,
 //! one `X` event per span, one `C` counter event per concurrency sample.
 
-use humanify_ag_model::profiling::{
-    JsNumber, JsObject, ProfileReport, TraceEvent, TraceFile, trace_tid,
-};
+use humanify_ag_model::profiling::{Fields, ProfileReport, TraceEvent, TraceFile, trace_tid};
 
 /// The trace's single process id.
 const PID: u32 = 1;
@@ -25,11 +23,11 @@ fn metadata_event(name: &str, tid: u32, value: String) -> TraceEvent {
         name: name.to_string(),
         cat: "__metadata".to_string(),
         ph: "M".to_string(),
-        ts: JsNumber(0.0),
+        ts: 0.0,
         dur: None,
         pid: PID,
         tid,
-        args: Some(JsObject::new().with("name", value)),
+        args: Some(Fields::new().with("name", value)),
     }
 }
 
@@ -53,8 +51,8 @@ pub fn to_trace_events(report: &ProfileReport) -> TraceFile {
         name: span.name.clone(),
         cat: span.category.clone(),
         ph: "X".to_string(),
-        ts: JsNumber(span.start_ms.0 * 1000.0),
-        dur: Some(JsNumber((span.end_ms.0 - span.start_ms.0) * 1000.0)),
+        ts: span.start_ms * 1000.0,
+        dur: Some((span.end_ms - span.start_ms) * 1000.0),
         pid: PID,
         tid: span.tid,
         args: span.metadata.clone(),
@@ -65,12 +63,12 @@ pub fn to_trace_events(report: &ProfileReport) -> TraceFile {
             name: "Concurrency".to_string(),
             cat: "concurrency".to_string(),
             ph: "C".to_string(),
-            ts: JsNumber(s.time_ms.0 * 1000.0),
+            ts: s.time_ms * 1000.0,
             dur: None,
             pid: PID,
             tid: 0,
             args: Some(
-                JsObject::new()
+                Fields::new()
                     .with("inFlight", s.in_flight)
                     .with("ready", s.ready)
                     .with("blocked", s.blocked),

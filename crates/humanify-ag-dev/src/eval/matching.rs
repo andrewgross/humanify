@@ -29,7 +29,8 @@
 //!   records the spread of their totals (`matchingBands` in the slot), and
 //!   a same-commit leaderboard flags a move outside it.
 
-use humanify_ag_model::js::{JsValue, number_to_string};
+use crate::json::js::JsValue;
+use humanify_ag_model::js::number_to_string;
 
 use super::card::{at, number_at};
 use super::llm_diag::{Col, Spec, fold, sum};

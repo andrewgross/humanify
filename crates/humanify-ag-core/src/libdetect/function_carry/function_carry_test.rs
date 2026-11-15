@@ -137,35 +137,6 @@ fn consumed_classification_joins_by_fresh_span() {
     );
 }
 
-/// regions.json is written in the TS's key order and bytes (write.test.ts:
-/// an open-ended region is `end: null`).
-#[test]
-fn regions_json_writes_the_ts_bytes() {
-    let regions = [
-        CommentRegion {
-            library_name: "beta".into(),
-            start: 30,
-            end: None,
-        },
-        CommentRegion {
-            library_name: "alpha".into(),
-            start: 9,
-            end: Some(30),
-        },
-    ];
-    let functions = [LibraryFunctionKey {
-        span: Span::new(22, 40),
-        session_id: "input.js:2:10".into(),
-        library: "alpha".into(),
-    }];
-    let text =
-        humanify_ag_model::js::stringify(&super::regions_json(&regions, &functions, Vec::new()));
-    assert_eq!(
-        text,
-        r#"{"schemaVersion":1,"commentRegions":[{"span":{"start":9,"end":30},"library":"alpha"},{"span":{"start":30,"end":null},"library":"beta"}],"libraryFunctions":[{"key":{"text":"fresh","start":22,"end":40},"sessionId":"input.js:2:10","library":"alpha"}],"bannerClassifications":[]}"#
-    );
-}
-
 /// No banner regions, no carry (the TS adds `libraryCarryPlugin` only when
 /// the file has regions).
 #[test]

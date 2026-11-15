@@ -11,7 +11,8 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use humanify_ag_model::js::{JsValue, number_to_string};
+use crate::json::js::JsValue;
+use humanify_ag_model::js::number_to_string;
 
 use super::card::at;
 use super::kpis::{Kpi, caveat_lines, named};

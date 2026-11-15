@@ -18,8 +18,8 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use humanify_ag_model::profiling::{
-    ConcurrencyCounts, ConcurrencySnapshot, JsNumber, JsObject, ProfileMeta, ProfileReport,
-    ProfileSpan, RenameTiming, StageSummary, trace_tid,
+    ConcurrencyCounts, ConcurrencySnapshot, Fields, ProfileMeta, ProfileReport, ProfileSpan,
+    RenameTiming, StageSummary, trace_tid,
 };
 
 pub use self::summary::format_profile_summary;
@@ -66,14 +66,14 @@ pub struct SpanHandle<'p> {
     category: String,
     tid: u32,
     start_ms: f64,
-    metadata: Option<JsObject>,
+    metadata: Option<Fields>,
 }
 
 impl SpanHandle<'_> {
     /// End the span. `end_metadata` is spread over the start metadata
     /// (`{ ...metadata, ...endMetadata }`); with neither, the span carries
     /// no metadata at all (the TS's `undefined`).
-    pub fn end(self, end_metadata: Option<JsObject>) {
+    pub fn end(self, end_metadata: Option<Fields>) {
         let Some(p) = self.profiler else { return };
         let end_ms = elapsed_ms(p.start);
         let metadata = match (self.metadata, end_metadata) {
@@ -89,8 +89,8 @@ impl SpanHandle<'_> {
         lock(&p.recorded).spans.push(ProfileSpan {
             name: self.name,
             category: self.category,
-            start_ms: JsNumber(self.start_ms),
-            end_ms: JsNumber(end_ms),
+            start_ms: self.start_ms,
+            end_ms,
             tid: self.tid,
             metadata,
         });
@@ -129,7 +129,7 @@ impl Profiler {
         name: &str,
         category: &str,
         tid: u32,
-        metadata: Option<JsObject>,
+        metadata: Option<Fields>,
     ) -> SpanHandle<'_> {
         SpanHandle {
             profiler: self.enabled.then_some(self),
@@ -199,7 +199,7 @@ impl Profiler {
                 stage_summaries: Vec::new(),
                 rename_timing: None,
                 meta: ProfileMeta {
-                    total_duration_ms: JsNumber(0.0),
+                    total_duration_ms: 0.0,
                     started_at: String::new(),
                     input_file: None,
                 },
@@ -213,7 +213,7 @@ impl Profiler {
             stage_summaries: stage_summaries(&recorded.spans),
             rename_timing: rename_timing(&recorded.spans),
             meta: ProfileMeta {
-                total_duration_ms: JsNumber(total_duration_ms),
+                total_duration_ms,
                 started_at: self.started_at.clone(),
                 input_file: input_file.map(str::to_string),
             },
@@ -268,7 +268,7 @@ pub struct Phase {
     name: &'static str,
     start_ms: f64,
     cpu_start: Option<f64>,
-    meta: JsObject,
+    meta: Fields,
 }
 
 impl Phase {
@@ -291,7 +291,7 @@ pub fn phase(name: &'static str) -> Option<Phase> {
         name,
         start_ms: elapsed_ms(*start),
         cpu_start: process_cpu_ms(),
-        meta: JsObject::new(),
+        meta: Fields::new(),
     })
 }
 
@@ -311,8 +311,8 @@ impl Drop for Phase {
         lock(recorded).spans.push(ProfileSpan {
             name: self.name.to_string(),
             category: "phase".to_string(),
-            start_ms: JsNumber(self.start_ms),
-            end_ms: JsNumber(end_ms),
+            start_ms: self.start_ms,
+            end_ms,
             tid: PHASE_TID,
             metadata: Some(meta),
         });
@@ -326,7 +326,7 @@ impl Drop for Profiler {
 }
 
 fn push_snapshot(recorded: &Mutex<Recorded>, start: Instant, c: ConcurrencyCounts) {
-    let time_ms = JsNumber(elapsed_ms(start));
+    let time_ms = elapsed_ms(start);
     lock(recorded).snapshots.push(ConcurrencySnapshot {
         time_ms,
         in_flight: c.in_flight,
@@ -340,15 +340,15 @@ fn push_snapshot(recorded: &Mutex<Recorded>, start: Instant, c: ConcurrencyCount
 fn stage_summaries(spans: &[ProfileSpan]) -> Vec<StageSummary> {
     let mut out: Vec<StageSummary> = Vec::new();
     for span in spans.iter().filter(|s| s.tid == trace_tid::PIPELINE) {
-        let dur = span.end_ms.0 - span.start_ms.0;
+        let dur = span.end_ms - span.start_ms;
         match out.iter_mut().find(|s| s.name == span.name) {
             Some(s) => {
-                s.duration_ms.0 += dur;
+                s.duration_ms += dur;
                 s.span_count += 1;
             }
             None => out.push(StageSummary {
                 name: span.name.clone(),
-                duration_ms: JsNumber(dur),
+                duration_ms: dur,
                 span_count: 1,
             }),
         }
@@ -361,18 +361,18 @@ fn rename_timing(spans: &[ProfileSpan]) -> Option<RenameTiming> {
     let mut durations: Vec<f64> = spans
         .iter()
         .filter(|s| s.category == "rename" && s.tid == trace_tid::RENAME_FUNCTION)
-        .map(|s| s.end_ms.0 - s.start_ms.0)
+        .map(|s| s.end_ms - s.start_ms)
         .collect();
     if durations.is_empty() {
         return None;
     }
     durations.sort_by(f64::total_cmp);
     Some(RenameTiming {
-        p50: JsNumber(compute_percentile(&durations, 50.0)),
-        p95: JsNumber(compute_percentile(&durations, 95.0)),
-        p99: JsNumber(compute_percentile(&durations, 99.0)),
-        min_ms: JsNumber(durations[0]),
-        max_ms: JsNumber(durations[durations.len() - 1]),
+        p50: compute_percentile(&durations, 50.0),
+        p95: compute_percentile(&durations, 95.0),
+        p99: compute_percentile(&durations, 99.0),
+        min_ms: durations[0],
+        max_ms: durations[durations.len() - 1],
         count: u32::try_from(durations.len()).unwrap_or(u32::MAX),
     })
 }

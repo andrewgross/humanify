@@ -18,10 +18,9 @@
 //!   `systemPrompt`, hint or suggested name is absent;
 //! - `Object.entries(alreadyRenamed)` enumerates index-like keys first —
 //!   [`StrMap`] is already in JS enumeration order (built through
-//!   `JsObject`);
+//!   `JsRecord`);
 //! - `record[key]` falls through to `Object.prototype` ([`js_record`]).
 
-use humanify_ag_model::js::JsValue;
 use humanify_ag_model::llm::{BatchRenameRequest, PriorRejects, RenameFailures, StrMap};
 
 use super::js_record;
@@ -96,30 +95,8 @@ impl ArrayRecord {
 
 impl<'de> serde::Deserialize<'de> for ArrayRecord {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = JsValue::deserialize(deserializer)?;
-        let JsValue::Object(obj) = value else {
-            return Err(serde::de::Error::custom(
-                "expected an object of string arrays",
-            ));
-        };
-        let strings = |v: &JsValue| -> Option<Vec<String>> {
-            match v {
-                JsValue::Array(items) => items
-                    .iter()
-                    .map(|s| s.as_str().map(str::to_string))
-                    .collect(),
-                _ => None,
-            }
-        };
-        obj.entries()
-            .iter()
-            .map(|(k, v)| {
-                strings(v)
-                    .map(|list| (k.clone(), list))
-                    .ok_or_else(|| serde::de::Error::custom(format!("{k}: expected strings")))
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(ArrayRecord)
+        humanify_ag_model::llm::JsRecord::<Vec<String>>::deserialize(deserializer)
+            .map(|r| ArrayRecord(r.0))
     }
 }
 

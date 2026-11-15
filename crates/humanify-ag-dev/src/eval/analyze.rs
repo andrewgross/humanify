@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use humanify_ag_model::js::JsValue;
+use crate::json::js::JsValue;
 
 use super::card::{SCORER_VERSION, count, fixed, int, obj, text, texts};
 use super::compose::{Composition, compose_diff};

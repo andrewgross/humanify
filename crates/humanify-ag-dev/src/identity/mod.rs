@@ -187,8 +187,7 @@ impl Identity {
     /// The record as written beside a card (`identity.json`, JS spelling).
     pub fn to_text(&self) -> String {
         let compact = serde_json::to_string(self).expect("an identity serializes");
-        let value =
-            humanify_ag_model::js::JsValue::parse(&compact).expect("serde_json writes JSON");
+        let value = crate::json::js::JsValue::parse(&compact).expect("serde_json writes JSON");
         crate::json::js_text(&value, true)
     }
 

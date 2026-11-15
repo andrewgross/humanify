@@ -556,7 +556,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
 /// resolved from the verdict (no flags), as the stats file records it.
 fn run_detect(input: &str, profile: Option<&str>, toolchain: bool, split_method: bool) {
     use humanify_ag_core::profiling::{Profiler, format_profile_summary, to_trace_events};
-    use humanify_ag_model::profiling::{JsObject, trace_tid};
+    use humanify_ag_model::profiling::{Fields, trace_tid};
 
     let profiler = Profiler::new(profile.is_some());
     let read = profiler.start_span("file-io:read", "io", trace_tid::PIPELINE, None);
@@ -569,14 +569,14 @@ fn run_detect(input: &str, profile: Option<&str>, toolchain: bool, split_method:
     };
     // `bytes: code.length` — UTF-16 code units, as the TS records it.
     read.end(Some(
-        JsObject::new()
+        Fields::new()
             .with("path", input)
             .with("bytes", code.encode_utf16().count()),
     ));
     let span = profiler.pipeline_span("detection");
     let verdict = humanify_ag_core::detect::detect_bundle(&code);
     let bundler = serde_json::to_value(verdict.bundler.kind).expect("an enum serializes");
-    span.end(Some(JsObject::new().with("bundler", bundler)));
+    span.end(Some(Fields::new().with("bundler", bundler)));
     println!(
         "{}",
         serde_json::to_string(&verdict).expect("a detection verdict serializes")
@@ -607,32 +607,24 @@ fn split_method_line(
     verdict: &humanify_ag_model::detection::BundlerDetectionResult,
 ) -> String {
     use humanify_ag_core::place::method::split_method_of_input;
-    use humanify_ag_model::js::{JsObject, JsValue, stringify};
-    use humanify_ag_model::jsshape::JsType;
 
     let resolved = humanify_ag_core::toolchain::resolve_toolchain(verdict, None, None);
     let record = split_method_of_input(code, &resolved).record();
-    let mut line = JsObject::new();
-    line.insert("splitMethod", record.to_js());
-    stringify(&JsValue::Object(line))
+    serde_json::to_string(&serde_json::json!({ "splitMethod": record }))
+        .expect("a record serializes")
 }
 
 /// `detect --toolchain`'s second line: `{"selection":…,"toolchain":[…]}`,
 /// the two blocks a run's stats file carries, resolved with no flags.
 fn toolchain_line(verdict: &humanify_ag_model::detection::BundlerDetectionResult) -> String {
     use humanify_ag_cli::pipeline_config::{pipeline_selection_record, toolchain_record};
-    use humanify_ag_model::js::{JsObject, JsValue, stringify};
-    use humanify_ag_model::jsshape::JsType;
 
     let resolved = humanify_ag_core::toolchain::resolve_toolchain(verdict, None, None);
-    let pieces = toolchain_record(&resolved)
-        .iter()
-        .map(JsType::to_js)
-        .collect();
-    let mut line = JsObject::new();
-    line.insert("selection", pipeline_selection_record(&resolved).to_js());
-    line.insert("toolchain", JsValue::Array(pieces));
-    stringify(&JsValue::Object(line))
+    serde_json::to_string(&serde_json::json!({
+        "selection": pipeline_selection_record(&resolved),
+        "toolchain": toolchain_record(&resolved),
+    }))
+    .expect("a record serializes")
 }
 
 /// `humanify-ag format`: the native formatter on one file.

@@ -9,7 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
-use humanify_ag_model::js::JsValue;
+use crate::json::js::JsValue;
 
 use super::analyze::{PairInputs, partition_failures, score_pair};
 use super::card::{is_scorecard, scorer_version};

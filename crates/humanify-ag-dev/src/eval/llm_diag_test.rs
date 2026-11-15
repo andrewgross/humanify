@@ -1,7 +1,7 @@
 //! The label's LLM call diagnostics (exp206): one digest per scored run,
 //! folded without inventing numbers for runs that have none.
 
-use humanify_ag_model::js::JsValue;
+use crate::json::js::JsValue;
 
 use super::{LLM_CALLS, digest, fold, tables};
 
@@ -20,7 +20,7 @@ fn stats(calls: f64, p90: f64, taken: f64) -> JsValue {
 }
 
 fn with_pair(pair: &str, d: JsValue) -> JsValue {
-    let mut o = humanify_ag_model::js::JsObject::new();
+    let mut o = crate::json::js::JsObject::new();
     o.insert("pair", JsValue::str(pair));
     for (k, v) in d.as_object().unwrap().entries() {
         o.insert(k.clone(), v.clone());

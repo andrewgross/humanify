@@ -139,3 +139,23 @@ fn pure_sources_compose() {
     assert!(readme_source("index.js", &deps).contains("best-effort"));
     assert!(runner_source("x/\"y\".js").contains("path.join(__dirname, \"x/\\\"y\\\".js\")"));
 }
+
+/// The in-tree package.json and run.cjs, byte for byte: indent 2, a
+/// trailing newline, dependencies in JS record order (an array-index name
+/// first), non-ASCII written raw, control characters escaped.
+#[test]
+fn package_json_and_runner_bytes_are_pinned() {
+    let deps: Vec<(String, String)> = [("ws", "*"), ("@a/b", "^1.2.3"), ("10", "1"), ("é", "~2")]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    assert_eq!(
+        package_json_source(&deps),
+        "{\n  \"name\": \"humanified-runnable\",\n  \"private\": true,\n  \"description\": \
+         \"Unpacked, humanified, split bundle — runnable under Node.\",\n  \"scripts\": {\n    \
+         \"start\": \"node run.cjs\"\n  },\n  \"dependencies\": {\n    \"10\": \"1\",\n    \
+         \"ws\": \"*\",\n    \"@a/b\": \"^1.2.3\",\n    \"é\": \"~2\"\n  }\n}\n"
+    );
+    assert!(package_json_source(&[]).ends_with("\"dependencies\": {}\n}\n"));
+    assert!(runner_source("a\u{1}é\\b.js").contains("\"a\\u0001é\\\\b.js\""));
+}

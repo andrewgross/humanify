@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use humanify_ag_model::js::JsValue;
+use crate::json::js::JsValue;
 
 use super::Ctx;
 use crate::committed::eval::{Pairs, pairs};

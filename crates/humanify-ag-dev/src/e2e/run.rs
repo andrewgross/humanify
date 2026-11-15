@@ -46,7 +46,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use humanify_ag_model::js::{JsValue, cmp_utf16};
+use crate::json::js::JsValue;
+use humanify_ag_model::js::cmp_utf16;
 use humanify_ag_testkit::answers;
 use humanify_ag_testkit::stub_server::StubServer;
 

@@ -2,7 +2,7 @@
 //! checked for exact equality where the pipeline is deterministic and
 //! banded where they move with the LLM's draws.
 
-use humanify_ag_model::js::{JsObject, JsValue};
+use crate::json::js::{JsObject, JsValue};
 
 use super::*;
 use crate::eval::card::number_at;

@@ -44,7 +44,6 @@
 //! `skipLibraries` off, or a wrapper IIFE detected — see
 //! [`classify_library_functions`].
 
-use humanify_ag_model::js::{JsObject, JsValue};
 use oxc_span::Span;
 use serde_json::Value;
 
@@ -205,9 +204,10 @@ pub fn resolve_function_libraries(
     Ok(out)
 }
 
-/// One `regions.json` `libraryFunctions` row: a library function keyed by
-/// its FRESH span (UTF-8 bytes of the beautified text).
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// One library function keyed by its FRESH span (UTF-8 bytes of the
+/// beautified text) — a row of the dump's regions section.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LibraryFunctionKey {
     pub span: Span,
     pub session_id: String,
@@ -325,56 +325,6 @@ pub fn library_function_rows(
         .collect();
     rows.sort_by_key(|r| r.span.start);
     rows
-}
-
-/// `regions.json` in the TS schema (#33), in the TS's key order (the file
-/// is byte-comparable): `commentRegions` spans in the MINIFIED text (UTF-8
-/// bytes; an open end is `null`, never -1), `libraryFunctions` keyed in the
-/// FRESH text, `bannerClassifications` (the Bun per-factory records; the
-/// caller supplies them serialized).
-pub fn regions_json(
-    comment_regions: &[CommentRegion],
-    library_functions: &[LibraryFunctionKey],
-    banner_classifications: Vec<JsValue>,
-) -> JsValue {
-    let num = |n: usize| JsValue::Number(n as f64);
-    let mut sorted: Vec<&CommentRegion> = comment_regions.iter().collect();
-    sorted.sort_by_key(|r| r.start);
-    let regions = sorted
-        .into_iter()
-        .map(|r| {
-            let mut span = JsObject::new();
-            span.insert("start", num(r.start));
-            span.insert("end", r.end.map_or(JsValue::Null, num));
-            let mut o = JsObject::new();
-            o.insert("span", JsValue::Object(span));
-            o.insert("library", JsValue::str(&r.library_name));
-            JsValue::Object(o)
-        })
-        .collect();
-    let functions = library_functions
-        .iter()
-        .map(|f| {
-            let mut key = JsObject::new();
-            key.insert("text", JsValue::str("fresh"));
-            key.insert("start", num(f.span.start as usize));
-            key.insert("end", num(f.span.end as usize));
-            let mut o = JsObject::new();
-            o.insert("key", JsValue::Object(key));
-            o.insert("sessionId", JsValue::str(&f.session_id));
-            o.insert("library", JsValue::str(&f.library));
-            JsValue::Object(o)
-        })
-        .collect();
-    let mut out = JsObject::new();
-    out.insert("schemaVersion", num(1));
-    out.insert("commentRegions", JsValue::Array(regions));
-    out.insert("libraryFunctions", JsValue::Array(functions));
-    out.insert(
-        "bannerClassifications",
-        JsValue::Array(banner_classifications),
-    );
-    JsValue::Object(out)
 }
 
 #[cfg(test)]

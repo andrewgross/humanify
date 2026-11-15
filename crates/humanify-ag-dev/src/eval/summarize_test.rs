@@ -115,7 +115,7 @@ fn a_card_without_a_scorer_version_is_refused() {
     let dir = std::env::temp_dir().join(format!("dev-summarize-v-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let text = humanify_ag_model::js::stringify(&card("2.1.85->2.1.86", 1.0, true))
+    let text = crate::json::js::stringify(&card("2.1.85->2.1.86", 1.0, true))
         .replace("\"scorerVersion\":2,", "");
     std::fs::write(dir.join("2.1.86.json"), text).unwrap();
     let reference = crate::committed::eval::self_hop_reference(&crate::paths::repo_root())

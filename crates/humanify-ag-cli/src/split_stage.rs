@@ -26,9 +26,8 @@ use humanify_ag_core::place::method::{MarkerOffer, method_name, method_record, n
 use humanify_ag_core::place::tiers::{PLACEMENT_TIERS, PlacementSwitches, placement_summary};
 use humanify_ag_core::place::trail::PlacementTrail;
 use humanify_ag_core::rename::transfer::carry::PriorCarry;
-use humanify_ag_model::js::{JsObject, JsValue, stringify};
-use humanify_ag_model::jsshape::CountMap;
 use humanify_ag_model::llm::NameProvider;
+use humanify_ag_model::ordered::OrderedMap;
 use humanify_ag_model::stats::SplitMethodStats;
 
 use crate::kill_switches::{Switch, SwitchState};
@@ -224,37 +223,24 @@ pub struct PostSplitRecords {
 }
 
 fn split_dump(code: &str, outcome: &SplitOutcome, trail: &PlacementTrail) -> SplitSections {
-    let hashes: Vec<String> = outcome
-        .ledger
-        .as_object()
-        .and_then(|o| o.get("hashes"))
-        .and_then(|h| match h {
-            JsValue::Array(items) => Some(
-                items
-                    .iter()
-                    .map(|v| v.as_str().unwrap_or_default().to_string())
-                    .collect(),
-            ),
-            _ => None,
+    let hashes: Vec<String> = outcome.ledger.hashes.clone();
+    let files: Vec<serde_json::Value> = outcome
+        .layout
+        .iter()
+        .map(|(path, statements)| serde_json::json!({"path": path, "statements": statements}))
+        .collect();
+    let aliases: Vec<serde_json::Value> = outcome
+        .aliases
+        .iter()
+        .map(|(importer, module, alias)| {
+            serde_json::json!({"importer": importer, "module": module, "alias": alias})
         })
-        .unwrap_or_default();
-    let mut imports: std::collections::HashMap<&str, std::collections::BTreeMap<String, String>> =
-        std::collections::HashMap::new();
-    for (importer, module, alias) in &outcome.aliases {
-        imports
-            .entry(importer.as_str())
-            .or_default()
-            .insert(module.clone(), alias.clone());
-    }
+        .collect();
     SplitSections {
         statement_family: outcome.spans.iter().copied().zip(hashes).collect(),
-        placement: trail.placement_json(),
+        placement: serde_json::to_value(&trail.rows).expect("the placement rows serialize"),
         shipped: code.to_string(),
-        emit: humanify_ag_core::emit::emit_dump::layout_rows(
-            &outcome.layout,
-            &outcome.spans,
-            |p| imports.get(p).cloned().unwrap_or_default(),
-        ),
+        emit: serde_json::json!({"files": files, "aliases": aliases}),
     }
 }
 
@@ -480,16 +466,10 @@ fn commit_and_finish(
     if debug_enabled()
         && let Some(carry) = prior_carry.filter(|c| !c.match_map.is_empty())
     {
-        let map = JsObject::from_entries(
-            carry
-                .match_map
-                .iter()
-                .map(|(k, v)| (k.clone(), JsValue::str(v.as_str())))
-                .collect(),
-        );
+        let map = OrderedMap(carry.match_map.clone());
         write_file(
             &out.join(".humanify").join("prior-match-map.json"),
-            &stringify(&JsValue::Object(map)),
+            &serde_json::to_string(&map).expect("a name map serializes"),
         )
         .map_err(before)?;
     }
@@ -502,7 +482,7 @@ fn commit_and_finish(
         out,
         &StageHashes {
             after_naming: stage_fingerprint(code),
-            after_placement: stage_fingerprint(&stringify(&outcome.ledger)),
+            after_placement: stage_fingerprint(&outcome.ledger.to_json()),
         },
     )
     .map_err(|e| before(e.to_string()))?;
@@ -549,21 +529,21 @@ fn commit_and_finish(
         }
     }
     let stats = &outcome.stats;
-    let by_tier = CountMap(
+    let by_tier = OrderedMap(
         PLACEMENT_TIERS
             .iter()
             .zip(stats.tiers.by_tier)
-            .map(|(t, n)| (t.name().to_string(), n as f64))
+            .map(|(t, n)| (t.name().to_string(), n as u64))
             .collect(),
     );
     write_placement_stats(
         out,
         &PlacementStats {
-            statements: stats.statements as f64,
-            files: stats.files as f64,
-            folders: stats.folders as f64,
-            inherited: stats.tiers.inherited as f64,
-            residue_locality: stats.tiers.residue_locality as f64,
+            statements: stats.statements as u64,
+            files: stats.files as u64,
+            folders: stats.folders as u64,
+            inherited: stats.tiers.inherited as u64,
+            residue_locality: stats.tiers.residue_locality as u64,
             by_tier,
         },
     )

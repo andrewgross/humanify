@@ -14,7 +14,7 @@
 
 use std::path::Path;
 
-use humanify_ag_model::js::{JsObject, JsValue};
+use crate::json::js::{JsObject, JsValue};
 
 use super::card::{obj, text, texts};
 use super::kpis::{KPIS, SPLIT_KPIS};

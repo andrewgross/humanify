@@ -35,8 +35,10 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
-use crate::js::{JsObject, JsValue};
+use serde::Serialize;
+
 use crate::llm::{BatchRenameResponse, CallSite, LlmCall, LlmError, LlmErrorKind};
+use crate::ordered::OrderedMap;
 
 /// One HTTP attempt's result, as the client saw it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,7 +122,8 @@ pub fn classify_sent(
 /// The verdicts on one raw answer, one per ASKED identifier (exclusive, in
 /// this priority: missing, unchanged, invalid, duplicate-in-answer,
 /// taken-name, else proposed), plus two counts beside them.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AnswerVerdicts {
     /// Identifiers the call asked about.
     pub asked: u64,
@@ -163,21 +166,6 @@ impl AnswerVerdicts {
         self.hinted += o.hinted;
         self.equals_prior_hint += o.equals_prior_hint;
         self.extra_keys += o.extra_keys;
-    }
-
-    fn to_js(self) -> JsValue {
-        counts(&[
-            ("asked", self.asked),
-            ("proposed", self.proposed),
-            ("missing", self.missing),
-            ("unchanged", self.unchanged),
-            ("invalid", self.invalid),
-            ("duplicateInAnswer", self.duplicate_in_answer),
-            ("takenName", self.taken_name),
-            ("hinted", self.hinted),
-            ("equalsPriorHint", self.equals_prior_hint),
-            ("extraKeys", self.extra_keys),
-        ])
     }
 }
 
@@ -333,62 +321,108 @@ impl Tally {
         self.attempt_ms.extend(&o.attempt_ms);
     }
 
-    fn outcomes_js(&self) -> JsValue {
-        let mut o = JsObject::new();
-        o.insert("calls", num(self.calls));
-        o.insert("answered", num(self.answered));
-        o.insert("failed", num(self.failed));
-        o.insert("truncated", num(self.truncated));
-        o.insert("answers", self.answers.to_js());
-        JsValue::Object(o)
+    fn outcomes(&self) -> Outcomes {
+        Outcomes {
+            calls: self.calls,
+            answered: self.answered,
+            failed: self.failed,
+            truncated: self.truncated,
+            answers: self.answers,
+        }
     }
 
-    fn transport_js(&self) -> JsValue {
+    fn transport(&self) -> Transport {
         let keyed = |keys: &[&'static str], map: &BTreeMap<&'static str, u64>| {
-            let pairs: Vec<(&str, u64)> = keys
-                .iter()
-                .map(|k| (*k, map.get(k).copied().unwrap_or(0)))
-                .collect();
-            counts(&pairs)
+            OrderedMap(
+                keys.iter()
+                    .map(|k| (k.to_string(), map.get(k).copied().unwrap_or(0)))
+                    .collect(),
+            )
         };
-        let mut o = JsObject::new();
-        o.insert("servedMemo", num(self.served_memo));
-        o.insert("servedDisk", num(self.served_disk));
-        o.insert("sent", num(self.sent));
-        o.insert("okFirstTry", num(self.ok_first_try));
-        o.insert("okAfterRetry", num(self.ok_after_retry));
-        o.insert("failed", keyed(&FAIL_KEYS, &self.failed_by));
-        o.insert("httpAttempts", num(self.http_attempts));
-        o.insert("retried", keyed(&RETRY_KEYS, &self.retried_by));
-        o.insert(
-            "tokens",
-            counts(&[
-                ("input", self.input_tokens),
-                ("output", self.output_tokens),
-                ("total", self.total_tokens),
-            ]),
-        );
-        JsValue::Object(o)
+        Transport {
+            served_memo: self.served_memo,
+            served_disk: self.served_disk,
+            sent: self.sent,
+            ok_first_try: self.ok_first_try,
+            ok_after_retry: self.ok_after_retry,
+            failed: keyed(&FAIL_KEYS, &self.failed_by),
+            http_attempts: self.http_attempts,
+            retried: keyed(&RETRY_KEYS, &self.retried_by),
+            tokens: Tokens {
+                input: self.input_tokens,
+                output: self.output_tokens,
+                total: self.total_tokens,
+            },
+        }
     }
 
-    fn timing_js(&self) -> JsValue {
-        let mut o = JsObject::new();
-        o.insert("callMs", percentiles(&self.call_ms));
-        o.insert("attemptMs", percentiles(&self.attempt_ms));
-        JsValue::Object(o)
+    fn timing(&self) -> Timing {
+        Timing {
+            call_ms: percentiles(&self.call_ms),
+            attempt_ms: percentiles(&self.attempt_ms),
+        }
     }
 }
 
-fn num(n: u64) -> JsValue {
-    JsValue::Number(n as f64)
+/// One namer's outcomes view.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Outcomes {
+    pub calls: u64,
+    pub answered: u64,
+    pub failed: u64,
+    pub truncated: u64,
+    pub answers: AnswerVerdicts,
 }
 
-fn counts(pairs: &[(&str, u64)]) -> JsValue {
-    let mut o = JsObject::new();
-    for (k, n) in pairs {
-        o.insert(*k, num(*n));
-    }
-    JsValue::Object(o)
+/// One namer's transport view: failures by kind and retries by reason,
+/// every kind written (zeros included).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Transport {
+    pub served_memo: u64,
+    pub served_disk: u64,
+    pub sent: u64,
+    pub ok_first_try: u64,
+    pub ok_after_retry: u64,
+    pub failed: OrderedMap<u64>,
+    pub http_attempts: u64,
+    pub retried: OrderedMap<u64>,
+    pub tokens: Tokens,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct Tokens {
+    pub input: u64,
+    pub output: u64,
+    pub total: u64,
+}
+
+/// One namer's timing view (ms).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Timing {
+    pub call_ms: Percentiles,
+    pub attempt_ms: Percentiles,
+}
+
+/// `{n, p50, p90, p99, max, mean}` of a latency list.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct Percentiles {
+    pub n: u64,
+    pub p50: u64,
+    pub p90: u64,
+    pub p99: u64,
+    pub max: u64,
+    pub mean: u64,
+}
+
+/// The `--stats-json` `llmCalls` block: each view keyed by namer (every
+/// namer, zeros included) and then `total`.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CallStats {
+    pub outcomes: OrderedMap<Outcomes>,
+    pub transport: OrderedMap<Transport>,
+    pub timing: OrderedMap<Timing>,
 }
 
 /// Nearest-rank percentile of a SORTED list.
@@ -400,9 +434,9 @@ fn rank(sorted: &[u64], p: f64) -> u64 {
     sorted[idx]
 }
 
-/// `{n, p50, p90, p99, max, mean}` (ms) of a latency list — sorted first,
-/// so the order the calls completed in never shows.
-fn percentiles(values: &[u64]) -> JsValue {
+/// The percentiles of a latency list, sorted first so they are
+/// independent of the order the calls completed in.
+fn percentiles(values: &[u64]) -> Percentiles {
     let mut sorted = values.to_vec();
     sorted.sort_unstable();
     let mean = if sorted.is_empty() {
@@ -410,14 +444,14 @@ fn percentiles(values: &[u64]) -> JsValue {
     } else {
         (sorted.iter().sum::<u64>() as f64 / sorted.len() as f64).round() as u64
     };
-    counts(&[
-        ("n", sorted.len() as u64),
-        ("p50", rank(&sorted, 0.50)),
-        ("p90", rank(&sorted, 0.90)),
-        ("p99", rank(&sorted, 0.99)),
-        ("max", sorted.last().copied().unwrap_or(0)),
-        ("mean", mean),
-    ])
+    Percentiles {
+        n: sorted.len() as u64,
+        p50: rank(&sorted, 0.50),
+        p90: rank(&sorted, 0.90),
+        p99: rank(&sorted, 0.99),
+        max: sorted.last().copied().unwrap_or(0),
+        mean,
+    }
 }
 
 /// The coverage block's LLM fields this ledger is the source of.
@@ -563,20 +597,20 @@ impl CallLedger {
     /// The `--stats-json` `llmCalls` block: `outcomes`, `transport` and
     /// `timing`, each keyed by namer (every namer, zeros included) plus
     /// `total`.
-    pub fn stats(&self) -> JsValue {
+    pub fn stats(&self) -> CallStats {
         let (per, total) = self.snapshot();
-        let view = |f: fn(&Tally) -> JsValue| {
-            let mut o = JsObject::new();
-            for (site, t) in &per {
-                o.insert(site.as_str(), f(t));
-            }
-            o.insert("total", f(&total));
-            JsValue::Object(o)
-        };
-        let mut o = JsObject::new();
-        o.insert("outcomes", view(Tally::outcomes_js));
-        o.insert("transport", view(Tally::transport_js));
-        o.insert("timing", view(Tally::timing_js));
-        JsValue::Object(o)
+        fn view<T>(per: &[(CallSite, Tally)], total: &Tally, f: fn(&Tally) -> T) -> OrderedMap<T> {
+            let mut rows: Vec<(String, T)> = per
+                .iter()
+                .map(|(s, t)| (s.as_str().to_string(), f(t)))
+                .collect();
+            rows.push(("total".to_string(), f(total)));
+            OrderedMap(rows)
+        }
+        CallStats {
+            outcomes: view(&per, &total, Tally::outcomes),
+            transport: view(&per, &total, Tally::transport),
+            timing: view(&per, &total, Tally::timing),
+        }
     }
 }

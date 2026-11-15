@@ -25,7 +25,6 @@
 //! ported (the Rust has no source-map output; `sourceMap` / the ledger flag
 //! only gate passes here, exactly as the TS conditions read them).
 
-pub mod dump;
 pub mod era;
 pub mod library;
 pub mod validate;
@@ -33,8 +32,8 @@ pub mod validate;
 use humanify_ag_model::llm::{CacheKeyParams, NameProvider};
 use humanify_ag_model::stats::{
     CloseMatchStats, CoverageSummary, EvalStats, NamingFloorStats, PrivateNameStats,
-    RejectionCounts, RenameClaimGuards, RenameClaimStats, TransferStats as StatsTransferStats,
-    TransferStatsByTier, WaveGaugesStats,
+    RenameClaimGuards, RenameClaimStats, TransferStats as StatsTransferStats, TransferStatsByTier,
+    WaveGaugesStats,
 };
 
 use crate::naming::passes::census::MintedCensus;
@@ -753,16 +752,13 @@ fn coverage_inputs(
 
 fn transfer_stats(s: &TransferStats) -> StatsTransferStats {
     StatsTransferStats {
-        attempted: s.attempted as f64,
-        applied: s.applied as f64,
-        skipped: s.skipped as f64,
+        attempted: s.attempted,
+        applied: s.applied,
+        skipped: s.skipped,
         rejected: (!s.rejected.is_empty()).then(|| {
-            RejectionCounts(humanify_ag_model::jsshape::CountMap(
-                s.rejected
-                    .iter()
-                    .map(|(k, n)| (k.clone(), *n as f64))
-                    .collect(),
-            ))
+            humanify_ag_model::ordered::OrderedMap(
+                s.rejected.iter().map(|(k, n)| (k.clone(), (*n))).collect(),
+            )
         }),
     }
 }
@@ -784,7 +780,7 @@ fn resolution_stats(
     use humanify_ag_model::stats as m;
     let r = &s.propagation_by_rung;
     let a = &s.enclosing_stmt_abstain;
-    let n = |x: usize| x as f64;
+    let n = |x: usize| x as u64;
     m::ResolutionStats {
         structural_hash_unique: n(s.structural_hash_unique),
         identity_resolved: n(s.identity_resolved),
@@ -827,7 +823,7 @@ fn resolution_stats(
             spanning_parent_agrees: n(a.spanning_parent_agrees),
             spanning_parent_disagrees: n(a.spanning_parent_disagrees),
             spanning_parent_unknown: n(a.spanning_parent_unknown),
-            reached_span_buckets: humanify_ag_model::jsshape::CountMap(
+            reached_span_buckets: humanify_ag_model::ordered::OrderedMap(
                 STMT_SPAN_BUCKETS
                     .iter()
                     .zip(a.reached_span_buckets)
@@ -848,34 +844,34 @@ fn reask_stats(
     deferred_sweep: Option<&SweepResult>,
 ) -> humanify_ag_model::stats::ReaskStats {
     let mut reask = humanify_ag_model::stats::ReaskStats {
-        unrecoverable_rejections: processor.unrecoverable_rejections as f64,
-        late_rejections: processor.late_rejections as f64,
-        invalid_suggestion_finishes: processor.invalid_suggestion_finishes as f64,
-        all_failed_windows: processor.all_failed_windows as f64,
-        sweep_reasked: 0.0,
-        sweep_reask_applied: 0.0,
-        sweep_reask_dropped: 0.0,
-        collision_handoffs: Some(processor.collision_handoffs as f64),
-        lane_end_handoffs: Some(processor.lane_end_handoffs as f64),
+        unrecoverable_rejections: processor.unrecoverable_rejections as u64,
+        late_rejections: processor.late_rejections as u64,
+        invalid_suggestion_finishes: processor.invalid_suggestion_finishes as u64,
+        all_failed_windows: processor.all_failed_windows as u64,
+        sweep_reasked: 0,
+        sweep_reask_applied: 0,
+        sweep_reask_dropped: 0,
+        collision_handoffs: Some(processor.collision_handoffs as u64),
+        lane_end_handoffs: Some(processor.lane_end_handoffs as u64),
         ladder_at_lane_end: Some(ladder_count(processor, "remaining")),
         ladder_at_barrier: Some(ladder_count(processor, "wave")),
     };
     for sweep in [pre_sweep, deferred_sweep].into_iter().flatten() {
-        reask.sweep_reasked += sweep.reasked as f64;
-        reask.sweep_reask_applied += sweep.reask_applied as f64;
-        reask.sweep_reask_dropped += sweep.reask_dropped as f64;
+        reask.sweep_reasked += sweep.reasked as u64;
+        reask.sweep_reask_applied += sweep.reask_applied as u64;
+        reask.sweep_reask_dropped += sweep.reask_dropped as u64;
     }
     reask
 }
 
 /// The processor's suffix-ladder repairs at one site (`remaining`: the
 /// lane tail, `wave`: the barrier).
-fn ladder_count(processor: &ProcessorReport, site: &str) -> f64 {
+fn ladder_count(processor: &ProcessorReport, site: &str) -> u64 {
     processor
         .contention
         .iter()
         .filter(|e| e.site == site)
-        .count() as f64
+        .count() as u64
 }
 
 /// The stats record's `promptGuard` block (2026-10-04): the waves'
@@ -887,21 +883,21 @@ fn prompt_guard_stats(
 ) -> humanify_ag_model::stats::PromptGuardStats {
     let g = &processor.prompt_guard;
     let mut out = humanify_ag_model::stats::PromptGuardStats {
-        fn_asked: g.fn_asked as f64,
-        fn_unshown: g.fn_unshown as f64,
-        retry_asked: g.retry_asked as f64,
-        retry_unshown: g.retry_unshown as f64,
-        module_asked: g.module_asked as f64,
-        module_unshown: g.module_unshown as f64,
-        sweep_asked: 0.0,
-        sweep_unshown: 0.0,
-        sweep_refused: 0.0,
+        fn_asked: g.fn_asked as u64,
+        fn_unshown: g.fn_unshown as u64,
+        retry_asked: g.retry_asked as u64,
+        retry_unshown: g.retry_unshown as u64,
+        module_asked: g.module_asked as u64,
+        module_unshown: g.module_unshown as u64,
+        sweep_asked: 0,
+        sweep_unshown: 0,
+        sweep_refused: 0,
         examples: g.examples.clone(),
     };
     for sweep in [pre_sweep, deferred_sweep].into_iter().flatten() {
-        out.sweep_asked += sweep.targets_asked as f64;
-        out.sweep_unshown += (sweep.targets_asked - sweep.targets_shown) as f64;
-        out.sweep_refused += sweep.not_shown as f64;
+        out.sweep_asked += sweep.targets_asked as u64;
+        out.sweep_unshown += (sweep.targets_asked - sweep.targets_shown) as u64;
+        out.sweep_refused += sweep.not_shown as u64;
         out.examples.extend(
             sweep
                 .not_shown_examples
@@ -933,44 +929,41 @@ impl NamingOutcome {
         EvalStats {
             coverage: self.coverage.clone(),
             transfer_stats: p.map(transfer_stats_by_tier),
-            prior_version_applied: Some(p.map_or(0.0, |p| p.counts.functions_matched as f64)),
+            prior_version_applied: Some(p.map_or(0, |p| p.counts.functions_matched as u64)),
             prior_version_already_named: Some(
-                p.map_or(0.0, |p| p.counts.functions_already_named as f64),
+                p.map_or(0, |p| p.counts.functions_already_named as u64),
             ),
-            prior_version_bindings_applied: Some(
-                p.map_or(0.0, |p| p.counts.bindings_applied as f64),
-            ),
+            prior_version_bindings_applied: Some(p.map_or(0, |p| p.counts.bindings_applied as u64)),
             private_names: Some(PrivateNameStats {
-                members: self.private_names.members as f64,
-                kept: self.private_names.kept as f64,
-                derived: self.private_names.derived as f64,
-                numbered: self.private_names.numbered as f64,
+                members: self.private_names.members as u64,
+                kept: self.private_names.kept as u64,
+                derived: self.private_names.derived as u64,
+                numbered: self.private_names.numbered as u64,
             }),
             naming_floor: self.floor.map(|f| NamingFloorStats {
-                derived: f.derived as f64,
-                undecorated: f.undecorated as f64,
-                swept: f.swept as f64,
-                skipped: f.skipped as f64,
+                derived: f.derived as u64,
+                undecorated: f.undecorated as u64,
+                swept: f.swept as u64,
+                skipped: f.skipped as u64,
             }),
             close_match_stats: p.map(|p| CloseMatchStats {
-                corroborated_by_alignment: p.close_match_stats.corroborated_by_alignment as f64,
-                corroborated_by_shingles: p.close_match_stats.corroborated_by_shingles as f64,
-                uncorroborated: p.close_match_stats.uncorroborated as f64,
+                corroborated_by_alignment: p.close_match_stats.corroborated_by_alignment,
+                corroborated_by_shingles: p.close_match_stats.corroborated_by_shingles,
+                uncorroborated: p.close_match_stats.uncorroborated,
             }),
             resolution_stats: p.map(|p| resolution_stats(&p.resolution_stats)),
-            binding_resolution_stats: humanify_ag_model::jsshape::Nullable(
-                p.and_then(|p| p.binding_resolution_stats.as_ref())
-                    .map(resolution_stats),
-            ),
+            binding_resolution_stats: p
+                .and_then(|p| p.binding_resolution_stats.as_ref())
+                .map(resolution_stats),
             vendor_naming: None,
             rename_claims: RenameClaimStats {
-                ledger_only_rejections: c.ledger_only_rejections as f64,
+                ledger_only_rejections: c.ledger_only_rejections,
                 by_guard: RenameClaimGuards {
-                    target_in_scope: c.by_guard.target_in_scope as f64,
-                    target_visible: c.by_guard.target_visible as f64,
-                    shadows_child: c.by_guard.shadows_child as f64,
+                    target_in_scope: c.by_guard.target_in_scope,
+                    target_visible: c.by_guard.target_visible,
+                    shadows_child: c.by_guard.shadows_child,
                 },
-                claims_recorded: c.claims_recorded as f64,
+                claims_recorded: c.claims_recorded,
             },
             selection: None,
             toolchain: None,
@@ -994,23 +987,21 @@ impl NamingOutcome {
                 self.deferred_sweep.as_ref().map(|(_, run)| &run.result),
             )),
             wave_gauges: Some(WaveGaugesStats {
-                context_set_names: self.waves.context_set_names as f64,
-                peak_live_dispatches: self.waves.peak_live_dispatches as f64,
-                peak_live_prompt_bytes: self.waves.peak_live_prompt_bytes as f64,
-                strategy_bytes: self.waves.gauges.strategy_bytes as f64,
-                strategy_bindings_bytes: Some(self.waves.gauges.strategy_bindings_bytes as f64),
-                strategy_taken_bytes: Some(self.waves.gauges.strategy_taken_bytes as f64),
-                strategy_callee_bytes: Some(self.waves.gauges.strategy_callee_bytes as f64),
-                strategy_callsite_bytes: Some(self.waves.gauges.strategy_callsite_bytes as f64),
-                strategy_context_var_bytes: Some(
-                    self.waves.gauges.strategy_context_var_bytes as f64,
-                ),
-                strategy_module_bytes: Some(self.waves.gauges.strategy_module_bytes as f64),
-                taken_set_names: Some(self.waves.gauges.taken_set_names as f64),
-                ctx_bytes: self.waves.gauges.ctx_bytes as f64,
-                used_set_bytes: self.waves.gauges.used_set_bytes as f64,
-                name_record_bytes: self.waves.gauges.name_record_bytes as f64,
-                bookkeeping_bytes: self.waves.gauges.bookkeeping_bytes as f64,
+                context_set_names: self.waves.context_set_names as u64,
+                peak_live_dispatches: self.waves.peak_live_dispatches as u64,
+                peak_live_prompt_bytes: self.waves.peak_live_prompt_bytes,
+                strategy_bytes: self.waves.gauges.strategy_bytes,
+                strategy_bindings_bytes: Some(self.waves.gauges.strategy_bindings_bytes),
+                strategy_taken_bytes: Some(self.waves.gauges.strategy_taken_bytes),
+                strategy_callee_bytes: Some(self.waves.gauges.strategy_callee_bytes),
+                strategy_callsite_bytes: Some(self.waves.gauges.strategy_callsite_bytes),
+                strategy_context_var_bytes: Some(self.waves.gauges.strategy_context_var_bytes),
+                strategy_module_bytes: Some(self.waves.gauges.strategy_module_bytes),
+                taken_set_names: Some(self.waves.gauges.taken_set_names as u64),
+                ctx_bytes: self.waves.gauges.ctx_bytes,
+                used_set_bytes: self.waves.gauges.used_set_bytes,
+                name_record_bytes: self.waves.gauges.name_record_bytes,
+                bookkeeping_bytes: self.waves.gauges.bookkeeping_bytes,
             }),
         }
     }

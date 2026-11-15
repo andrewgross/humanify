@@ -35,7 +35,8 @@ use crate::unpack::{ModuleMetadata, UnpackedFile};
 
 /// A banner-delimited library region (`CommentRegion`): from its banner to
 /// the next banner, the last one to EOF (`end` None).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CommentRegion {
     pub library_name: String,
     /// Byte offset of the banner match.

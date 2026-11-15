@@ -431,16 +431,13 @@ fn the_log_streams_the_bulk_builders_bytes() {
         .unwrap_or_default();
     dispatches.extend(sweep);
     let params = config_tier(crate::fast::FastTier::Off).params;
-    let (prompts, keys) = dispatch_rows(&dispatches, &params);
-    let mut streamed = (String::new(), String::new());
-    for (p, k) in log.memory_rows() {
-        streamed.0.push_str(p);
-        streamed.0.push('\n');
-        streamed.1.push_str(k);
-        streamed.1.push('\n');
+    let prompts = dispatch_rows(&dispatches, &params);
+    let mut streamed = String::new();
+    for p in log.memory_rows() {
+        streamed.push_str(p);
+        streamed.push('\n');
     }
-    assert_eq!(streamed.0, prompts, "prompts.jsonl, row for row");
-    assert_eq!(streamed.1, keys, "cache-keys.jsonl, row for row");
+    assert_eq!(streamed, prompts, "prompts.jsonl, row for row");
     let asks = ask_rows(&dispatches);
     assert_eq!(log.ask_rows(), asks, "asks.jsonl, row for row");
 }
@@ -510,7 +507,7 @@ fn the_off_log_retains_nothing_and_the_asks_log_keeps_rows_only() {
 }
 
 /// A dump-streaming run (`--dump-artifacts`, real part files) ships the
-/// SAME prompts.jsonl + cache-keys.jsonl bytes as the bulk builders over
+/// SAME prompts.jsonl bytes as the bulk builders over
 /// a retaining run's dispatches — the pipelined rounds' records were
 /// REBUILT at their canonical commit ([`Prepared::Replay`], finding #65),
 /// so this is the rebuild's byte-identity proof.
@@ -538,7 +535,7 @@ fn a_dump_streaming_run_replays_the_prepared_records_bytes() {
                 .map(|d| Dispatch::Sweep(crate::trail::Anchor::Fresh, d)),
         );
     }
-    let (prompts, keys) = dispatch_rows(&dispatches, &params);
+    let prompts = dispatch_rows(&dispatches, &params);
 
     // The streaming run: its pipelined records exist only as replay
     // sources, and the rows are written to real files at commit.
@@ -572,16 +569,11 @@ fn a_dump_streaming_run_replays_the_prepared_records_bytes() {
         prompts,
         "the replayed rows are the prepared rows"
     );
-    assert_eq!(
-        std::fs::read_to_string(dir.join("cache-keys.jsonl")).expect("cache-keys.jsonl"),
-        keys
+    assert!(
+        !dir.join("cache-keys.jsonl").exists(),
+        "the dump writes no cache-key rows"
     );
-    for part in [
-        "prompts.jsonl.vendorpart",
-        "prompts.jsonl.namingpart",
-        "cache-keys.jsonl.vendorpart",
-        "cache-keys.jsonl.namingpart",
-    ] {
+    for part in ["prompts.jsonl.vendorpart", "prompts.jsonl.namingpart"] {
         assert!(
             !dir.join(part).exists(),
             "close removes the part files ({part})"

@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use humanify_ag_model::js::JsValue;
+use crate::json::js::JsValue;
 
 use super::card::at;
 

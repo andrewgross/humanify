@@ -32,10 +32,10 @@ fn the_stats_block_carries_the_total_and_each_namer() {
             s.split,
             s.tree_reviser
         ),
-        (14.0, 7.0, 2.0, 1.0, 3.0, 1.0)
+        (14, 7, 2, 1, 3, 1)
     );
     // Always written, all-zero included: absent means an older binary.
-    assert_eq!(ProviderFailures::default().stats().total, 0.0);
+    assert_eq!(ProviderFailures::default().stats().total, 0);
 }
 
 #[test]

@@ -1,11 +1,34 @@
 //! The artifact dump writer's red tests.
 
 use humanify_ag_model::llm::CacheKeyParams;
+use serde_json::{Value, json};
 
-use super::{Dispatch, ask_rows, dispatch_rows};
+use super::{Dispatch, DumpSink, dispatch_rows};
 
-/// `writePrompts` / `writeCacheKeys` join the rows with "\n" and add a
-/// trailing "\n" — so a run that dispatched nothing writes ONE newline.
+/// A section is its records exactly as serde writes them, in `<name>.json`.
+#[test]
+fn a_section_is_written_as_its_records() {
+    #[derive(serde::Serialize)]
+    struct Row {
+        tier: &'static str,
+        count: u32,
+    }
+    let dir = humanify_ag_testkit::ScratchDir::new("dump-sink");
+    let sink = DumpSink::create(&dir.path().join("dump")).expect("the sink");
+    sink.section(
+        "rows",
+        &[Row {
+            tier: "hash",
+            count: 3,
+        }],
+    )
+    .expect("written");
+    let text = std::fs::read_to_string(dir.path().join("dump/rows.json")).expect("rows.json");
+    let value: Value = serde_json::from_str(&text).expect("JSON");
+    assert_eq!(value, json!([{"tier": "hash", "count": 3}]));
+}
+
+/// A run that dispatched nothing writes ONE newline.
 #[test]
 fn no_dispatches_write_one_newline() {
     let params = CacheKeyParams {
@@ -14,72 +37,21 @@ fn no_dispatches_write_one_newline() {
         max_tokens: None,
         reasoning_effort: None,
     };
-    let (prompts, keys) = dispatch_rows(&[], &params);
-    assert_eq!((prompts.as_str(), keys.as_str()), ("\n", "\n"));
-}
-
-/// 16-findings #7: the cache-key row DROPPED the callee `snippet`, which IS
-/// cache-key material (`CalleeSignature`'s doc) — most rows per pair could
-/// not be re-derived from the dump. The row builder is the Rust
-/// `request_material` (the TS `cacheKeyMaterialRow` was deleted at the
-/// cutover); the row must now carry it exactly as the key material does.
-#[test]
-fn cache_key_rows_carry_the_callee_snippet() {
-    let params = CacheKeyParams::default();
-    let call = humanify_ag_model::llm::LlmCall {
-        request: humanify_ag_model::llm::BatchRenameRequest {
-            code: "function f(a){x(a);}".into(),
-            identifiers: vec!["a".into()],
-            callee_signatures: vec![humanify_ag_model::llm::CalleeSignature {
-                name: "x".into(),
-                params: vec!["a".into()],
-                snippet: Some("function x(a) { return a; }".into()),
-            }],
-            ..humanify_ag_model::llm::BatchRenameRequest::default()
-        },
-        system_prompt: String::new(),
-        user_prompt: String::new(),
-        site: humanify_ag_model::llm::CallSite::Naming,
-    };
-    let (_, keys) = dispatch_rows(
-        &[super::Dispatch::Plain {
-            function_id: "vendor-namer",
-            site: "vendor",
-            call: &call,
-        }],
-        &params,
-    );
-    let row = humanify_ag_model::js::JsValue::parse(keys.lines().next().unwrap_or_default())
-        .expect("the row parses")
-        .as_object()
-        .cloned()
-        .expect("an object");
-    let request = row.get("request").expect("the request half");
-    let signatures = request
-        .as_object()
-        .expect("an object")
-        .get("calleeSignatures")
-        .expect("the signature list");
-    let humanify_ag_model::js::JsValue::Array(signatures) = signatures else {
-        panic!("an array");
-    };
-    assert_eq!(signatures.len(), 1);
-    assert_eq!(
-        signatures[0]
-            .as_object()
-            .expect("a signature object")
-            .get("snippet")
-            .and_then(humanify_ag_model::js::JsValue::as_str),
-        Some("function x(a) { return a; }"),
-        "the row carries the snippet the key hashed (16-findings #7)"
-    );
+    assert_eq!(dispatch_rows(&[], &params), "\n");
 }
 
 /// `--dump-asks` fixtures: the shared record builders and row accessors
 /// (one row per dispatch — the ask-trace taxonomy of `naming::ask_trace`).
 use crate::naming::ask_trace::AskSite;
 use crate::naming::waves::processor::DispatchRecord;
-use humanify_ag_model::js::JsValue;
+
+/// The bulk ask rows, as JSON values.
+fn ask_rows(dispatches: &[Dispatch<'_>]) -> Vec<Value> {
+    super::ask_rows(dispatches)
+        .iter()
+        .map(|r| serde_json::to_value(r).expect("a row"))
+        .collect()
+}
 
 fn ask_record(id: &str, ids: &[&str], retry: bool, ask: AskSite) -> DispatchRecord {
     let mut request = humanify_ag_model::llm::BatchRenameRequest {
@@ -136,25 +108,22 @@ fn ask_vendor_call() -> humanify_ag_model::llm::LlmCall {
     }
 }
 
-fn str_of<'a>(row: &'a JsValue, k: &str) -> &'a str {
-    row.as_object()
-        .and_then(|o| o.get(k))
-        .and_then(JsValue::as_str)
+fn str_of<'a>(row: &'a Value, k: &str) -> &'a str {
+    row[k]
+        .as_str()
         .unwrap_or_else(|| panic!("no string field {k}: {row:?}"))
 }
 
-fn num_of(row: &JsValue, k: &str) -> f64 {
-    match row.as_object().and_then(|o| o.get(k)) {
-        Some(JsValue::Number(v)) => *v,
-        other => panic!("no number field {k}: {other:?}"),
-    }
+fn num_of(row: &Value, k: &str) -> f64 {
+    row[k]
+        .as_f64()
+        .unwrap_or_else(|| panic!("no number field {k}: {row:?}"))
 }
 
-fn bool_of(row: &JsValue, k: &str) -> bool {
-    match row.as_object().and_then(|o| o.get(k)) {
-        Some(JsValue::Bool(v)) => *v,
-        other => panic!("no bool field {k}: {other:?}"),
-    }
+fn bool_of(row: &Value, k: &str) -> bool {
+    row[k]
+        .as_bool()
+        .unwrap_or_else(|| panic!("no bool field {k}: {row:?}"))
 }
 
 /// A first-round ask (fn or module lane): reason and variant by site,
@@ -180,19 +149,7 @@ fn fresh_and_module_ask_rows_read_by_site() {
     assert!(!bool_of(&rows[0], "isRetry"));
     assert!(rows[0].as_object().unwrap().get("retryCause").is_none());
     assert_eq!(num_of(&rows[0], "usedNamesCount"), 2.0);
-    let JsValue::Array(ids) = rows[0]
-        .as_object()
-        .unwrap()
-        .get("identifiers")
-        .cloned()
-        .unwrap()
-    else {
-        panic!("identifiers")
-    };
-    assert_eq!(
-        ids.iter().map(|v| v.as_str().unwrap()).collect::<Vec<_>>(),
-        ["a", "b"]
-    );
+    assert_eq!(rows[0]["identifiers"], json!(["a", "b"]));
     // A module lane: its prior suggestions live in the PROMPT text, so the
     // site's flag is what the row reads.
     assert_eq!(str_of(&rows[1], "reason"), "module-lane");
@@ -275,10 +232,9 @@ pub(crate) fn post_split_row(text: &str) -> crate::trail::TrailEntry {
     }
 }
 
-/// Finding #50: a post-split reconcile row indexes its SPLIT FILE, so its
-/// key names that file (07 §1's tree-relative path key) and its span is
-/// the row's own byte span in that file's text — never converted through
-/// the generated text's table.
+/// A post-split reconcile row indexes its SPLIT FILE, so its key names
+/// that file and its span is the row's own byte span in that file's text
+/// — not converted through the generated text's table.
 #[test]
 fn post_split_rows_are_keyed_in_their_split_file() {
     use crate::naming::report::diagnostics::ExtraText;
@@ -289,15 +245,14 @@ fn post_split_rows_are_keyed_in_their_split_file() {
         text: text.into(),
         rows: vec![post_split_row(text)],
     }];
-    let keys = super::extra_keys(&extra);
-    assert_eq!(keys.len(), 1);
-    assert_eq!(keys[0].key.text, "src/tools/a.js");
+    let rows: Vec<_> = super::extra_rows(&extra).collect();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].target.text, "src/tools/a.js");
     assert_eq!(
-        (keys[0].key.start, keys[0].key.end),
+        (rows[0].target.start, rows[0].target.end),
         (start, start + 1),
         "the row's own UTF-8 byte span in its file"
     );
-    assert_eq!(keys[0].loc, "2:4");
 }
 
 /// Finding #50, diag.json: the row's `declText` names its split file and
@@ -305,7 +260,6 @@ fn post_split_rows_are_keyed_in_their_split_file() {
 #[test]
 fn post_split_trail_rows_name_their_split_file() {
     use crate::naming::report::diagnostics::{AnchorTexts, ExtraText, trail_report};
-    use humanify_ag_model::js::JsValue;
     let text = "var é = 1;\nvar a = 2;\n";
     let extra = vec![ExtraText {
         file: "src/tools/a.js".into(),
@@ -320,20 +274,9 @@ fn post_split_trail_rows_name_their_split_file() {
         },
         &extra,
     );
-    let JsValue::Object(report) = report else {
-        panic!("an object")
-    };
-    let Some(JsValue::Array(trails)) = report.get("trails") else {
-        panic!("trails")
-    };
-    let JsValue::Object(row) = &trails[0] else {
-        panic!("a row")
-    };
-    assert_eq!(row.get("declText"), Some(&JsValue::str("src/tools/a.js")));
-    let Some(JsValue::Object(span)) = row.get("declSpan") else {
-        panic!("declSpan")
-    };
+    let row = &report.trails[0];
+    assert_eq!(row.decl_text, "src/tools/a.js");
     // `é` is 2 bytes / 1 unit: `a` sits at byte 16, JS index 15.
-    assert_eq!(span.get("start"), Some(&JsValue::Number(15.0)));
-    assert_eq!(row.get("loc"), Some(&JsValue::str("2:4")));
+    assert_eq!(row.decl_span.start, 15);
+    assert_eq!(row.loc, "2:4");
 }

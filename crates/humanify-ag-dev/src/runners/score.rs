@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use humanify_ag_model::js::JsValue;
+use crate::json::js::JsValue;
 
 use super::boot;
 use super::lanes::Lanes;

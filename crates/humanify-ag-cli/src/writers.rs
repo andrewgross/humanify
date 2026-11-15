@@ -3,15 +3,14 @@
 //! `src/stage-fingerprint.ts`). Bytes gated against the TS writers
 //! (test/parity/wpb4-vectors.json `writers`, `fingerprints`).
 //!
-//! Formats (contract 14 §8.4): stats, placement stats — indent 2, NO
-//! trailing newline; stage hashes — indent 2 WITH a trailing newline; the
-//! split ledger — compact, no trailing newline.
+//! Formats: stats, placement stats — indent 2, NO trailing newline; stage
+//! hashes — indent 2 WITH a trailing newline; the split ledger — compact,
+//! no trailing newline. The two `.humanify/` records are part of the
+//! written tree: their bytes are pinned by `writers_test`.
 
 use std::path::Path;
 
-use humanify_ag_model::js::{JsValue, stringify, stringify_pretty};
-use humanify_ag_model::js_record;
-use humanify_ag_model::jsshape::{CountMap, JsType};
+use humanify_ag_model::ordered::OrderedMap;
 use humanify_ag_model::stats::EvalStats;
 use sha2::{Digest, Sha256};
 
@@ -37,38 +36,43 @@ fn write_creating_parent(dest: &Path, text: &str) -> std::io::Result<()> {
     std::fs::write(dest, text)
 }
 
+/// Serde's pretty JSON (indent 2), no trailing newline.
+fn pretty(value: &impl serde::Serialize) -> String {
+    serde_json::to_string_pretty(value).expect("a record serializes")
+}
+
 /// `writeEvalStats(destPath, ...)`.
 pub fn write_eval_stats(dest: &Path, stats: &EvalStats) -> std::io::Result<()> {
     write_creating_parent(dest, &stats.to_file_text())
 }
 
-js_record! {
-    /// The `{afterNaming, afterPlacement}` stage-boundary fingerprints.
-    pub struct StageHashes {
-        after_naming: String = "afterNaming",
-        after_placement: String = "afterPlacement",
-    }
+/// The `{afterNaming, afterPlacement}` stage-boundary fingerprints.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageHashes {
+    pub after_naming: String,
+    pub after_placement: String,
 }
 
 /// `writeStageHashes`.
 pub fn write_stage_hashes(output_dir: &Path, hashes: &StageHashes) -> std::io::Result<()> {
     write_creating_parent(
         &output_dir.join(STAGE_HASHES_PATH),
-        &format!("{}\n", stringify_pretty(&hashes.to_js(), 2)),
+        &format!("{}\n", pretty(hashes)),
     )
 }
 
-js_record! {
-    /// The fields `writePlacementStats` copies out of `StableSplitStats`;
-    /// `byTier` is keyed by the placement registry, in its order.
-    pub struct PlacementStats {
-        statements: f64 = "statements",
-        files: f64 = "files",
-        folders: f64 = "folders",
-        inherited: f64 = "inherited",
-        residue_locality: f64 = "residueLocality",
-        by_tier: CountMap = "byTier",
-    }
+/// The fields `writePlacementStats` copies out of `StableSplitStats`;
+/// `byTier` is keyed by the placement registry, in its order.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlacementStats {
+    pub statements: u64,
+    pub files: u64,
+    pub folders: u64,
+    pub inherited: u64,
+    pub residue_locality: u64,
+    pub by_tier: OrderedMap<u64>,
 }
 
 /// A JSON document, pretty (indent 2) with a trailing newline.
@@ -79,16 +83,15 @@ pub fn write_json_file(path: &Path, doc: &serde_json::Value) -> std::io::Result<
 
 /// `writePlacementStats`.
 pub fn write_placement_stats(output_dir: &Path, stats: &PlacementStats) -> std::io::Result<()> {
-    write_creating_parent(
-        &output_dir.join(PLACEMENT_STATS_PATH),
-        &stringify_pretty(&stats.to_js(), 2),
-    )
+    write_creating_parent(&output_dir.join(PLACEMENT_STATS_PATH), &pretty(stats))
 }
 
-/// `writeSplitLedger`: compact `JSON.stringify(ledger)`. The ledger's typed
-/// model arrives with the split (WP5.1); the writer's format is fixed here.
-pub fn write_split_ledger(output_dir: &Path, ledger: &JsValue) -> std::io::Result<()> {
-    write_creating_parent(&output_dir.join(SPLIT_LEDGER_PATH), &stringify(ledger))
+/// `writeSplitLedger`: the ledger's compact JSON, no trailing newline.
+pub fn write_split_ledger(
+    output_dir: &Path,
+    ledger: &humanify_ag_core::place::ledger::SplitLedger,
+) -> std::io::Result<()> {
+    write_creating_parent(&output_dir.join(SPLIT_LEDGER_PATH), &ledger.to_json())
 }
 
 /// `RENAME_LEDGER_APPLIER`: the self-contained replay script written next

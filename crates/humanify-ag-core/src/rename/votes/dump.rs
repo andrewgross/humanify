@@ -1,27 +1,20 @@
-//! The votes dump (07 §2 votes.json) — TS original: `prior-transfer.ts`
-//! `recordVoteDump` / `collectVoteWitnesses` and `src/dump/write.ts`
-//! `writeVotes` / `voteOutcomeBySpan`.
-//!
-//! Per-target tallies with witnesses, snapshotted BEFORE the ladders run;
-//! the ladder OUTCOME is joined from the strategy trail at write time (the
-//! last vote-ladder attempt on the target's row: module-vote, module-pin,
-//! fn-name-vote, fn-name-pin, vote-suggest). Closure tallies carry totals
-//! only (exact recorded as 0) and closure-capture is not a ladder tier, so
-//! closure rows carry no outcome.
+//! The votes record (the dump's votes section): per-target tallies with
+//! witnesses, snapshotted BEFORE the ladders run. The ladder's outcome is
+//! the target's row in the transfers section. Closure tallies carry
+//! totals only (exact recorded as 0).
 
 use std::collections::HashMap;
 
-use humanify_ag_model::dump::{SpanKey, VoteRow, VoteTally, VoteWitness};
 use oxc_span::Span;
 
 use crate::rename::transfer::{ExternalRef, TransferRun};
 use crate::rename::validated::scopes::BindingId;
-use crate::trail::{Anchor, Outcome, StrategyTrail, Tier};
 
 use super::{Route, Votes, route};
 
 /// One snapshotted target.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VoteDumpRow {
     pub target_kind: &'static str,
     /// The target identifier's span in the fresh text.
@@ -96,79 +89,12 @@ pub(super) fn record_vote_dump(
     run.votes_dump.extend(rows);
 }
 
-/// A vote map → the tally array, sorted by name (JS `<` — UTF-16 order).
+/// A vote map → the tally array, sorted by name.
 fn sorted_tally(votes: &Votes, with_exact: bool) -> Vec<(String, u64, u64)> {
     let mut out: Vec<(String, u64, u64)> = votes
         .iter()
         .map(|(n, c)| (n.clone(), c.total, if with_exact { c.exact } else { 0 }))
         .collect();
-    out.sort_by(|a, b| humanify_ag_model::js::cmp_utf16(&a.0, &b.0));
+    out.sort_by(|a, b| a.0.cmp(&b.0));
     out
-}
-
-/// The vote-ladder tiers whose trail entry carries a target's outcome.
-fn is_ladder_tier(tier: Tier) -> bool {
-    matches!(
-        tier,
-        Tier::ModuleVote | Tier::ModulePin | Tier::FnNameVote | Tier::FnNamePin | Tier::VoteSuggest
-    )
-}
-
-/// TS `writeVotes`: the dump rows with the ladder outcome joined from the
-/// trail (fresh-anchored rows only), sorted by target span.
-pub fn vote_rows(dump: &[VoteDumpRow], trail: &StrategyTrail) -> Vec<VoteRow> {
-    let mut outcome_by_span: HashMap<(u32, u32), String> = HashMap::new();
-    for entry in trail.entries() {
-        if entry.target.anchor != Anchor::Fresh {
-            continue;
-        }
-        let Some(last) = entry.attempts.iter().rev().find(|a| is_ladder_tier(a.tier)) else {
-            continue;
-        };
-        let outcome = if last.outcome == Outcome::Abstained {
-            format!(
-                "{}:{}",
-                last.outcome.as_str(),
-                last.reason.as_deref().unwrap_or("")
-            )
-        } else {
-            last.outcome.as_str().to_string()
-        };
-        let span = entry.target.decl_span;
-        outcome_by_span.insert((span.start, span.end), outcome);
-    }
-    let mut rows: Vec<VoteRow> = dump
-        .iter()
-        .map(|row| VoteRow {
-            target: SpanKey {
-                text: "fresh".to_string(),
-                start: i64::from(row.span.start),
-                end: i64::from(row.span.end),
-            },
-            target_kind: row.target_kind.to_string(),
-            outcome: outcome_by_span
-                .get(&(row.span.start, row.span.end))
-                .cloned(),
-            tally: row
-                .tally
-                .iter()
-                .map(|(name, total, exact)| VoteTally {
-                    name: name.clone(),
-                    total: *total,
-                    exact: *exact,
-                })
-                .collect(),
-            witnesses: row
-                .witnesses
-                .iter()
-                .map(|(old, source, exact)| VoteWitness {
-                    source_function_id: source.clone(),
-                    old_name: old.clone(),
-                    exact_slot: *exact,
-                })
-                .collect(),
-        })
-        .collect();
-    rows.sort_by(|a, b| a.target.cmp(&b.target));
-    rows
 }

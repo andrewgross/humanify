@@ -83,14 +83,52 @@ fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
         "the runnable emit declines with the TS's reason"
     );
     assert!(outcome.runnable.is_none(), "the review tree is written");
-    let ledger = outcome.ledger.as_object().expect("a ledger object");
+    let written: serde_json::Map<String, Value> =
+        serde_json::from_str(&ledger_text(&outcome)).expect("a ledger object");
     assert!(
-        ledger.get("aliases").is_none(),
+        written.get("aliases").is_none(),
         "the ledger records no aliases"
     );
     assert!(
-        ledger.get("emitIndexes").is_none(),
+        outcome.ledger.emit_indexes.is_none(),
         "the layout was never recorded"
+    );
+    assert_eq!(
+        sha(&ledger_text(&outcome)),
+        "b399b00de01621f62fbbe928b564a65f772ddb248c521104a7ed69d8c877089f"
+    );
+}
+
+/// The persisted ledger's bytes (`.humanify/split-ledger.json`).
+fn ledger_text(outcome: &super::SplitOutcome) -> String {
+    outcome.ledger.to_json()
+}
+
+fn sha(text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(text.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// A fossil module's ledger row: key order file, hashes, imports,
+/// declared, tokens, sourcePath (when kept), mechanicalStem.
+#[test]
+fn a_fossil_module_row_is_written_in_the_ledger_key_order() {
+    let m = crate::place::ledger::FossilLedgerModule {
+        file: "src/a.js".into(),
+        hashes: vec!["h1".into()],
+        imports: vec![2, 0],
+        declared: vec!["x".into()],
+        tokens: vec!["t".into()],
+        source_path: Some("lib/a.ts".into()),
+        mechanical_stem: "x".into(),
+    };
+    let written = serde_json::to_string(&m).unwrap();
+    assert_eq!(
+        written,
+        r#"{"file":"src/a.js","hashes":["h1"],"imports":[2,0],"declared":["x"],"tokens":["t"],"sourcePath":"lib/a.ts","mechanicalStem":"x"}"#
     );
 }
 
@@ -573,17 +611,17 @@ fn a_moved_library_module_lands_at_its_vendor_path() {
          rewritten to its file's require): {text}"
     );
     // The ledger carries the path — the next hop's match inherits it.
-    let ledger = outcome.ledger.as_object().expect("a ledger object");
-    let modules = match ledger.get("fossilModules") {
-        Some(humanify_ag_model::js::JsValue::Array(items)) => items,
-        other => panic!("fossilModules is not an array: {other:?}"),
-    };
-    let file = modules[1]
-        .as_object()
-        .and_then(|m| m.get("file"))
-        .and_then(humanify_ag_model::js::JsValue::as_str)
-        .expect("module 1's file");
+    let modules = outcome
+        .ledger
+        .fossil_modules
+        .as_ref()
+        .expect("fossilModules");
+    let file = modules[1].file.as_str();
     assert_eq!(file, "vendor/ms/module-1.js");
+    assert_eq!(
+        sha(&ledger_text(&outcome)),
+        "833c2c264fb3bbb85a6756936015bc8edbc3abb214cdc7b4064c3c220ca31e83"
+    );
     // And no other file shares the name.
     assert_eq!(
         outcome
@@ -695,8 +733,7 @@ fn split_module_bundle(group_init: bool) -> String {
 }
 
 fn ledger_of(outcome: &super::SplitOutcome) -> StableSplitLedger {
-    let text = humanify_ag_model::js::stringify(&outcome.ledger);
-    serde_json::from_str(&text).expect("a ledger")
+    serde_json::from_str(&ledger_text(outcome)).expect("a ledger")
 }
 
 fn file_holding<'o>(outcome: &'o super::SplitOutcome, marker: &str) -> &'o str {
@@ -798,4 +835,12 @@ fn an_unchanged_run_glued_to_another_module_keeps_its_file_in_the_runnable_tree(
     assert_eq!(file_holding(&v2, "function resizeImage"), image_file);
     assert_eq!(file_holding(&v2, "function mimeOf"), image_file);
     assert_eq!(file_holding(&v2, "function dimensionsOf"), image_file);
+    assert_eq!(
+        sha(&ledger_text(&v1)),
+        "df061bda8ce964a0f3ef84324e4eb012824975d50733118009b5655b79cb12a8"
+    );
+    assert_eq!(
+        sha(&ledger_text(&v2)),
+        "e9ae3585add0489e4c8a5f76e82d3eb428ea4df8f30327505487bc6f0999978a"
+    );
 }

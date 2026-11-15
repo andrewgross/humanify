@@ -7,7 +7,8 @@
 use std::cmp::Ordering;
 use std::path::Path;
 
-use humanify_ag_model::js::{JsObject, JsValue, locale_compare, to_fixed};
+use crate::json::js::{JsObject, JsValue};
+use humanify_ag_model::js::{locale_compare, to_fixed};
 
 use super::card::{at, is_scorecard, number_at, obj, scorer_version, text, texts};
 use super::kpis::{Denominator, Kpi, caveat_lines, named};

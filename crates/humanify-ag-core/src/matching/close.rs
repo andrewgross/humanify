@@ -177,6 +177,9 @@ pub struct CloseMatchPair {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CloseMatchResult {
     pub pairs: Vec<CloseMatchPair>,
+    /// Every scored candidate above the threshold, in the assignment's
+    /// decision order (descending score, stable).
+    pub candidates: Vec<CloseCandidate>,
     pub skipped_old: usize,
     pub skipped_new: usize,
 }
@@ -203,11 +206,12 @@ pub fn find_close_matches(
     let (old_vectors, skipped_old) = build_vector_map(unmatched_old, old_index);
     let (fresh_vectors, skipped_new) = build_vector_map(unmatched_new, new_index);
 
-    let candidates = score_pairs(&old_vectors, &fresh_vectors, threshold);
-    let pairs = assign_greedy(candidates);
+    let mut candidates = score_pairs(&old_vectors, &fresh_vectors, threshold);
+    let pairs = assign_greedy(&mut candidates);
 
     CloseMatchResult {
         pairs,
+        candidates,
         skipped_old,
         skipped_new,
     }
@@ -295,7 +299,7 @@ fn insert_top_k(list: &mut Vec<CloseCandidate>, candidate: CloseCandidate) {
 /// cross-pair same-shaped siblings and present the coin flip as a match.
 /// Equal-score pairs with disjoint endpoints are not in contention and
 /// still match. Returns the assignments in decision order.
-fn assign_greedy(mut candidates: Vec<CloseCandidate>) -> Vec<CloseMatchPair> {
+fn assign_greedy(candidates: &mut [CloseCandidate]) -> Vec<CloseMatchPair> {
     // TS `candidates.sort((a, b) => b.score - a.score)` — STABLE
     // (ES2019): equal scores keep candidate order. NaN cannot occur (the
     // cosine's norms are positive by the early return), so the
@@ -313,7 +317,7 @@ fn assign_greedy(mut candidates: Vec<CloseCandidate>) -> Vec<CloseMatchPair> {
         if old_taken || used_new.contains(&candidate.new_id) {
             continue;
         }
-        if tied_rival(&candidates, i, &out, &used_new) {
+        if tied_rival(candidates, i, &out, &used_new) {
             continue;
         }
         used_new.insert(candidate.new_id.clone());

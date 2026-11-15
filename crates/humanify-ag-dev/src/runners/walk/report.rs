@@ -18,7 +18,7 @@
 
 use std::path::{Path, PathBuf};
 
-use humanify_ag_model::js::{JsValue, stringify};
+use crate::json::js::{JsValue, stringify};
 use humanify_ag_model::numfmt::group_digits;
 
 use super::super::scoring::{self, PairInputs};
@@ -158,9 +158,9 @@ fn tree_lines(walk: &Path, from: &str, to: &str) -> Result<(f64, Vec<(String, f6
         by_top.push((top, n as f64));
     }
     let total: f64 = by_top.iter().map(|(_, n)| n).sum();
-    let mut o = humanify_ag_model::js::JsObject::new();
+    let mut o = crate::json::js::JsObject::new();
     o.insert("total", JsValue::Number(total));
-    let mut bt = humanify_ag_model::js::JsObject::new();
+    let mut bt = crate::json::js::JsObject::new();
     for (k, n) in &by_top {
         bt.insert(k.as_str(), JsValue::Number(*n));
     }
@@ -915,7 +915,7 @@ fn header_line(name: &str, dir: &Path, rows: &[Row]) -> Result<String, String> {
 
 fn row_json(r: &Row) -> JsValue {
     let lines = r.lines.as_ref().map_or(JsValue::Null, |(t, by)| {
-        let mut bt = humanify_ag_model::js::JsObject::new();
+        let mut bt = crate::json::js::JsObject::new();
         for (k, n) in by {
             bt.insert(k.as_str(), JsValue::Number(*n));
         }
@@ -924,7 +924,7 @@ fn row_json(r: &Row) -> JsValue {
             ("byTop", JsValue::Object(bt)),
         ])
     });
-    let mut o = humanify_ag_model::js::JsObject::new();
+    let mut o = crate::json::js::JsObject::new();
     o.insert("from", r.from.clone().map_or(JsValue::Null, JsValue::str));
     o.insert("to", JsValue::str(r.to.as_str()));
     o.insert("hop", r.hop.clone());
@@ -1001,7 +1001,7 @@ pub fn write_report(
         md.extend(examples_section(ctx, &ex, dir, r, example_hops_n)?);
     }
     write(&out.join("report.md"), &md.join("\n"))?;
-    let mut json = humanify_ag_model::js::JsObject::new();
+    let mut json = crate::json::js::JsObject::new();
     for (name, r) in &rows {
         json.insert(
             name.as_str(),

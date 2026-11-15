@@ -131,69 +131,76 @@ fn module_source_of<'j>(
     })
 }
 
-/// The artifact dump's naming-era capture (`--dump-artifacts`) — what the
-/// TS records while the graph and the match stage are live, right after
-/// the prior-version transfer and before the first wave
-/// (`captureGraphDump`, `captureMatchDump`, `recordCloseMatches`,
-/// `recordTwinProposals`, `recordTwinGates`, `captureMechanicalBoundary`,
-/// `pushVotes`). Observation only: nothing here feeds a decision.
+/// The artifact dump's naming-era capture (`--dump-artifacts`): the
+/// records of the stages that are live only inside the era — the graph,
+/// the match stage, the transfers at the mechanical boundary, the votes —
+/// snapshotted right after the prior-version transfer and before the
+/// first wave. Observation only: nothing here feeds a decision.
 #[derive(Default)]
 pub struct EraCapture {
-    /// functions.json's rows: the graph's pre-naming state, with the
-    /// function rows' `name` / `bindings[].name` read AFTER the transfer
-    /// (the TS reads the live AST's identifiers there).
-    pub functions: Vec<Value>,
-    /// partitions.json's `structuralHash` family (fresh spans).
+    /// Named dump sections, each the stage's records as serde writes them.
+    pub sections: Vec<(&'static str, Value)>,
+    /// partitions' `structuralHash` family (fresh spans).
     pub structural_family: Vec<(oxc_span::Span, String)>,
-    /// matches / matches-close / twins / twin-gates (None without a prior).
-    pub matches: Option<crate::matching::matches_dump::MatchSections>,
-    /// transfers-mechanical.json: the trail at the mechanical boundary.
-    pub mechanical: Vec<humanify_ag_model::dump::TransferRow>,
-    /// votes.json's rows before the ladder outcome joins (the final trail).
-    pub votes: Vec<crate::rename::votes::dump::VoteDumpRow>,
 }
 
-/// The capture's graph half: the rows with the names the transfer left on
-/// each function's name binding and placeholder slots.
+fn record(value: impl serde::Serialize) -> Value {
+    serde_json::to_value(value).expect("a dump record serializes")
+}
+
+/// The capture's graph half: the graph's rows (their pre-naming names)
+/// and the trail at the mechanical boundary.
 fn capture_graph(graph: &UnifiedGraph, state: &RenameState) -> EraCapture {
-    use crate::graph::functions_dump::{function_rows, structural_hash_members};
-    let view = state.view();
-    let names: HashMap<(u32, u32), &str> = view
-        .bindings
-        .iter()
-        .enumerate()
-        .map(|(i, b)| {
-            (
-                (b.id_span.start, b.id_span.end),
-                state.name_of(crate::rename::validated::scopes::BindingId(i as u32)),
-            )
-        })
-        .collect();
-    let span_of = |v: &Value| -> Option<(u32, u32)> {
-        Some((v["start"].as_u64()? as u32, v["end"].as_u64()? as u32))
-    };
-    let mut functions = function_rows(graph);
-    for row in &mut functions {
-        if row["kind"] != "function" {
-            continue;
-        }
-        if let Some(name) = span_of(&row["nameBinding"]).and_then(|k| names.get(&k)) {
-            row["name"] = Value::from(*name);
-        }
-        if let Some(slots) = row["bindings"].as_array_mut() {
-            for slot in slots {
-                if let Some(name) = span_of(&slot["span"]).and_then(|k| names.get(&k)) {
-                    slot["name"] = Value::from(*name);
-                }
-            }
-        }
-    }
     EraCapture {
-        functions,
-        structural_family: structural_hash_members(graph),
-        mechanical: state.trail().transfer_rows(),
-        ..EraCapture::default()
+        sections: vec![
+            (
+                "functions",
+                serde_json::json!({
+                    "functions": graph.functions,
+                    "moduleBindings": graph.module_bindings,
+                }),
+            ),
+            (
+                "transfers-mechanical",
+                record(state.trail().transfer_rows()),
+            ),
+        ],
+        structural_family: crate::graph::structural_hash_members(graph),
     }
+}
+
+/// The capture's match half: both cascades' results, the close tier's
+/// file, the twin gates' outcomes and private renames, and the votes
+/// before the ladders ran.
+fn capture_matches(
+    stage: &crate::prior::MatchStage<'_, '_>,
+    twins: &crate::twins::gates::TwinGateOutput,
+    votes: &[crate::rename::votes::dump::VoteDumpRow],
+) -> Vec<(&'static str, Value)> {
+    let cascade = |r: &crate::matching::cascade::MatchResult| {
+        serde_json::json!({
+            "resolutionStats": r.resolution_stats,
+            "pairs": r.pair_resolutions,
+            "rejections": r.pair_rejections,
+        })
+    };
+    let mut sections = vec![(
+        "matches",
+        serde_json::json!({
+            "function": cascade(stage.function_result),
+            "binding": stage.binding_result.map(cascade),
+        }),
+    )];
+    if let Some(close) = stage.close_file {
+        sections.push(("matches-close", record(close)));
+    }
+    sections.push((
+        "twin-gates",
+        crate::twins::gates::gate_dump(twins, &stage.prior.gate_side(), &stage.fresh.gate_side()),
+    ));
+    sections.push(("private-renames", record(&twins.private_renames)));
+    sections.push(("votes", record(votes)));
+    sections
 }
 
 /// The waves' own records (the dump's prompts / keys / names).
@@ -372,10 +379,12 @@ pub fn prior_era<P: NameProvider>(
     } else {
         Vec::new()
     };
-    let capture = opts.capture.then(|| EraCapture {
-        matches: Some(crate::matching::matches_dump::match_sections(stage, &twins)),
-        votes: outcome.votes_dump.clone(),
-        ..capture_graph(graph, &outcome.rename)
+    let capture = opts.capture.then(|| {
+        let mut capture = capture_graph(graph, &outcome.rename);
+        capture
+            .sections
+            .extend(capture_matches(stage, &twins, &outcome.votes_dump));
+        capture
     });
     let ph = crate::profiling::phase("era:close-contexts");
     let close = close_contexts(stage, &outcome.fn_close_prior, opts.fast.on())?;

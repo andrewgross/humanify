@@ -593,7 +593,7 @@ fn pipeline_body(
             &mut split,
             renderer,
         )?;
-        span.end(Some(humanify_ag_model::profiling::JsObject::new().with(
+        span.end(Some(humanify_ag_model::profiling::Fields::new().with(
             "stable",
             matches!(records.ended, crate::split_stage::SplitEnded::Complete),
         )));
@@ -655,10 +655,10 @@ fn pipeline_body(
                 .filter(|(p, _)| p == path)
                 .flat_map(|(_, m)| m.regions.iter().cloned())
                 .collect();
-            // The streamed dispatch rows are the dump's prompts.jsonl +
-            // cache-keys.jsonl: assemble them exactly when the dump itself
-            // is written (an invalid output keeps the TS behavior — no
-            // dump files at all — by discarding the parts).
+            // The streamed dispatch rows are the dump's prompts.jsonl:
+            // assemble them exactly when the dump itself is written (an
+            // invalid output writes no dump files at all — the parts are
+            // discarded).
             if outcome.coverage.is_some() {
                 dispatch_log.close().map_err(Crash)?;
             } else {
@@ -667,10 +667,7 @@ fn pipeline_body(
             reports.write_dump(
                 &DumpContext {
                     dir,
-                    output_dir: Path::new(out_dir),
                     minified: &bundled_code,
-                    prior: prior.as_deref(),
-                    flags: dump_flags(config, &toolchain),
                     regions: &regions,
                     layout: toolchain.layout.piece,
                     module_wrappers: toolchain.module_wrappers.piece,
@@ -815,10 +812,7 @@ struct RunReports<'a> {
 /// What `--dump-artifacts` reads beyond the naming outcome.
 struct DumpContext<'a> {
     dir: &'a str,
-    output_dir: &'a Path,
     minified: &'a str,
-    prior: Option<&'a str>,
-    flags: humanify_ag_model::js::JsValue,
     regions: &'a [humanify_ag_core::libdetect::CommentRegion],
     layout: humanify_ag_core::toolchain::BundleLayout,
     module_wrappers: humanify_ag_core::toolchain::ModuleWrapperGrammar,
@@ -979,90 +973,6 @@ fn load_library_index(
     Ok(load)
 }
 
-/// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved
-/// selection and the decision levers; unset optional flags are absent.
-/// The switch lists are the applied switches in registry order.
-fn dump_flags(config: &Config, toolchain: &Toolchain) -> humanify_ag_model::js::JsValue {
-    use humanify_ag_model::js::{JsObject, JsValue};
-    let mut f = JsObject::new();
-    f.insert("split", JsValue::Bool(config.split.enabled));
-    f.insert("splitPure", JsValue::Bool(config.split.pure));
-    f.insert("bundler", JsValue::str(enum_name(toolchain.bundler)));
-    f.insert("minifier", JsValue::str(enum_name(toolchain.minifier)));
-    f.insert(
-        "skipLibraries",
-        JsValue::Bool(config.library.skips_libraries()),
-    );
-    f.insert(
-        "reconcilePriorDiff",
-        JsValue::Bool(config.matching.reconcile_prior_diff),
-    );
-    f.insert("namingFloor", JsValue::Bool(config.naming.naming_floor));
-    f.insert(
-        "namingFloorSweep",
-        JsValue::Bool(config.naming.naming_floor_sweep),
-    );
-    f.insert("model", JsValue::str(config.llm.model.as_str()));
-    f.insert_opt(
-        "reasoningEffort",
-        config.llm.reasoning_effort.map(|e| JsValue::str(e.name())),
-    );
-    let list = |disable: bool| -> Option<JsValue> {
-        let names: Vec<&str> = config
-            .switches
-            .active()
-            .into_iter()
-            .filter(|s| s.is_disable() == disable)
-            .map(|s| s.name())
-            .collect();
-        (!names.is_empty()).then(|| JsValue::str(names.join(",")))
-    };
-    f.insert_opt("disable", list(true));
-    f.insert_opt("probe", list(false));
-    JsValue::Object(f)
-}
-
-/// `gitShortSha()`: the CWD's `git rev-parse --short HEAD`, "unknown" when
-/// git cannot answer.
-/// The `git rev-parse` deadline: 1 minute. It answers in milliseconds
-/// from a local checkout; only a hung git (a stuck network filesystem, a
-/// wedged credential helper) reaches it.
-const GIT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
-
-/// The dump manifest's commit, `git rev-parse --short HEAD`.
-fn git_short_sha(renderer: &mut dyn ProgressRenderer) -> String {
-    let mut command = std::process::Command::new("git");
-    command.args(["rev-parse", "--short", "HEAD"]);
-    let (sha, warning) = short_sha(&mut command, GIT_DEADLINE);
-    if let Some(warning) = warning {
-        renderer.message(&warning);
-    }
-    sha
-}
-
-/// Run a `rev-parse`-shaped command: its trimmed stdout, or "unknown".
-/// Not a git checkout, or no git at all, is the decided quiet "unknown"
-/// (the binary runs outside checkouts); a git past `deadline` is killed
-/// and the "unknown" comes with a WARNING (docs/concurrency.md rule 4).
-fn short_sha(
-    command: &mut std::process::Command,
-    deadline: std::time::Duration,
-) -> (String, Option<String>) {
-    use humanify_ag_core::subprocess::SubprocessError;
-    match humanify_ag_core::subprocess::run(command, None, deadline) {
-        Ok(o) if o.status.success() => {
-            (String::from_utf8_lossy(&o.stdout).trim().to_string(), None)
-        }
-        Ok(_) | Err(SubprocessError::Spawn(_)) => ("unknown".to_string(), None),
-        Err(e) => (
-            "unknown".to_string(),
-            Some(format!(
-                "WARNING: git rev-parse failed ({e}) — the dump's manifest records commit \"unknown\""
-            )),
-        ),
-    }
-}
-
 impl RunReports<'_> {
     /// The library decision's record: the mode, the index id, and a
     /// missing recipe slice (`recipeMissing`, the warning's text).
@@ -1113,7 +1023,6 @@ impl RunReports<'_> {
         use humanify_ag_core::naming::report::diagnostics::{
             AnchorTexts, DiagnosticsInputs, build_diagnostics_report,
         };
-        use humanify_ag_model::js::{JsObject, JsValue, stringify_pretty};
         let (Some(dest), Some(coverage)) = (
             &self.config.diagnostics.diagnostics_file,
             &self.outcome.coverage,
@@ -1125,7 +1034,7 @@ impl RunReports<'_> {
             .prior
             .as_ref()
             .map(humanify_ag_core::naming::driver::transfer_stats_by_tier);
-        let report = build_diagnostics_report(&DiagnosticsInputs {
+        let mut report = build_diagnostics_report(&DiagnosticsInputs {
             timestamp: humanify_ag_model::js::iso_now(),
             reports: &out.reports,
             coverage,
@@ -1140,50 +1049,32 @@ impl RunReports<'_> {
             contention: &out.processor.contention,
             extra_trail: &self.post_split.trail,
         });
-        let JsValue::Object(report) = report else {
-            unreachable!("the report is an object")
-        };
-        let placement = self
-            .placement
-            .diagnostics_report(self.split.map_or("", |s| s.shipped.as_str()));
-        let mut with_placement = JsObject::new();
-        for (k, v) in report.entries() {
-            with_placement.insert(k.clone(), v.clone());
-            if k == "strategyTrails" {
-                with_placement.insert("placementTrails", placement.clone());
-            }
-        }
+        report.placement_trails =
+            Some(to_json(&self.placement.diagnostics_report(
+                self.split.map_or("", |s| s.shipped.as_str()),
+            )));
+        let extra = &mut report.extra;
         if let Some(r) = self.content_carry {
-            let json = serde_json::json!({
-                "candidates": r.candidates,
-                "leftovers": r.leftovers,
-                "carries": r.carries,
-            });
-            with_placement.insert(
-                "vendorContentCarry",
-                JsValue::parse(&json.to_string()).expect("serde_json writes JSON"),
+            extra.insert(
+                "vendorContentCarry".into(),
+                serde_json::json!({
+                    "candidates": r.candidates,
+                    "leftovers": r.leftovers,
+                    "carries": r.carries,
+                }),
             );
         }
         if !self.app_declarations.is_empty() {
-            let json = serde_json::to_string(self.app_declarations).expect("serializable");
-            with_placement.insert(
-                "appDeclaredLibraries",
-                JsValue::parse(&json).expect("serde_json writes JSON"),
+            extra.insert(
+                "appDeclaredLibraries".into(),
+                to_json(self.app_declarations),
             );
         }
         if !self.app_modules.is_empty() {
-            let json = serde_json::to_string(self.app_modules).expect("serializable");
-            with_placement.insert(
-                "appModules",
-                JsValue::parse(&json).expect("serde_json writes JSON"),
-            );
+            extra.insert("appModules".into(), to_json(self.app_modules));
         }
         if let Some(report) = self.library_discovery {
-            let json = serde_json::to_string(report).expect("serializable");
-            with_placement.insert(
-                "libraryDiscovery",
-                JsValue::parse(&json).expect("serde_json writes JSON"),
-            );
+            extra.insert("libraryDiscovery".into(), to_json(report));
         }
         if let Some(dump) = out.era_dump.as_ref() {
             // exp164: the restoration's measurement evidence — the era's
@@ -1206,32 +1097,19 @@ impl RunReports<'_> {
                 "ordinalMovedFiles": dump.ordinal_moved_files,
                 "conversion": dump.conversion,
             });
-            with_placement.insert(
-                "eraRestoration",
-                JsValue::parse(&serde_json::to_string(&json).expect("serde_json writes JSON"))
-                    .expect("serde_json writes JSON"),
-            );
+            extra.insert("eraRestoration".into(), json);
         }
         if self.config.library.matching == LibraryMatching::Report {
-            let block = self.library_matching_block().to_string();
-            with_placement.insert(
-                "libraryMatching",
-                JsValue::parse(&block).expect("serde_json writes JSON"),
-            );
+            extra.insert("libraryMatching".into(), self.library_matching_block());
         }
-        std::fs::write(
-            dest,
-            format!(
-                "{}\n",
-                stringify_pretty(&JsValue::Object(with_placement), 2)
-            ),
-        )
-        .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
+        let text = serde_json::to_string_pretty(&report).expect("the report serializes");
+        std::fs::write(dest, format!("{text}\n"))
+            .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
         renderer.message(&format!("Diagnostics written to {dest}"));
         Ok(())
     }
 
-    /// `--dump-artifacts` (writeDumpArtifacts): the 07 §2 catalog.
+    /// `--dump-artifacts`: every section the run reached.
     fn write_dump(
         &self,
         ctx: &DumpContext<'_>,
@@ -1243,13 +1121,7 @@ impl RunReports<'_> {
         humanify_ag_core::artifact_dump::write_artifact_dump(
             &humanify_ag_core::artifact_dump::DumpInputs {
                 dir: Path::new(ctx.dir),
-                output_dir: ctx.output_dir,
-                flags: ctx.flags.clone(),
-                commit: git_short_sha(renderer),
-                generated_at: humanify_ag_model::js::iso_now(),
                 minified: ctx.minified,
-                prior: ctx.prior,
-                fresh: self.fresh,
                 outcome: self.outcome,
                 split: self.split,
                 comment_regions: ctx.regions,
@@ -1296,7 +1168,7 @@ fn detect_stage(
     let bundler_name = enum_name(toolchain.bundler);
     let adapter = toolchain.unpack.piece;
     span.end(Some(
-        humanify_ag_model::profiling::JsObject::new()
+        humanify_ag_model::profiling::Fields::new()
             .with("bundler", bundler_name.clone())
             .with("adapter", adapter.name()),
     ));
@@ -1661,6 +1533,11 @@ struct RunLevelStats<'a> {
     input_link: Option<&'a humanify_ag_core::unpack::chunk_link::LinkReport>,
 }
 
+/// A record as a JSON value (the diagnostics' run-level blocks).
+fn to_json<T: serde::Serialize + ?Sized>(value: &T) -> serde_json::Value {
+    serde_json::to_value(value).expect("a record serializes")
+}
+
 /// `--stats-json` (writeEvalStats): the naming stage's record + the vendor
 /// namer's tally (only when it was asked anything) + the selection record
 /// + the run-level blocks.
@@ -1679,10 +1556,10 @@ fn write_stats_json(
     let mut stats = outcome.eval_stats_with(later_claims);
     if vendor.named + vendor.declined + vendor.echoed + vendor.batches_failed > 0 {
         stats.vendor_naming = Some(humanify_ag_model::stats::VendorNamingStats {
-            named: vendor.named as f64,
-            declined: vendor.declined as f64,
-            echoed: vendor.echoed as f64,
-            batches_failed: vendor.batches_failed as f64,
+            named: vendor.named as u64,
+            declined: vendor.declined as u64,
+            echoed: vendor.echoed as u64,
+            batches_failed: vendor.batches_failed as u64,
         });
     }
     stats.selection = Some(crate::pipeline_config::pipeline_selection_record(toolchain));
@@ -1696,26 +1573,15 @@ fn write_stats_json(
         // Were hard-coded 0 / None until exp206 (the MetricsTracker that
         // should have filled them was never wired).
         let l = run.ledger.coverage_llm();
-        llm.retries = l.retries as f64;
+        llm.retries = l.retries;
         llm.avg_response_time_ms = l.avg_response_time_ms;
-        llm.total_tokens = l.total_tokens.map(|n| n as f64);
-        llm.input_tokens = l.input_tokens.map(|n| n as f64);
-        llm.output_tokens = l.output_tokens.map(|n| n as f64);
+        llm.total_tokens = l.total_tokens;
+        llm.input_tokens = l.input_tokens;
+        llm.output_tokens = l.output_tokens;
     }
-    stats.config = Some(
-        humanify_ag_model::js::JsValue::parse(&run.config.record().to_string())
-            .expect("serde_json writes JSON"),
-    );
-    stats.library_matching = Some(
-        humanify_ag_model::js::JsValue::parse(
-            &run.library.outcome(run.config.library.matching).to_string(),
-        )
-        .expect("serde_json writes JSON"),
-    );
-    stats.input_link = run.input_link.map(|link| {
-        humanify_ag_model::js::JsValue::parse(&link.to_json().to_string())
-            .expect("serde_json writes JSON")
-    });
+    stats.config = Some(run.config.record());
+    stats.library_matching = Some(run.library.outcome(run.config.library.matching));
+    stats.input_link = run.input_link.map(|link| link.to_json());
     crate::writers::write_eval_stats(Path::new(dest), &stats)
         .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
     renderer.message(&format!("Eval stats written to {dest}"));
@@ -1922,6 +1788,3 @@ fn load_prior_version_code(
     renderer.message(&format!("Prior version: loaded from {path}"));
     Ok(Some(code))
 }
-
-#[cfg(test)]
-mod unified_test;

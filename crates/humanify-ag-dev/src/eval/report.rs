@@ -627,7 +627,7 @@ pub fn render_html(
 /// The record's count-map key orders, from its text.
 fn key_orders(text: &str) -> KeyOrders {
     let mut out = KeyOrders::new();
-    let Ok(v) = humanify_ag_model::js::JsValue::parse(text) else {
+    let Ok(v) = crate::json::js::JsValue::parse(text) else {
         return out;
     };
     for (name, path) in [
