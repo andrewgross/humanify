@@ -16,3 +16,7 @@ Refresh them after any change to the prior's on-disk format.
 **Proof:** the harness test for the default path was changed first and failed,
 then passed after the change; `cargo dev check` passes; one neutrality run on
 2.1.118 -> 2.1.119 without `--priors` (result below).
+
+**Result:** NEUTRAL on 2.1.118 -> 2.1.119 with the default priors (no `--priors`
+flag): 0 differing files, 0 differing lines, exits 0/0, cache writes candidate +0,
+baseline +0. The run read `/work/neutrality-priors/2.1.118-rebased`.
