@@ -1,0 +1,24 @@
+<REPO>/target/release/humanify-ag (in <REPO>) HUMANIFY_API_KEY=ask-trace :: <TMP>/input.js -o <TMP>/out-default/tree --config <TMP>/out-default/humanify.toml --endpoint http://127.0.0.1:<PORT>/v1 
+humanify-config| [diagnostics]
+humanify-config| dump_asks = "<TMP>/out-default/asks.jsonl"
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [split]
+humanify-config| enabled = false
+<REPO>/target/release/humanify-ag (in <REPO>) HUMANIFY_API_KEY=ask-trace :: <TMP>/input.js -o <TMP>/out-prior/tree --config <TMP>/out-prior/humanify.toml --endpoint http://127.0.0.1:<PORT>/v1 --prior-version <TMP>/prior.js --model m 
+humanify-config| [diagnostics]
+humanify-config| dump_asks = "<TMP>/out-prior/asks.jsonl"
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [naming]
+humanify-config| schedule = "sequential"
+humanify-config| batch_size = 10
+humanify-config| [split]
+humanify-config| enabled = false
+<REPO>/target/release/humanify-ag (in <REPO>) HUMANIFY_API_KEY=ask-trace :: <TMP>/input.js -o <TMP>/out-split/tree --config <TMP>/out-split/humanify.toml --endpoint http://127.0.0.1:<PORT>/v1 
+humanify-config| [diagnostics]
+humanify-config| dump_asks = "<TMP>/out-split/asks.jsonl"
+humanify-config| [llm]
+humanify-config| retries = 0
+humanify-config| [split]
+humanify-config| enabled = true
