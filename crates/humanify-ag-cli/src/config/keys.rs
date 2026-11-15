@@ -223,9 +223,9 @@ pub fn tuning_section(section: &str) -> bool {
 /// generic machinery is `crate::registry`; the harness has its own table).
 pub static PIPELINE: Registry = Registry {
     keys: KEYS,
-    // Read only by the harness's `--pipeline-set` check (humanify-ag-dev,
-    // lane exp237 deletes it with that check); the pipeline's own config
-    // file refuses these as unknown keys.
+    // Read only by the harness's `--pipeline-set` check (humanify-ag-dev),
+    // and to be deleted with it; the pipeline's own config file refuses
+    // these as unknown keys.
     retired_keys: &[
         ("llm.api_key", "set HUMANIFY_API_KEY in the environment"),
         ("perf.profile", "renamed: perf.perf_trace"),
