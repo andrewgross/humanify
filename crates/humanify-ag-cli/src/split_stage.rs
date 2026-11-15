@@ -26,8 +26,8 @@ use humanify_ag_core::place::method::{MarkerOffer, method_name, method_record, n
 use humanify_ag_core::place::tiers::{PLACEMENT_TIERS, PlacementSwitches, placement_summary};
 use humanify_ag_core::place::trail::PlacementTrail;
 use humanify_ag_core::rename::transfer::carry::PriorCarry;
-use humanify_ag_model::js::{JsObject, JsValue, stringify};
 use humanify_ag_model::llm::NameProvider;
+use humanify_ag_model::ordered::OrderedMap;
 use humanify_ag_model::stats::SplitMethodStats;
 
 use crate::kill_switches::{Switch, SwitchState};
@@ -466,16 +466,10 @@ fn commit_and_finish(
     if debug_enabled()
         && let Some(carry) = prior_carry.filter(|c| !c.match_map.is_empty())
     {
-        let map = JsObject::from_entries(
-            carry
-                .match_map
-                .iter()
-                .map(|(k, v)| (k.clone(), JsValue::str(v.as_str())))
-                .collect(),
-        );
+        let map = OrderedMap(carry.match_map.clone());
         write_file(
             &out.join(".humanify").join("prior-match-map.json"),
-            &stringify(&JsValue::Object(map)),
+            &serde_json::to_string(&map).expect("a name map serializes"),
         )
         .map_err(before)?;
     }
@@ -535,7 +529,7 @@ fn commit_and_finish(
         }
     }
     let stats = &outcome.stats;
-    let by_tier = humanify_ag_model::ordered::OrderedMap(
+    let by_tier = OrderedMap(
         PLACEMENT_TIERS
             .iter()
             .zip(stats.tiers.by_tier)

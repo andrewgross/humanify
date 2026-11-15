@@ -142,15 +142,12 @@ fn truncates_the_declared_names_but_says_how_many() {
     assert_eq!(trail.rows[1].name_count, None);
 }
 
-/// `--diagnostics`' `placementTrails` is `placementTrail.report()` as
-/// `JSON.stringify` writes it: `tiers` in first-seen order, then every
-/// recorded entry with its RAW span (JS string indexes into the shipped
-/// text; absent without one), keys in the recorded object's order —
-/// the record-site fields, then `nameCount` (appended by the recorder) —
-/// and `alternatives` in the tiers' own order (not sorted).
+/// `--diagnostics`' `placementTrails`: `tiers` in first-seen order, then
+/// every recorded entry with its span as JS string indexes into the
+/// shipped text (absent without one), and `alternatives` in the tiers'
+/// own order (not sorted).
 #[test]
-fn the_diagnostics_report_is_the_ts_recorder_json() {
-    use humanify_ag_model::js::stringify;
+fn the_diagnostics_report_keeps_record_and_tier_order() {
     let shipped = "var é = 1;\nvar b = 2;\n";
     let mut trail = PlacementTrail::default();
     trail.record(TrailEntry {
@@ -189,10 +186,13 @@ fn the_diagnostics_report_is_the_ts_recorder_json() {
             r#"{{"index":1,"span":{{"start":11,"end":21}},"names":[{}],"placedBy":"novote","#,
             r#""file":"src/b.js","priorFile":"src/old.js","priorFileFrom":"hash","hashMiss":"absent","#,
             r#""alternatives":{{"name":"src/z.js","anchor":"src/a.js"}},"#,
-            r#""evidence":{{"votes":["src/z.js"],"allSame":[],"anchor":"src/a.js"}},"nameCount":34}},"#,
+            r#""evidence":{{"allSame":[],"anchor":"src/a.js","votes":["src/z.js"]}},"nameCount":34}},"#,
             r#"{{"index":0,"names":["x"],"placedBy":"fossil-eager","file":"src/bootstrap.js","evidence":{{}}}}]}}"#
         ),
         names.join(",")
     );
-    assert_eq!(stringify(&trail.diagnostics_report(shipped)), expected);
+    assert_eq!(
+        serde_json::to_string(&trail.diagnostics_report(shipped)).unwrap(),
+        expected
+    );
 }

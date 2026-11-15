@@ -12,6 +12,8 @@
 //! (`keepsEvidence`), else `{}`.
 
 use humanify_ag_model::dump::{PlacementRow, SpanKey};
+use humanify_ag_model::ordered::OrderedMap;
+use serde::Serialize;
 use serde_json::{Map, Value};
 
 /// Names beyond this are noise in a trail (`MAX_NAMES`).
@@ -149,96 +151,75 @@ impl PlacementTrail {
         });
     }
 
-    /// `placementTrail.report()` as `--diagnostics` writes it: `tiers` in
-    /// first-seen order, then every entry in record order with its RAW
-    /// span (JS string indexes into `shipped`; absent without one) — keys
-    /// in the recorded object's order, `nameCount` appended by the
-    /// recorder after `evidence`.
-    pub fn diagnostics_report(&self, shipped: &str) -> humanify_ag_model::js::JsValue {
-        use humanify_ag_model::js::{JsObject, JsValue, Utf16Offsets};
-        let offsets = Utf16Offsets::new(shipped);
-        let mut tiers = JsObject::new();
-        for (t, n) in &self.tiers {
-            tiers.insert(t.clone(), JsValue::Number(*n as f64));
-        }
+    /// The `--diagnostics` placement report: `tiers` in first-seen order,
+    /// then every row in record order with its span as JS string indexes
+    /// into `shipped` (absent without one) and its dissenting tiers in
+    /// their own order.
+    pub fn diagnostics_report(&self, shipped: &str) -> TrailReport<'_> {
+        let offsets = humanify_ag_model::js::Utf16Offsets::new(shipped);
         let trails = self
             .rows
             .iter()
             .zip(&self.dissent_order)
-            .map(|(r, dissent)| {
-                let mut o = JsObject::new();
-                o.insert("index", JsValue::Number(r.index as f64));
-                if r.key.start >= 0 {
-                    let mut span = JsObject::new();
-                    span.insert(
-                        "start",
-                        JsValue::Number(f64::from(offsets.at(r.key.start as u32))),
-                    );
-                    span.insert(
-                        "end",
-                        JsValue::Number(f64::from(offsets.at(r.key.end as u32))),
-                    );
-                    o.insert("span", JsValue::Object(span));
-                }
-                o.insert("names", str_list(&r.names));
-                insert_placed(&mut o, r, dissent.as_deref());
-                o.insert_opt("nameCount", r.name_count.map(|n| JsValue::Number(n as f64)));
-                JsValue::Object(o)
+            .map(|(r, dissent)| TrailReportRow {
+                index: r.index,
+                span: (r.key.start >= 0).then(|| ReportSpan {
+                    start: offsets.at(r.key.start as u32),
+                    end: offsets.at(r.key.end as u32),
+                }),
+                names: &r.names,
+                placed_by: &r.placed_by,
+                file: &r.file,
+                prior_file: r.prior_file.as_deref(),
+                prior_file_from: r.prior_file_from.as_deref(),
+                hash_miss: r.hash_miss.as_deref(),
+                alternatives: dissent.clone().map(OrderedMap::from),
+                evidence: &r.evidence,
+                name_count: r.name_count,
             })
             .collect();
-        let mut out = JsObject::new();
-        out.insert("tiers", JsValue::Object(tiers));
-        out.insert("trails", JsValue::Array(trails));
-        JsValue::Object(out)
+        TrailReport {
+            tiers: OrderedMap::from(self.tiers.clone()),
+            trails,
+        }
     }
 }
 
-fn str_list(v: &[String]) -> humanify_ag_model::js::JsValue {
-    use humanify_ag_model::js::JsValue;
-    JsValue::Array(v.iter().map(|s| JsValue::str(s.as_str())).collect())
+/// The `--diagnostics` placement report ([`PlacementTrail::diagnostics_report`]).
+#[derive(Debug, Serialize)]
+pub struct TrailReport<'t> {
+    pub tiers: OrderedMap<usize>,
+    pub trails: Vec<TrailReportRow<'t>>,
 }
 
-/// A row's decision fields in the recorded order: `placedBy, file,
-/// priorFile?, priorFileFrom?, hashMiss?, alternatives?` (the dissenting
-/// tiers, their order), then `evidence` (`votes, allSame, anchor`).
-fn insert_placed(
-    o: &mut humanify_ag_model::js::JsObject,
-    r: &PlacementRow,
-    dissent: Option<&[(String, String)]>,
-) {
-    use humanify_ag_model::js::{JsObject, JsValue};
-    o.insert("placedBy", JsValue::str(r.placed_by.as_str()));
-    o.insert("file", JsValue::str(r.file.as_str()));
-    o.insert_opt("priorFile", r.prior_file.as_deref().map(JsValue::str));
-    o.insert_opt(
-        "priorFileFrom",
-        r.prior_file_from.as_deref().map(JsValue::str),
-    );
-    o.insert_opt("hashMiss", r.hash_miss.as_deref().map(JsValue::str));
-    if let Some(d) = dissent {
-        let mut alt = JsObject::new();
-        for (tier, file) in d {
-            alt.insert(tier.clone(), JsValue::str(file.as_str()));
-        }
-        o.insert("alternatives", JsValue::Object(alt));
-    }
-    let mut evidence = JsObject::new();
-    for key in ["votes", "allSame", "anchor"] {
-        match r.evidence.get(key) {
-            Some(serde_json::Value::Array(items)) => {
-                let items: Vec<String> = items
-                    .iter()
-                    .filter_map(|v| v.as_str().map(str::to_string))
-                    .collect();
-                evidence.insert(key, str_list(&items));
-            }
-            Some(serde_json::Value::String(s)) => {
-                evidence.insert(key, JsValue::str(s.as_str()));
-            }
-            _ => {}
-        }
-    }
-    o.insert("evidence", JsValue::Object(evidence));
+/// A span as JS string indexes.
+#[derive(Debug, Serialize)]
+pub struct ReportSpan {
+    pub start: u32,
+    pub end: u32,
+}
+
+/// One placed statement in the `--diagnostics` report.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrailReportRow<'t> {
+    pub index: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span: Option<ReportSpan>,
+    pub names: &'t [String],
+    pub placed_by: &'t str,
+    pub file: &'t str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prior_file: Option<&'t str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prior_file_from: Option<&'t str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash_miss: Option<&'t str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alternatives: Option<OrderedMap<String>>,
+    pub evidence: &'t Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name_count: Option<u64>,
 }
 
 #[cfg(test)]

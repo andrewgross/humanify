@@ -1050,7 +1050,7 @@ impl RunReports<'_> {
             extra_trail: &self.post_split.trail,
         });
         report.placement_trails =
-            Some(placement_trails_json(&self.placement.diagnostics_report(
+            Some(to_json(&self.placement.diagnostics_report(
                 self.split.map_or("", |s| s.shipped.as_str()),
             )));
         let extra = &mut report.extra;
@@ -1536,12 +1536,6 @@ struct RunLevelStats<'a> {
 /// A record as a JSON value (the diagnostics' run-level blocks).
 fn to_json<T: serde::Serialize + ?Sized>(value: &T) -> serde_json::Value {
     serde_json::to_value(value).expect("a record serializes")
-}
-
-/// The split's placement trail as a JSON value.
-fn placement_trails_json(trail: &humanify_ag_model::js::JsValue) -> serde_json::Value {
-    serde_json::from_str(&humanify_ag_model::js::stringify(trail))
-        .expect("a placement trail is JSON")
 }
 
 /// `--stats-json` (writeEvalStats): the naming stage's record + the vendor
