@@ -1005,7 +1005,17 @@ fn is_copy_props_helper(plan: &Plan<'_, '_>, binding: BindingId) -> bool {
 /// `relocateNamespaceAugmentations`: each top-level copy-props call on a
 /// bare identifier moves to the file that DEFINES its target.
 fn relocate_namespace_augmentations(plan: &mut Plan<'_, '_>) {
+    for (idx, decl_idx) in namespace_augmentations(plan) {
+        plan.stmt_file[idx] = plan.stmt_file[decl_idx];
+    }
+}
+
+/// The top-level copy-props calls on a bare identifier, each with the
+/// statement that declares its target (declared earlier in the bundle),
+/// in statement order — whatever file each statement is in.
+fn namespace_augmentations(plan: &Plan<'_, '_>) -> Vec<(usize, usize)> {
     let mut helper_cache: HashMap<BindingId, bool> = HashMap::new();
+    let mut out = Vec::new();
     for idx in 0..plan.statements.len() {
         let Statement::ExpressionStatement(stmt) = &plan.statements[idx] else {
             continue;
@@ -1049,8 +1059,73 @@ fn relocate_namespace_augmentations(plan: &mut Plan<'_, '_>) {
         if decl_idx > idx {
             continue;
         }
-        plan.stmt_file[idx] = plan.stmt_file[decl_idx];
+        out.push((idx, decl_idx));
     }
+    out
+}
+
+/// The bundle's load-time references between top-level statements,
+/// whatever file each statement is placed in: what
+/// [`Plan::assert_load_time_acyclic`] reads once the files are fixed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LoadGraph {
+    /// (reading statement, declaring statement): a read or write of a
+    /// wrapper-scope binding that runs while the reader's file loads.
+    pub edges: Vec<(usize, usize)>,
+    /// (statement, statement it follows): the runnable emit writes a
+    /// namespace augmentation into the file of the statement declaring
+    /// its target, in this order.
+    pub follows: Vec<(usize, usize)>,
+}
+
+/// The [`LoadGraph`] of `input`'s bundle (its `files`/`order` only have
+/// to be consistent; the graph does not depend on them).
+pub fn load_graph(input: &RunnableInput<'_, '_>) -> Result<LoadGraph, EmitError> {
+    let plan = new_plan(input)?;
+    let wrapper = input.wrapper.node;
+    let mut edges = BTreeSet::new();
+    let mut add = |reader: Option<usize>, decl: usize, id: NodeId| {
+        if let Some(reader) = reader
+            && reader != decl
+            && is_load_time_site(plan.nodes, id, wrapper)
+        {
+            edges.insert((reader, decl));
+        }
+    };
+    for (_, bid) in plan.wrapper_scope_bindings() {
+        let b = input.scopes.binding(*bid);
+        if b.kind == BindingKind::Param {
+            continue;
+        }
+        let Some(decl) = stmt_index_of(&plan.ranges, b.id_span.start) else {
+            continue;
+        };
+        for site in &b.refs {
+            if site.ty != SiteType::Identifier
+                || delete_of(plan.nodes, site.node, site.span).is_some()
+            {
+                continue;
+            }
+            add(
+                stmt_index_of(&plan.ranges, site.span.start),
+                decl,
+                site.node,
+            );
+        }
+        for span in b.violation_targets.iter().flatten() {
+            let Some(id) = plan.ident(*span) else {
+                continue;
+            };
+            if parent_is_delete(plan.nodes, id) {
+                continue;
+            }
+            add(stmt_index_of(&plan.ranges, span.start), decl, id);
+        }
+    }
+    Ok(LoadGraph {
+        edges: edges.into_iter().collect(),
+        follows: namespace_augmentations(&plan),
+    })
 }
 
 // ---------------------------------------------------------------------------

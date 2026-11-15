@@ -689,7 +689,8 @@ pub fn hops_to_look_at(name: &str, rows: &[Row]) -> Vec<String> {
         format!(
             "Flagged when noiseLines ≥ {NOISE_FACTOR}× the walk's median ({}), or when ≥ {}% of the hop's \
              hash-named vendor files (`module-<8 hex>.js` / `lib_<8 hex>.js`) appear in only one of the two \
-             trees and that count is ≥ {NOISE_FACTOR}× the median ({}). These are hops to READ, not verdicts.",
+             trees and that count is ≥ {NOISE_FACTOR}× the median ({}), or when the pipeline exited non-zero. \
+             These are hops to READ, not verdicts.",
             fmt(Some(mn)),
             TURNOVER_SHARE * 100.0,
             fmt(Some(mt))
@@ -699,6 +700,11 @@ pub fn hops_to_look_at(name: &str, rows: &[Row]) -> Vec<String> {
     let mut flagged = Vec::new();
     for r in &hops {
         let mut why = Vec::new();
+        if let Some(rc) = num_at(Some(&r.hop), &["exitCode"]).filter(|rc| *rc != 0.0) {
+            why.push(format!(
+                "the pipeline exited {rc} (the run declared itself invalid)"
+            ));
+        }
         if let Some(n) = noise_lines(r.card.as_ref())
             && mn > 0.0
             && n >= NOISE_FACTOR * mn

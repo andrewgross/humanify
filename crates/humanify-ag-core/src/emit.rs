@@ -26,6 +26,7 @@
 
 pub mod align;
 pub mod cjs;
+pub mod cycle_guard;
 pub mod entry_order;
 pub mod import_alias;
 pub mod load_order;

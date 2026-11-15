@@ -76,6 +76,8 @@ mod library_config_test;
 #[cfg(test)]
 mod match_verb_test;
 #[cfg(test)]
+mod report_test;
+#[cfg(test)]
 mod runtime_index_test;
 #[cfg(test)]
 mod surface_test;

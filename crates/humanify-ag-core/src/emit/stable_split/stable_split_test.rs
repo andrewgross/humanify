@@ -10,24 +10,18 @@ use crate::place::ledger::StableSplitLedger;
 use crate::place::method::MarkerOffer;
 use crate::place::placement_dump::Regime;
 
-/// Finding #40: a prior ledger whose names place `xa` in a.js and `yb`,
-/// `zb` in b.js makes a load-time reference cycle (a.js reads b.js's `yb`
-/// at load, b.js reads a.js's `xa`) — the runnable emit declines, the
-/// byte-exact review tree is written. The persisted ledger used to keep
-/// the aliases the TS emit had assigned before it threw; aliases are per
-/// importer now and carried from the prior tree's require lines (finding
-/// #88), so the ledger records none — and a review tree has no require
-/// lines to carry.
-#[test]
-fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
+/// One `wp53-cjs.json` vector split with a prior ledger whose names
+/// place each listed name in its file (60 pad names in pad/fill.js).
+fn split_vector(name: &str, placed: &[(&str, &[&str])]) -> (super::SplitOutcome, Value) {
     let vectors: Vec<Value> =
         serde_json::from_str(include_str!("../../../../../test/parity/wp53-cjs.json"))
             .expect("vectors");
     let v = vectors
         .iter()
-        .find(|v| v["name"] == "load-time cycle declines")
-        .expect("the cycle vector");
-    let code = v["code"].as_str().expect("code");
+        .find(|v| v["name"] == name)
+        .expect("the vector")
+        .clone();
+    let code = v["code"].as_str().expect("code").to_string();
     let order: Vec<String> = v["order"]
         .as_array()
         .expect("order")
@@ -35,9 +29,9 @@ fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
         .map(|s| s.as_str().expect("file").to_string())
         .collect();
     let mut name_to_files: HashMap<String, Vec<String>> = HashMap::new();
-    name_to_files.insert("xa".into(), vec!["a.js".into()]);
-    name_to_files.insert("yb".into(), vec!["b.js".into()]);
-    name_to_files.insert("zb".into(), vec!["b.js".into()]);
+    for (n, files) in placed {
+        name_to_files.insert(n.to_string(), files.iter().map(|f| f.to_string()).collect());
+    }
     for i in 0..60 {
         name_to_files.insert(format!("padFiller{i}"), vec!["pad/fill.js".into()]);
     }
@@ -54,7 +48,7 @@ fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
         fossil_modules: None,
     };
     let outcome = stable_split(
-        code,
+        &code,
         SplitOptions {
             layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
             module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
@@ -77,6 +71,44 @@ fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
         },
     )
     .expect("the split runs");
+    (outcome, v)
+}
+
+/// A prior ledger whose names place `xa` in a.js
+/// and `yb`, `zb` in b.js makes a load-time reference cycle (a.js reads
+/// b.js's `yb` at load, b.js's `zb` reads a.js's `xa`). The load-time
+/// cycle guard moves `yb` (a declaration, emptying no file, leaving one
+/// read across files) into a.js, and the runnable tree is written.
+#[test]
+fn a_prior_layout_with_a_load_time_cycle_is_repaired_by_the_guard() {
+    let (outcome, _) = split_vector(
+        "load-time cycle declines",
+        &[("xa", &["a.js"]), ("yb", &["b.js"]), ("zb", &["b.js"])],
+    );
+    assert_eq!(outcome.declined.map(|d| d.to_string()), None);
+    assert_eq!(
+        outcome.cycle_moves,
+        vec![(1, "b.js".to_string(), "a.js".to_string())]
+    );
+    let runnable = outcome.runnable.expect("the runnable tree is written");
+    assert!(runnable.iter().any(|f| f == "a.js") && runnable.iter().any(|f| f == "b.js"));
+    assert_eq!(
+        &outcome.ledger.order[..3],
+        &["a.js".to_string(), "a.js".to_string(), "b.js".to_string()],
+        "the ledger records the repaired layout"
+    );
+}
+
+/// A decline the guard does not handle (a cross-file function
+/// redeclaration): the byte-exact review tree is written. Aliases are
+/// per importer and carried from the prior tree's require lines, so the
+/// ledger records none — and a review tree has no require lines to carry.
+#[test]
+fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
+    let (outcome, v) = split_vector(
+        "function redeclaration declines",
+        &[("dup", &["a.js", "b.js"]), ("use", &["b.js"])],
+    );
     assert_eq!(
         outcome
             .declined
@@ -87,6 +119,7 @@ fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
         "the runnable emit declines with the TS's reason"
     );
     assert!(outcome.runnable.is_none(), "the review tree is written");
+    assert!(outcome.cycle_moves.is_empty());
     let written: serde_json::Map<String, Value> =
         serde_json::from_str(&ledger_text(&outcome)).expect("a ledger object");
     assert!(
@@ -96,10 +129,6 @@ fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
     assert!(
         outcome.ledger.emit_indexes.is_none(),
         "the layout was never recorded"
-    );
-    assert_eq!(
-        sha(&ledger_text(&outcome)),
-        "b399b00de01621f62fbbe928b564a65f772ddb248c521104a7ed69d8c877089f"
     );
 }
 

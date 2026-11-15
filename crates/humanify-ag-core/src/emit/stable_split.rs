@@ -24,7 +24,10 @@ use crate::place::trail::PlacementTrail;
 use crate::rename::validated::scopes::BabelScopes;
 
 use super::align::AlignSwitches;
-use super::cjs::{RunnableInput, emit_runnable_cjs, wrapper_view};
+use super::cjs::{
+    EmitError, RunnableInput, WrapperView, emit_runnable_cjs, load_graph, wrapper_view,
+};
+use super::cycle_guard::{CycleRepair, break_load_time_cycles};
 use super::entry_order::read_prior_entry_order;
 use super::import_alias::read_prior_import_aliases;
 use super::load_order::{LoadOrderFacts, bundle_load_order_facts};
@@ -163,6 +166,9 @@ pub struct SplitOutcome {
     /// The runnable emit's file map keys (the finishing stage's split-file
     /// list); None when the review tree was written.
     pub runnable: Option<Vec<String>>,
+    /// The statements the load-time cycle guard moved: (statement, from
+    /// file, to file).
+    pub cycle_moves: Vec<(usize, String, String)>,
     /// The runnable emit's decline reason.
     pub declined: Option<super::cjs::EmitError>,
     /// The persisted ledger.
@@ -434,91 +440,52 @@ pub fn stable_split(
     let lazy_init = options.module_wrappers.lazy_init_helpers(&input.body);
     let facts =
         bundle_load_order_facts(statements, &lazy_init, options.registrar_exemption_disabled);
-    let review = review_split(
+    let scopes = (!options.split_pure).then(|| BabelScopes::build(ingest.semantic()));
+    let prior_entry = options
+        .prior_tree
+        .and_then(|tree| read_prior_entry_order(|f| tree.text(f).map(str::to_string)));
+    let ctx = WriteContext {
         shipped,
-        &input.spans,
-        &assignment,
-        &input.hashes,
-        &names,
-        &facts,
-        options.prior,
-        options.align,
-    );
-    let mut ledger = build_ledger(
-        &input,
-        &assignment,
-        &review.files,
-        &review.emit_hashes,
-        &review.emit_names,
-    );
-    ledger.fossil_modules = fossil_modules;
-    // `assertConcatEquivalence` (finding #41): the review tree must
-    // reconstruct the bundle's statements — a pre-commit failure.
-    super::review::assert_concat_equivalence(&review.contents, &assignment, &input.spans, shipped)?;
-    let folders: std::collections::HashSet<&str> = review
-        .files
-        .iter()
-        .map(|f| f.rfind('/').map_or("", |at| &f[..at]))
-        .collect();
-    let stats = SplitStats {
-        statements: input.body.len(),
-        files: review.files.len(),
-        folders: folders.len(),
-        tiers: tier_stats,
-    };
-
-    drop(ph);
-    let ph = phase("split:runnable-cjs");
-    // Vendor bridges (finding #60): resolve the unpack's capture records —
-    // raw names read by vendored bodies — against the FRESH text (the
-    // beautified pre-rename runtime, whose wrapper statements align 1:1
-    // with this split's renamed ones) and this split's placement. The
-    // owner files must export the accessors whether or not any app file
-    // references the binding, so the emit gets them as forced exports.
-    let vendor_bridges = resolve_vendor_bridges(
-        options.vendor_captures,
-        options.vendor_fresh,
-        &input.body,
-        &assignment,
-        original_binding_count,
+        input: &input,
+        names: &names,
+        facts: &facts,
+        prior: options.prior,
+        prior_tree: options.prior_tree,
+        align: options.align,
+        vendor_captures: options.vendor_captures,
+        vendor_fresh: options.vendor_fresh,
         layout,
-    )?;
-    let mut forced_exports: Vec<(String, String)> = vendor_bridges
-        .iter()
-        .map(|b| (b.file.clone(), b.accessor.clone()))
-        .collect();
-    forced_exports.sort();
-    forced_exports.dedup();
-    let runnable = if options.split_pure {
-        None
-    } else {
-        let scopes = BabelScopes::build(ingest.semantic());
-        let prior_entry = options
-            .prior_tree
-            .and_then(|tree| read_prior_entry_order(|f| tree.text(f).map(str::to_string)));
-        let prior_aliases = options.prior_tree.map(|tree| {
-            read_prior_import_aliases(&review.files, |f| tree.text(f).map(str::to_string))
-        });
-        Some(emit_runnable_cjs(&RunnableInput {
-            code: shipped,
-            semantic: ingest.semantic(),
-            scopes: &scopes,
-            wrapper: &view,
-            files: &review.files,
-            order: &assignment,
-            emit_hashes: &review.emit_hashes,
-            emit_names: &review.emit_names,
-            prior_aliases: prior_aliases.as_ref(),
-            prior_entry: prior_entry.as_deref(),
-            bundle_hashes: &input.hashes,
-            bundle_names: &names,
-            facts: &facts,
-            switches: options.align,
-            forced_exports: &forced_exports,
-            layout,
-        }))
+        original_binding_count,
+        semantic: ingest.semantic(),
+        view: &view,
+        scopes: scopes.as_ref(),
+        prior_entry: prior_entry.as_deref(),
     };
     drop(ph);
+    let mut written = write_split(&ctx, &assignment)?;
+    let guarded = guard_load_time_cycles(&ctx, &assignment, &written)?;
+    let cycle_moves = match guarded {
+        Some((repair, rewritten)) => {
+            for (s, _, to) in &repair.moved {
+                trail.moved_by_cycle_guard(*s, to);
+            }
+            written = rewritten;
+            repair.moved
+        }
+        None => Vec::new(),
+    };
+    let Written {
+        review,
+        mut ledger,
+        stats,
+        vendor_bridges,
+        runnable,
+    } = written;
+    ledger.fossil_modules = fossil_modules;
+    let stats = SplitStats {
+        tiers: tier_stats,
+        ..stats
+    };
     // Only a runnable emit exports the accessors the bridges read; a
     // declined or pure-review tree keeps its vendor bodies raw either way
     // (the finish relinks nothing without a runnable list).
@@ -539,6 +506,7 @@ pub fn stable_split(
         spans: input.spans.clone(),
         facts: Vec::new(),
         vendor_bridges,
+        cycle_moves,
     };
     match runnable {
         Some(Ok(tree)) => {
@@ -589,6 +557,182 @@ pub fn stable_split(
     outcome.ledger = ledger;
     outcome.facts = facts;
     Ok(outcome)
+}
+
+/// What every write of the split reads, whatever the assignment.
+struct WriteContext<'c, 'a> {
+    shipped: &'a str,
+    input: &'c SplitInput,
+    names: &'c [Option<String>],
+    facts: &'c [LoadOrderFacts],
+    prior: Option<&'c StableSplitLedger>,
+    prior_tree: Option<&'c crate::prior_tree::PriorFiles>,
+    align: AlignSwitches,
+    vendor_captures: &'c [ManifestCapture],
+    vendor_fresh: Option<&'c str>,
+    layout: crate::toolchain::BundleLayout,
+    original_binding_count: Option<usize>,
+    semantic: &'c oxc_semantic::Semantic<'a>,
+    view: &'c WrapperView<'a>,
+    /// None under `--split-pure` (no runnable emit).
+    scopes: Option<&'c BabelScopes>,
+    prior_entry: Option<&'c [String]>,
+}
+
+/// One assignment written: the review tree, its ledger (no fossil
+/// modules yet), its stats (no tier stats yet), the vendor bridges and
+/// the runnable emit (None under `--split-pure`).
+struct Written {
+    review: super::review::ReviewSplit,
+    ledger: SplitLedger,
+    stats: SplitStats,
+    vendor_bridges: Vec<VendorBridge>,
+    runnable: Option<Result<super::cjs::RunnableTree, super::cjs::EmitDecline>>,
+}
+
+/// Review tree → ledger → vendor bridges → runnable emit, for one
+/// assignment.
+fn write_split(ctx: &WriteContext<'_, '_>, assignment: &[String]) -> Result<Written, SplitError> {
+    use crate::profiling::phase;
+    let input = ctx.input;
+    let ph = phase("split:review");
+    let review = review_split(
+        ctx.shipped,
+        &input.spans,
+        assignment,
+        &input.hashes,
+        ctx.names,
+        ctx.facts,
+        ctx.prior,
+        ctx.align,
+    );
+    let ledger = build_ledger(
+        input,
+        assignment,
+        &review.files,
+        &review.emit_hashes,
+        &review.emit_names,
+    );
+    // `assertConcatEquivalence` (finding #41): the review tree must
+    // reconstruct the bundle's statements — a pre-commit failure.
+    super::review::assert_concat_equivalence(
+        &review.contents,
+        assignment,
+        &input.spans,
+        ctx.shipped,
+    )?;
+    let folders: std::collections::HashSet<&str> = review
+        .files
+        .iter()
+        .map(|f| f.rfind('/').map_or("", |at| &f[..at]))
+        .collect();
+    let stats = SplitStats {
+        statements: input.body.len(),
+        files: review.files.len(),
+        folders: folders.len(),
+        tiers: TierStats::default(),
+    };
+    drop(ph);
+    let _ph = phase("split:runnable-cjs");
+    // Vendor bridges (finding #60): resolve the unpack's capture records —
+    // raw names read by vendored bodies — against the FRESH text (the
+    // beautified pre-rename runtime, whose wrapper statements align 1:1
+    // with this split's renamed ones) and this split's placement. The
+    // owner files must export the accessors whether or not any app file
+    // references the binding, so the emit gets them as forced exports.
+    let vendor_bridges = resolve_vendor_bridges(
+        ctx.vendor_captures,
+        ctx.vendor_fresh,
+        &input.body,
+        assignment,
+        ctx.original_binding_count,
+        ctx.layout,
+    )?;
+    let mut forced_exports: Vec<(String, String)> = vendor_bridges
+        .iter()
+        .map(|b| (b.file.clone(), b.accessor.clone()))
+        .collect();
+    forced_exports.sort();
+    forced_exports.dedup();
+    let runnable = ctx.scopes.map(|scopes| {
+        let prior_aliases = ctx.prior_tree.map(|tree| {
+            read_prior_import_aliases(&review.files, |f| tree.text(f).map(str::to_string))
+        });
+        emit_runnable_cjs(&runnable_input(
+            ctx,
+            scopes,
+            assignment,
+            &review,
+            prior_aliases.as_ref(),
+            &forced_exports,
+        ))
+    });
+    Ok(Written {
+        review,
+        ledger,
+        stats,
+        vendor_bridges,
+        runnable,
+    })
+}
+
+/// The runnable emit's input for one written assignment.
+fn runnable_input<'s, 'a>(
+    ctx: &WriteContext<'s, 'a>,
+    scopes: &'s BabelScopes,
+    assignment: &'s [String],
+    review: &'s super::review::ReviewSplit,
+    prior_aliases: Option<&'s super::import_alias::PriorImportAliases>,
+    forced_exports: &'s [(String, String)],
+) -> RunnableInput<'a, 's> {
+    RunnableInput {
+        code: ctx.shipped,
+        semantic: ctx.semantic,
+        scopes,
+        wrapper: ctx.view,
+        files: &review.files,
+        order: assignment,
+        emit_hashes: &review.emit_hashes,
+        emit_names: &review.emit_names,
+        prior_aliases,
+        prior_entry: ctx.prior_entry,
+        bundle_hashes: &ctx.input.hashes,
+        bundle_names: ctx.names,
+        facts: ctx.facts,
+        switches: ctx.align,
+        forced_exports,
+        layout: ctx.layout,
+    }
+}
+
+/// The load-time cycle guard ([`super::cycle_guard`]): when the runnable
+/// emit declined on a load-time cycle between files, move the fewest app
+/// statements that break it and write the split again. None: no cycle,
+/// or none the guard can break (the emit's decline stands, and the run
+/// fails on it).
+fn guard_load_time_cycles(
+    ctx: &WriteContext<'_, '_>,
+    assignment: &[String],
+    written: &Written,
+) -> Result<Option<(CycleRepair, Written)>, SplitError> {
+    let (Some(scopes), Some(Err(decline))) = (ctx.scopes, &written.runnable) else {
+        return Ok(None);
+    };
+    if !matches!(decline.reason, EmitError::Cycle(_)) {
+        return Ok(None);
+    }
+    let input = runnable_input(ctx, scopes, assignment, &written.review, None, &[]);
+    let Ok(graph) = load_graph(&input) else {
+        return Ok(None);
+    };
+    let vendor = format!("{}/", crate::place::layout::VENDOR_DIR);
+    let app_only =
+        |_: usize, from: &str, to: &str| !from.starts_with(&vendor) && !to.starts_with(&vendor);
+    let Some(repair) = break_load_time_cycles(assignment, &graph, &app_only) else {
+        return Ok(None);
+    };
+    let rewritten = write_split(ctx, &repair.assignment)?;
+    Ok(Some((repair, rewritten)))
 }
 
 /// The statements (body indexes) holding the factories the unpack kept as

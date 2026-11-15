@@ -867,6 +867,7 @@ fn build_tree(
         post_split = records.post_split;
         failed_calls.split = records.failed_calls.namer;
         failed_calls.tree_reviser = records.failed_calls.tree_reviser;
+        failures.runnable_declined = records.declined;
     }
     Ok(Built {
         unpacked,
@@ -1720,6 +1721,8 @@ struct Failures {
     semantic: Vec<(String, crate::output_validation::OutputSemanticFailure)>,
     preserved: Vec<crate::failed_output::FailedOutputFile>,
     internal_errors: usize,
+    /// Why the runnable emit declined (the review tree was written).
+    runnable_declined: Option<String>,
 }
 
 /// `checkStructuralInvariant`'s headline; the first diverging token window
@@ -1768,6 +1771,7 @@ impl Failures {
             crate::report::report_parse_failures(&self.parse),
             crate::report::report_semantic_failures(&self.semantic),
             crate::report::report_internal_errors(self.internal_errors),
+            crate::report::report_runnable_declined(self.runnable_declined.as_deref()),
         ] {
             for m in &report.messages {
                 renderer.message(m);
@@ -1905,3 +1909,7 @@ fn load_prior_inputs(
     }
     Ok(inputs)
 }
+
+#[cfg(test)]
+#[path = "unified_test.rs"]
+mod unified_test;

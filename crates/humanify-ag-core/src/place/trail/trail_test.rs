@@ -196,3 +196,20 @@ fn the_diagnostics_report_keeps_record_and_tier_order() {
         expected
     );
 }
+
+#[test]
+fn a_statement_the_cycle_guard_moved_is_counted_under_the_guard() {
+    let mut trail = PlacementTrail::default();
+    trail.record(entry(0, "hash", "a.js"));
+    trail.record(entry(1, "hash", "b.js"));
+    trail.moved_by_cycle_guard(1, "a.js");
+    assert_eq!(
+        trail.tiers,
+        vec![
+            ("hash".to_string(), 1),
+            (super::CYCLE_GUARD_TIER.to_string(), 1)
+        ]
+    );
+    assert_eq!(trail.rows[1].file, "a.js");
+    assert_eq!(trail.rows[1].placed_by, super::CYCLE_GUARD_TIER);
+}
