@@ -91,20 +91,20 @@ pub enum VerbError {
     Write(String, std::io::Error),
     #[error("stdout: {0}")]
     Stdout(std::io::Error),
-    #[error("{0}")]
-    Unpack(humanify_ag_core::unpack::UnpackError),
+    #[error(transparent)]
+    Unpack(#[from] humanify_ag_core::unpack::UnpackError),
     #[error(transparent)]
     Tree(#[from] crate::output_tree::WriteError),
-    #[error("{0}")]
-    Format(humanify_ag_core::format::FormatError),
-    #[error("{0}")]
-    Relink(humanify_ag_core::finish::relink::RelinkError),
-    #[error("{0}")]
-    Carry(humanify_ag_core::libdetect::function_carry::CarryError),
-    #[error("{0}")]
-    Transfer(humanify_ag_core::rename::transfer::TransferError),
-    #[error("{0}")]
-    Prior(humanify_ag_core::prior::PriorMatchError),
+    #[error(transparent)]
+    Format(#[from] humanify_ag_core::format::FormatError),
+    #[error(transparent)]
+    Relink(#[from] humanify_ag_core::finish::relink::RelinkError),
+    #[error(transparent)]
+    Carry(#[from] humanify_ag_core::libdetect::function_carry::CarryError),
+    #[error(transparent)]
+    Transfer(#[from] humanify_ag_core::rename::transfer::TransferError),
+    #[error(transparent)]
+    Prior(#[from] humanify_ag_core::prior::PriorMatchError),
     #[error(
         "every unpacked file failed; no matching ran at all — \
          see the recorded parse and match errors"
@@ -115,8 +115,8 @@ pub enum VerbError {
         dir: String,
         why: Box<humanify_ag_core::libindex::lookup::LoadError>,
     },
-    #[error("{0}")]
-    Scratch(humanify_ag_io::scratch::ScratchError),
+    #[error(transparent)]
+    Scratch(#[from] humanify_ag_io::scratch::ScratchError),
     /// Every refused `[library]` key of the `--config` file, one a line.
     #[error("{}", .0.join("\n"))]
     Settings(Vec<String>),
@@ -124,12 +124,6 @@ pub enum VerbError {
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     PriorLoad(#[from] crate::prior_tree::PriorLoadError),
-}
-
-impl From<humanify_ag_core::prior::PriorMatchError> for VerbError {
-    fn from(e: humanify_ag_core::prior::PriorMatchError) -> Self {
-        VerbError::Prior(e)
-    }
 }
 
 /// The dump's schema version for the SINGLE-FILE shape (every exp092
@@ -236,8 +230,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, VerbError> {
                 toolchain.module_identity.piece,
             )
         },
-    )
-    .map_err(VerbError::Unpack)?
+    )?
     .into_result();
     // The candidates are read back from the work folder.
     crate::output_tree::write_tree(&tree)?;
@@ -405,8 +398,7 @@ impl MatchRun {
                 text,
                 &humanify_ag_core::format::FormatOptions::default(),
                 &[],
-            )
-            .map_err(VerbError::Format)?
+            )?
             .text
         };
         // The prior side is the run's shared state: this file's stage
@@ -418,14 +410,13 @@ impl MatchRun {
             *side,
             !multi,
             |stage| {
-                let freeze = humanify_ag_core::rename::transfer::library_freeze(stage, None, false)
-                    .map_err(VerbError::Carry)?;
+                let freeze =
+                    humanify_ag_core::rename::transfer::library_freeze(stage, None, false)?;
                 let twins = humanify_ag_core::rename::transfer::statement_twins(
                     stage,
                     &freeze,
                     name_profile,
-                )
-                .map_err(VerbError::Transfer)?;
+                )?;
                 let section = file_section(stage, &twins, &fresh, prior, path, !multi)?;
                 self.matched_any = true;
                 if multi {
@@ -551,14 +542,12 @@ fn wrapped_factory_text(
         &std::collections::BTreeMap::new(),
         &[],
         interop,
-    )
-    .map_err(VerbError::Relink)?;
+    )?;
     Ok(humanify_ag_core::format::format_file(
         &wrapped,
         &humanify_ag_core::format::FormatOptions::default(),
         &[],
-    )
-    .map_err(VerbError::Format)?
+    )?
     .text)
 }
 

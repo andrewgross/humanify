@@ -49,7 +49,7 @@ pub enum PriorLoadError {
     },
     /// A folder or file of the prior tree.
     #[error("cannot read the prior tree: {0}")]
-    Tree(TreeError),
+    Tree(#[from] TreeError),
     /// What the tree holds is not what this binary reads.
     #[error("{}", refused_text(.root, .error))]
     Refused {
@@ -137,8 +137,7 @@ pub fn load_prior_tree(
     code: String,
 ) -> Result<(PriorTree, Option<RawLedger>), PriorLoadError> {
     let root = split_tree_root_of(prior_file);
-    let mut files =
-        PriorFiles::new(read_tree(&root, &enters_folder).map_err(PriorLoadError::Tree)?);
+    let mut files = PriorFiles::new(read_tree(&root, &enters_folder)?);
     // The prior file is held once, as the code — unless it sits among the
     // tree's own files (outside the metadata folder), where a reader may
     // ask for it by path.

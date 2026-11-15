@@ -118,8 +118,7 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, VerbError>
     let (work_dir, owned) = match args.work_dir {
         Some(dir) => (dir.to_string(), false),
         None => (
-            humanify_ag_io::scratch::temp_dir("humanify-discover")
-                .map_err(VerbError::Scratch)?
+            humanify_ag_io::scratch::temp_dir("humanify-discover")?
                 .display()
                 .to_string(),
             true,
@@ -179,7 +178,7 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, VerbError>
     // A bundle that does not parse runs no discovery — nor does the
     // pipeline on it: said, not failed, so a score can count it as
     // "discovery never ran".
-    let report = report.map_err(VerbError::Unpack)?;
+    let report = report?;
     let no_discovery = report.is_none().then(|| {
         format!(
             "the {} adapter ran no library discovery (the input does not parse)",

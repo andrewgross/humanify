@@ -47,7 +47,7 @@ pub enum ReplayError {
     )]
     RecipeVersion { slice: String, built: String },
     #[error("replay: {0}")]
-    Recipe(humanify_ag_core::libindex::recipe::RecipeError),
+    Recipe(#[from] humanify_ag_core::libindex::recipe::RecipeError),
 }
 
 /// The replay plan of the index whose `manifest.json` text is given.
@@ -61,7 +61,7 @@ pub fn replay_plan(manifest_text: &str) -> Result<ReplayPlan, ReplayError> {
                 built: s.recipe_version.clone(),
             });
         }
-        let recipe = Recipe::parse(&s.recipe).map_err(ReplayError::Recipe)?;
+        let recipe = Recipe::parse(&s.recipe)?;
         recipes.push((recipe, s.version.clone()));
     }
     Ok(ReplayPlan {

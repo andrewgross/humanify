@@ -450,7 +450,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), VerbEr
     // finished, as it was when the adapter wrote as it went.
     humanify_ag_cli::output_tree::write_tree(&tree)?;
     drop(tree);
-    let outcome = match outcome.map_err(VerbError::Unpack)? {
+    let outcome = match outcome? {
         AdapterOutcome::VendorRecord(outcome) => outcome,
         AdapterOutcome::Files { result, .. } => {
             println!(

@@ -101,7 +101,7 @@ pub enum RecipeRunError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("{0}")]
-    Run(SubprocessError),
+    Run(#[from] SubprocessError),
     /// The bundler's own error text (stderr, then stdout).
     #[error("{0}")]
     Bundler(String),
@@ -236,8 +236,7 @@ impl RecipeBuild {
         let _ = std::fs::remove_dir_all(out_dir);
         std::fs::create_dir_all(out_dir)?;
         let mut cmd = self.command(cwd, entry, out_dir, externals, esm);
-        let out = humanify_ag_io::subprocess::run(&mut cmd, None, BUILD_DEADLINE)
-            .map_err(RecipeRunError::Run)?;
+        let out = humanify_ag_io::subprocess::run(&mut cmd, None, BUILD_DEADLINE)?;
         if !out.status.success() {
             return Err(RecipeRunError::Bundler(format!(
                 "{}{}",

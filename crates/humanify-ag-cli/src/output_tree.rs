@@ -51,8 +51,8 @@ pub fn tree_for(root: &Path) -> OutputTree {
 #[derive(Debug, thiserror::Error)]
 pub enum WriteError {
     /// Making a folder or writing a file failed.
-    #[error("{0}")]
-    File(FileError),
+    #[error(transparent)]
+    File(#[from] FileError),
     /// An embedded file could not be copied into the tree.
     #[error("copy the embedded file {} to {}: {source}", .from.display(), .to.display())]
     EmbeddedCopy {
@@ -60,12 +60,6 @@ pub enum WriteError {
         to: PathBuf,
         source: std::io::Error,
     },
-}
-
-impl From<FileError> for WriteError {
-    fn from(e: FileError) -> Self {
-        Self::File(e)
-    }
 }
 
 /// Put `tree` on disk: the output folder (made even when the tree is

@@ -259,7 +259,7 @@ pub enum SpecError {
     #[error("spec: {0}")]
     AsOf(#[from] crate::asof::AsOfError),
     #[error("spec: build.recipes: {0}")]
-    Recipe(humanify_ag_core::libindex::recipe::RecipeError),
+    Recipe(#[from] humanify_ag_core::libindex::recipe::RecipeError),
     #[error("spec: build.recipes: {0} given twice")]
     RecipeTwice(String),
     #[error("spec: build.sponge_regions {0:?} (drop, origin)")]
@@ -566,7 +566,7 @@ impl IndexSpec {
         let as_of = parse_as_of(&raw.as_of)?;
         let mut recipes = Vec::new();
         for text in &raw.build.recipes {
-            let r = Recipe::parse(text).map_err(SpecError::Recipe)?;
+            let r = Recipe::parse(text)?;
             if recipes.contains(&r) {
                 return Err(SpecError::RecipeTwice(text.clone()));
             }
