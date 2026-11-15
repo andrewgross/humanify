@@ -30,6 +30,10 @@ humanify-ag-llm = { path = "../humanify-ag-llm" }
 # the ONE stub LLM server and the shuffled fake (docs/dev-harness.md §6);
 # it depends on humanify-ag-model alone, so core's types stay one copy.
 humanify-ag-testkit = { path = "../humanify-ag-testkit" }
+# The shell's I/O library, for tests only: scratch dirs and the system
+# `diff` the reconcile tests hand in as their Differ. The core library
+# never links it (rules::PURE_CRATES).
+humanify-ag-io = { path = "../humanify-ag-io" }
 
 [lints]
 workspace = true

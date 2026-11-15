@@ -517,6 +517,7 @@ fn commit_and_finish(
         vendor_record: input.vendor_record,
         split_files: outcome.files.iter().map(|(p, _)| p.as_str()).collect(),
         embedded_files: input.embedded_files,
+        differ: &humanify_ag_io::diff::compute_normal_diff,
     };
     drop(ph);
     let mut report = FinishReport::default();

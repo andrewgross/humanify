@@ -25,6 +25,7 @@ pub mod surface;
 pub mod unified;
 pub mod unminify;
 pub mod util;
+pub mod webcrack;
 pub mod writers;
 
 /// The pipeline program's entry (`humanify-ag <input> [options]`): parse

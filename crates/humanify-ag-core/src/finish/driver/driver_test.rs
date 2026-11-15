@@ -19,6 +19,7 @@
 //! shared; the esbuild adapter advertises the runnable split the same way
 //! bun's does) — and never a record an earlier run left on disk (R6).
 
+use humanify_ag_io::diff::compute_normal_diff as gnu_diff;
 use std::fs;
 use std::path::PathBuf;
 
@@ -88,8 +89,11 @@ fn the_finish_reconcile_records_its_constituent_spans() {
         &s.0,
         Some(&prior_bundle),
         FinishSwitches::default(),
-        crate::rename::name_profile::NameProfile::Bun,
-        crate::rename::eligibility::NeverRename::UNIVERSAL,
+        super::PostSplitRules {
+            name_profile: crate::rename::name_profile::NameProfile::Bun,
+            never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
+            differ: &gnu_diff,
+        },
         crate::toolchain::BundleLayout::SingleWrapperFunction,
         &mut report,
     )

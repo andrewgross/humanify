@@ -366,7 +366,7 @@ fn main() {
 
 /// The webcrack shim for a `--webcrack-shim <script>` flag (the one owner:
 /// `humanify_ag_cli::unminify::webcrack_shim`).
-fn webcrack_shim(script: &str) -> humanify_ag_core::unpack::webcrack::WebcrackShim {
+fn webcrack_shim(script: &str) -> humanify_ag_cli::webcrack::WebcrackShim {
     humanify_ag_cli::unminify::webcrack_shim(std::path::Path::new(script))
 }
 
@@ -430,7 +430,9 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
             namer: recording.as_mut().map(|n| n as &mut dyn VendorNamer),
             prior,
             manifest_prior_order_disabled: false,
-            webcrack_shim: shim.as_ref(),
+            webcrack_shim: shim
+                .as_ref()
+                .map(|s| s as &dyn humanify_ag_core::unpack::webcrack::ExternalUnpacker),
             library_discovery: None,
         },
     )? {

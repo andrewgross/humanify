@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use super::{INPUT_LAYOUTS, InputLayout, choose_input_layout, read_input};
 
 fn dir_with(files: &[(&str, &str)]) -> PathBuf {
-    let dir = crate::scratch::temp_dir("input-layout").unwrap();
+    let dir = humanify_ag_io::scratch::temp_dir("input-layout").unwrap();
     for (name, text) in files {
         std::fs::write(dir.join(name), text).unwrap();
     }

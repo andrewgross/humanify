@@ -79,21 +79,21 @@
       "reason": "--log-file: one file shared by the debug and verbose writers; locked per line so lines never interleave. Diagnostics only"
     },
     {
-      "file": "crates/humanify-ag-core/src/naming/reconcile/hunks.rs",
+      "file": "crates/humanify-ag-io/src/diff.rs",
       "scope": "compute_normal_diff",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "`diff` for the normal-diff hunks (audit R3, fixed): through crate::subprocess::run under DIFF_DEADLINE (10 min vs 4.5 s measured on the whole Claude Code bundle); one per reconcile file on the par seam, results rejoined in ledger order. A failure is never silent: the post-split pass counts it as diff_failed (apart from parse discards) and WARNS; the pre-split step's error becomes a WARNING"
+      "reason": "`diff` for the normal-diff hunks (audit R3, fixed): through humanify_ag_io::subprocess::run under DIFF_DEADLINE (10 min vs 4.5 s measured on the whole Claude Code bundle); one per reconcile file on the par seam, results rejoined in ledger order. A failure is never silent: the post-split pass counts it as diff_failed (apart from parse discards) and WARNS; the pre-split step's error becomes a WARNING"
     },
     {
-      "file": "crates/humanify-ag-core/src/scratch.rs",
+      "file": "crates/humanify-ag-io/src/scratch.rs",
       "scope": "temp_dir",
       "construct": "atomic",
       "pattern": "stats-counter",
       "reason": "temp-dir sequence (audit O17): unique names only; create_dir refuses a clash and the loop retries"
     },
     {
-      "file": "crates/humanify-ag-core/src/scratch.rs",
+      "file": "crates/humanify-ag-io/src/scratch.rs",
       "scope": "temp_dir",
       "construct": "atomic-relaxed",
       "pattern": "stats-counter",
@@ -219,67 +219,67 @@
       "reason": "--perf-trace spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
     },
     {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
       "scope": "kill_group",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "`kill -KILL -- -<pgid>` on the timeout path (core forbids unsafe, so no kill(2)): kill(1) returns at once and needs no deadline of its own; stdio null; whether it worked is reported in TimedOut.killed"
+      "reason": "`kill -KILL -- -<pgid>` on the timeout path (the crate forbids unsafe, so no kill(2)): kill(1) returns at once and needs no deadline of its own; stdio null; whether it worked is reported in TimedOut.killed"
     },
     {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
       "scope": "run",
       "construct": "channel",
       "pattern": "subprocess",
       "reason": "one bounded sync_channel (capacity 4, one slot per sender) carries the threads' events; nobody blocks on a send. A disconnect with events missing (a drain panicked) kills the group and is an error"
     },
     {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
       "scope": "run",
       "construct": "piped-stdio",
       "pattern": "subprocess",
       "reason": "stdout and stderr always piped (stdin only when there is input): each pipe has its own drain thread, so no write can block on a full pipe (audit W1)"
     },
     {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
       "scope": "run",
       "construct": "thread-spawn",
       "pattern": "subprocess",
       "reason": "the drains, the stdin feeder and the exit waiter: plain threads on purpose (not scoped) \u2014 if something outside the killed process group still holds a pipe, they end when it closes and the run does not wait on them. Each sends exactly one event and exits; nothing they produce reaches output except through the returned Finished"
     },
     {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
       "scope": "run",
       "construct": "timeout",
       "pattern": "subprocess",
       "reason": "recv_timeout until ONE deadline from before spawn: it covers stdin, both outputs and the exit together (rule 3); on expiry the process group is SIGKILLed and the caller gets TimedOut"
     },
     {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
       "scope": "run_inherited",
       "construct": "channel",
       "pattern": "subprocess",
       "reason": "one bounded sync_channel (capacity 1, one sender) carries the exit waiter's status; a disconnect (the waiter panicked) kills the group and is an error"
     },
     {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
       "scope": "run_inherited",
       "construct": "thread-spawn",
       "pattern": "subprocess",
       "reason": "the exit waiter: one plain thread that sends exactly one event; stdout and stderr are inherited, not piped, so there is nothing to drain and nothing can block on a full pipe"
     },
     {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
       "scope": "run_inherited",
       "construct": "timeout",
       "pattern": "subprocess",
       "reason": "recv_timeout until ONE deadline from just after spawn over the whole run (rule 3); on expiry the process group is SIGKILLed and the caller gets TimedOut"
     },
     {
-      "file": "crates/humanify-ag-core/src/unpack/webcrack.rs",
-      "scope": "unpack_webcrack",
+      "file": "crates/humanify-ag-cli/src/webcrack.rs",
+      "scope": "WebcrackShim::run",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "the webcrack shim (audit W1 + follow-up, fixed): through crate::subprocess::run, which feeds stdin while both outputs drain, under WebcrackShim::deadline (production WEBCRACK_DEADLINE, 30 min vs 12 s measured on a 2.9 MB webpack bundle); a timeout kills the shim's process group; timeout, non-zero exit or unparseable output is an error"
+      "reason": "the webcrack shim (audit W1 + follow-up, fixed): through humanify_ag_io::subprocess::run, which feeds stdin while both outputs drain, under WebcrackShim::deadline (production WEBCRACK_DEADLINE, 30 min vs 12 s measured on a 2.9 MB webpack bundle); a timeout kills the shim's process group; timeout, non-zero exit or unparseable output is an error"
     },
     {
       "file": "crates/humanify-ag-index/src/build.rs",
@@ -300,42 +300,42 @@
       "scope": "npm_install",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "`npm install --before=<cutoff>` of one package (retried once with --legacy-peer-deps; install calls it at the exact cutoff, then once at the grace cutoff when only the date blocked it), through humanify_ag_core::subprocess::run under INSTALL_DEADLINE (30 min; tens of seconds in the exp095 builds); a failure or timeout fails the task, which writes no shard and is reported as FAILED"
+      "reason": "`npm install --before=<cutoff>` of one package (retried once with --legacy-peer-deps; install calls it at the exact cutoff, then once at the grace cutoff when only the date blocked it), through humanify_ag_io::subprocess::run under INSTALL_DEADLINE (30 min; tens of seconds in the exp095 builds); a failure or timeout fails the task, which writes no shard and is reported as FAILED"
     },
     {
       "file": "crates/humanify-ag-index/src/build.rs",
       "scope": "npm_ci",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "`npm ci --prefer-offline` restores an earlier install's tree from its kept lockfile (exp213; retried once with --legacy-peer-deps), through humanify_ag_core::subprocess::run under INSTALL_DEADLINE like npm_install; a failure falls back to the ordinary install path, which fails the task loudly"
+      "reason": "`npm ci --prefer-offline` restores an earlier install's tree from its kept lockfile (exp213; retried once with --legacy-peer-deps), through humanify_ag_io::subprocess::run under INSTALL_DEADLINE like npm_install; a failure falls back to the ordinary install path, which fails the task loudly"
     },
     {
       "file": "crates/humanify-ag-index/src/recipe.rs",
       "scope": "version_command_of",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "`<bundler> --version` (`node <recipe script> --version` for webpack and rollup, exp105) for the index manifest and the tool fetch's check (exp181), built here and run by bundler_version_of through humanify_ag_core::subprocess::run under VERSION_DEADLINE (1 min; it answers in ms); a non-zero exit, empty answer or timeout is an error"
+      "reason": "`<bundler> --version` (`node <recipe script> --version` for webpack and rollup, exp105) for the index manifest and the tool fetch's check (exp181), built here and run by bundler_version_of through humanify_ag_io::subprocess::run under VERSION_DEADLINE (1 min; it answers in ms); a non-zero exit, empty answer or timeout is an error"
     },
     {
       "file": "crates/humanify-ag-index/src/recipe.rs",
       "scope": "RecipeBuild::command",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "one minified bun/esbuild build (or `node <recipe script>` for webpack and rollup, exp105) of a package entry, built here and run by RecipeBuild::build through humanify_ag_core::subprocess::run under BUILD_DEADLINE (30 min; seconds in the exp095 builds); a non-zero exit or timeout returns the error text and the build contributes no files (the module shard records it)"
+      "reason": "one minified bun/esbuild build (or `node <recipe script>` for webpack and rollup, exp105) of a package entry, built here and run by RecipeBuild::build through humanify_ag_io::subprocess::run under BUILD_DEADLINE (30 min; seconds in the exp095 builds); a non-zero exit or timeout returns the error text and the build contributes no files (the module shard records it)"
     },
     {
       "file": "crates/humanify-ag-index/src/tools.rs",
       "scope": "fetch_tool_at",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "exp171/exp181: a run-time index build whose store holds no tool for the bundle's recipe fetches the pinned one (Bun, esbuild, webpack or rollup) \u2014 `npm install <specs> --before=<date> --prefix <store>/tools/<bundler>-<v> --ignore-scripts` \u2014 through humanify_ag_core::subprocess::run (pipes drained) under FETCH_DEADLINE (15 min); a non-zero exit, a timeout, no platform binary or a wrong version is a loud error that removes the half-made directory"
+      "reason": "exp171/exp181: a run-time index build whose store holds no tool for the bundle's recipe fetches the pinned one (Bun, esbuild, webpack or rollup) \u2014 `npm install <specs> --before=<date> --prefix <store>/tools/<bundler>-<v> --ignore-scripts` \u2014 through humanify_ag_io::subprocess::run (pipes drained) under FETCH_DEADLINE (15 min); a non-zero exit, a timeout, no platform binary or a wrong version is a loud error that removes the half-made directory"
     },
     {
       "file": "crates/humanify-ag-index/src/registry.rs",
       "scope": "fetch",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "`npm view <name> time versions --json` for a packument not yet cached, through humanify_ag_core::subprocess::run under VIEW_DEADLINE (5 min; seconds); a non-zero exit, timeout or unparseable JSON is an error naming the package"
+      "reason": "`npm view <name> time versions --json` for a packument not yet cached, through humanify_ag_io::subprocess::run under VIEW_DEADLINE (5 min; seconds); a non-zero exit, timeout or unparseable JSON is an error naming the package"
     },
     {
       "file": "crates/humanify-ag-llm/src/cache.rs",
@@ -624,7 +624,7 @@
       "scope": "fetch_high_impact_list",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "the spec's list fetch (exp184): npm pack of the pinned npm-high-impact version and tar -xzf of it, run through humanify_ag_core::subprocess::run (drained pipes, a whole-wait deadline, loud failure); the file's sha256 is verified before the fetched list is used"
+      "reason": "the spec's list fetch (exp184): npm pack of the pinned npm-high-impact version and tar -xzf of it, run through humanify_ag_io::subprocess::run (drained pipes, a whole-wait deadline, loud failure); the file's sha256 is verified before the fetched list is used"
     },
     {
       "file": "crates/humanify-ag-index/src/planner.rs",
@@ -659,7 +659,7 @@
       "scope": "command",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "the harness's ONE Command::new: every child it starts goes through humanify_ag_core::subprocess::run (all pipes drained at once, one deadline over the whole run, the process group killed on expiry, every failure returned), or run_inherited for a gate stage whose output streams (nothing piped, the same one deadline and group kill); callers pick the deadline (git 60 s, a release build 1 h)"
+      "reason": "the harness's ONE Command::new: every child it starts goes through humanify_ag_io::subprocess::run (all pipes drained at once, one deadline over the whole run, the process group killed on expiry, every failure returned), or run_inherited for a gate stage whose output streams (nothing piped, the same one deadline and group kill); callers pick the deadline (git 60 s, a release build 1 h)"
     },
     {
       "file": "crates/humanify-ag-dev/src/proc.rs",
@@ -694,7 +694,7 @@
       "scope": "kill_group",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "the file-logged child's group kill on deadline expiry (`kill -KILL -- -<pgid>`), itself through humanify_ag_core::subprocess::run with a 10 s deadline"
+      "reason": "the file-logged child's group kill on deadline expiry (`kill -KILL -- -<pgid>`), itself through humanify_ag_io::subprocess::run with a 10 s deadline"
     },
     {
       "file": "crates/humanify-ag-dev/src/runners/index.rs",

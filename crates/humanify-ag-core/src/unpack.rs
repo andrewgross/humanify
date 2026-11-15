@@ -206,8 +206,8 @@ pub struct AdapterRun<'n> {
     pub prior: Option<bun::PriorVendor>,
     /// `--disable manifest-prior-order`.
     pub manifest_prior_order_disabled: bool,
-    /// The webcrack subprocess shim (the webcrack adapter errors without it).
-    pub webcrack_shim: Option<&'n webcrack::WebcrackShim>,
+    /// The webcrack shim the shell runs (the webcrack adapter errors without it).
+    pub webcrack_shim: Option<&'n dyn webcrack::ExternalUnpacker>,
     /// Run library discovery, report-only (`--diagnostics`; vendor-record
     /// adapters; docs/design/library-discovery.md).
     pub library_discovery: Option<crate::libdetect::discovery::DiscoveryRequest<'n>>,

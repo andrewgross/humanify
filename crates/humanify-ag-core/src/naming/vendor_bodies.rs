@@ -137,6 +137,7 @@ pub fn name_vendor_bodies<P: NameProvider>(
     prior: Option<&str>,
     config: &NamingConfig,
     provider: &P,
+    differ: &dyn crate::naming::reconcile::hunks::Differ,
     log: &mut DispatchLog,
 ) -> Result<Option<VendorNaming>, String> {
     let mut order: Vec<usize> = (0..bodies.len()).collect();
@@ -171,6 +172,7 @@ pub fn name_vendor_bodies<P: NameProvider>(
             },
             config,
             provider,
+            differ,
             log,
         )
     };

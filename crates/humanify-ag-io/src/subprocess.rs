@@ -4,9 +4,10 @@
 //! killed when it expires, and every failure returned as an error the
 //! caller has to say out loud.
 //!
-//! Three callers: the webcrack shim, `diff` for the normal-diff hunks and
-//! `git rev-parse` for the dump's manifest. Each picks its own deadline
-//! (see their constants and docs/concurrency.md, "Subprocesses"). The
+//! The pipeline's callers: the webcrack shim (cli `webcrack`), `diff` for
+//! the normal-diff hunks ([`crate::diff`]) and the offline index builder's
+//! npm and bundler runs. Each picks its own deadline (see their constants
+//! and docs/concurrency.md, "Subprocesses"). The
 //! measurement harness (humanify-ag-dev `proc`) uses [`run`] for every
 //! child it reads, and [`run_inherited`] for a gate stage whose output is
 //! printed as it happens.
@@ -15,7 +16,7 @@
 //! plain thread each drains stdout, drains stderr, feeds stdin and waits
 //! for the exit. They report on one bounded channel, and the caller's
 //! thread waits on that channel with `recv_timeout` until the deadline — an
-//! event wait, never a sleep-and-poll. On expiry the whole group is killed
+//! event wait, not a sleep-and-poll. On expiry the whole group is killed
 //! (`kill -KILL -- -<pgid>`): the shim is `npx tsx …`, whose grandchild
 //! `node` holds the pipes open, so killing the direct child alone would
 //! leave the drains blocked. The threads are not scoped on purpose: if
@@ -40,7 +41,7 @@ pub struct Finished {
 /// Why a child did not finish.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubprocessError {
-    /// It never started (not found, EAGAIN, ENOMEM, …).
+    /// It did not start (not found, EAGAIN, ENOMEM, …).
     Spawn(String),
     /// The deadline expired; `killed` says whether the group kill was
     /// delivered.
@@ -86,8 +87,6 @@ struct Collected {
 }
 
 impl Collected {
-    // default: legacy, untriaged: a Result error becomes a value here
-    #[allow(clippy::disallowed_methods)]
     fn take(&mut self, event: Event) {
         let pipe = |r: std::io::Result<Vec<u8>>, what: &str, error: &mut Option<String>| {
             r.unwrap_or_else(|e| {
@@ -114,9 +113,6 @@ impl Collected {
 /// exit status is returned for the caller to judge. A failed stdin write
 /// is an error only when the child still exited 0 — it left input unread
 /// and claimed success; a child that failed reports through its status.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 pub fn run(
     command: &mut Command,
     stdin: Option<Vec<u8>>,
@@ -216,11 +212,8 @@ pub fn run(
 /// deadline from before spawn. Nothing is piped, so nothing can block on
 /// a full pipe; one plain thread waits for the exit and reports on a
 /// bounded channel, and the caller waits on it with `recv_timeout` — an
-/// event wait, never a poll. On expiry the child's process group is
+/// event wait, not a poll. On expiry the child's process group is
 /// SIGKILLed, as in [`run`].
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 pub fn run_inherited(
     command: &mut Command,
     deadline: Duration,
@@ -256,11 +249,9 @@ pub fn run_inherited(
 }
 
 /// SIGKILL the child's whole process group (it is the group's leader, so
-/// the group id is its pid). Through `kill(1)`: core forbids `unsafe`, so
+/// the group id is its pid). Through `kill(1)`: this crate forbids `unsafe`, so
 /// no direct `kill(2)`. `kill` returns at once, so it needs no deadline of
 /// its own.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
 fn kill_group(pid: u32) -> bool {
     Command::new("kill")
         .args(["-KILL", "--", &format!("-{pid}")])

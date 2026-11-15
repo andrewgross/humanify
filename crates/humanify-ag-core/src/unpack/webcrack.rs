@@ -5,36 +5,36 @@
 //! WPB.2). The bundle goes in on stdin; one JSON line comes back:
 //! `{"files":[{"path","metadata"?}],"bundleType"?}`.
 //!
-//! The command is configuration (the caller resolves where node and the
-//! shim live); core never reads the environment.
+//! The shell runs the shim (cli `webcrack`, through the one subprocess
+//! owner) and hands core what it printed: core spawns nothing, reads no
+//! environment and touches no disk here. Core keeps the decisions: what
+//! the contract line says, and that every file it names lies inside the
+//! directory the shim was given.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::time::Duration;
 
 use super::{ModuleMetadata, UnpackResult, UnpackedFile};
 
-/// How to launch the shim: the program and its leading arguments (e.g.
-/// `npx tsx <repo>/tools/webcrack-shim.ts`); the output directory is
-/// appended as the last argument.
+/// What one run of the external unpacker gave back: the ABSOLUTE,
+/// canonical directory it wrote into (a relative `-o out` resolved
+/// against the run's working directory, not the shim's) and its stdout.
 #[derive(Clone, Debug)]
-pub struct WebcrackShim {
-    pub program: String,
-    pub args: Vec<String>,
-    /// The working directory (the repo root, where `node_modules` resolves).
-    pub cwd: Option<PathBuf>,
-    /// The deadline over the shim's whole run (start, stdin, output,
-    /// exit); the production value is [`WEBCRACK_DEADLINE`].
-    pub deadline: Duration,
+pub struct ShimRun {
+    pub out_dir: PathBuf,
+    pub stdout: String,
 }
 
-/// The shim's deadline: 30 minutes. Measured 2026-10-12: a 2.9 MB,
-/// 3,000-module webpack 4 bundle takes 12 s end to end (`npx` start
-/// included), a 10 KB one 0.85 s; time grows about linearly with size, so
-/// a 20 MB bundle should take under 2 minutes. 30 minutes is 150x the
-/// largest measurement and >10x the extrapolation: only a webcrack that
-/// will never finish reaches it (docs/concurrency.md, "Subprocesses").
-pub const WEBCRACK_DEADLINE: Duration = Duration::from_secs(30 * 60);
+/// Why the external unpacker gave nothing: the shell's message, word for
+/// word (a non-zero exit, a deadline, a directory it could not make).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnpackerError(pub String);
+
+/// The webcrack shim as core sees it: given the bundle and the run's
+/// output directory, run it and return what it printed. The shell
+/// implements it (cli `webcrack::WebcrackShim`); a test may hand in its own.
+pub trait ExternalUnpacker {
+    fn run(&self, code: &str, out_dir: &Path) -> Result<ShimRun, UnpackerError>;
+}
 
 #[derive(serde::Deserialize)]
 struct ShimFile {
@@ -47,35 +47,19 @@ struct ShimOutput {
     files: Vec<ShimFile>,
 }
 
-/// `WebcrackAdapter.unpack`: run the shim on the ABSOLUTE output directory
-/// ([`shim_out_dir`]), return its files in the order it listed them — every
-/// one inside that directory, or the unpack fails naming the one outside. A non-zero exit, unparseable output or a shim past its
-/// deadline (killed) is an error — the TS adapter throws the same way when
-/// webcrack does. The pipes and the deadline are [`crate::subprocess`]'s.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
+/// `WebcrackAdapter.unpack`: run the shim through `unpacker` and return
+/// its files in the order it listed them — every one inside the
+/// directory the shim wrote into, or the unpack fails naming the one
+/// outside. A failed run (non-zero exit, a shim past its deadline) or
+/// unparseable output is an error — the TS adapter throws the same way
+/// when webcrack does.
 pub fn unpack_webcrack(
     code: &str,
     out_dir: &Path,
-    shim: &WebcrackShim,
+    unpacker: &dyn ExternalUnpacker,
 ) -> Result<UnpackResult, String> {
-    let out_dir = shim_out_dir(out_dir)?;
-    let mut command = Command::new(&shim.program);
-    command.args(&shim.args).arg(&out_dir);
-    if let Some(cwd) = &shim.cwd {
-        command.current_dir(cwd);
-    }
-    let output =
-        crate::subprocess::run(&mut command, Some(code.as_bytes().to_vec()), shim.deadline)
-            .map_err(|e| format!("webcrack shim ({}): {e}", shim.program))?;
-    if !output.status.success() {
-        return Err(format!(
-            "webcrack shim exited {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-    let result = parse_shim_output(&String::from_utf8_lossy(&output.stdout))?;
+    let ShimRun { out_dir, stdout } = unpacker.run(code, out_dir).map_err(|e| e.0)?;
+    let result = parse_shim_output(&stdout)?;
     if let Some(stray) = result.files.iter().find(|f| !f.path.starts_with(&out_dir)) {
         return Err(format!(
             "webcrack shim reported {}, outside its output directory {}",
@@ -84,20 +68,6 @@ pub fn unpack_webcrack(
         ));
     }
     Ok(result)
-}
-
-/// The output directory as the shim must receive it: created, then
-/// ABSOLUTE and canonical. The shim runs in its own working directory (the
-/// repo root, [`WebcrackShim::cwd`]), so a relative `out_dir` — `-o out` —
-/// resolved THERE: webcrack wrote into `<repo>/out/` and reported
-/// `out/deobfuscated.js`, which the run then read against its own working
-/// directory and did not find (exp182). Canonical, so the paths the shim
-/// reports (`path.join(outputDir, file)`, which normalizes) start with it.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-fn shim_out_dir(out_dir: &Path) -> Result<PathBuf, String> {
-    std::fs::create_dir_all(out_dir).map_err(|e| format!("mkdir {}: {e}", out_dir.display()))?;
-    std::fs::canonicalize(out_dir).map_err(|e| format!("resolve {}: {e}", out_dir.display()))
 }
 
 /// The shim's stdout → the unpack result (its LAST non-empty line: a

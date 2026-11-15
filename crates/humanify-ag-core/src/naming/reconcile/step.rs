@@ -63,18 +63,31 @@ pub fn pipeline_options(prior_text: &str) -> ReconcileOptions {
     }
 }
 
+/// What the step reconciles with: the run's rename eligibility and
+/// minifier name profile, and the system `diff` the shell hands in.
+#[derive(Clone, Copy)]
+pub struct StepRules<'r> {
+    pub eligible: &'r Eligibility,
+    pub profile: NameProfile,
+    pub differ: &'r dyn hunks::Differ,
+}
+
 /// `runPriorDiffReconciliation(code, prior)`. Err when the step could not
 /// run (unparseable text, a `diff` failure) — the caller ships the
 /// pre-reconcile output, as the TS returns undefined.
 pub fn run_prior_diff_reconciliation(
     code: &str,
     prior_text: &str,
-    eligible: &Eligibility,
-    profile: NameProfile,
+    rules: StepRules<'_>,
     trail: StrategyTrail,
     ledger: Option<LedgerWalk>,
     library_spans: &[(u32, u32)],
 ) -> Result<PriorDiffOutcome, (String, StrategyTrail)> {
+    let StepRules {
+        eligible,
+        profile,
+        differ,
+    } = rules;
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
     if !ingest.errors.is_empty() {
@@ -85,9 +98,9 @@ pub fn run_prior_diff_reconciliation(
     }
     let semantic = ingest.semantic();
     let ph = crate::profiling::phase("reconcile:diff");
-    let diff_text = match hunks::compute_normal_diff(prior_text, code) {
+    let diff_text = match differ.normal_diff(prior_text, code) {
         Ok(d) => d,
-        Err(e) => return Err((e, trail)),
+        Err(e) => return Err((e.0, trail)),
     };
     drop(ph);
     let ph = crate::profiling::phase("reconcile:options");

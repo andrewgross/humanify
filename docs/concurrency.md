@@ -29,7 +29,7 @@ no ordered mode at all now.)
   **2 of them known exceptions**: the two retry layers (R1). It started at
   61 sites and 5 exceptions; the other three — the `diff` subprocess (R3)
   and the webcrack and `git` subprocesses with no deadline — were fixed
-  2026-10-12 by the one subprocess owner (`crate::subprocess`, see
+  2026-10-12 by the one subprocess owner (`humanify_ag_io::subprocess`, see
   Subprocesses); it has grown with the pipeline since (85 as of the
   ordering audit, whose `order-mode` entry is the mode flag).
 - **Three checks enforce it**:
@@ -65,8 +65,10 @@ main thread in only four ways:
    - `run_pipelined` is `block_on(FuturesUnordered)`.
    - Each call passes through `AnswerMemo → RateLimited → DebugProvider →
 OpenAiClient`.
-3. **Subprocesses**, all through `humanify_ag_core::subprocess::run`: the
-   webcrack shim, `diff` for the normal-diff hunks, and `git rev-parse`.
+3. **Subprocesses**, all through `humanify_ag_io::subprocess::run` (the
+   shell's I/O crate; the pure core spawns nothing): the webcrack shim
+   (cli `webcrack.rs`), `diff` for the normal-diff hunks (io `diff.rs`,
+   handed to core as its `Differ`), and `git rev-parse`.
 4. **Observers**: the TTY redraw thread and the profiler's sampler.
 
 The audit has the full diagram ("The thread and runtime model").
@@ -84,9 +86,9 @@ name.
 | `single-flight`  | one key, one answer: per-key async gate plus the answer maps                                                                      | `cache.rs`                                                                           |
 | `retry-envelope` | a retry loop's backoff                                                                                                            | `rate.rs` `with_retry`, `client.rs` `post_with_sdk_retries` (R1)                     |
 | `deadline`       | a timeout that bounds a whole operation, and the HTTP client it applies to                                                        | `client.rs`                                                                          |
-| `subprocess`     | a child process: drained pipes, deadline, loud failure                                                                            | `subprocess.rs` (the owner); `webcrack.rs`, `hunks.rs`, `unified.rs` `git_short_sha` |
+| `subprocess`     | a child process: drained pipes, deadline, loud failure                                                                            | io `subprocess.rs` (the owner); cli `webcrack.rs`, io `diff.rs`, `unified.rs` `git_short_sha` |
 | `short-lock`     | a std `Mutex`/`RwLock` held for a few field updates, never across slow work                                                       | `metrics.rs`, `llm_sim.rs`                                                           |
-| `stats-counter`  | an atomic used as a counter or a unique-name sequence; nothing decides on it                                                      | `cache.rs` counters, `PRIOR_PARSES`, `hunks.rs` temp-dir `SEQ`                       |
+| `stats-counter`  | an atomic used as a counter or a unique-name sequence; nothing decides on it                                                      | `cache.rs` counters, `PRIOR_PARSES`, io `scratch.rs` temp-dir `SEQ`                     |
 | `observer`       | a side thread or lock that only watches (progress, profiling, logging)                                                            | `progress.rs`, `profiling.rs`, `log.rs`, `unified.rs` log file                       |
 | `test-support`   | a construct in the test-only crate `humanify-ag-testkit` (a dev-dependency, never linked into a product binary): the stub server  | `humanify-ag-testkit/src/stub_server.rs`; the census refuses it in any other crate   |
 
@@ -174,13 +176,13 @@ deadline covers the whole operation, not the first half of it.
 - **A sleep is not a deadline.** Wait for an event with a timeout, such as
   `recv_timeout` or `timeout_at`. Never poll in a loop with a sleep.
 - **Every subprocess has one**, set by its caller and handed to
-  `crate::subprocess::run` (values and why: Subprocesses). The W1
+  `humanify_ag_io::subprocess::run` (values and why: Subprocesses). The W1
   follow-up, R3 and the `git` gap were closed 2026-10-12.
 
 ## Subprocesses
 
 **Rule 4.** A child process goes through ONE owner,
-`humanify_ag_core::subprocess::run(command, stdin, deadline)`. Do not call
+`humanify_ag_io::subprocess::run(command, stdin, deadline)`. Do not call
 `Command::output`, `spawn` or `wait_with_output` yourself: the owner is
 where all three parts of this rule live, and its tests pin them.
 
@@ -208,8 +210,8 @@ reaches):
 
 | child                                                     | deadline | measured                                                                                                                                                                         | on failure                                                                                                                                                                     |
 | --------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| webcrack shim (`WEBCRACK_DEADLINE`, `unpack/webcrack.rs`) | 30 min   | 12 s for a 2.9 MB / 3,000-module webpack bundle, `npx` start included; 0.85 s for 10 KB; about linear in size                                                                    | the unpack fails: the run stops with the error                                                                                                                                 |
-| `diff` (`DIFF_DEADLINE`, `naming/reconcile/hunks.rs`)     | 10 min   | 4.5 s for the largest diff the pipeline runs, the pre-split reconcile over the whole Claude Code bundle (793k vs 805k lines, 2.1.215 -> 2.1.216); per-file diffs are far smaller | post-split: counted as `diff_failed` (apart from parse `discarded`) and a WARNING naming the first file; pre-split: a WARNING that the reconcile did not run (audit R3, fixed) |
+| webcrack shim (`WEBCRACK_DEADLINE`, cli `webcrack.rs`)    | 30 min   | 12 s for a 2.9 MB / 3,000-module webpack bundle, `npx` start included; 0.85 s for 10 KB; about linear in size                                                                    | the unpack fails: the run stops with the error                                                                                                                                 |
+| `diff` (`DIFF_DEADLINE`, io `diff.rs`)                    | 10 min   | 4.5 s for the largest diff the pipeline runs, the pre-split reconcile over the whole Claude Code bundle (793k vs 805k lines, 2.1.215 -> 2.1.216); per-file diffs are far smaller | post-split: counted as `diff_failed` (apart from parse `discarded`) and a WARNING naming the first file; pre-split: a WARNING that the reconcile did not run (audit R3, fixed) |
 | `git rev-parse` (`GIT_DEADLINE`, `unified.rs`)            | 1 min    | milliseconds                                                                                                                                                                     | not a checkout / no git: the decided quiet "unknown"; a timeout: "unknown" and a WARNING                                                                                       |
 
 The offline index builder (`crates/humanify-ag-index`, not the pipeline) runs
@@ -418,8 +420,8 @@ production three:
 - `client.rs` `OpenAiClient::new`: the deadline is per attempt;
 - `progress.rs` `TtyRenderer::start`: the observer redraw thread's tick.
 
-(`webcrack.rs` `unpack_webcrack`'s allow for `wait_with_output` went with
-the move to `crate::subprocess`, 2026-10-12.)
+(the webcrack shim's allow for `wait_with_output` went with
+the move to the subprocess owner, now `humanify_ag_io::subprocess`.)
 
 The test allows cover private runtimes, `#[tokio::test]`, deliberate sleeps,
 and the stub server.

@@ -90,7 +90,7 @@ fn fetch(name: &str) -> Result<Packument, String> {
     let url = registry_url(name);
     let (code, body) = with_retry(
         || {
-            let out = humanify_ag_core::subprocess::run(
+            let out = humanify_ag_io::subprocess::run(
                 Command::new("curl").args(["-sS", "--compressed", "-w", "\n%{http_code}", &url]),
                 None,
                 FETCH_DEADLINE,

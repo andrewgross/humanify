@@ -80,6 +80,9 @@ pub struct FinishInput<'a> {
     /// code-split app's `file` imports, exp217): a runnable tree carries
     /// each under `embedded/`. Empty for every other input.
     pub embedded_files: &'a [crate::unpack::chunk_link::EmbeddedFile],
+    /// The system `diff` the post-split reconcile aligns with, handed in
+    /// by the shell (`humanify_ag_io::diff`): core runs no process.
+    pub differ: &'a dyn crate::naming::reconcile::hunks::Differ,
 }
 
 /// The vendor record as the finish reads it (`BunModulesManifest`).
@@ -387,8 +390,11 @@ pub fn finish_stage(
         input.output_dir,
         input.prior_version,
         input.switches,
-        input.name_profile,
-        input.never_rename,
+        PostSplitRules {
+            name_profile: input.name_profile,
+            never_rename: input.never_rename,
+            differ: input.differ,
+        },
         input.layout,
         report,
     )?;
@@ -416,6 +422,16 @@ fn read_opt(root: &Path, file: &str) -> Option<String> {
         .map(|b| String::from_utf8_lossy(&b).into_owned())
 }
 
+/// What the post-split reconcile renames with: the run's minifier name
+/// profile and its lists of names left alone (the SAME the naming stage
+/// used), and the system `diff` the shell hands in.
+#[derive(Clone, Copy)]
+pub struct PostSplitRules<'r> {
+    pub name_profile: NameProfile,
+    pub never_rename: NeverRename,
+    pub differ: &'r dyn crate::naming::reconcile::hunks::Differ,
+}
+
 /// `reconcilePostSplit(opts, ledger, isEligible)` over the tree on disk:
 /// the ledger is `.humanify/split-ledger.json` (rewritten when a file
 /// changed), the bundle `.humanify/humanified.js`.
@@ -423,11 +439,15 @@ pub fn reconcile_post_split(
     output_dir: &Path,
     prior_version: Option<&Path>,
     switches: FinishSwitches,
-    name_profile: NameProfile,
-    never_rename: NeverRename,
+    rules: PostSplitRules<'_>,
     layout: crate::toolchain::BundleLayout,
     report: &mut FinishReport,
 ) -> Result<Option<ReconcileReport>, String> {
+    let PostSplitRules {
+        name_profile,
+        never_rename,
+        differ,
+    } = rules;
     let Some(prior_version) = prior_version else {
         return Ok(None);
     };
@@ -454,6 +474,7 @@ pub fn reconcile_post_split(
             eligible: &eligible,
             name_profile,
             disabled: switches.post_split_reconcile_disabled,
+            differ,
         })
     };
     if let Some(warning) = super::reconcile::diff_failure_warning(&result) {

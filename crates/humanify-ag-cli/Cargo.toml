@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 humanify-ag-core = { path = "../humanify-ag-core" }
+humanify-ag-io = { path = "../humanify-ag-io" }
 humanify-ag-index = { path = "../humanify-ag-index" }
 humanify-ag-llm = { path = "../humanify-ag-llm" }
 humanify-ag-model = { path = "../humanify-ag-model" }

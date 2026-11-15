@@ -4,7 +4,7 @@
 //! Functional core, imperative shell: `humanify-ag-core` and
 //! `humanify-ag-model` decide over values; disk, processes, the
 //! environment, clocks, threads, terminal output and the network belong to
-//! the shell crates (cli, index, llm). This census finds every effect
+//! the shell crates (cli, index, io, llm). This census finds every effect
 //! construct in the non-test sources of the product crates, every global
 //! mutable `static`, and every non-private fn returning `Result<_, String>`,
 //! and requires each one to be on dev/census/effects-allowlist.json with

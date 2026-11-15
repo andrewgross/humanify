@@ -11,6 +11,7 @@ pub const PRODUCT_CRATES: &[&str] = &[
     "crates/humanify-ag-cli/",
     "crates/humanify-ag-core/",
     "crates/humanify-ag-index/",
+    "crates/humanify-ag-io/",
     "crates/humanify-ag-llm/",
     "crates/humanify-ag-model/",
 ];
@@ -74,7 +75,7 @@ pub const ROLES: &[(&str, &str)] = &[
     ),
     (
         "shell",
-        "an effect in a shell crate (cli, index, llm): inventory",
+        "an effect in a shell crate (cli, index, io, llm): inventory",
     ),
 ];
 

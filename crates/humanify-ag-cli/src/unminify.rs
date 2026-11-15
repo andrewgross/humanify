@@ -7,12 +7,12 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::webcrack::WebcrackShim;
 use humanify_ag_core::libdetect::{LibraryDetector, MixedFileDetection, detect_libraries};
 use humanify_ag_core::modules::vendor_names::{
     BunModulesManifest, ProviderVendorNamer, VendorNamer, VendorNamingStats,
 };
 use humanify_ag_core::profiling::Profiler;
-use humanify_ag_core::unpack::webcrack::WebcrackShim;
 use humanify_ag_core::unpack::{AdapterOutcome, AdapterRun, UnpackedFile, bun, run_adapter};
 use humanify_ag_model::llm::NameProvider;
 use humanify_ag_model::profiling::Fields;
@@ -31,7 +31,7 @@ pub fn webcrack_shim(script: &Path) -> WebcrackShim {
             .parent()
             .and_then(Path::parent)
             .map(Path::to_path_buf),
-        deadline: humanify_ag_core::unpack::webcrack::WEBCRACK_DEADLINE,
+        deadline: crate::webcrack::WEBCRACK_DEADLINE,
     }
 }
 

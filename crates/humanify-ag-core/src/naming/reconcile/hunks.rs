@@ -2,11 +2,9 @@
 //! `computeNormalDiff`, `parseNormalDiff`, `analyzeHunks` and the exp088
 //! skeleton-vote pool.
 //!
-//! `computeNormalDiff` shells out to the system `diff` exactly as the TS
-//! does (normal format, CRLF-normalized temp files): the alignment IS
-//! GNU diff's, and re-implementing its LCS heuristics would be a second
-//! diff with its own hunk boundaries. The binary is a pipeline
-//! dependency.
+//! `computeNormalDiff` is the system `diff` (normal format, CRLF-normalized
+//! temp files): the alignment IS GNU diff's. The shell runs it
+//! (`humanify_ag_io::diff`) and core receives it as a [`Differ`].
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -24,54 +22,35 @@ pub struct DiffHunk {
     pub new_lines: Vec<String>,
 }
 
-/// The `diff` deadline: 10 minutes. Measured 2026-10-12: the largest diff
-/// the pipeline runs — the pre-split reconcile over the whole Claude Code
-/// bundle, 793k vs 805k lines (2.1.215 -> 2.1.216) — takes 4.5 s; two
-/// unrelated 800k-line files 0.85 s; the post-split per-file diffs are a
-/// fraction of that. 10 minutes is >100x the worst measurement, room for
-/// up to one `diff` per core on a loaded shared box (audit R3). Reaching it
-/// is a failure the caller reports, never a silent discard.
-pub const DIFF_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
-
-/// `computeNormalDiff(prior, new)`: `diff prior new` (normal format) over
-/// CRLF-normalized copies, under [`DIFF_DEADLINE`]. Err on a real `diff`
-/// failure (exit >= 2, spawn failure, the deadline) — each caller reports
-/// it: the pre-split step as a WARNING, the post-split pass as a counted,
-/// warned `diff_failed` (audit R3).
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
-pub fn compute_normal_diff(prior_text: &str, new_text: &str) -> Result<String, String> {
-    let dir = tempdir()?;
-    let prior_path = dir.join("prior.js");
-    let new_path = dir.join("new.js");
-    let result = (|| {
-        std::fs::write(&prior_path, prior_text.replace("\r\n", "\n"))
-            .map_err(|e| format!("write prior: {e}"))?;
-        std::fs::write(&new_path, new_text.replace("\r\n", "\n"))
-            .map_err(|e| format!("write new: {e}"))?;
-        let mut command = std::process::Command::new("diff");
-        command.arg(&prior_path).arg(&new_path);
-        let out = crate::subprocess::run(&mut command, None, DIFF_DEADLINE)
-            .map_err(|e| format!("diff failed (status null): {e}"))?;
-        match out.status.code() {
-            Some(0 | 1) => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),
-            code => Err(format!(
-                "diff failed (status {code:?}): {}",
-                String::from_utf8_lossy(&out.stderr)
-            )),
-        }
-    })();
-    let _ = std::fs::remove_dir_all(&dir);
-    result
+/// How the reconcile gets a normal-format diff of two texts: GNU `diff`'s
+/// alignment over CRLF-normalized copies (`computeNormalDiff`). Core runs
+/// no process; the shell hands in `humanify_ag_io::diff::compute_normal_diff`
+/// (a test may hand in a failing one). Err on a real `diff` failure — each
+/// caller reports it: the pre-split step as a WARNING, the post-split pass
+/// as a counted, warned `diff_failed` (audit R3).
+pub trait Differ: Sync {
+    fn normal_diff(&self, prior_text: &str, new_text: &str) -> Result<String, DiffError>;
 }
 
-/// A private temp directory (`fs.mkdtempSync(os.tmpdir()/humanify-reconcile-)`).
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::map_err_ignore)]
-fn tempdir() -> Result<std::path::PathBuf, String> {
-    crate::scratch::temp_dir("humanify-reconcile")
-        .map_err(|_| "cannot create a reconcile temp dir".to_string())
+/// Why a [`Differ`] gave no diff: the shell's message, word for word (it
+/// reaches the run's WARNING lines unchanged).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DiffError(pub String);
+
+impl std::fmt::Display for DiffError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl<F, E> Differ for F
+where
+    F: Fn(&str, &str) -> Result<String, E> + Sync,
+    E: std::fmt::Display,
+{
+    fn normal_diff(&self, prior_text: &str, new_text: &str) -> Result<String, DiffError> {
+        self(prior_text, new_text).map_err(|e| DiffError(e.to_string()))
+    }
 }
 
 /// `HUNK_HEADER`: `^(\d+)(?:,\d+)?([acd])(\d+)(?:,\d+)?$`.
