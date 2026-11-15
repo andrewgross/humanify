@@ -103,9 +103,9 @@ const VERBS: &[Verb] = &[
         cannot_prove: "any delta inside the measured noise-bands.json floor — it will still print a sign",
         settings: SCORE_SETTINGS,
         footprint: Footprint {
-            memory: "up to 5 pipeline runs at once (--parallel-pairs 5): summed RSS peak 26.6-30.8 GB, one run 6-19 GB (rebases 6.0-10.7, scored legs 9.7-17.7, self-hops 18.5-18.8; ref-names-40921b9f r1-r3, exp207)",
+            memory: "up to 5 pipeline runs at once (--parallel-pairs 5): summed RSS peak 26.6-30.8 GB, one run 6-19 GB (rebases 6.0-10.7, scored legs 9.7-17.7, self-hops 18.5-18.8; ref-names-40921b9f r1-r3, exp207); the code-split pair 2.1.260->2.1.261 alone: rebase 17.9 GB, scored leg 29.8 GB (exp254-pair261-s1)",
             llm: "yes: every rebase, scored leg and cold self-hop asks the LLM server, cold (the warm self-hop replays); ONE rebase at a time by default (--parallel-rebases 1: one rebase at 472 saturates the 4-replica server; five at once made it slower in total), scored legs overlap it at 10-35 in flight; the boot gate asks the Claude API (boot.model)",
-            time: "~95 min for the five pairs in parallel lanes, ~119 min serial (--parallel-pairs 1), both stall-free the same night (ref-names-40921b9f-r3, serial-40921b9f-s1; exp207); a scored leg 188-546 s",
+            time: "~95 min for the five pairs in parallel lanes, ~119 min serial (--parallel-pairs 1), both stall-free the same night (ref-names-40921b9f-r3, serial-40921b9f-s1; exp207); a scored leg 188-546 s. The sixth pair (2.1.260->2.1.261, not yet in a full run) adds a cold rebase of 2,609 s and a scored leg of 799 s, measured beside a running walk (exp254-pair261-s1)",
             writes: "<workdir>/<label>/ (default /work/eval-work/<label>; claimed while it runs), dev/eval/results/<label>/, this checkout's target/release",
         },
     },

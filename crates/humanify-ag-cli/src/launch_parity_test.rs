@@ -584,6 +584,17 @@ fn every_golden_launch_resolves_to_a_captured_launchs_settings() {
             );
             got["statsJson"] = Value::Null;
         }
+        // A code-split release (2.1.242 on) has its entry at the root of
+        // `binary-decompiled/`; every captured launch read a single-file
+        // release, whose entry sits under its source tree. The input path
+        // is the release's layout, not a setting: it is compared as the
+        // single-file spelling, and the other keys as they are.
+        let root_entry = "<TMP>/inputs/claude-code-<V>/binary-decompiled/index.js";
+        if got["input"] == root_entry {
+            got["input"] = Value::from(
+                "<TMP>/inputs/claude-code-<V>/binary-decompiled/src/entrypoints/index.js",
+            );
+        }
         assert!(
             wanted.contains(&got),
             "a golden launch whose settings no captured launch had:\n{launch:?}\n{got:#}"
