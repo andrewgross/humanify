@@ -13,6 +13,7 @@ publish.workspace = true
 # the harness do, and core takes it as a DEV-dependency for its tests.
 
 [dependencies]
+thiserror.workspace = true
 
 [lints]
 workspace = true

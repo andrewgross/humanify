@@ -39,11 +39,12 @@ pub const PURE_CRATES: &[(&str, &[&str])] = &[
             "serde_json",
             "sha1",
             "sha2",
+            "thiserror",
         ],
     ),
     (
         "crates/humanify-ag-model/",
-        &["dragonbox_ecma", "serde", "serde_json", "sha2"],
+        &["dragonbox_ecma", "serde", "serde_json", "sha2", "thiserror"],
     ),
 ];
 

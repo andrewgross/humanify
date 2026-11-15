@@ -32,6 +32,9 @@ publish = false
 # Runtime and dev dependencies are added per work package with an exact
 # version, here, never in a member crate (05 §5).
 serde = { version = "=1.0.228", features = ["derive"] }
+# Error enums: `#[derive(Error)]` writes the Display, source and From
+# impls each error type used to spell by hand.
+thiserror = "=2.0.21"
 serde_json = { version = "=1.0.142", features = ["unbounded_depth"] }
 clap = { version = "=4.5.47", features = ["derive"] }
 # The --config file (config sweep step 5, 2026-10-13): TOML, parsed ONCE in

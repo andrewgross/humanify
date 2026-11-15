@@ -7,6 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+thiserror.workspace = true
 humanify-ag-model = { path = "../humanify-ag-model" }
 serde.workspace = true
 serde_json.workspace = true
