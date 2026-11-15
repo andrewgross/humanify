@@ -168,42 +168,39 @@ fn placement_tiers_by_count() -> Vec<(String, u64)> {
 /// order). A changed byte here changes every written tree.
 #[test]
 fn the_in_tree_records_keep_their_bytes() {
-    let dir = temp_dir("in-tree");
-    crate::writers::write_stage_hashes(
-        &dir,
-        &crate::writers::StageHashes {
+    assert_eq!(
+        crate::writers::STAGE_HASHES_PATH,
+        ".humanify/stage-hashes.json"
+    );
+    assert_eq!(
+        crate::writers::PLACEMENT_STATS_PATH,
+        ".humanify/placement-stats.json"
+    );
+    assert_eq!(
+        crate::writers::stage_hashes_text(&crate::writers::StageHashes {
             after_naming: "e45d254255d266fa".into(),
             after_placement: "253ca5dceb1d0254".into(),
-        },
-    )
-    .expect("writes");
-    assert_eq!(
-        std::fs::read_to_string(dir.join(".humanify/stage-hashes.json")).expect("read"),
+        }),
         "{\n  \"afterNaming\": \"e45d254255d266fa\",\n  \"afterPlacement\": \"253ca5dceb1d0254\"\n}\n"
     );
-    crate::writers::write_placement_stats(
-        &dir,
-        &crate::writers::PlacementStats {
-            statements: 22425,
-            files: 3567,
-            folders: 533,
-            inherited: 0,
-            residue_locality: 12,
-            by_tier: placement_tiers_by_count().into(),
-        },
-    )
-    .expect("writes");
+    let placement = crate::writers::placement_stats_text(&crate::writers::PlacementStats {
+        statements: 22425,
+        files: 3567,
+        folders: 533,
+        inherited: 0,
+        residue_locality: 12,
+        by_tier: placement_tiers_by_count().into(),
+    });
     let by_tier: String = placement_tiers_by_count()
         .iter()
         .map(|(t, n)| format!("    \"{t}\": {n}"))
         .collect::<Vec<_>>()
         .join(",\n");
     assert_eq!(
-        std::fs::read_to_string(dir.join(".humanify/placement-stats.json")).expect("read"),
+        placement,
         format!(
             "{{\n  \"statements\": 22425,\n  \"files\": 3567,\n  \"folders\": 533,\n  \
 \"inherited\": 0,\n  \"residueLocality\": 12,\n  \"byTier\": {{\n{by_tier}\n  }}\n}}"
         )
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }

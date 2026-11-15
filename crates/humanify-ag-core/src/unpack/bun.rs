@@ -15,7 +15,6 @@
 //! so the sliced strings are identical.
 
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use oxc_allocator::Allocator;
@@ -24,7 +23,6 @@ use oxc_span::GetSpan;
 use oxc_syntax::reference::ReferenceFlags;
 
 use crate::detect::js_text::{is_js_space, is_word_boundary, skip_js_space};
-use crate::error::{FileError, FileOp};
 use crate::hash::forms::{CARRY_CONTENT, MATCH_KEY, VENDOR_CONTENT};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
@@ -48,6 +46,7 @@ use crate::modules::{
     BunModuleClassification, CarriedName, FactoryNameCounts, FactoryRecord, NameSource,
     hash_fallback_name, name_cjs_factories, text_assets,
 };
+use crate::output_tree::OutputTree;
 
 use super::{UnpackResult, UnpackedFile, write_passthrough};
 
@@ -403,13 +402,6 @@ pub struct UnpackPlan {
 /// Why the Bun (or esbuild) adapter could not unpack the bundle.
 #[derive(Debug)]
 pub enum BunError {
-    /// Making a directory or writing a file failed.
-    File(FileError),
-    /// Writing one of the adapter's own files failed (`what` names it).
-    Write {
-        what: &'static str,
-        source: std::io::Error,
-    },
     /// The run asked for something this adapter cannot do.
     Refused(&'static str),
     /// The library index's module answers could not be read.
@@ -419,17 +411,9 @@ pub enum BunError {
 impl std::fmt::Display for BunError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::File(e) => e.fmt(f),
-            Self::Write { what, source } => write!(f, "{what}: {source}"),
             Self::Refused(why) => f.write_str(why),
             Self::Answers(e) => e.fmt(f),
         }
-    }
-}
-
-impl From<FileError> for BunError {
-    fn from(e: FileError) -> Self {
-        Self::File(e)
     }
 }
 
@@ -444,14 +428,11 @@ impl From<crate::libindex::module_answers::AnswersError> for BunError {
 /// pipeline, differing only in the wrapper shapes the classification
 /// accepts ([`crate::modules::factory_arg_function`]) and the manifest's
 /// `adapter` stamp.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
 pub fn unpack_bun(
     code: &str,
-    out_dir: &Path,
+    tree: &mut OutputTree,
     mut options: BunUnpackOptions<'_>,
 ) -> Result<BunUnpackOutcome, BunError> {
-    fs::create_dir_all(out_dir).map_err(FileError::at(FileOp::Mkdir, out_dir))?;
     // The one-file floor still runs library discovery when asked (exp105):
     // a bundle no module helper wraps is still a bundle of statements.
     let floor_pieces = crate::libdetect::discovery::BundlePieces {
@@ -460,9 +441,9 @@ pub fn unpack_bun(
         interop: options.interop,
     };
     let floor_request = options.library_discovery;
-    let floor = |code: &str| -> Result<BunUnpackOutcome, BunError> {
+    let floor = |code: &str, tree: &mut OutputTree| -> Result<BunUnpackOutcome, BunError> {
         Ok(BunUnpackOutcome {
-            result: write_passthrough(code, out_dir)?,
+            result: write_passthrough(code, tree),
             manifest: None,
             name_counts: None,
             llm_renamed: 0,
@@ -483,7 +464,7 @@ pub fn unpack_bun(
 
     let grammar = options.module_wrappers;
     let Some(factory) = grammar.identify_factory_helper(code) else {
-        return floor(code);
+        return floor(code, tree);
     };
     let require_var = identify_bun_require(code);
 
@@ -669,7 +650,7 @@ pub fn unpack_bun(
         None => extract_factory_bodies(code, helper_name),
     };
     if modules.is_empty() {
-        return floor(code);
+        return floor(code, tree);
     }
 
     let factories: &[FactoryRecord] = classification
@@ -680,10 +661,6 @@ pub fn unpack_bun(
 
     // Pass 2: each factory body with cross-factory references rewritten,
     // then the runtime the same way.
-    fs::create_dir_all(out_dir.join(VENDOR_DIR)).map_err(|source| BunError::Write {
-        what: "mkdir vendor",
-        source,
-    })?;
     let mut files = Vec::new();
     let mut entries = Vec::new();
     let mut bundle_order = Vec::new();
@@ -739,7 +716,7 @@ pub fn unpack_bun(
             rel_path.clone(),
         ));
         files.push(UnpackedFile {
-            path: write_vendor_file(out_dir, &rel_path, &body)?,
+            path: tree.put_rel(&rel_path, body),
             metadata: None,
         });
         bundle_order.push(BundleOrderRow {
@@ -810,11 +787,7 @@ pub fn unpack_bun(
         });
     let mut runtime_file = None;
     if !runtime.trim_matches(is_js_space).is_empty() {
-        let path = out_dir.join(RUNTIME_FILE);
-        fs::write(&path, &runtime).map_err(|source| BunError::Write {
-            what: "write runtime",
-            source,
-        })?;
+        let path = tree.put_rel(RUNTIME_FILE, runtime);
         files.push(UnpackedFile {
             path,
             metadata: None,
@@ -846,12 +819,7 @@ pub fn unpack_bun(
             order_by_prior_manifest(annotate_hash_ordinals(entries), prior.factories.as_deref())
         },
     };
-    fs::write(bun_manifest_path(out_dir), manifest.to_written_json()).map_err(|source| {
-        BunError::Write {
-            what: "write manifest",
-            source,
-        }
-    })?;
+    tree.put(bun_manifest_path(tree.root()), manifest.to_written_json());
 
     Ok(BunUnpackOutcome {
         result: UnpackResult { files },
@@ -1564,19 +1532,6 @@ fn naming_lookup(factories: &[FactoryRecord]) -> HashMap<&str, usize> {
         map.insert(f.factory_var.as_str(), i);
     }
     map
-}
-
-/// Write one vendored body, creating a nested package folder
-/// (vendor/@scope/name/…) when the grouped name has one.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-fn write_vendor_file(out_dir: &Path, rel_path: &str, body: &str) -> Result<PathBuf, FileError> {
-    let path = out_dir.join(rel_path);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(FileError::at(FileOp::Mkdir, parent))?;
-    }
-    fs::write(&path, body).map_err(FileError::at(FileOp::Write, &path))?;
-    Ok(path)
 }
 
 /// Pass 1 (`planModules`): the file name and the stable-identifier plan for

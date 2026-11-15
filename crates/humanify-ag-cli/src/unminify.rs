@@ -72,7 +72,7 @@ pub struct Unpacked {
     pub app_modules: Vec<bun::AppModuleRow>,
 }
 
-/// `unpackBundle`: run the run's adapter into `out_dir` through the one
+/// `unpackBundle`: run the run's adapter into `tree` through the one
 /// dispatch site (`unpack::run_adapter`), handing it the vendor namer over
 /// `provider` and the prior release's vendor names + manifest order
 /// (discovered from `--prior-version`, as the TS does); an adapter that
@@ -80,7 +80,7 @@ pub struct Unpacked {
 #[allow(clippy::too_many_arguments)]
 pub fn unpack_bundle(
     code: &str,
-    out_dir: &Path,
+    tree: &mut humanify_ag_core::output_tree::OutputTree,
     toolchain: &humanify_ag_core::toolchain::Toolchain,
     provider: &dyn NameProvider,
     log: &mut humanify_ag_core::artifact_dump::DispatchLog,
@@ -120,7 +120,7 @@ pub fn unpack_bundle(
         adapter,
         toolchain.layout.piece,
         code,
-        out_dir,
+        tree,
         AdapterRun {
             interop: toolchain.interop.piece,
             module_wrappers: toolchain.module_wrappers.piece,
@@ -309,17 +309,21 @@ pub struct Filtered {
 }
 
 /// `filterLibraries`: detect with the run's detector (the toolchain's P6
-/// piece), report what is skipped, keep every file that is not a whole
-/// library.
+/// piece) over the unpacked files as the output tree holds them, report
+/// what is skipped, keep every file that is not a whole library.
 pub fn filter_libraries(
     files: Vec<UnpackedFile>,
+    tree: &humanify_ag_core::output_tree::OutputTree,
     detector: LibraryDetector,
     profiler: &Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Filtered, String> {
     let span = profiler.pipeline_span("library-detection");
-    let detection = detect_libraries(detector, &files, &crate::index_files::read_utf8)
-        .map_err(|e| e.to_string())?;
+    let read = |path: &Path| {
+        tree.read(path)
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+    };
+    let detection = detect_libraries(detector, &files, &read).map_err(|e| e.to_string())?;
     span.end(Some(
         Fields::new()
             .with("libraryCount", detection.library_files.len())

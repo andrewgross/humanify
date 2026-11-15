@@ -423,11 +423,12 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
     };
     // The one dispatch site (`unpack::run_adapter`): every adapter gets
     // the namer, the prior and the shim, and takes what it uses.
-    let outcome = match run_adapter(
+    let mut tree = humanify_ag_cli::output_tree::tree_for(out);
+    let outcome = run_adapter(
         adapter,
         toolchain.layout.piece,
         &code,
-        out,
+        &mut tree,
         AdapterRun {
             interop: toolchain.interop.piece,
             module_wrappers: toolchain.module_wrappers.piece,
@@ -440,9 +441,12 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
                 .map(|s| s as &dyn humanify_ag_core::unpack::webcrack::ExternalUnpacker),
             library_discovery: None,
         },
-    )
-    .map_err(|e| e.to_string())?
-    {
+    );
+    // What the adapter put in the tree is written whether or not it
+    // finished, as it was when the adapter wrote as it went.
+    humanify_ag_cli::output_tree::write_tree(&tree).map_err(|e| e.to_string())?;
+    drop(tree);
+    let outcome = match outcome.map_err(|e| e.to_string())? {
         AdapterOutcome::VendorRecord(outcome) => outcome,
         AdapterOutcome::Files { result, .. } => {
             println!(

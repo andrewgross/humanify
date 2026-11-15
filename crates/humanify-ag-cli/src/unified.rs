@@ -61,6 +61,12 @@ impl From<String> for Crash {
     }
 }
 
+impl From<crate::output_tree::WriteError> for Crash {
+    fn from(e: crate::output_tree::WriteError) -> Self {
+        Crash(e.to_string())
+    }
+}
+
 /// `fs.readFileSync(path, "utf-8")`: invalid UTF-8 becomes U+FFFD.
 fn read_utf8(path: &str) -> Result<String, Crash> {
     std::fs::read(path)
@@ -304,7 +310,6 @@ fn pipeline_body(
     use humanify_ag_core::profiling::phase;
     use std::sync::atomic::{AtomicBool, Ordering};
     let input = config.io.input.as_str();
-    let switches = &config.switches;
     let outputs = &config.diagnostics;
     let ph = phase("read+detect");
     // The one reader of the input file: a Bun code-split entry comes back
@@ -415,179 +420,45 @@ fn pipeline_body(
     // armRecorders: the diagnostics/dump recorders arrive with the stages
     // that feed them.
 
-    // Stages 3-5: unpack (the Bun adapter names its vendor files inside),
-    // then library detection picks the files the per-file stages process.
+    // Stages 3-12 build the output tree in memory; the shell writes it
+    // ONCE, after the split's finish — and also when a stage fails after
+    // the tree has content (what an earlier write-as-you-go run left on
+    // disk at that point) and on the rename invariant's exit 1.
     let out_dir = config.io.output_dir.as_str();
-    let ph = phase("unpack+vendor");
-    let mut unpacked = unpack_bundle(
-        &bundled_code,
-        Path::new(out_dir),
-        &toolchain,
-        provider,
-        &mut dispatch_log,
-        prior.tree.as_ref(),
-        switches.switch_on(Switch::ManifestPriorOrder),
-        // `--library-matching report`: discovery runs, its rows go to the
-        // library report (and the diagnostics), nowhere else. `names`
-        // (plan step 4; the default since exp171) asks for the same report and
-        // reads the index's whole-module answers — the unpack places
-        // wholly claimed factories at the index's vendor paths, and
-        // nothing else reads them. The request builder attaches the
-        // answers itself (the discover verb builds the same request).
-        (config.library.matching != LibraryMatching::Off && library.skipped.is_none())
-            .then(|| config.library.discovery_request(library.index.as_ref())),
-        profiler,
-        renderer,
+    let Built {
+        unpacked,
+        last,
+        failures,
+        mixed_files,
+        placement,
+        split_sections,
+        post_split,
+        split_method,
+        failed_calls,
+        prompt_window,
+    } = crate::output_tree::build_then_write(
+        crate::output_tree::tree_for(Path::new(out_dir)),
+        |tree| {
+            build_tree(
+                &BuildInputs {
+                    config,
+                    input,
+                    bundled_code: &bundled_code,
+                    input_link: input_link.as_ref(),
+                    toolchain,
+                    markers,
+                    prior: &prior,
+                    library: &library,
+                    provider,
+                    profiler,
+                },
+                naming_config,
+                &mut dispatch_log,
+                tree,
+                renderer,
+            )
+        },
     )?;
-    drop(ph);
-    let ph = phase("library-detection");
-    let unpacked_files = std::mem::take(&mut unpacked.files);
-    let (files_to_process, mixed_files) = if config.library.skips_libraries() {
-        let filtered = filter_libraries(
-            unpacked_files,
-            toolchain.library_detector.piece,
-            profiler,
-            renderer,
-        )?;
-        (filtered.files_to_process, filtered.mixed_files)
-    } else {
-        (unpacked_files, Vec::new())
-    };
-
-    // Stages 6-9 per file.
-    let mut failures = Failures::default();
-    let prompt_window = naming_config.prompt_window;
-    // The restoration answers ride the discovery report (the run's carried
-    // artifact); the map is rebuilt from its rows — the report's row IS
-    // the map's entry.
-    let restorations = unpacked
-        .library_discovery
-        .as_ref()
-        .map(|r| r.restoration_map())
-        .unwrap_or_default();
-    let prior_modules = prior_module_carry(
-        &unpacked.claimed_module_regions,
-        prior.ledger.as_ref(),
-        renderer,
-    );
-    let mut naming = NamingRun {
-        split: config.split.enabled,
-        config: naming_config,
-        log: &mut dispatch_log,
-        prior: prior.tree.as_ref().map(|t| t.code.as_str()),
-        provider,
-        profiler,
-        mixed_files: &mixed_files,
-        failed_calls: Default::default(),
-        claimed_regions: &unpacked.claimed_module_regions,
-        prior_modules: &prior_modules,
-        era_bridge: unpacked.era_bridge.as_ref(),
-        restorations: &restorations,
-    };
-    drop(ph);
-    let ph = phase("format+naming");
-    let last = naming.run(
-        &files_to_process,
-        toolchain.app_file.piece,
-        &mut failures,
-        renderer,
-    )?;
-    drop(ph);
-    // exp169 (names mode only — the bridge exists only there): the
-    // vendored factory bodies' unrestored identifiers, named like app
-    // code — the prior's carry first, then the model.
-    if let Some(bridge) = unpacked.era_bridge.as_ref() {
-        let ph = phase("vendor-body-naming");
-        naming.failed_calls.naming += name_vendor_bodies_stage(
-            Path::new(out_dir),
-            bridge,
-            prior.tree.as_ref().and_then(|t| t.vendor_naming.as_deref()),
-            &naming.config,
-            provider,
-            renderer,
-        )?;
-        drop(ph);
-    }
-    renderer.message(&format!(
-        "Done! You can find your unminified code in {out_dir}"
-    ));
-    report_vendor_naming(&unpacked.vendor_naming, renderer);
-    failures.preserve(Path::new(out_dir), renderer);
-
-    // Stages 10-12: the split, emit and finish (crate::split_stage).
-    let mut placement = humanify_ag_core::place::trail::PlacementTrail::default();
-    let mut split_sections = None;
-    let mut post_split = crate::split_stage::PostSplitRecords::default();
-    let mut split_method = None;
-    let mut failed_calls = naming.failed_calls;
-    failed_calls.vendor = unpacked.vendor_naming.batches_failed;
-    if config.split.enabled
-        && let Some(NamedFile {
-            outcome,
-            path: source,
-            fresh,
-            ..
-        }) = &last
-        && let Some(code) = &outcome.code
-    {
-        let app_module_vars: Vec<String> = unpacked
-            .app_modules
-            .iter()
-            .map(|r| r.factory_var.clone())
-            .collect();
-        let working_dir = config.io.working_dir.as_deref().ok_or_else(|| {
-            Crash("no working directory: the config was not read from a process".into())
-        })?;
-        let mut split = crate::split_stage::SplitStageInput {
-            output_dir: Path::new(out_dir),
-            embedded_files: input_link.as_ref().map_or(&[], |l| l.embedded.as_slice()),
-            input_file: Path::new(input),
-            working_dir,
-            processed_source: Some(source),
-            toolchain,
-            vendor_record: unpacked.vendor_record.as_ref(),
-            prior: prior.tree.as_ref(),
-            ledger: prior.ledger.as_ref(),
-            split_pure: config.split.pure,
-            markers,
-            switches,
-            provider,
-            log: &mut dispatch_log,
-            namer_budget: split_namer_budget(&config.llm),
-            prompt_window,
-            // Finding #60: the vendor bridge resolves the manifest's raw
-            // capture names against this PRE-RENAME text.
-            fresh: Some(fresh),
-            // The ≥50 wrapper-binding gate reads the run's ORIGINAL input
-            // (what the unpack stage saw), never the post-extraction
-            // runtime the split is handed — being a bundled app is a
-            // property of the input.
-            input_bundle: Some(bundled_code.as_str()),
-            // exp156: the naming stage's layout — which modules the names
-            // mode placed at the index's vendor paths.
-            library: &outcome.library_layout.moved,
-            // exp172: the app's own CommonJS modules, by raw name.
-            app_modules: &app_module_vars,
-        };
-        let _ph = phase("split");
-        let span = profiler.pipeline_span("split");
-        let records = crate::split_stage::run_split(
-            code,
-            outcome.prior_carry.as_ref(),
-            &mut split,
-            renderer,
-        )?;
-        span.end(Some(humanify_ag_model::profiling::Fields::new().with(
-            "stable",
-            matches!(records.ended, crate::split_stage::SplitEnded::Complete),
-        )));
-        placement = records.trail;
-        split_sections = records.dump;
-        split_method = Some(records.method);
-        post_split = records.post_split;
-        failed_calls.split = records.failed_calls.namer;
-        failed_calls.tree_reviser = records.failed_calls.tree_reviser;
-    }
     // Every namer's failed calls, one WARNING (audit R2): the naming
     // stage's, the vendor namer's (stage 3) and the split's.
     if let Some(warning) = failed_calls.warning() {
@@ -760,6 +631,252 @@ its init name, {} renamed to it, {} refused",
     // parts go the same way.
     dispatch_log.discard();
     Ok(failures.close(renderer))
+}
+
+/// What the stages that build the output tree read, beyond the naming
+/// config, the dispatch log and the tree.
+struct BuildInputs<'a> {
+    config: &'a Config,
+    input: &'a str,
+    bundled_code: &'a str,
+    input_link: Option<&'a humanify_ag_core::unpack::chunk_link::LinkReport>,
+    toolchain: Toolchain,
+    markers: MarkerOffer,
+    prior: &'a crate::prior_tree::PriorInputs,
+    library: &'a LibraryLoad,
+    provider: &'a dyn NameProvider,
+    profiler: &'a humanify_ag_core::profiling::Profiler,
+}
+
+/// What the stages that build the output tree hand the run's reports.
+struct Built {
+    unpacked: crate::unminify::Unpacked,
+    last: Option<NamedFile>,
+    failures: Failures,
+    mixed_files: Vec<(
+        std::path::PathBuf,
+        humanify_ag_core::libdetect::MixedFileDetection,
+    )>,
+    placement: humanify_ag_core::place::trail::PlacementTrail,
+    split_sections: Option<humanify_ag_core::artifact_dump::SplitSections>,
+    post_split: crate::split_stage::PostSplitRecords,
+    split_method: Option<humanify_ag_model::stats::SplitMethodStats>,
+    failed_calls: crate::provider_failures::ProviderFailures,
+    prompt_window: usize,
+}
+
+/// Stages 3-12 into the output tree: unpack (the Bun adapter names its
+/// vendor files inside), library detection, the per-file naming, the
+/// vendor-body naming, then the split, emit and finish. Nothing here
+/// writes the tree; the caller does, once, whatever this returns.
+fn build_tree(
+    inputs: &BuildInputs<'_>,
+    naming_config: NamingConfig,
+    dispatch_log: &mut humanify_ag_core::artifact_dump::DispatchLog,
+    tree: &mut humanify_ag_core::output_tree::OutputTree,
+    renderer: &mut dyn ProgressRenderer,
+) -> Result<Built, Crash> {
+    use humanify_ag_core::profiling::phase;
+    let BuildInputs {
+        config,
+        input,
+        bundled_code,
+        input_link,
+        toolchain,
+        markers,
+        prior,
+        library,
+        provider,
+        profiler,
+    } = *inputs;
+    let switches = &config.switches;
+    // Stages 3-5: unpack (the Bun adapter names its vendor files inside),
+    // then library detection picks the files the per-file stages process.
+    let out_dir = config.io.output_dir.as_str();
+    let ph = phase("unpack+vendor");
+    let mut unpacked = unpack_bundle(
+        bundled_code,
+        tree,
+        &toolchain,
+        provider,
+        dispatch_log,
+        prior.tree.as_ref(),
+        switches.switch_on(Switch::ManifestPriorOrder),
+        // `--library-matching report`: discovery runs, its rows go to the
+        // library report (and the diagnostics), nowhere else. `names`
+        // (plan step 4; the default since exp171) asks for the same report and
+        // reads the index's whole-module answers — the unpack places
+        // wholly claimed factories at the index's vendor paths, and
+        // nothing else reads them. The request builder attaches the
+        // answers itself (the discover verb builds the same request).
+        (config.library.matching != LibraryMatching::Off && library.skipped.is_none())
+            .then(|| config.library.discovery_request(library.index.as_ref())),
+        profiler,
+        renderer,
+    )?;
+    drop(ph);
+    let ph = phase("library-detection");
+    let unpacked_files = std::mem::take(&mut unpacked.files);
+    let (files_to_process, mixed_files) = if config.library.skips_libraries() {
+        let filtered = filter_libraries(
+            unpacked_files,
+            tree,
+            toolchain.library_detector.piece,
+            profiler,
+            renderer,
+        )?;
+        (filtered.files_to_process, filtered.mixed_files)
+    } else {
+        (unpacked_files, Vec::new())
+    };
+
+    // Stages 6-9 per file.
+    let mut failures = Failures::default();
+    let prompt_window = naming_config.prompt_window;
+    // The restoration answers ride the discovery report (the run's carried
+    // artifact); the map is rebuilt from its rows — the report's row IS
+    // the map's entry.
+    let restorations = unpacked
+        .library_discovery
+        .as_ref()
+        .map(|r| r.restoration_map())
+        .unwrap_or_default();
+    let prior_modules = prior_module_carry(
+        &unpacked.claimed_module_regions,
+        prior.ledger.as_ref(),
+        renderer,
+    );
+    let mut naming = NamingRun {
+        split: config.split.enabled,
+        config: naming_config,
+        log: &mut *dispatch_log,
+        prior: prior.tree.as_ref().map(|t| t.code.as_str()),
+        provider,
+        profiler,
+        mixed_files: &mixed_files,
+        failed_calls: Default::default(),
+        claimed_regions: &unpacked.claimed_module_regions,
+        prior_modules: &prior_modules,
+        era_bridge: unpacked.era_bridge.as_ref(),
+        restorations: &restorations,
+    };
+    drop(ph);
+    let ph = phase("format+naming");
+    let last = naming.run(
+        &files_to_process,
+        tree,
+        toolchain.app_file.piece,
+        &mut failures,
+        renderer,
+    )?;
+    drop(ph);
+    // exp169 (names mode only — the bridge exists only there): the
+    // vendored factory bodies' unrestored identifiers, named like app
+    // code — the prior's carry first, then the model.
+    if let Some(bridge) = unpacked.era_bridge.as_ref() {
+        let ph = phase("vendor-body-naming");
+        naming.failed_calls.naming += name_vendor_bodies_stage(
+            tree,
+            bridge,
+            prior.tree.as_ref().and_then(|t| t.vendor_naming.as_deref()),
+            &naming.config,
+            provider,
+            renderer,
+        )?;
+        drop(ph);
+    }
+    renderer.message(&format!(
+        "Done! You can find your unminified code in {out_dir}"
+    ));
+    report_vendor_naming(&unpacked.vendor_naming, renderer);
+    failures.preserve(tree, renderer);
+
+    // Stages 10-12: the split, emit and finish (crate::split_stage).
+    let mut placement = humanify_ag_core::place::trail::PlacementTrail::default();
+    let mut split_sections = None;
+    let mut post_split = crate::split_stage::PostSplitRecords::default();
+    let mut split_method = None;
+    let mut failed_calls = naming.failed_calls;
+    failed_calls.vendor = unpacked.vendor_naming.batches_failed;
+    if config.split.enabled
+        && let Some(NamedFile {
+            outcome,
+            path: source,
+            fresh,
+            ..
+        }) = &last
+        && let Some(code) = &outcome.code
+    {
+        let app_module_vars: Vec<String> = unpacked
+            .app_modules
+            .iter()
+            .map(|r| r.factory_var.clone())
+            .collect();
+        let working_dir = config.io.working_dir.as_deref().ok_or_else(|| {
+            Crash("no working directory: the config was not read from a process".into())
+        })?;
+        let mut split = crate::split_stage::SplitStageInput {
+            embedded_files: input_link.as_ref().map_or(&[], |l| l.embedded.as_slice()),
+            input_file: Path::new(input),
+            working_dir,
+            processed_source: Some(source),
+            toolchain,
+            vendor_record: unpacked.vendor_record.as_ref(),
+            prior: prior.tree.as_ref(),
+            ledger: prior.ledger.as_ref(),
+            split_pure: config.split.pure,
+            markers,
+            switches,
+            provider,
+            log: &mut *dispatch_log,
+            namer_budget: split_namer_budget(&config.llm),
+            prompt_window,
+            // Finding #60: the vendor bridge resolves the manifest's raw
+            // capture names against this PRE-RENAME text.
+            fresh: Some(fresh),
+            // The ≥50 wrapper-binding gate reads the run's ORIGINAL input
+            // (what the unpack stage saw), never the post-extraction
+            // runtime the split is handed — being a bundled app is a
+            // property of the input.
+            input_bundle: Some(bundled_code),
+            // exp156: the naming stage's layout — which modules the names
+            // mode placed at the index's vendor paths.
+            library: &outcome.library_layout.moved,
+            // exp172: the app's own CommonJS modules, by raw name.
+            app_modules: &app_module_vars,
+        };
+        let _ph = phase("split");
+        let span = profiler.pipeline_span("split");
+        let records = crate::split_stage::run_split(
+            code,
+            outcome.prior_carry.as_ref(),
+            &mut split,
+            tree,
+            renderer,
+        )?;
+        span.end(Some(humanify_ag_model::profiling::Fields::new().with(
+            "stable",
+            matches!(records.ended, crate::split_stage::SplitEnded::Complete),
+        )));
+        placement = records.trail;
+        split_sections = records.dump;
+        split_method = Some(records.method);
+        post_split = records.post_split;
+        failed_calls.split = records.failed_calls.namer;
+        failed_calls.tree_reviser = records.failed_calls.tree_reviser;
+    }
+    Ok(Built {
+        unpacked,
+        last,
+        failures,
+        mixed_files,
+        placement,
+        split_sections,
+        post_split,
+        split_method,
+        failed_calls,
+        prompt_window,
+    })
 }
 
 /// The run's recorded reports, written after the split in the TS order
@@ -1222,7 +1339,7 @@ fn detect_stage(
 /// failed calls. One progress line with its size and time (its requests
 /// are in the run's one `LLM requests:` line).
 fn name_vendor_bodies_stage(
-    out_dir: &Path,
+    tree: &mut humanify_ag_core::output_tree::OutputTree,
     bridge: &humanify_ag_core::naming::module_names::EraBridge,
     prior: Option<&str>,
     config: &NamingConfig,
@@ -1231,7 +1348,7 @@ fn name_vendor_bodies_stage(
 ) -> Result<usize, Crash> {
     use humanify_ag_core::naming::vendor_bodies as vb;
     let started = std::time::Instant::now();
-    let bodies = vb::bodies_of_bridge(out_dir, bridge).map_err(|e| Crash(e.to_string()))?;
+    let bodies = vb::bodies_of_bridge(tree, bridge).map_err(|e| Crash(e.to_string()))?;
     // No module step: the bodies are not the bundle's module markers.
     let mut config = config.clone();
     config.module_naming = None;
@@ -1248,8 +1365,7 @@ fn name_vendor_bodies_stage(
     else {
         return Ok(0);
     };
-    let written =
-        vb::write_vendor_naming(out_dir, &bodies, &named).map_err(|e| Crash(e.to_string()))?;
+    let written = vb::write_vendor_naming(tree, &bodies, &named);
     let held: usize = bodies.iter().map(|b| b.restored.len()).sum();
     let mut skipped: std::collections::BTreeMap<&str, usize> = Default::default();
     for (_, why) in &named.skipped {
@@ -1336,6 +1452,7 @@ impl NamingRun<'_> {
     fn run(
         &mut self,
         files: &[humanify_ag_core::unpack::UnpackedFile],
+        tree: &mut humanify_ag_core::output_tree::OutputTree,
         app_file: humanify_ag_core::toolchain::AppFile,
         failures: &mut Failures,
         renderer: &mut dyn ProgressRenderer,
@@ -1345,7 +1462,10 @@ impl NamingRun<'_> {
         for (i, file) in files.iter().enumerate() {
             renderer.message(&format!("Processing file {}/{total}", i + 1));
             let path = file.path.display().to_string();
-            let code = read_utf8(&path)?;
+            let code = tree
+                .read(&file.path)
+                .map(|b| String::from_utf8_lossy(&b).into_owned())
+                .map_err(|e| Crash(node_fs_error(&e, "open", &path)))?;
             if humanify_ag_model::js::trim(&code).is_empty() {
                 verbose().log(&format!("Skipping empty file {path}"));
                 continue;
@@ -1370,8 +1490,7 @@ impl NamingRun<'_> {
                 && let Some(shipped) = &outcome.code
             {
                 // skipFileWrite is off without --split: the file is rewritten.
-                std::fs::write(&file.path, shipped)
-                    .map_err(|e| Crash(node_fs_error(&e, "open", &path)))?;
+                tree.put(file.path.clone(), shipped.as_str());
             }
             failures.record(&outcome, &path, &formatted.text);
             if last.is_none() || app_file.replaces_earlier() {
@@ -1616,11 +1735,15 @@ impl Failures {
     /// `preserveFailedOutput` — BEFORE the split, which consumes and
     /// deletes the processed source (the only window a rejected file
     /// still exists).
-    fn preserve(&self, out_dir: &Path, renderer: &mut dyn ProgressRenderer) {
+    fn preserve(
+        &self,
+        tree: &humanify_ag_core::output_tree::OutputTree,
+        renderer: &mut dyn ProgressRenderer,
+    ) {
         if self.preserved.is_empty() {
             return;
         }
-        crate::failed_output::preserve_failed_output(out_dir, &self.preserved);
+        crate::failed_output::preserve_failed_output(tree, &self.preserved);
         renderer.message(&format!(
             "Preserved {} rejected file(s) for inspection under {}/",
             self.preserved.len(),

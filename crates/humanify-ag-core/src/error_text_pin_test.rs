@@ -11,7 +11,6 @@ use oxc_span::Span;
 use crate::error::{FileError, FileOp};
 use crate::finish::driver::FinishError;
 use crate::finish::relink::RelinkError;
-use crate::finish::scaffold::EmbeddedCopyError;
 use crate::finish::using::{UsingError, UsingTreeError};
 use crate::format::FormatError;
 use crate::format::ast::Field;
@@ -159,14 +158,6 @@ fn finish_errors_keep_their_words() {
             source: json_error(),
         },
         &format!("out/.humanify/split-ledger.json: {}", json_error()),
-    );
-    same(
-        EmbeddedCopyError::Copy {
-            from: PathBuf::from("in/a.bin"),
-            to: PathBuf::from("out/embedded/a.bin"),
-            source: io("gone"),
-        },
-        "copy the embedded file in/a.bin to out/embedded/a.bin: gone",
     );
     same(
         UsingTreeError::InFile {
@@ -453,13 +444,6 @@ fn unpack_errors_keep_their_words() {
             spec: "fs".into(),
         },
         "in/a.js: re-exports from \"fs\"; not linked",
-    );
-    same(
-        crate::unpack::bun::BunError::Write {
-            what: "write manifest",
-            source: io("gone"),
-        },
-        "write manifest: gone",
     );
     same(
         crate::unpack::UnpackError::NoShim,

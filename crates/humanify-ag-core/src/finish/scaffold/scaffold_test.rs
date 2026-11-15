@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
+use crate::output_tree::disk_test::Disk;
+
 use super::{
     external_packages_from, package_json_source, readme_source, resolve_external_versions,
     runner_source, write_runnable_scaffold,
@@ -66,6 +68,7 @@ fn resolved_versions_match_the_ts() {
         &["@scope/pkg".into(), "ajv".into(), "ws".into()],
         Some(&deep),
         Path::new("/"),
+        &Disk,
     );
     let want: Vec<(String, String)> = fx["resolved"]
         .as_object()
@@ -78,7 +81,7 @@ fn resolved_versions_match_the_ts() {
     assert_eq!(got_sorted, want);
     // Without a directory everything is "*".
     assert!(
-        resolve_external_versions(&["ajv".into()], None, Path::new("/"))
+        resolve_external_versions(&["ajv".into()], None, Path::new("/"), &Disk)
             .iter()
             .all(|(_, v)| v == "*")
     );
@@ -101,7 +104,12 @@ fn the_walk_up_starts_from_the_resolved_directory() {
     .unwrap();
     let from = root.path().join("x").join("..").join("a").join("b");
     assert_eq!(
-        resolve_external_versions(&["ws".into(), "ajv".into()], Some(&from), Path::new("/")),
+        resolve_external_versions(
+            &["ws".into(), "ajv".into()],
+            Some(&from),
+            Path::new("/"),
+            &Disk
+        ),
         vec![
             ("ws".to_string(), "*".to_string()),
             ("ajv".to_string(), "8.1.0".to_string())
@@ -119,7 +127,9 @@ fn scaffold_files_are_the_ts_bytes() {
         let externals = strings(&case["externals"]);
         let from = case["resolve"].as_bool().unwrap().then_some(deep.as_path());
         let out = ScratchDir::new(&format!("out-{name}"));
-        write_runnable_scaffold(out.path(), entry, &externals, from, Path::new("/")).unwrap();
+        let mut tree = crate::output_tree::disk_test::tree_on_disk(out.path());
+        write_runnable_scaffold(&mut tree, entry, &externals, from, Path::new("/"));
+        crate::output_tree::disk_test::write(&tree);
         let read = |f: &str| fs::read_to_string(out.path().join(f)).unwrap();
         assert_eq!(
             read("package.json"),

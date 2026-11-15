@@ -22,12 +22,11 @@ pub mod gate;
 pub mod input;
 pub mod webcrack;
 
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use humanify_ag_model::detection::{BundlerDetectionResult, BundlerType};
 
-use crate::error::{FileError, FileOp};
+use crate::output_tree::OutputTree;
 use crate::toolchain::{Chosen, Reason};
 
 /// Module metadata webcrack reports for one extracted file
@@ -299,8 +298,6 @@ pub enum UnpackError {
     Webcrack(webcrack::WebcrackError),
     /// The webcrack adapter was selected without its shim.
     NoShim,
-    /// The passthrough adapter could not write its file.
-    File(FileError),
 }
 
 impl std::fmt::Display for UnpackError {
@@ -309,7 +306,6 @@ impl std::fmt::Display for UnpackError {
             Self::Bun(e) => e.fmt(f),
             Self::Webcrack(e) => e.fmt(f),
             Self::NoShim => f.write_str("the webcrack adapter needs its subprocess shim"),
-            Self::File(e) => e.fmt(f),
         }
     }
 }
@@ -326,21 +322,17 @@ impl From<webcrack::WebcrackError> for UnpackError {
     }
 }
 
-impl From<FileError> for UnpackError {
-    fn from(e: FileError) -> Self {
-        Self::File(e)
-    }
-}
-
 /// Run the selected adapter (`adapter.unpack(code, outputDir, options)`) —
 /// THE one dispatch site: the pipeline, the `unpack`, `discover` and
 /// `match` verbs all come through here, so a registered adapter is run
-/// the same way everywhere.
+/// the same way everywhere. The adapter's files go into `tree` (the
+/// webcrack shim, a subprocess, writes its own files under the tree's
+/// folder on disk; the tree reads them from there).
 pub fn run_adapter(
     adapter: UnpackAdapter,
     layout: crate::toolchain::BundleLayout,
     code: &str,
-    out_dir: &Path,
+    tree: &mut OutputTree,
     run: AdapterRun<'_>,
 ) -> Result<AdapterOutcome, UnpackError> {
     match adapter {
@@ -349,7 +341,7 @@ pub fn run_adapter(
         UnpackAdapter::Bun | UnpackAdapter::Esbuild => {
             Ok(AdapterOutcome::VendorRecord(Box::new(bun::unpack_bun(
                 code,
-                out_dir,
+                tree,
                 bun::BunUnpackOptions {
                     namer: run.namer,
                     prior: run.prior,
@@ -368,7 +360,7 @@ pub fn run_adapter(
                 discover_without_vendor_record(code, layout, &run).map(Box::new);
             let result = webcrack::unpack_webcrack(
                 code,
-                out_dir,
+                tree.root(),
                 run.webcrack_shim.ok_or(UnpackError::NoShim)?,
             )?;
             Ok(AdapterOutcome::Files {
@@ -380,7 +372,7 @@ pub fn run_adapter(
             let library_discovery =
                 discover_without_vendor_record(code, layout, &run).map(Box::new);
             Ok(AdapterOutcome::Files {
-                result: write_passthrough(code, out_dir)?,
+                result: write_passthrough(code, tree),
                 library_discovery,
             })
         }
@@ -389,16 +381,12 @@ pub fn run_adapter(
 
 /// The passthrough adapter (`PassthroughAdapter.unpack`), also the Bun
 /// adapter's no-factory floor: the whole input as `<out>/index.js`.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub fn write_passthrough(code: &str, out_dir: &Path) -> Result<UnpackResult, FileError> {
-    fs::create_dir_all(out_dir).map_err(FileError::at(FileOp::Mkdir, out_dir))?;
-    let path = out_dir.join("index.js");
-    fs::write(&path, code).map_err(FileError::at(FileOp::Write, &path))?;
-    Ok(UnpackResult {
+pub fn write_passthrough(code: &str, tree: &mut OutputTree) -> UnpackResult {
+    let path = tree.put_rel("index.js", code);
+    UnpackResult {
         files: vec![UnpackedFile {
             path,
             metadata: None,
         }],
-    })
+    }
 }

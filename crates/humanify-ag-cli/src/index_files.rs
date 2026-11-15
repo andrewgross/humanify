@@ -1,8 +1,7 @@
 //! The shell's side of core's library-index reads
 //! (`humanify_ag_core::libindex::files`): a directory of index files, and
 //! each table opened as a file read by position, so core reads only the
-//! pages a lookup touches, not a whole table. Also the text reader
-//! library detection reads unpacked files through.
+//! pages a lookup touches, not a whole table.
 
 use std::path::{Path, PathBuf};
 
@@ -67,10 +66,4 @@ impl ReadAt for FileReadAt {
         }
         Ok(())
     }
-}
-
-/// `fs.readFile(path, "utf-8")`: invalid bytes become U+FFFD (library
-/// detection's reader, `libdetect::ReadText`).
-pub fn read_utf8(path: &Path) -> std::io::Result<String> {
-    std::fs::read(path).map(|b| String::from_utf8_lossy(&b).into_owned())
 }

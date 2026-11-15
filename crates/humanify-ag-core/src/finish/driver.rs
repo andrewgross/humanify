@@ -1,18 +1,19 @@
-//! The finishing stage over a tree on disk, in the TS's order — the driver
+//! The finishing stage over the output tree, in the TS's order — the driver
 //! half of `src/commands/unified.ts` (`finishSplitOutput` →
 //! `reconcilePostSplit` → `carryIntoBundle`) plus `relinkBunModules`.
 //!
-//! The tree, the ledger and `.humanify/humanified.js` are already written
-//! (the TS's `committed` point); everything here rewrites files in place.
+//! The tree, the ledger and `.humanify/humanified.js` are already in the
+//! [`OutputTree`] (the TS's `committed` point); everything here rewrites
+//! the tree's files in memory, and the shell writes the result once.
 //! [`finish_split_output`] then [`reconcile_post_split`] — the reconcile
 //! runs only when the finish succeeded (a throw ends the TS stage).
 
 use std::collections::HashSet;
-use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::error::{FileError, FileOp};
+use crate::error::FileError;
 use crate::modules::vendor_names::BunModulesManifest;
+use crate::output_tree::OutputTree;
 use crate::place::layout::METADATA_DIR;
 use crate::rename::eligibility::{Eligibility, NeverRename};
 use crate::rename::name_profile::NameProfile;
@@ -24,9 +25,7 @@ use super::reconcile::{PostSplitInput, PostSplitResult, post_split_reconcile};
 use super::relink::{
     FactoryLookup, RelinkError, VendorBridge, relink_factory_references, wrap_extracted_factory,
 };
-use super::scaffold::{
-    EmbeddedCopyError, detect_external_packages, read_utf8, write_runnable_scaffold,
-};
+use super::scaffold::{detect_external_packages, write_runnable_scaffold};
 use super::using::UsingTreeError;
 use super::vendor_inherit::VendorBodyInheritor;
 
@@ -44,7 +43,6 @@ pub struct FinishSwitches {
 
 /// What the stage is given.
 pub struct FinishInput<'a> {
-    pub output_dir: &'a Path,
     /// The runnable emit's file map keys, in emission order — None when the
     /// review tree was written instead (`--split-pure` or a decline).
     pub runnable: Option<&'a [String]>,
@@ -129,13 +127,13 @@ fn this_runs_manifest(record: Option<&BunModulesManifest>) -> Option<Manifest> {
 /// tree. They can only be left from an earlier run into the same folder.
 /// The finish never re-links, rewrites or deletes them (they may be the
 /// user's); it names them so nobody mistakes them for this run's output.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
+/// A folder that cannot be listed is skipped.
 fn leftover_vendor_files(
-    output_dir: &Path,
+    tree: &OutputTree,
     record: Option<&BunModulesManifest>,
     split_files: &[&str],
 ) -> Vec<String> {
+    let output_dir = tree.root();
     let mut written: HashSet<String> = split_files.iter().map(|f| (*f).to_string()).collect();
     if let Some(r) = record {
         written.insert(format!("{VENDOR_DIR}/{BUN_MODULES_MANIFEST}"));
@@ -144,12 +142,12 @@ fn leftover_vendor_files(
     let mut leftovers = Vec::new();
     let mut stack = vec![output_dir.join(VENDOR_DIR)];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
+        let Ok(entries) = tree.list(&dir) else {
             continue;
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
+        for entry in entries {
+            let path = dir.join(&entry.name);
+            if entry.leads_to_dir {
                 stack.push(path);
                 continue;
             }
@@ -191,12 +189,6 @@ pub fn runnable_entry_file(keys: &[String]) -> String {
         .unwrap_or_else(|| "index.js".into())
 }
 
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-fn write_file(path: &Path, text: &str) -> Result<(), FileError> {
-    fs::write(path, text).map_err(FileError::at(FileOp::Write, path))
-}
-
 /// Why the finishing stage failed (the TS's "Post-split step failed").
 #[derive(Debug)]
 pub enum FinishError {
@@ -206,8 +198,6 @@ pub enum FinishError {
     Relink { file: String, source: RelinkError },
     /// The `using` desugar failed.
     Using(UsingTreeError),
-    /// An embedded file could not be copied into the tree.
-    Embedded(EmbeddedCopyError),
     /// The split ledger is not valid JSON.
     Ledger {
         path: PathBuf,
@@ -221,7 +211,6 @@ impl std::fmt::Display for FinishError {
             Self::File(e) => e.fmt(f),
             Self::Relink { file, source } => write!(f, "{file}: {source}"),
             Self::Using(e) => e.fmt(f),
-            Self::Embedded(e) => e.fmt(f),
             Self::Ledger { path, source } => write!(f, "{}: {source}", path.display()),
         }
     }
@@ -239,12 +228,6 @@ impl From<UsingTreeError> for FinishError {
     }
 }
 
-impl From<EmbeddedCopyError> for FinishError {
-    fn from(e: EmbeddedCopyError) -> Self {
-        Self::Embedded(e)
-    }
-}
-
 /// What the stage did (the TS's progress lines, in order).
 #[derive(Debug, Default)]
 pub struct FinishReport {
@@ -254,11 +237,8 @@ pub struct FinishReport {
 }
 
 /// `relinkBunModules(outputDir, manifest, splitFiles, { priorRoot })`.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 fn relink_bun_modules(
-    output_dir: &Path,
+    tree: &mut OutputTree,
     manifest: &Manifest,
     split_files: &[String],
     prior: Option<&crate::prior_tree::PriorFiles>,
@@ -271,16 +251,12 @@ fn relink_bun_modules(
         .iter()
         .filter_map(|(file, id)| id.clone().map(|id| (id, file.clone())))
         .collect();
-    let runtime_path = output_dir.join(interop.runtime_file());
-    if let Some(dir) = runtime_path.parent() {
-        fs::create_dir_all(dir).map_err(FileError::at(FileOp::Mkdir, dir))?;
-    }
-    write_file(&runtime_path, interop.relink_runtime())?;
+    tree.put_rel(&interop.runtime_file(), interop.relink_runtime());
     let mut inherit = prior.map(VendorBodyInheritor::new);
     let mut bridged_reads = 0usize;
     for (file_name, _) in &manifest.factories {
-        let abs = output_dir.join(file_name);
-        let body = read_utf8(&abs)?;
+        let abs = tree.root().join(file_name);
+        let body = tree.read_lossy(&abs)?;
         let (rendered, bridged) = wrap_extracted_factory(
             &body, file_name, &lookup, bridges, interop,
         )
@@ -293,7 +269,7 @@ fn relink_bun_modules(
             Some(i) => i.bytes_for(file_name, rendered),
             None => rendered,
         };
-        write_file(&abs, &bytes)?;
+        tree.put(abs, bytes);
     }
     if bridged_reads > 0 {
         report.messages.push(format!(
@@ -311,33 +287,31 @@ fn relink_bun_modules(
         ));
     }
     for rel in split_files {
-        let abs = output_dir.join(rel);
-        let code = read_utf8(&abs)?;
+        let abs = tree.root().join(rel);
+        let code = tree.read_lossy(&abs)?;
         let out =
             relink_factory_references(&code, rel, &lookup).map_err(|e| FinishError::Relink {
                 file: rel.clone(),
                 source: e.into(),
             })?;
-        write_file(&abs, &out)?;
+        tree.put(abs, out);
     }
     if let Some(runtime) = &manifest.runtime_file {
-        let _ = fs::remove_file(output_dir.join(runtime));
+        let path = tree.root().join(runtime);
+        tree.remove(&path);
     }
     Ok(())
 }
 
 /// `finishSplitOutput`: re-link, then (runnable only) the `using`
 /// desugar and the scaffold. Returns whether a Bun re-link ran.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 pub fn finish_split_output(
     input: &FinishInput<'_>,
+    tree: &mut OutputTree,
     report: &mut FinishReport,
 ) -> Result<bool, FinishError> {
-    let output_dir = input.output_dir;
     let manifest = this_runs_manifest(input.vendor_record);
-    let leftovers = leftover_vendor_files(output_dir, input.vendor_record, &input.split_files);
+    let leftovers = leftover_vendor_files(tree, input.vendor_record, &input.split_files);
     if !leftovers.is_empty() {
         report.messages.push(leftover_warning(&leftovers));
     }
@@ -359,7 +333,7 @@ pub fn finish_split_output(
             // per-file reconcile, the apply and the carry.
             let _ph = crate::profiling::phase("split:finish:relink");
             relink_bun_modules(
-                output_dir,
+                tree,
                 manifest,
                 runnable,
                 inherit_from,
@@ -376,31 +350,32 @@ pub fn finish_split_output(
     if input.runnable.is_none()
         && let Some(runtime) = manifest.as_ref().and_then(|m| m.runtime_file.as_ref())
     {
-        let _ = fs::remove_file(output_dir.join(runtime));
+        let path = tree.root().join(runtime);
+        tree.remove(&path);
     }
     if let Some(runnable) = input.runnable {
         let desugared = {
             let _ph = crate::profiling::phase("split:finish:desugar-using");
-            super::using::desugar_using_in_tree(output_dir)?
+            super::using::desugar_using_in_tree(tree)?
         };
         report
             .messages
-            .push(super::using::desugar_summary(output_dir, desugared));
+            .push(super::using::desugar_summary(tree.root(), desugared));
         let entry = runnable_entry_file(runnable);
         let externals = {
             let _ph = crate::profiling::phase("split:finish:scaffold");
-            let externals = detect_external_packages(output_dir)?;
+            let externals = detect_external_packages(tree)?;
             write_runnable_scaffold(
-                output_dir,
+                tree,
                 &entry,
                 &externals,
                 input.input_file.parent(),
                 input.working_dir,
-            )?;
+            );
             externals
         };
         if !input.embedded_files.is_empty() {
-            let copied = super::scaffold::write_embedded_files(output_dir, input.embedded_files)?;
+            let copied = super::scaffold::write_embedded_files(tree, input.embedded_files);
             report.messages.push(format!(
                 "Embedded files: {copied} copied to {}/ (the linked program reads them by path)",
                 crate::unpack::chunk_link::EMBEDDED_DIR
@@ -431,9 +406,10 @@ pub fn finish_split_output(
 /// owner of this order: the pipeline and the `finish` verb both call it.
 pub fn finish_stage(
     input: &FinishInput<'_>,
+    tree: &mut OutputTree,
     report: &mut FinishReport,
 ) -> Result<(bool, Option<ReconcileReport>), FinishError> {
-    let relinked = finish_split_output(input, report)?;
+    let relinked = finish_split_output(input, tree, report)?;
     // Each split file names its own library imports (`path`, not the
     // bundle-wide `pathModule54`; finding #91) on the FINAL text, before
     // the reconcile reads it against a prior tree that went through the
@@ -441,7 +417,7 @@ pub fn finish_stage(
     let library_names = {
         let _ph = crate::profiling::phase("split:finish:library-names");
         super::library_names::name_library_imports_in_tree(
-            input.output_dir,
+            tree,
             &input.split_files,
             input.never_rename,
             input.name_profile,
@@ -450,7 +426,7 @@ pub fn finish_stage(
     report.messages.push(library_names.message());
     report.library_names = Some(library_names);
     let reconciled = reconcile_post_split(
-        input.output_dir,
+        tree,
         input.prior.map(|p| &p.files),
         input.switches,
         PostSplitRules {
@@ -476,11 +452,11 @@ pub struct ReconcileReport {
     pub carry: Option<CarryResult>,
 }
 
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
+// default: a file the folder does not hold (or cannot read) is absent
+// to the reconcile, which skips it
 #[allow(clippy::disallowed_methods)]
-fn read_opt(root: &Path, file: &str) -> Option<String> {
-    std::fs::read(root.join(file))
+fn read_opt(tree: &OutputTree, file: &str) -> Option<String> {
+    tree.read(&tree.root().join(file))
         .ok()
         .map(|b| String::from_utf8_lossy(&b).into_owned())
 }
@@ -495,11 +471,11 @@ pub struct PostSplitRules<'r> {
     pub differ: &'r dyn crate::naming::reconcile::hunks::Differ,
 }
 
-/// `reconcilePostSplit(opts, ledger, isEligible)` over the tree on disk:
+/// `reconcilePostSplit(opts, ledger, isEligible)` over the output tree:
 /// the ledger is `.humanify/split-ledger.json` (rewritten when a file
 /// changed), the bundle `.humanify/humanified.js`.
 pub fn reconcile_post_split(
-    output_dir: &Path,
+    tree: &mut OutputTree,
     prior: Option<&crate::prior_tree::PriorFiles>,
     switches: FinishSwitches,
     rules: PostSplitRules<'_>,
@@ -514,19 +490,22 @@ pub fn reconcile_post_split(
     let Some(prior) = prior else {
         return Ok(None);
     };
-    let ledger_path = output_dir.join(METADATA_DIR).join("split-ledger.json");
+    let ledger_path = tree.root().join(METADATA_DIR).join("split-ledger.json");
     let (mut ledger, eligible) = {
         let _ph = crate::profiling::phase("split:finish:reconcile-ledger");
         (
-            serde_json::from_str::<crate::place::ledger::SplitLedger>(&read_utf8(&ledger_path)?)
-                .map_err(|source| FinishError::Ledger {
-                    path: ledger_path.clone(),
-                    source,
-                })?,
+            serde_json::from_str::<crate::place::ledger::SplitLedger>(
+                &tree.read_lossy(&ledger_path)?,
+            )
+            .map_err(|source| FinishError::Ledger {
+                path: ledger_path.clone(),
+                source,
+            })?,
             Eligibility::new(never_rename),
         )
     };
-    let read_fresh = |f: &str| read_opt(output_dir, f);
+    let reading: &OutputTree = tree;
+    let read_fresh = |f: &str| read_opt(reading, f);
     let read_prior = |f: &str| prior.text_lossy(f).map(std::borrow::Cow::into_owned);
     let result = {
         // The per-file read + compute bulk (the reads interleave with the
@@ -558,13 +537,13 @@ pub fn reconcile_post_split(
     {
         let _ph = crate::profiling::phase("split:finish:reconcile-apply");
         for (file, text) in &result.changed {
-            write_file(&output_dir.join(file), text)?;
+            tree.put_rel(file, text.as_str());
         }
-        write_file(&ledger_path, &ledger.to_json())?;
+        tree.put(ledger_path, ledger.to_json());
     }
     let carry = {
         let _ph = crate::profiling::phase("split:finish:carry");
-        carry_into_bundle(output_dir, &ledger, &result.renames, layout, report)
+        carry_into_bundle(tree, &ledger, &result.renames, layout, report)
     };
     report.messages.push(format!(
         "Post-split reconcile: restored {} prior name(s) across {} of {} file(s){}",
@@ -591,22 +570,20 @@ pub fn reconcile_post_split(
 // default: legacy, untriaged: a Result error becomes a value here
 #[allow(clippy::disallowed_methods)]
 fn carry_into_bundle(
-    output_dir: &Path,
+    tree: &mut OutputTree,
     ledger: &crate::place::ledger::SplitLedger,
     renames: &[super::reconcile::PostSplitRename],
     layout: crate::toolchain::BundleLayout,
     report: &mut FinishReport,
 ) -> Option<CarryResult> {
-    let bundle_path = output_dir.join(METADATA_DIR).join("humanified.js");
-    let bundle = read_utf8(&bundle_path).ok()?;
+    let bundle_path = tree.root().join(METADATA_DIR).join("humanified.js");
+    let bundle = tree.read_lossy(&bundle_path).ok()?;
     let carry = match carry_renames_into_bundle(&bundle, ledger, renames, layout) {
         Ok(c) => c,
         Err(_) => return None, // "bundle carry skipped" (debug only)
     };
-    if let Some(code) = &carry.code
-        && write_file(&bundle_path, code).is_err()
-    {
-        return None;
+    if let Some(code) = &carry.code {
+        tree.put(bundle_path, code.as_str());
     }
     let missed: usize = carry.abstained.iter().map(|(_, n)| n).sum();
     let mut by_reason = carry.abstained.clone();

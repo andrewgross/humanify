@@ -157,11 +157,12 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
     let shim = args
         .webcrack_shim
         .map(|s| crate::unminify::webcrack_shim(Path::new(s)));
+    let mut tree = crate::output_tree::tree_for(Path::new(&work_dir));
     let result = humanify_ag_core::unpack::run_adapter(
         adapter,
         layout,
         &code,
-        Path::new(&work_dir),
+        &mut tree,
         humanify_ag_core::unpack::AdapterRun {
             webcrack_shim: shim
                 .as_ref()
@@ -175,6 +176,9 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
     )
     .map_err(|e| e.to_string())?
     .into_result();
+    // The candidates are read back from the work folder.
+    crate::output_tree::write_tree(&tree).map_err(|e| e.to_string())?;
+    drop(tree);
 
     // A MULTI-file tree (>= 2 candidates) is the raw-bundle regime: the
     // prior side is hoisted to the dump's top level once, and the

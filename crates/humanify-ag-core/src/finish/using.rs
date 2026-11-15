@@ -33,13 +33,14 @@ use oxc_ast::AstKind;
 use oxc_ast::ast::VariableDeclarationKind;
 
 use super::relink::parse_or_err;
-use super::scaffold::{js_files_under, read_utf8};
-use crate::error::{FileError, FileOp};
+use super::scaffold::js_files_under;
+use crate::error::FileError;
 use crate::format::FormatError;
 use crate::format::ast::{Kind, Tree};
 use crate::format::convert::Converter;
 use crate::format::printer::{Mode, Printer};
 use crate::ingest::{Ingest, ParseError};
+use crate::output_tree::OutputTree;
 use crate::rename::validated::scopes::BabelScopes;
 
 /// `/\busing\b/` (ASCII word boundaries, as a non-unicode JS regex).
@@ -245,13 +246,13 @@ pub fn desugar_using(code: &str) -> Result<Option<String>, UsingError> {
     transform::apply(code, splices).map(Some)
 }
 
-/// `desugarUsingInTree(outputDir)`: the number of files rewritten.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub fn desugar_using_in_tree(output_dir: &Path) -> Result<usize, UsingTreeError> {
+/// `desugarUsingInTree(outputDir)`: the number of files rewritten, over
+/// every `.js` / `.cjs` file of the output folder as it stands (a file an
+/// earlier run left there included, as on disk).
+pub fn desugar_using_in_tree(tree: &mut OutputTree) -> Result<usize, UsingTreeError> {
     let mut transformed = 0;
-    for file in js_files_under(output_dir)? {
-        let code = read_utf8(&file)?;
+    for file in js_files_under(tree)? {
+        let code = tree.read_lossy(&file)?;
         let Some(out) = desugar_using(&code).map_err(|source| UsingTreeError::InFile {
             path: file.clone(),
             source,
@@ -259,7 +260,7 @@ pub fn desugar_using_in_tree(output_dir: &Path) -> Result<usize, UsingTreeError>
         else {
             continue;
         };
-        std::fs::write(&file, out).map_err(FileError::at(FileOp::Write, &file))?;
+        tree.put(file, out);
         transformed += 1;
     }
     Ok(transformed)
