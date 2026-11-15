@@ -1,4 +1,6 @@
 //! The input-layout registry: which layout reads a run's input file.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::path::PathBuf;
 

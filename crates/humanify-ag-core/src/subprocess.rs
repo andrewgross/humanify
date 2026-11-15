@@ -86,6 +86,8 @@ struct Collected {
 }
 
 impl Collected {
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods)]
     fn take(&mut self, event: Event) {
         let pipe = |r: std::io::Result<Vec<u8>>, what: &str, error: &mut Option<String>| {
             r.unwrap_or_else(|e| {
@@ -112,6 +114,9 @@ impl Collected {
 /// exit status is returned for the caller to judge. A failed stdin write
 /// is an error only when the child still exited 0 — it left input unread
 /// and claimed success; a child that failed reports through its status.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 pub fn run(
     command: &mut Command,
     stdin: Option<Vec<u8>>,
@@ -213,6 +218,9 @@ pub fn run(
 /// bounded channel, and the caller waits on it with `recv_timeout` — an
 /// event wait, never a poll. On expiry the child's process group is
 /// SIGKILLed, as in [`run`].
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 pub fn run_inherited(
     command: &mut Command,
     deadline: Duration,
@@ -251,6 +259,8 @@ pub fn run_inherited(
 /// the group id is its pid). Through `kill(1)`: core forbids `unsafe`, so
 /// no direct `kill(2)`. `kill` returns at once, so it needs no deadline of
 /// its own.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn kill_group(pid: u32) -> bool {
     Command::new("kill")
         .args(["-KILL", "--", &format!("-{pid}")])

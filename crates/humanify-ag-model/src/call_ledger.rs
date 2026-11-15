@@ -488,6 +488,8 @@ impl CallLedger {
     }
 
     /// The outermost layer: every call, whatever answered it.
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods)]
     pub fn outcome(&self, call: &LlmCall, result: &Result<BatchRenameResponse, LlmError>) {
         let verdicts = result
             .as_ref()

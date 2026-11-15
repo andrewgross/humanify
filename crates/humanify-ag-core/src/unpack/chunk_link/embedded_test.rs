@@ -6,6 +6,8 @@
 //! string `"/$bunfs/root/<name>"`, which the app reads itself. Linked, a
 //! text read is the text (what Bun writes for a text import in one file)
 //! and a path is the copy the output tree carries under `embedded/`.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::path::{Path, PathBuf};
 

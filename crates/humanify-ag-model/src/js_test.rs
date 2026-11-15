@@ -1,6 +1,8 @@
 //! The JS runtime rules, pinned to vectors recorded from JavaScript:
 //! test/parity/wp41-js-vectors.json. The cache key's pins live in
 //! `llm_test.rs`.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use crate::js::{math_round, number_to_string, to_fixed};
 

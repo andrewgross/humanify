@@ -3,6 +3,8 @@
 //! started, first done), so a lane's follow-up races the rest of its
 //! round; others complete in seeded shuffled orders. The tests below
 //! compare every order's bytes and dispatch records.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
 use std::cell::Cell;
 

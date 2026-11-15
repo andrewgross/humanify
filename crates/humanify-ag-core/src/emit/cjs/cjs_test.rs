@@ -6,6 +6,8 @@
 //! so the 9 emitted files whose statements span lines were re-recorded —
 //! each differs from the TS's bytes only by leading spaces removed from a
 //! statement's continuation lines.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::HashMap;
 

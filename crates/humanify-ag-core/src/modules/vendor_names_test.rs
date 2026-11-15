@@ -2,6 +2,8 @@
 //! expectations (src/unpack/adapters/bun.test.ts, src/unpack/
 //! vendor-namer.test.ts, src/unpack/manifest-order.test.ts) plus the
 //! cache replay through the real wiring.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::{HashMap, HashSet};
 

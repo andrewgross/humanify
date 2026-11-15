@@ -18,6 +18,8 @@
 /// `extra.raw`, quotes included — `"a\nb"` stays `a\nb`), with a backtick
 /// and `${` escaped; otherwise escaped from the value. The source-derived
 /// text is used only when it cooks back to exactly `value`.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn raw_for_string(value: &str, source: Option<&str>) -> String {
     if let Some(raw) = source.and_then(raw_from_string_source)
         && template_element_cooked(&raw).ok().flatten().as_deref() == Some(value)

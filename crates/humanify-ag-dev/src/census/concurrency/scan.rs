@@ -638,10 +638,16 @@ fn scope_of(stack: &[Frame], statement: &[u8]) -> String {
 /// Every construct occurrence in one sanitized file, keyed into sites
 /// (first-seen order).
 pub fn sites_of(file: &str, text: &[u8]) -> Vec<Site> {
-    let mut hits: Vec<(usize, &str)> = CONSTRUCTS
+    let hits: Vec<(usize, &str)> = CONSTRUCTS
         .iter()
         .flat_map(|c| matches(text, c).into_iter().map(move |at| (at, c.id)))
         .collect();
+    sites_from_hits(file, text, hits)
+}
+
+/// Key construct occurrences (offset, construct id) of one sanitized file
+/// into sites, naming each one's scope (first-seen order).
+pub fn sites_from_hits(file: &str, text: &[u8], mut hits: Vec<(usize, &str)>) -> Vec<Site> {
     hits.sort_by_key(|h| h.0);
     let mut sites: Vec<Site> = Vec::new();
     let mut stack: Vec<Frame> = Vec::new();

@@ -1,6 +1,8 @@
 //! Statement-hash unit tests (the 06 §4 property classes at statement
 //! scale): rename-invariance with content controls, the literal classes,
 //! optional chains, holes.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use serde_json::json;
 

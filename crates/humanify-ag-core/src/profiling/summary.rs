@@ -19,6 +19,8 @@ fn pad_start(s: &str, n: usize) -> String {
     format!("{}{s}", " ".repeat(n.saturating_sub(utf16_len(s))))
 }
 
+// io: the profiling clock and sampler: observation for --perf-trace only
+#[allow(clippy::let_underscore_must_use)]
 fn stage_lines(stages: &[StageSummary], total: f64, lines: &mut Vec<String>) {
     lines.push("Stage breakdown:".to_string());
     let mut sorted: Vec<&StageSummary> = stages.iter().collect();

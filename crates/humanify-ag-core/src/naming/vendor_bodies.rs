@@ -130,6 +130,8 @@ pub fn split_bodies(code: &str, n: usize) -> Result<Vec<String>, String> {
 /// path order and named once. A named text that is not a valid pure
 /// rename (the driver's verdict) or does not split back ships every body
 /// verbatim.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn name_vendor_bodies<P: NameProvider>(
     bodies: &[VendorBody],
     prior: Option<&str>,
@@ -205,6 +207,8 @@ pub fn name_vendor_bodies<P: NameProvider>(
 }
 
 /// One body as the joined text holds it, or why it stays as extracted.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::map_err_ignore)]
 fn format_body(text: &str) -> Result<String, Skip> {
     if has_lone_surrogate_escape(text) {
         return Err(Skip::LoneSurrogate);
@@ -223,6 +227,8 @@ fn format_body(text: &str) -> Result<String, Skip> {
 
 /// A `\uXXXX` escape of a UTF-16 surrogate that is not one half of a
 /// high-low pair. Conservative: an escaped backslash before `u` counts too.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn has_lone_surrogate_escape(text: &str) -> bool {
     let bytes = text.as_bytes();
     let unit_at = |at: usize| -> Option<u16> {
@@ -252,6 +258,8 @@ fn has_lone_surrogate_escape(text: &str) -> bool {
 /// bridge's factory files; an app text asset under `src/` is not library
 /// code and is left alone), each with the names Site B restored inside
 /// its declaration — read back from `out_dir` as written.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn bodies_of_bridge(
     out_dir: &std::path::Path,
     bridge: &crate::naming::module_names::EraBridge,
@@ -279,11 +287,16 @@ pub fn bodies_of_bridge(
 /// Whether the prior tree at `root` holds vendored bodies this pass named
 /// (its [`VENDOR_NAMING_SOURCE`] is there) — the content carry then pairs
 /// blind to binding spellings (`modules::vendor_pairing::blind_text`).
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn prior_bodies_named(root: &std::path::Path) -> bool {
     root.join(VENDOR_NAMING_SOURCE).is_file()
 }
 
 /// The prior release's joined named bodies, when its tree has them.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn prior_vendor_naming(prior_file: &std::path::Path) -> Option<String> {
     let root = crate::unpack::bun::find_prior_tree_root(prior_file)?;
     std::fs::read_to_string(root.join(VENDOR_NAMING_SOURCE)).ok()
@@ -291,6 +304,8 @@ pub fn prior_vendor_naming(prior_file: &std::path::Path) -> Option<String> {
 
 /// Write the pass's result: every body whose text changed, and the joined
 /// text the next release reads as its prior. Returns the files rewritten.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn write_vendor_naming(
     out_dir: &std::path::Path,
     bodies: &[VendorBody],

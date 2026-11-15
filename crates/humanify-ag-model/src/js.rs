@@ -12,6 +12,8 @@ use std::cmp::Ordering;
 /// The numeric value of an array-index key, or None for an ordinary key.
 /// An array index is a canonical decimal (no sign, no leading zero unless
 /// it is "0") below 2^32 - 1.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn array_index(key: &str) -> Option<u32> {
     let bytes = key.as_bytes();
     if bytes.is_empty() || bytes.len() > 10 || !bytes.iter().all(u8::is_ascii_digit) {
@@ -179,6 +181,8 @@ pub fn math_log(x: f64) -> f64 {
 /// parsed one ulp high). Handles `_` separators, hex/octal/binary radix
 /// prefixes, and sloppy-mode legacy octal (`017` = 15, `019` = 19).
 /// `None` for a BigInt (`…n`) or anything that is not a numeric literal.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn numeric_literal_value(raw: &str) -> Option<f64> {
     let s: String = raw.chars().filter(|c| *c != '_').collect();
     if s.ends_with('n') {
@@ -307,6 +311,9 @@ pub fn is_js_whitespace(c: char) -> bool {
 /// directory, then `.` and `..` normalized LEXICALLY — never through the
 /// filesystem, and before any parent walk (`std::path::absolute` keeps
 /// `..`, so a raw `parent()` walk from `a/x/../b` visits `a/x`).
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn node_path_resolve(p: &std::path::Path) -> std::path::PathBuf {
     use std::path::{Component, PathBuf};
     // `absolute` joins the working directory WITHOUT normalizing.

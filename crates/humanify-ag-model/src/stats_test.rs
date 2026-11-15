@@ -1,5 +1,7 @@
 //! The `--stats-json` record: the absent-is-not-zero rules the harness
 //! reads, and counts written as integers.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
 
 use crate::stats::{CoverageSummary, EvalStats, LlmCoverage, RenameCounts};
 

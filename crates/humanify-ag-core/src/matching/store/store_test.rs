@@ -2,6 +2,8 @@
 //! index store never serves INTO edges, answers INSIDE / OUT-OF from a
 //! `/4` index's edge table and `NotRecorded` from a `/3` one; the prior
 //! store reads one program whole.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
 use crate::graph::edges::Scope;
 use std::collections::BTreeMap;

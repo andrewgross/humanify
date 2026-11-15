@@ -388,6 +388,14 @@ const VERBS: &[Verb] = &[
         footprint: LIGHT,
     },
     Verb {
+        words: &["census", "effects"],
+        usage: "census effects [--files a.rs,...] [--root D] [--allowlist F]",
+        proves: "every effect site (disk, process, env, clock, thread, terminal, network, global mutable static) and every non-private Result<_, String> signature in the product crates is on the allowlist with its role, and the list only shrinks; the pure crates' clippy configs carry the root's bans and their dependencies stay on the allowed list",
+        cannot_prove: "an effect reached through a helper in another crate, or a Result's error dropped by `if let Ok` / `let Ok(..) else` (clippy's tagged bans cover .ok() and unwrap_or*)",
+        settings: &["dev.files", "dev.root", "dev.allowlist"],
+        footprint: LIGHT,
+    },
+    Verb {
         words: &["census", "comments"],
         usage: "census comments [--base REF] [--all] [--root D]",
         proves: "comments in crates/ cite no experiment, date or missing file and tag their directives; the kept docs' links resolve; no Markdown file outside the allowlist (ADVISORY: new findings against the merge-base)",
@@ -526,6 +534,7 @@ fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
         ["no-private-addresses"] => gate::private_addresses::run(parsed, &host),
         ["shims"] => gate::shims::run(parsed, &host),
         ["census", "concurrency"] => census::concurrency::run(parsed, &host),
+        ["census", "effects"] => census::effects::run(parsed, &host),
         ["census", "clones"] => census::clones::run(parsed, &host),
         ["census", "slop"] => census::slop::run(parsed, &host),
         ["census", "comments"] => census::comments::run(parsed, &host),

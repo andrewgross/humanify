@@ -1,5 +1,7 @@
 //! The finish driver's tests: the SPAN coverage (perf-instrumentation)
 //! and the manifest gate (feat/esbuild-unpack).
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
 //! The finish driver's SPAN coverage (docs/perf-inventory.md item 3):
 //! `split:finish` was 40 s of serial work per with-prior hop with NO

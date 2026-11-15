@@ -73,6 +73,8 @@ pub fn node_type(node: &serde_json::Value) -> &str {
 /// input is oxc's own serialization of a program that parsed). Malformed
 /// text answers `Null` — use [`try_parse_estree_json`] where a reader must
 /// say why.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn parse_estree_json(text: &str) -> serde_json::Value {
     try_parse_estree_json(text).unwrap_or(serde_json::Value::Null)
 }
@@ -195,6 +197,8 @@ fn value_step(bytes: &[u8], i: usize, in_string: &mut bool) -> Step {
 }
 
 /// The code unit of a `\uXXXX` escape starting at `i`, if there is one.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn unicode_escape(bytes: &[u8], i: usize) -> Option<u32> {
     if bytes.get(i) != Some(&b'\\') || bytes.get(i + 1) != Some(&b'u') {
         return None;
@@ -211,6 +215,8 @@ impl<'a> Ingest<'a> {
 
     /// Parse + build semantic over the given text. `source_type` is derived
     /// from the path when given (jsx/mjs flags matter for the bundles).
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods)]
     pub fn parse(allocator: &'a Allocator, text: &'a str, source_name: &str) -> Ingest<'a> {
         let source_type = SourceType::from_path(source_name)
             .unwrap_or_default()

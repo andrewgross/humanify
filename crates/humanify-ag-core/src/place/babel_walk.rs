@@ -118,6 +118,8 @@ fn visitor_keys(babel_type: &str) -> &'static [&'static str] {
         .map_or(&[], |(_, keys)| keys)
 }
 
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn node_span(v: &Value) -> Option<(u32, u32)> {
     let at = |k: &str| v.get(k)?.as_u64().and_then(|n| u32::try_from(n).ok());
     Some((at("start")?, at("end")?))

@@ -52,6 +52,8 @@ struct ShimOutput {
 /// one inside that directory, or the unpack fails naming the one outside. A non-zero exit, unparseable output or a shim past its
 /// deadline (killed) is an error — the TS adapter throws the same way when
 /// webcrack does. The pipes and the deadline are [`crate::subprocess`]'s.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn unpack_webcrack(
     code: &str,
     out_dir: &Path,
@@ -91,6 +93,8 @@ pub fn unpack_webcrack(
 /// `out/deobfuscated.js`, which the run then read against its own working
 /// directory and did not find (exp182). Canonical, so the paths the shim
 /// reports (`path.join(outputDir, file)`, which normalizes) start with it.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn shim_out_dir(out_dir: &Path) -> Result<PathBuf, String> {
     std::fs::create_dir_all(out_dir).map_err(|e| format!("mkdir {}: {e}", out_dir.display()))?;
     std::fs::canonicalize(out_dir).map_err(|e| format!("resolve {}: {e}", out_dir.display()))

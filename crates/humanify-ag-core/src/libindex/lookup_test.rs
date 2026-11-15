@@ -1,5 +1,7 @@
 //! The unit lookup: the structural rule, specificity, support and literal
 //! agreement, on a tiny in-memory index.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use oxc_span::Span;
 

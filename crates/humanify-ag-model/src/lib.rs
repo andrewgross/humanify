@@ -4,6 +4,10 @@
 //!
 //! WP0.3 lands the dump schemas here first so that `humanify-parity` can
 //! build against TS dumps before any pipeline Rust exists.
+// Effects and swallowed errors (see clippy.toml beside this crate): an
+// error mapped away with `map_err(|_| ..)` or discarded with `let _ =`
+// needs an allow tagged `// default: <reason>` (enforced: census:effects).
+#![deny(clippy::map_err_ignore, clippy::let_underscore_must_use)]
 
 pub mod call_ledger;
 pub mod detection;

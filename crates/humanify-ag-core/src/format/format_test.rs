@@ -7,6 +7,8 @@
 //! finding #42's bugs, the traversal engine's queue/requeue/insert/remove
 //! paths, the printer's ESM/class/paren paths, attached comments, and the
 //! inputs Babel's module-mode parse rejects.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::fs;
 use std::path::PathBuf;

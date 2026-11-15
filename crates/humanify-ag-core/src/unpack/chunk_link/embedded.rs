@@ -101,6 +101,8 @@ pub(super) struct Resolved {
 
 /// Is the file at `path` a module Bun built (a `.js` file whose first
 /// line is Bun's pragma) — a chunk or an entry, not an embedded file?
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub(super) fn is_bun_module(path: &Path) -> bool {
     if path.extension().is_none_or(|x| x != "js") {
         return false;
@@ -113,6 +115,8 @@ pub(super) fn is_bun_module(path: &Path) -> bool {
 
 /// The file `rest` names under the root `dir`, refusing a name that
 /// leaves it.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn file_of(dir: &Path, rest: &str) -> Result<PathBuf, String> {
     let inside = Path::new(rest)
         .components()
@@ -237,6 +241,8 @@ fn is_require(
 }
 
 /// Decide every chunk's embedded-file uses (see the module doc).
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub(super) fn resolve(chunks: &[Chunk], dir: &Path) -> Result<Resolved, String> {
     let aliases = require_aliases(chunks);
     let mut out = Resolved::default();

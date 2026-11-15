@@ -49,6 +49,8 @@ pub struct Profiler {
 
 /// Locks through poisoning: a panicked span-ender must not take the
 /// profile down with it (the data is append-only).
+// io: the profiling clock and sampler: observation for --perf-trace only
+#[allow(clippy::disallowed_methods)]
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -99,6 +101,8 @@ impl SpanHandle<'_> {
 
 impl Profiler {
     /// TS `new Profiler(enabled)`.
+    // io: the profiling clock and sampler: observation for --perf-trace only
+    #[allow(clippy::disallowed_methods)]
     pub fn new(enabled: bool) -> Self {
         Self {
             enabled,
@@ -160,6 +164,8 @@ impl Profiler {
     /// TS `startConcurrencySampling(sampler, intervalMs = 250)`: a
     /// background thread records `sampler()` every `interval` until
     /// `stop_concurrency_sampling` or `finalize`.
+    // io: the profiling clock and sampler: observation for --perf-trace only
+    #[allow(clippy::disallowed_methods)]
     pub fn start_concurrency_sampling<F>(&self, mut sampler: F, interval: Duration)
     where
         F: FnMut() -> ConcurrencyCounts + Send + 'static,
@@ -180,6 +186,8 @@ impl Profiler {
     }
 
     /// TS `stopConcurrencySampling`.
+    // io: the profiling clock and sampler: observation for --perf-trace only
+    #[allow(clippy::let_underscore_must_use)]
     pub fn stop_concurrency_sampling(&self) {
         if let Some(s) = lock(&self.sampler).take() {
             // The thread may already be gone; either way it stops.
@@ -238,6 +246,8 @@ pub static SPAN_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 impl Profiler {
     /// Route [`phase`] spans into this profiler (enabled profilers only).
+    // io: the profiling clock and sampler: observation for --perf-trace only
+    #[allow(clippy::disallowed_methods)]
     pub fn install_global(&self) {
         if self.enabled {
             *GLOBAL.write().unwrap_or_else(PoisonError::into_inner) =
@@ -246,6 +256,8 @@ impl Profiler {
     }
 
     /// Stop routing [`phase`] spans anywhere.
+    // io: the profiling clock and sampler: observation for --perf-trace only
+    #[allow(clippy::disallowed_methods)]
     pub fn uninstall_global() {
         *GLOBAL.write().unwrap_or_else(PoisonError::into_inner) = None;
     }
@@ -253,6 +265,8 @@ impl Profiler {
 
 /// This process's user+system CPU time in ms (Linux `/proc/self/stat`,
 /// USER_HZ = 100); None elsewhere.
+// io: the profiling clock and sampler: observation for --perf-trace only
+#[allow(clippy::disallowed_methods)]
 pub fn process_cpu_ms() -> Option<f64> {
     let stat = std::fs::read_to_string("/proc/self/stat").ok()?;
     // Fields after the parenthesised comm: state is field 3, utime 14, stime 15.
@@ -284,6 +298,8 @@ impl Phase {
 /// time spent meanwhile (`cpuMs`) and the average cores busy (`cores`) —
 /// the serial-vs-parallel split per stage. A no-op returning None unless a
 /// profiler is installed.
+// io: the profiling clock and sampler: observation for --perf-trace only
+#[allow(clippy::disallowed_methods)]
 pub fn phase(name: &'static str) -> Option<Phase> {
     let guard = GLOBAL.read().unwrap_or_else(PoisonError::into_inner);
     let (start, _) = guard.as_ref()?;
@@ -296,6 +312,8 @@ pub fn phase(name: &'static str) -> Option<Phase> {
 }
 
 impl Drop for Phase {
+    // io: the profiling clock and sampler: observation for --perf-trace only
+    #[allow(clippy::disallowed_methods)]
     fn drop(&mut self) {
         let guard = GLOBAL.read().unwrap_or_else(PoisonError::into_inner);
         let Some((start, recorded)) = guard.as_ref() else {
@@ -357,6 +375,8 @@ fn stage_summaries(spans: &[ProfileSpan]) -> Vec<StageSummary> {
 }
 
 /// Percentiles over the rename spans (category "rename", tid 2).
+// io: the profiling clock and sampler: observation for --perf-trace only
+#[allow(clippy::disallowed_methods)]
 fn rename_timing(spans: &[ProfileSpan]) -> Option<RenameTiming> {
     let mut durations: Vec<f64> = spans
         .iter()

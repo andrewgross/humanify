@@ -4,12 +4,11 @@
 //! flag is only worth trusting if its red has been SEEN. Plus the census
 //! on this repository, which must be green.
 
-use std::path::PathBuf;
-
 use serde_json::{Value, json};
 
 use super::run;
 use crate::HostEnv;
+use crate::census::planted_test::Planted;
 use crate::paths::repo_root;
 use crate::settings::{self, Parsed};
 
@@ -19,40 +18,11 @@ fn parse(args: &[String]) -> Parsed {
     settings::parse("census concurrency", ACCEPTED, &[], args).expect("args parse")
 }
 
-/// A fresh temp root (removed on drop).
-struct Tree(PathBuf);
-
-impl Tree {
-    fn new() -> Tree {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        static N: AtomicUsize = AtomicUsize::new(0);
-        let dir = std::env::temp_dir().join(format!(
-            "concurrency-census-{}-{}",
-            std::process::id(),
-            N.fetch_add(1, Ordering::Relaxed)
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        Tree(dir)
-    }
-    fn write(&self, rel: &str, text: &str) {
-        let p = self.0.join(rel);
-        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
-        std::fs::write(p, text).unwrap();
-    }
-}
-
-impl Drop for Tree {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 /// Plant `files` (root-relative path -> text) and an allowlist holding
 /// `entries`; run the census with `files_flag` (root-relative `.rs`
 /// paths, made absolute) as `--files`. Returns (exit code, output).
 fn census_with(files: &[(&str, &str)], entries: &[Value], files_flag: &[&str]) -> (u8, String) {
-    let tree = Tree::new();
+    let tree = Planted::new("concurrency-census");
     for (rel, text) in files {
         tree.write(rel, text);
     }
@@ -302,4 +272,39 @@ fn the_census_of_this_repository_is_green() {
     let (code, out, err) = run(&parse(&args), &HostEnv::default());
     assert_eq!(code, 0, "expected GREEN, got:\n{out}\n{err}");
     assert!(out.contains("CONCURRENCY CENSUS GREEN"), "{out}");
+}
+
+#[test]
+fn the_pure_crates_tags_are_accepted_and_an_inner_allow_is_checked() {
+    let tagged = concat!(
+        "// io: the shell's job, listed\n#[al",
+        "low(clippy::disallowed_methods)]\npub fn a() {}\n",
+        "// default: absence is data here\n#[al",
+        "low(clippy::let_underscore_must_use)]\npub fn b() {}\n"
+    );
+    let (code, out) = census(&[(LIB, tagged)], &[]);
+    assert_eq!(code, 0, "expected GREEN, got:\n{out}");
+
+    let untagged = concat!(
+        "#![al",
+        "low(clippy::disallowed_methods)]\n",
+        "#[al",
+        "low(clippy::map_err_ignore)]\npub fn c() {}\n"
+    );
+    let (code, out) = census(&[(LIB, untagged)], &[]);
+    assert_eq!(code, 1, "expected RED, got:\n{out}");
+    assert!(out.contains("lib.rs:1  #![al"), "{out}");
+    assert!(out.contains("lib.rs:2  #[al"), "{out}");
+    assert!(out.contains("`// io: <reason>` for an effect"), "{out}");
+}
+
+#[test]
+fn an_allow_spread_over_several_lines_is_checked() {
+    let untagged = concat!(
+        "#![al",
+        "low(\n    clippy::disallowed_methods,\n)]\npub fn d() {}\n"
+    );
+    let (code, out) = census(&[(LIB, untagged)], &[]);
+    assert_eq!(code, 1, "expected RED, got:\n{out}");
+    assert!(out.contains("lib.rs:1  #![al"), "{out}");
 }

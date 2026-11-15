@@ -8,9 +8,9 @@
 cargo dev check
 ```
 
-It runs twelve stages, cheapest first — shims, no-private-addresses,
+It runs thirteen stages, cheapest first — shims, no-private-addresses,
 rust:fmt, rust:clippy, census:clones (ADVISORY), census:concurrency,
-census:slop (ADVISORY), census:comments (ADVISORY), rust:unit, rust:build,
+census:effects, census:slop (ADVISORY), census:comments (ADVISORY), rust:unit, rust:build,
 format-golden, e2e — and prints a summary saying which ran, which failed and
 which it never reached (fail-fast). The three ADVISORY stages print `REVIEW`
 (never FAIL): an automated mini code-review for Claude/agents to act on —
@@ -22,7 +22,11 @@ id, date or `finding #`; a file not in the tree; a never/must/do not with no
 `(enforced: <check>)` tag; a dead link in the kept docs; a Markdown file
 outside `dev/census/docs-allowlist.json`). `census:concurrency` is
 pass/fail: an unlisted concurrency site in `crates/` FAILS until it is
-confirmed (see Code style, "Concurrency"). All other stages are pass/fail.
+confirmed (see Code style, "Concurrency"). `census:effects` is pass/fail:
+an effect site or a `Result<_, String>` in a product crate that is not on
+`dev/census/effects-allowlist.json` FAILS, and so does a stale entry (the
+pure crates' list only shrinks; `docs/responsibility.md`, "May this code do
+I/O?"). All other stages are pass/fail.
 Nothing is outside it.
 
 `cargo dev` is the measurement harness: the `humanify-ag-dev` crate

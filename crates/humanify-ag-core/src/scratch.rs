@@ -6,6 +6,9 @@
 
 /// Create and return a new, empty directory under the system temp dir,
 /// named `<prefix>-<pid>-<seq>-<nanos>`.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn temp_dir(prefix: &str) -> Result<std::path::PathBuf, String> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);

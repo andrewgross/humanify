@@ -136,6 +136,8 @@ fn split_callees(spans: &[oxc_span::Span], side: &RoleSide<'_, '_>) -> (Vec<Stri
 /// gives a redeclaration identifier the SAME symbol id, so a scan keyed on
 /// `symbol_id.is_none()` sees nothing and the K5 zlib-counter case minted
 /// content babel never has.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn binding_content_json(row: &ModuleBindingNode, side: &RoleSide<'_, '_>) -> Option<Value> {
     let json = crate::graph::binding_content_estree(
         row.symbol,

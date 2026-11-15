@@ -370,6 +370,8 @@ pub struct SplitNamerBudget {
 impl SplitNamerBudget {
     /// The budget for a model with `context_tokens` of context, of which
     /// `completion_tokens` (`max_tokens`) are reserved for the answer.
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods)]
     pub fn for_model(context_tokens: u64, completion_tokens: u64) -> Self {
         let system_tokens = SPLIT_NAMER_SYSTEM_PROMPT
             .len()

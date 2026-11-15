@@ -39,6 +39,8 @@ pub enum Pre {
     BoundaryNotTokioSync,
     /// `(?<![:\w])` (a bare `Relaxed`, not `X::Relaxed`).
     NotColonOrWord,
+    /// `(?<![.:\w])` (a bare call, not a method or a path's tail).
+    NotMember,
 }
 
 /// What must hold (or is consumed) just after an alternative's text.
@@ -74,7 +76,7 @@ pub struct Construct {
     pub rule: &'static str,
 }
 
-const fn w(lit: &'static str) -> Alt {
+pub(crate) const fn w(lit: &'static str) -> Alt {
     Alt {
         lit,
         pre: Pre::Boundary,
@@ -82,7 +84,7 @@ const fn w(lit: &'static str) -> Alt {
     }
 }
 
-const fn alt(lit: &'static str, pre: Pre, post: Post) -> Alt {
+pub(crate) const fn alt(lit: &'static str, pre: Pre, post: Post) -> Alt {
     Alt { lit, pre, post }
 }
 
@@ -325,6 +327,7 @@ fn pre_holds(s: &[u8], at: usize, pre: Pre) -> bool {
         Pre::Boundary => boundary(s, at),
         Pre::BoundaryNotTokioSync => !s[..at].ends_with(b"tokio::sync::") && boundary(s, at),
         Pre::NotColonOrWord => at == 0 || !(s[at - 1] == b':' || is_word(s[at - 1])),
+        Pre::NotMember => at == 0 || !(matches!(s[at - 1], b'.' | b':') || is_word(s[at - 1])),
     }
 }
 

@@ -32,6 +32,8 @@ pub fn modules_file(slice: &str) -> String {
 /// The planner's answers for `keys`: one entry per key the index holds.
 /// Keys the index lacks are simply absent (a miss is a synthetic name,
 /// not an error). An empty `keys` reads nothing.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn read_module_answers(
     dir: &Path,
     slice: &str,

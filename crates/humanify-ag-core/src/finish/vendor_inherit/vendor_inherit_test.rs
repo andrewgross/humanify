@@ -1,4 +1,6 @@
 //! Ported from src/split/vendor-body-inherit.test.ts.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
 use std::fs;
 

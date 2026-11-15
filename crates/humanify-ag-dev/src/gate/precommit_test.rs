@@ -26,6 +26,12 @@ fn a_staged_allowlist_runs_the_whole_census() {
 }
 
 #[test]
+fn a_staged_effects_allowlist_runs_the_whole_census() {
+    let plan = plan(&s(&["dev/census/effects-allowlist.json"]));
+    assert_eq!(plan.census, Some(Vec::new()), "empty = the whole tree");
+}
+
+#[test]
 fn nothing_rust_staged_runs_no_census() {
     let plan = plan(&s(&["README.md"]));
     assert_eq!(plan.census, None);
@@ -35,10 +41,11 @@ fn nothing_rust_staged_runs_no_census() {
 #[test]
 fn the_census_launch_names_the_files_or_none() {
     assert_eq!(
-        census_args(&s(&["a.rs", "b.rs"])),
+        census_args("concurrency", &s(&["a.rs", "b.rs"])),
         s(&["census", "concurrency", "--files", "a.rs,b.rs"])
     );
-    assert_eq!(census_args(&[]), s(&["census", "concurrency"]));
+    assert_eq!(census_args("effects", &[]), s(&["census", "effects"]));
+    assert_eq!(CENSUSES, &["concurrency", "effects"]);
 }
 
 #[test]

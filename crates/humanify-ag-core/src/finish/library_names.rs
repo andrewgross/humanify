@@ -335,6 +335,8 @@ pub fn name_library_imports_in_file(
 
 /// Name the library imports of every split file under `output_dir`
 /// (`files` are the paths the split wrote; `.humanify/` is skipped).
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn name_library_imports_in_tree(
     output_dir: &Path,
     files: &[&str],

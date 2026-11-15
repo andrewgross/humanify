@@ -1,6 +1,8 @@
 //! WP1.5 parity tests — expectations generated from the TS originals by
 //! test/parity/wp1.5-probe.mjs (tsx run against src/analysis/*.ts). The
 //! comments cite the probe line each expectation came from.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use crate::modules::identify_bun_cjs_factory;
 

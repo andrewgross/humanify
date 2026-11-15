@@ -4,6 +4,8 @@
 //! the TS generated output. Since the cutover the ledger is its own format
 //! (version 2, derived from the render — findings #48/#49); the TS probe
 //! is a spec for the entries, not for the version.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use serde_json::Value;
 

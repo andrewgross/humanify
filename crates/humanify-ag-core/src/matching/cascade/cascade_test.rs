@@ -14,6 +14,8 @@
 //! and "resolves ambiguous functions that cascade alone cannot" pin the
 //! stub's semantics (unchanged result, `propagationResolved: 0`) and note
 //! the TS expectations that come back once the pass is ported.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::{HashMap, HashSet};
 use std::fs;

@@ -605,8 +605,8 @@ pub static HARNESS_KEYS: &[Key] = &[
         "dev",
         "allowlist",
         Some("--allowlist"),
-        "dev/census/concurrency-allowlist.json",
-        "The concurrency census's allowlist file.",
+        "the census's own file under dev/census/",
+        "A census's allowlist file (concurrency, effects).",
     ),
     Key {
         section: "dev",

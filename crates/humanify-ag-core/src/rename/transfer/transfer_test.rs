@@ -5,6 +5,8 @@
 //! `applyPriorVersionIfPresent` trail on seven small pairs, one tier each).
 //! The four-pair bundle-scale gate is `humanify-ag transfers` +
 //! `humanify-parity compare --sections transfers.mechanical,votes`.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::HashSet;
 use std::fs;

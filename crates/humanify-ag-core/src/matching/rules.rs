@@ -245,6 +245,8 @@ impl RuleList {
             .collect()
     }
 
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods)]
     fn of(profile: Profile, specs: &[RuleSpec]) -> RuleList {
         let mut list = RuleList::new(profile);
         for &s in specs {

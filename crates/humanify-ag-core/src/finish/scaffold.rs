@@ -214,6 +214,8 @@ pub fn js_files_under(dir: &Path) -> Result<Vec<PathBuf>, String> {
 
 /// `root`: `dir` is the tree root, whose `embedded/` holds a Bun app's
 /// embedded files (data, even when named `.js` — exp217), not code.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn walk(dir: &Path, out: &mut Vec<PathBuf>, root: bool) -> Result<(), String> {
     let entries = fs::read_dir(dir).map_err(|e| format!("readdir {}: {e}", dir.display()))?;
     for entry in entries {
@@ -239,6 +241,8 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>, root: bool) -> Result<(), String> {
 }
 
 /// `readFile(…, "utf-8")`: invalid sequences become U+FFFD.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub(crate) fn read_utf8(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
@@ -256,6 +260,8 @@ pub fn detect_external_packages(dir: &Path) -> Result<Vec<String>, String> {
 
 /// The `version` of `pkg` installed nearest `from_dir` (Node's walk up the
 /// `node_modules` directories), or None.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn installed_version(pkg: &str, from_dir: &Path) -> Option<String> {
     let mut dir = node_path_resolve(from_dir);
     loop {
@@ -379,6 +385,8 @@ bun {r} [arguments]
 }
 
 /// `writeRunnableScaffold(outputDir, entryFile, externals, resolveFromDir)`.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn write_runnable_scaffold(
     output_dir: &Path,
     entry_file: &str,
@@ -400,6 +408,8 @@ pub fn write_runnable_scaffold(
 /// `embedded/<its bunfs name>` — where the linked program's
 /// `__dirname+"/embedded/<name>"` points. Returns how many were copied; a
 /// file that cannot be copied fails the write (the tree would not run).
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn write_embedded_files(
     output_dir: &Path,
     files: &[crate::unpack::chunk_link::EmbeddedFile],

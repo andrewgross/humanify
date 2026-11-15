@@ -3,6 +3,8 @@
 //! `adapters/default.test.ts` and `adapters/bun.test.ts`, plus the V8
 //! regex-semantics edges the TS gets for free (ECMAScript `\s`, UTF-16
 //! offsets).
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::fs;
 use std::path::{Path, PathBuf};

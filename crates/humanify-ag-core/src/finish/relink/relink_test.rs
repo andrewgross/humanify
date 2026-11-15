@@ -2,6 +2,8 @@
 //! executed ones live in the TS suite and the boot gate). Every expected
 //! string was produced by the TS functions themselves
 //! (`relinkFactoryReferences` / `wrapExtractedFactory`, 2026-09-25).
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use super::{BUN_RELINK_RUNTIME, FactoryLookup, VendorBridge, relink_factory_references};
 

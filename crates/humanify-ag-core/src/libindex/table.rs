@@ -93,6 +93,8 @@ const CALLEE_PRINTS_MAGIC: &[u8; 8] = b"HXCLPR01";
 /// A unit hash's key: its 16 lowercase hex digits as a number. Any other
 /// spelling is no key (no indexed row can hold it: the encoder refuses
 /// one).
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn unit_key(hash: &str) -> Option<u64> {
     (hash.len() == 16 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
         .then(|| u64::from_str_radix(hash, 16).ok())
@@ -186,6 +188,8 @@ pub fn lookup_files_into(
     Ok(())
 }
 
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn owner_id(packages: &[String], owner: &str) -> u32 {
     packages
         .binary_search_by(|p| p.as_str().cmp(owner))
@@ -219,6 +223,8 @@ pub struct PagedFile {
 }
 
 impl PagedFile {
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods)]
     fn page(&self, p: u64, mut use_bytes: impl FnMut(&[u8])) {
         let mut pages = self.pages.borrow_mut();
         let bytes = pages.entry(p).or_insert_with(|| {
@@ -233,6 +239,8 @@ impl PagedFile {
 }
 
 impl Source {
+    // io: legacy effect site, listed in dev/census/effects-allowlist.json
+    #[allow(clippy::disallowed_methods)]
     pub fn open(path: &Path) -> Result<Source, String> {
         let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
         let len = file
@@ -1264,6 +1272,8 @@ impl LiteralTable {
 
     /// [`LiteralTable::open`] under the key function the table was
     /// encoded with.
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::map_err_ignore)]
     pub(crate) fn open_keyed(src: Source, key: fn(&str) -> u64) -> Result<LiteralTable, String> {
         let h = header(&src, LITERALS_MAGIC, "literal table", 5)?;
         let (n_lits, n_files, n_post, n_file_lits) = (h[0], h[1], h[2], h[3]);

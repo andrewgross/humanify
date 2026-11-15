@@ -368,6 +368,8 @@ fn ts_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 /// TS `sessionPosition` (:392): `(Number(parts[1]) || 0, Number(parts[2]) || 0)`
 /// from a `file:line:col` id — "module:x" lands on (0, 0) since `Number`
 /// gives NaN there.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn session_position(session_id: &str) -> (i64, i64) {
     let num_or_zero =
         |part: Option<&str>| -> i64 { part.and_then(|p| p.parse().ok()).unwrap_or(0) };

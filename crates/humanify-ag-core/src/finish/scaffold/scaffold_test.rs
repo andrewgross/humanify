@@ -2,6 +2,8 @@
 //! (test/parity/wp54-scaffold.json, written by
 //! test/parity/wp54-scaffold-probe.ts), plus the ported unit cases of
 //! src/split/runnable-scaffold.test.ts.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use humanify_ag_testkit::ScratchDir;
 use std::fs;

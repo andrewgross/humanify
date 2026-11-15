@@ -107,6 +107,8 @@ fn quoted(t: &str) -> Option<&str> {
 /// A string literal's VALUE: its escapes decoded (`–`, `\u{1F600}`,
 /// `\xE9`, `\n`, `\"` …) — minified code writes non-ASCII as escapes, and
 /// a declared name is the value, not its spelling.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn unescape(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
     let mut chars = raw.chars().peekable();
@@ -917,6 +919,8 @@ fn is_pascal_with_suffix(s: &str, suffix: &str) -> bool {
 /// package — `STSClient` ships in both `@aws-sdk/client-sts` and
 /// `@aws-sdk/nested-clients` — so this is a hint and a report, never an
 /// identity. Two clients: abstain.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn aws_sdk_client(view: &ModuleView<'_>) -> Option<AwsSdkClient> {
     let t = view.tokens;
     let mut clients: Vec<AwsSdkClient> = Vec::new();

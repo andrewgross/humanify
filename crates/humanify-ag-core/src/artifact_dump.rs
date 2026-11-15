@@ -42,6 +42,8 @@ pub struct DumpSink {
 
 impl DumpSink {
     /// The sink over `dir`, created when missing.
+    // io: legacy effect site, listed in dev/census/effects-allowlist.json
+    #[allow(clippy::disallowed_methods)]
     pub fn create(dir: &Path) -> Result<DumpSink, String> {
         std::fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
         Ok(DumpSink {
@@ -50,6 +52,8 @@ impl DumpSink {
     }
 
     /// Write one section: `records` serialized to `<name>.json`.
+    // io: legacy effect site, listed in dev/census/effects-allowlist.json
+    #[allow(clippy::disallowed_methods)]
     pub fn section<T: Serialize + ?Sized>(&self, name: &str, records: &T) -> Result<(), String> {
         let path = self.dir.join(format!("{name}.json"));
         let file =
@@ -248,6 +252,8 @@ impl DispatchLog {
 
     /// `--dump-artifacts`: the part files opened in `dir` now (the dump's
     /// other files are still written once, at the end).
+    // io: legacy effect site, listed in dev/census/effects-allowlist.json
+    #[allow(clippy::disallowed_methods)]
     pub fn dump(params: CacheKeyParams, dir: &Path) -> std::io::Result<Self> {
         std::fs::create_dir_all(dir)?;
         let rows = LogRows::open(dir)?;
@@ -473,6 +479,8 @@ struct LogFiles {
     error: Option<String>,
 }
 
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn part(dir: &Path, name: &str) -> std::io::Result<BufWriter<std::fs::File>> {
     Ok(BufWriter::new(std::fs::File::create(dir.join(name))?))
 }
@@ -488,6 +496,8 @@ impl LogFiles {
         })
     }
 
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::let_underscore_must_use)]
     fn write(&mut self, site: &str, prompt: &str) {
         let target = match site {
             "vendor" => Some(&mut self.vendor),
@@ -514,11 +524,17 @@ impl LogFiles {
     }
 
     /// Remove the part files, no assembly.
+    // io: legacy effect site, listed in dev/census/effects-allowlist.json
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
     fn discard(self) {
         let _ = std::fs::remove_file(self.dir.join(VENDOR_PART));
         let _ = std::fs::remove_file(self.dir.join(NAMING_PART));
     }
 
+    // io: legacy effect site, listed in dev/census/effects-allowlist.json
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
     fn close(self) -> Result<(), String> {
         if let Some(e) = self.error {
             return Err(e);
@@ -559,6 +575,8 @@ impl LogFiles {
 /// recorded, in commit order, one JSON line each. Recording only — no
 /// decision reads it, and no row exists unless the flag asks for it.
 /// Returns the row count.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn write_ask_rows(path: &Path, rows: &[AskRow]) -> Result<usize, String> {
     let mut text = String::new();
     for row in rows {

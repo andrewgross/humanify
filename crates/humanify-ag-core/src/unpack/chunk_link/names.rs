@@ -219,6 +219,8 @@ fn chunk_keys(chunks: &[Chunk]) -> Vec<[u8; 32]> {
 /// the init `init<Name>` and the transfer carries it. When two chunks
 /// share a key (the same code up to names), [`Names::fresh`] gives the
 /// later one in the written order a `$k` suffix.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn content_stem(key: &[u8; 32]) -> String {
     const DIGITS: &[u8; 62] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     let mut n = u64::from_be_bytes(key[..8].try_into().unwrap_or_default());
@@ -311,6 +313,8 @@ fn default_of(
 }
 
 /// `.name`, or `["name"]` for a name that is not an identifier.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn member(name: &str) -> String {
     let ident = name
         .chars()

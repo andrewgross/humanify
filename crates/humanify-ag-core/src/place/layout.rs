@@ -32,6 +32,8 @@ pub const PLACEMENT_STATS_PATH: &str = ".humanify/placement-stats.json";
 pub const STAGE_HASHES_PATH: &str = ".humanify/stage-hashes.json";
 /// `findSplitLedgerIn(dir)`: the first existing candidate — `dir` IS the
 /// metadata folder, or `dir` is the tree root.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn find_split_ledger_in(dir: &Path) -> Option<PathBuf> {
     [dir.join(SPLIT_LEDGER_FILENAME), dir.join(SPLIT_LEDGER_PATH)]
         .into_iter()
