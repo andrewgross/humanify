@@ -9,13 +9,13 @@
 
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::modules::vendor_names::BunModulesManifest;
-use crate::place::layout::{METADATA_DIR, split_tree_root_of};
+use crate::place::layout::METADATA_DIR;
 use crate::rename::eligibility::{Eligibility, NeverRename};
 use crate::rename::name_profile::NameProfile;
-use crate::unpack::bun::{BUN_MODULES_MANIFEST, VENDOR_DIR, find_prior_tree_root};
+use crate::unpack::bun::{BUN_MODULES_MANIFEST, VENDOR_DIR};
 
 use super::carry::{CarryResult, carry_renames_into_bundle};
 use super::reconcile::{PostSplitInput, PostSplitResult, post_split_reconcile};
@@ -44,8 +44,8 @@ pub struct FinishInput<'a> {
     /// The runnable emit's file map keys, in emission order — None when the
     /// review tree was written instead (`--split-pure` or a decline).
     pub runnable: Option<&'a [String]>,
-    /// `--prior-version` (the prior release's `humanified.js`).
-    pub prior_version: Option<&'a Path>,
+    /// The prior release's tree (`--prior-version`), read by the shell.
+    pub prior: Option<&'a crate::prior_tree::PriorTree>,
     /// The input bundle (its directory resolves installed versions).
     pub input_file: &'a Path,
     /// The working directory the shell read: a relative `input_file`
@@ -209,7 +209,7 @@ fn relink_bun_modules(
     output_dir: &Path,
     manifest: &Manifest,
     split_files: &[String],
-    prior_root: Option<&Path>,
+    prior: Option<&crate::prior_tree::PriorFiles>,
     bridges: &[VendorBridge],
     interop: crate::toolchain::InteropHelpers,
     report: &mut FinishReport,
@@ -224,7 +224,7 @@ fn relink_bun_modules(
         fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
     }
     write_file(&runtime_path, interop.relink_runtime())?;
-    let mut inherit = prior_root.map(VendorBodyInheritor::new);
+    let mut inherit = prior.map(VendorBodyInheritor::new);
     let mut bridged_reads = 0usize;
     for (file_name, _) in &manifest.factories {
         let abs = output_dir.join(file_name);
@@ -283,10 +283,14 @@ pub fn finish_split_output(
         report.messages.push(leftover_warning(&leftovers));
     }
     if let (Some(runnable), Some(manifest)) = (input.runnable, manifest.as_ref()) {
-        let prior_root: Option<PathBuf> = if input.switches.vendor_inherit_disabled {
+        // The inherit reads a prior tree that has a vendor manifest.
+        let inherit_from = if input.switches.vendor_inherit_disabled {
             None
         } else {
-            input.prior_version.and_then(find_prior_tree_root)
+            input
+                .prior
+                .filter(|p| p.has_vendor_manifest())
+                .map(|p| &p.files)
         };
         {
             // The finish's constituents were dark (docs/perf-inventory.md
@@ -299,7 +303,7 @@ pub fn finish_split_output(
                 output_dir,
                 manifest,
                 runnable,
-                prior_root.as_deref(),
+                inherit_from,
                 &input.bridges,
                 input.interop,
                 report,
@@ -388,7 +392,7 @@ pub fn finish_stage(
     report.library_names = Some(library_names);
     let reconciled = reconcile_post_split(
         input.output_dir,
-        input.prior_version,
+        input.prior.map(|p| &p.files),
         input.switches,
         PostSplitRules {
             name_profile: input.name_profile,
@@ -437,7 +441,7 @@ pub struct PostSplitRules<'r> {
 /// changed), the bundle `.humanify/humanified.js`.
 pub fn reconcile_post_split(
     output_dir: &Path,
-    prior_version: Option<&Path>,
+    prior: Option<&crate::prior_tree::PriorFiles>,
     switches: FinishSwitches,
     rules: PostSplitRules<'_>,
     layout: crate::toolchain::BundleLayout,
@@ -448,10 +452,9 @@ pub fn reconcile_post_split(
         never_rename,
         differ,
     } = rules;
-    let Some(prior_version) = prior_version else {
+    let Some(prior) = prior else {
         return Ok(None);
     };
-    let prior_root = split_tree_root_of(prior_version);
     let ledger_path = output_dir.join(METADATA_DIR).join("split-ledger.json");
     let (mut ledger, eligible) = {
         let _ph = crate::profiling::phase("split:finish:reconcile-ledger");
@@ -462,7 +465,7 @@ pub fn reconcile_post_split(
         )
     };
     let read_fresh = |f: &str| read_opt(output_dir, f);
-    let read_prior = |f: &str| read_opt(&prior_root, f);
+    let read_prior = |f: &str| prior.text_lossy(f).map(std::borrow::Cow::into_owned);
     let result = {
         // The per-file read + compute bulk (the reads interleave with the
         // diffing inside post_split_reconcile — one span spans it all).

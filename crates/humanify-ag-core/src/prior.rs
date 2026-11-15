@@ -46,7 +46,6 @@ pub fn assert_prior_looks_like_same_program(
 // ---------------------------------------------------------------------------
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 
 use oxc_allocator::Allocator;
 use serde_json::{Value, json};
@@ -442,28 +441,11 @@ pub fn parse_side<'a>(
     Ok(ingest)
 }
 
-/// The parse-count pin's counter: how many parses of a PRIOR text this
-/// process has run. Observation only — no decision reads it — but the
-/// match verb's multi-file pin asserts it stays at ONE per run: the prior
-/// side is the run's shared state, not per-call work to redo per file.
-static PRIOR_PARSES: AtomicU64 = AtomicU64::new(0);
-
-/// How many prior parses ran so far ([`PRIOR_PARSES`] is private; tests
-/// and diagnostics read this).
-pub fn prior_parse_count() -> u64 {
-    PRIOR_PARSES.load(Relaxed)
-}
-
-/// Zero the parse counter. Tests call this just before a run whose prior
-/// parse count they pin.
-pub fn reset_prior_parse_count() {
-    PRIOR_PARSES.store(0, Relaxed);
-}
-
-/// Parse the PRIOR side's text — every prior parse routes here, so the
-/// counter above counts them all (the name in errors is `prior.js`).
+/// Parse the PRIOR side's text — every prior parse routes here, under one
+/// `prior:parse` phase span, so a profile counts them all (the match
+/// verb's pin holds it at ONE per run). The name in errors is `prior.js`.
 fn parse_prior<'a>(allocator: &'a Allocator, prior: &'a str) -> Result<Ingest<'a>, String> {
-    PRIOR_PARSES.fetch_add(1, Relaxed);
+    let _ph = crate::profiling::phase("prior:parse");
     parse_side(allocator, prior, "prior.js")
 }
 

@@ -43,9 +43,10 @@ pub struct SplitOptions<'a, 'n> {
     /// fresh grouping.
     pub markers: MarkerOffer,
     pub prior: Option<&'a StableSplitLedger>,
-    /// The prior TREE's root (`--prior-version`'s tree): each importer's
-    /// require aliases are carried from its own prior file (finding #88).
-    pub prior_tree: Option<&'a std::path::Path>,
+    /// The prior TREE's files (`--prior-version`'s tree): each importer's
+    /// require aliases are carried from its own prior file, and the entry
+    /// order from the prior's entry file.
+    pub prior_tree: Option<&'a crate::prior_tree::PriorFiles>,
     /// The tiers regime's carry (`renameResult.priorCarry`).
     pub carry: Option<PriorCarry>,
     /// The fresh regime's file namer — handed over whatever the method;
@@ -221,9 +222,6 @@ fn build_ledger(
 }
 
 /// `stableSplitFromCode` + `tryEmitRunnableCjs` over the shipped text.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods)]
 pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<SplitOutcome, String> {
     use crate::profiling::phase;
     let ph = phase("split:input");
@@ -274,14 +272,10 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         shipped,
         PlacementGate {
             regime: method.regime,
-            prior_ledger: None,
-            prior_text: None,
-            match_map: None,
             carry: options.carry,
             switches: options.placement,
             namer: options.namer.filter(|_| use_namer),
             reviser: options.reviser.filter(|_| use_reviser),
-            layout,
             module_wrappers: options.module_wrappers,
             module_ends,
             library: options.library,
@@ -295,7 +289,6 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         },
         options.prior,
         trail,
-        None,
     )?;
 
     drop(ph);
@@ -388,13 +381,11 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         None
     } else {
         let scopes = BabelScopes::build(ingest.semantic());
-        let prior_entry = options.prior_tree.and_then(|root| {
-            read_prior_entry_order(|f| std::fs::read_to_string(root.join(f)).ok())
-        });
-        let prior_aliases = options.prior_tree.map(|root| {
-            read_prior_import_aliases(&review.files, |f| {
-                std::fs::read_to_string(root.join(f)).ok()
-            })
+        let prior_entry = options
+            .prior_tree
+            .and_then(|tree| read_prior_entry_order(|f| tree.text(f).map(str::to_string)));
+        let prior_aliases = options.prior_tree.map(|tree| {
+            read_prior_import_aliases(&review.files, |f| tree.text(f).map(str::to_string))
         });
         Some(emit_runnable_cjs(&RunnableInput {
             code: shipped,

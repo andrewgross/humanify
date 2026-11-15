@@ -385,7 +385,7 @@ struct UnpackArgs {
 /// summary line (+ the LLM cache counts when replaying).
 fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String> {
     use humanify_ag_core::modules::vendor_names::{ProviderVendorNamer, VendorNamer};
-    use humanify_ag_core::unpack::{AdapterOutcome, AdapterRun, bun, gate, run_adapter};
+    use humanify_ag_core::unpack::{AdapterOutcome, AdapterRun, gate, run_adapter};
     use std::path::Path;
 
     let code = humanify_ag_core::unpack::input::read_input(Path::new(input))?.text;
@@ -410,12 +410,15 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         inner: n as &mut dyn VendorNamer,
         batches: Vec::new(),
     });
-    let prior = args
-        .prior_version
-        .as_deref()
-        .map(|p| bun::load_prior_vendor(Path::new(p)))
-        .transpose()?
-        .flatten();
+    let prior = match args.prior_version.as_deref() {
+        // The verb reads the prior's vendor record only, not its text.
+        Some(p) => {
+            humanify_ag_cli::prior_tree::load_prior_tree(Path::new(p), String::new())?
+                .0
+                .vendor
+        }
+        None => None,
+    };
     // The one dispatch site (`unpack::run_adapter`): every adapter gets
     // the namer, the prior and the shim, and takes what it uses.
     let outcome = match run_adapter(

@@ -5,6 +5,8 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::prior_tree::PriorFiles;
+
 /// Folder holding the humanified app code (the nested split tree).
 pub const CODE_DIR: &str = "src";
 /// Folder holding vendored libraries (Bun CJS factories), one file each.
@@ -30,19 +32,38 @@ pub const HUMANIFIED_SOURCE_PATH: &str = ".humanify/humanified.js";
 pub const PLACEMENT_STATS_PATH: &str = ".humanify/placement-stats.json";
 /// Stage-boundary content fingerprints beside the ledger.
 pub const STAGE_HASHES_PATH: &str = ".humanify/stage-hashes.json";
-/// `findSplitLedgerIn(dir)`: the first existing candidate — `dir` IS the
-/// metadata folder, or `dir` is the tree root.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub fn find_split_ledger_in(dir: &Path) -> Option<PathBuf> {
-    [dir.join(SPLIT_LEDGER_FILENAME), dir.join(SPLIT_LEDGER_PATH)]
-        .into_iter()
-        .find(|candidate| candidate.exists())
+/// The folder `--prior-version` sits in, as a path prefix inside its tree
+/// ([`split_tree_root_of`]): `.humanify/` when the file is in the metadata
+/// folder, else empty.
+fn prior_dir_in_tree(prior_file: &Path) -> String {
+    let dir = prior_file.parent().unwrap_or(Path::new(""));
+    if dir.file_name().and_then(|n| n.to_str()) == Some(METADATA_DIR) {
+        format!("{METADATA_DIR}/")
+    } else {
+        String::new()
+    }
 }
 
-/// `findSplitLedgerPath(priorFile)`: the ledger beside `--prior-version`.
-pub fn find_split_ledger_path(prior_file: &Path) -> Option<PathBuf> {
-    find_split_ledger_in(prior_file.parent().unwrap_or(Path::new("")))
+/// `--prior-version`'s own path inside its tree.
+pub fn prior_file_in_tree(prior_file: &Path) -> String {
+    let name = prior_file
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    format!("{}{name}", prior_dir_in_tree(prior_file))
+}
+
+/// `findSplitLedgerPath(priorFile)`: the ledger beside `--prior-version`,
+/// as a path inside its tree — the first candidate the tree holds: the
+/// file's folder IS the metadata folder, or that folder is the tree root.
+pub fn prior_ledger_in(prior_file: &Path, files: &PriorFiles) -> Option<String> {
+    let dir = prior_dir_in_tree(prior_file);
+    [
+        format!("{dir}{SPLIT_LEDGER_FILENAME}"),
+        format!("{dir}{SPLIT_LEDGER_PATH}"),
+    ]
+    .into_iter()
+    .find(|candidate| files.contains(candidate))
 }
 
 /// `splitTreeRootOf(priorFile)`: the tree root `--prior-version` belongs

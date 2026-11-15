@@ -191,7 +191,7 @@ given).
 | I10 | `modules.rs:181` (`identify_cjs_factory`) via `prior.rs:597` → `graph.rs:1479,1599`                      | EVERY input file (any bundler) is searched for Bun's `{exports:{}}` marker, then esbuild's `__commonJS`; whatever is found marks "third-party factory" bodies, and the naming stage skips every function inside them                                                                                       | Bun, esbuild | fixed (#80: the naming-time scan is deleted; the unpack decides once) | Medium |
 | I11 | `unpack/bun.rs:897` (`identify_bun_require`)                                                             | the module `require` is Bun's `createRequire(import.meta.url)` alias, rewritten back to `require(` in vendor files                                                                                                                                                                                         | Bun          | harmless                                                              | Low    |
 | I12 | `unpack/bun.rs:55`, `modules/vendor_names.rs:352`                                                        | the vendor record is named `vendor/_bun-modules.json` / `BunModulesManifest` for both adapters; its doc still says the stamp is "always bun"                                                                                                                                                               | Bun          | harmless (naming only)                                                | Low    |
-| I13 | `unpack/bun.rs:152` (`load_prior_vendor`)                                                                | a prior tree's vendor record is read whatever adapter wrote it                                                                                                                                                                                                                                             | all          | harmless                                                              | Low    |
+| I13 | `unpack/bun.rs` (`PriorVendor::parse`)                                                                   | a prior tree's vendor record is read whatever adapter wrote it                                                                                                                                                                                                                                             | all          | harmless                                                              | Low    |
 | I14 | `finish/driver.rs:83-87` (`load_bun_manifest`)                                                           | the finish re-links vendor files only when the record's stamp is `"bun"` or `"esbuild"` — **FIXED 2026-10-04**: it accepts the stamp of any registered adapter that writes the record (`UnpackAdapter::of_vendor_record_stamp`)                                                                            | Bun, esbuild | fixed                                                                 | Medium |
 | I15 | `modules.rs:58`, `modules.rs:478` (`factory_arg_function`)                                               | the two factory spellings (function passed directly; esbuild's `{"path"(exports, module){…}}`) are both accepted on every input                                                                                                                                                                            | Bun, esbuild | harmless (by shape)                                                   | Low    |
 
@@ -604,9 +604,10 @@ module declaring the same identity, equal and unique on both sides (finding
 the module's own declared identity (P17) → an LLM guess → `lib_<hash>`.
 (Before #95 a license banner and a "distinctive URL" came first; both are
 P17 readers now, and the URL only a hint shown to the model.) Before the ladder, a module
-that is only app text is set aside as an app asset (below). The prior is
-read by `unpack::bun::load_prior_vendor`; an old-era record is re-keyed by
-content.
+that is only app text is set aside as an app asset (below). The prior's
+record is read by `unpack::bun::PriorVendor::parse` (inside
+`prior_tree::PriorTree::parse`, over the files the shell read); an old-era
+record is re-keyed by content.
 
 **Already generic:** the record format, the naming ladder and the content
 re-key do not depend on the bundler. A new vendor-extracting plugin should

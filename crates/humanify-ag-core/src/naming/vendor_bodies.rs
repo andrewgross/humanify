@@ -286,24 +286,6 @@ pub fn bodies_of_bridge(
     Ok(out)
 }
 
-/// Whether the prior tree at `root` holds vendored bodies this pass named
-/// (its [`VENDOR_NAMING_SOURCE`] is there) — the content carry then pairs
-/// blind to binding spellings (`modules::vendor_pairing::blind_text`).
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub fn prior_bodies_named(root: &std::path::Path) -> bool {
-    root.join(VENDOR_NAMING_SOURCE).is_file()
-}
-
-/// The prior release's joined named bodies, when its tree has them.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods)]
-pub fn prior_vendor_naming(prior_file: &std::path::Path) -> Option<String> {
-    let root = crate::unpack::bun::find_prior_tree_root(prior_file)?;
-    std::fs::read_to_string(root.join(VENDOR_NAMING_SOURCE)).ok()
-}
-
 /// Write the pass's result: every body whose text changed, and the joined
 /// text the next release reads as its prior. Returns the files rewritten.
 // io: legacy effect site, listed in dev/census/effects-allowlist.json

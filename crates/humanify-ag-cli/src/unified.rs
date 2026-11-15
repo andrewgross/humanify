@@ -49,6 +49,7 @@ use crate::log::{debug_reset_output, debug_set_output, verbose};
 use crate::pipeline_config::enum_name;
 use crate::progress::{ProgressRenderer, create_progress_renderer};
 use crate::unminify::{filter_libraries, report_vendor_naming, unpack_bundle};
+use crate::util::node_fs_error;
 
 /// A failure below the configuration: `Error: <message>` after the
 /// finally (the TS uncaught-exception class, its headline only).
@@ -57,18 +58,6 @@ struct Crash(String);
 impl From<String> for Crash {
     fn from(s: String) -> Self {
         Crash(s)
-    }
-}
-
-/// A Node `fs` error's message (`ENOENT: no such file or directory, open
-/// '<path>'`), the headline the TS crash prints for a failed read.
-fn node_fs_error(e: &std::io::Error, syscall: &str, path: &str) -> String {
-    use std::io::ErrorKind;
-    match e.kind() {
-        ErrorKind::NotFound => format!("ENOENT: no such file or directory, {syscall} '{path}'"),
-        ErrorKind::PermissionDenied => format!("EACCES: permission denied, {syscall} '{path}'"),
-        ErrorKind::IsADirectory => "EISDIR: illegal operation on a directory, read".to_string(),
-        _ => format!("{e}, {syscall} '{path}'"),
     }
 }
 
@@ -366,14 +355,14 @@ fn pipeline_body(
         });
         let setup = (|| -> Result<
             (
-                Option<String>,
+                crate::prior_tree::PriorInputs,
                 NamingConfig,
                 humanify_ag_core::artifact_dump::DispatchLog,
                 LibraryLoad,
             ),
             Crash,
         > {
-            let prior = load_prior_version_code(config, renderer)?;
+            let prior = load_prior_inputs(config, renderer)?;
             let mut naming_config = naming_config(config, &toolchain);
             // The module step names each recorded module once, for its
             // wrapper and its file — offered whenever the toolchain offers
@@ -429,7 +418,6 @@ fn pipeline_body(
     // Stages 3-5: unpack (the Bun adapter names its vendor files inside),
     // then library detection picks the files the per-file stages process.
     let out_dir = config.io.output_dir.as_str();
-    let prior_path = config.matching.prior_version.as_deref().map(Path::new);
     let ph = phase("unpack+vendor");
     let mut unpacked = unpack_bundle(
         &bundled_code,
@@ -437,7 +425,7 @@ fn pipeline_body(
         &toolchain,
         provider,
         &mut dispatch_log,
-        prior_path,
+        prior.tree.as_ref(),
         switches.switch_on(Switch::ManifestPriorOrder),
         // `--library-matching report`: discovery runs, its rows go to the
         // library report (and the diagnostics), nowhere else. `names`
@@ -479,15 +467,14 @@ fn pipeline_body(
         .unwrap_or_default();
     let prior_modules = prior_module_carry(
         &unpacked.claimed_module_regions,
-        prior_path,
-        config.split.ledger.as_deref(),
+        prior.ledger.as_ref(),
         renderer,
     );
     let mut naming = NamingRun {
         split: config.split.enabled,
         config: naming_config,
         log: &mut dispatch_log,
-        prior: prior.as_deref(),
+        prior: prior.tree.as_ref().map(|t| t.code.as_str()),
         provider,
         profiler,
         mixed_files: &mixed_files,
@@ -514,7 +501,7 @@ fn pipeline_body(
         naming.failed_calls.naming += name_vendor_bodies_stage(
             Path::new(out_dir),
             bridge,
-            prior_path,
+            prior.tree.as_ref().and_then(|t| t.vendor_naming.as_deref()),
             &naming.config,
             provider,
             renderer,
@@ -559,8 +546,8 @@ fn pipeline_body(
             processed_source: Some(source),
             toolchain,
             vendor_record: unpacked.vendor_record.as_ref(),
-            prior_version: prior_path,
-            split_ledger: config.split.ledger.as_deref(),
+            prior: prior.tree.as_ref(),
+            ledger: prior.ledger.as_ref(),
             split_pure: config.split.pure,
             markers,
             switches,
@@ -1237,7 +1224,7 @@ fn detect_stage(
 fn name_vendor_bodies_stage(
     out_dir: &Path,
     bridge: &humanify_ag_core::naming::module_names::EraBridge,
-    prior_path: Option<&Path>,
+    prior: Option<&str>,
     config: &NamingConfig,
     provider: &dyn NameProvider,
     renderer: &mut dyn ProgressRenderer,
@@ -1245,14 +1232,13 @@ fn name_vendor_bodies_stage(
     use humanify_ag_core::naming::vendor_bodies as vb;
     let started = std::time::Instant::now();
     let bodies = vb::bodies_of_bridge(out_dir, bridge).map_err(Crash)?;
-    let prior = prior_path.and_then(vb::prior_vendor_naming);
     // No module step: the bodies are not the bundle's module markers.
     let mut config = config.clone();
     config.module_naming = None;
     let mut log = humanify_ag_core::artifact_dump::DispatchLog::off(config.params.clone());
     let Some(named) = vb::name_vendor_bodies(
         &bodies,
-        prior.as_deref(),
+        prior,
         &config,
         &provider,
         &humanify_ag_io::diff::compute_normal_diff,
@@ -1734,34 +1720,28 @@ fn naming_config(config: &Config, toolchain: &Toolchain) -> NamingConfig {
     }
 }
 
-/// What the prior's split ledger says about its modules, read once:
-/// the library placement by module content key (exp211, names mode — only
-/// when the unpack claimed regions, the era's placement plan being its one
-/// reader) and the app modules' init names by content (exp232, the module
-/// step's identity carry). An unreadable ledger carries nothing (the split
-/// stage reads the same file and reports it loudly); a ledger of another
-/// hash era carries nothing.
+/// What the prior's split ledger says about its modules: the library
+/// placement by module content key (names mode — only when the unpack
+/// claimed regions, the era's placement plan being its one reader) and the
+/// app modules' init names by content (the module step's identity carry).
+/// A ledger of another hash era carries nothing.
 fn prior_module_carry(
     regions: &[humanify_ag_core::naming::module_names::ClaimedRegion],
-    prior_path: Option<&Path>,
-    split_ledger: Option<&str>,
+    ledger: Option<&crate::prior_tree::PriorLedger>,
     renderer: &mut dyn ProgressRenderer,
 ) -> humanify_ag_core::naming::module_names::PriorModuleCarry {
     use humanify_ag_core::naming::module_names::{
         PriorModuleCarry, init_identity, prior_library_packages,
     };
-    let Some(path) = crate::split_stage::prior_split_ledger_path(prior_path, split_ledger) else {
-        return PriorModuleCarry::default();
-    };
-    let Ok(ledger) = humanify_ag_core::place::ledger::read_ledger(&path) else {
+    let Some(ledger) = ledger.map(|l| &l.ledger) else {
         return PriorModuleCarry::default();
     };
     let mut carry = PriorModuleCarry {
-        inits: init_identity::prior_module_inits(&ledger),
+        inits: init_identity::prior_module_inits(ledger),
         ..PriorModuleCarry::default()
     };
     if !regions.is_empty() {
-        carry.library = prior_library_packages(&ledger);
+        carry.library = prior_library_packages(ledger);
         renderer.message(&format!(
             "Library placement: {} prior vendor module(s) carry their package by content",
             carry.library.len()
@@ -1770,19 +1750,24 @@ fn prior_module_carry(
     carry
 }
 
-/// `loadPriorVersionCode`: an empty prior is an error, never a silent
+/// `loadPriorVersionCode`, now the whole prior read once
+/// (`crate::prior_tree`): an empty prior is an error, not a silent
 /// zero-transfer run.
-fn load_prior_version_code(
+fn load_prior_inputs(
     config: &Config,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<Option<String>, Crash> {
-    let Some(path) = config.matching.prior_version.as_deref() else {
-        return Ok(None);
-    };
-    let code = read_utf8(path)?;
-    if humanify_ag_model::js::trim(&code).is_empty() {
-        return Err(Crash(format!("--prior-version file is empty: {path}")));
+) -> Result<crate::prior_tree::PriorInputs, Crash> {
+    let prior_file = config.matching.prior_version.as_deref();
+    let inputs = crate::prior_tree::load_prior(
+        prior_file.map(Path::new),
+        config.split.ledger.as_deref().map(Path::new),
+    )
+    .map_err(|e| Crash(e.to_string()))?;
+    if let (Some(path), Some(tree)) = (prior_file, &inputs.tree) {
+        if humanify_ag_model::js::trim(&tree.code).is_empty() {
+            return Err(Crash(format!("--prior-version file is empty: {path}")));
+        }
+        renderer.message(&format!("Prior version: loaded from {path}"));
     }
-    renderer.message(&format!("Prior version: loaded from {path}"));
-    Ok(Some(code))
+    Ok(inputs)
 }
