@@ -10,9 +10,9 @@ pub mod detection;
 pub mod dump;
 pub mod hash_keys;
 pub mod js;
-pub mod jsshape;
 pub mod llm;
 pub mod numfmt;
+pub mod ordered;
 pub mod pipeline;
 pub mod profiling;
 pub mod stats;
@@ -27,6 +27,8 @@ mod js_test;
 mod llm_test;
 #[cfg(test)]
 mod numfmt_test;
+#[cfg(test)]
+mod ordered_test;
 #[cfg(test)]
 mod stats_test;
 #[cfg(test)]

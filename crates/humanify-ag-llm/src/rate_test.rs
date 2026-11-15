@@ -352,14 +352,10 @@ fn tracks_failed_calls() {
     );
 }
 
-fn number(v: &humanify_ag_model::js::JsValue, path: &[&str]) -> f64 {
-    let leaf = path.iter().fold(v, |v, k| {
-        v.as_object().and_then(|o| o.get(k)).expect("path")
-    });
-    match leaf {
-        humanify_ag_model::js::JsValue::Number(n) => *n,
-        _ => panic!("not a number"),
-    }
+fn number(stats: &humanify_ag_model::call_ledger::CallStats, path: &[&str]) -> f64 {
+    let v = serde_json::to_value(stats).expect("the stats serialize");
+    let leaf = path.iter().fold(&v, |v, k| v.get(k).expect("path"));
+    leaf.as_f64().expect("a number")
 }
 
 /// requestsPerMinute (no TS test): with a limit of 2, the third request

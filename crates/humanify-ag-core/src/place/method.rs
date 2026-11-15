@@ -136,7 +136,7 @@ pub fn method_record(choice: &SplitChoice) -> humanify_ag_model::stats::SplitMet
         method: method_name(choice.regime).to_string(),
         reason: choice.reason.clone(),
         marker_coverage: choice.coverage.map(|c| c.share()),
-        marker_modules: choice.coverage.map(|c| c.modules as f64),
+        marker_modules: choice.coverage.map(|c| c.modules as u64),
         threshold: MARKER_COVERAGE_THRESHOLD,
     }
 }

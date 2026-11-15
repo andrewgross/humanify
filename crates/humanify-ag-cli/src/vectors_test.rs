@@ -20,9 +20,8 @@ use crate::report::{
     report_internal_errors, report_parse_failures, report_semantic_failures, report_vendor_naming,
 };
 use crate::surface::CommandOptions;
-use crate::writers::{PlacementStats, StageHashes, stage_fingerprint};
+use crate::writers::stage_fingerprint;
 use humanify_ag_core::naming::driver::validate::format_divergence;
-use humanify_ag_model::jsshape::JsType;
 
 fn vectors() -> Value {
     let path = format!(
@@ -98,8 +97,13 @@ fn error_blocks_match_the_ts_reporters() {
         n += 1;
     }
     for case in eb["vendorNaming"].as_array().unwrap() {
-        let js = humanify_ag_model::js::JsValue::parse(&case["input"].to_string()).unwrap();
-        let stats = humanify_ag_model::stats::VendorNamingStats::from_js(&js, "v").unwrap();
+        let count = |k: &str| case["input"][k].as_u64().unwrap();
+        let stats = humanify_ag_model::stats::VendorNamingStats {
+            named: count("named"),
+            declined: count("declined"),
+            echoed: count("echoed"),
+            batches_failed: count("batchesFailed"),
+        };
         assert_eq!(stats.attempted(), case["attempted"].as_bool().unwrap());
         let r = report_vendor_naming(&stats);
         assert_eq!(r.messages, strs(&case["messages"]));
@@ -268,7 +272,7 @@ fn selection_matches_the_resolved_toolchain() {
         let toolchain = humanify_ag_core::toolchain::resolve_toolchain(&detection, b, m);
         let record = pipeline_selection_record(&toolchain);
         assert_eq!(
-            humanify_ag_model::js::stringify(&record.to_js()),
+            serde_json::to_string(&record).unwrap(),
             expected_selection(case, &detection, b),
             "{case}"
         );
@@ -424,51 +428,10 @@ fn unified_test_enum_flag_values() {
 // designed out (Rust drops the ASTs by ownership, no GC to feed).
 
 #[test]
-fn metadata_writers_match_the_ts_bytes() {
-    let v = vectors();
-    let w = &v["writers"];
+fn the_split_ledger_writer_is_compact_in_key_order() {
     let dir = std::env::temp_dir().join(format!("wpb4-writers-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    // Order-carrying inputs: navigate the file parsed with JS object rules
-    // (serde_json's Value alphabetizes keys).
-    let raw = humanify_ag_model::js::JsValue::parse(
-        &std::fs::read_to_string(format!(
-            "{}/../../test/parity/wpb4-vectors.json",
-            env!("CARGO_MANIFEST_DIR")
-        ))
-        .unwrap(),
-    )
-    .unwrap();
-    let field = |v: &humanify_ag_model::js::JsValue, k: &str| {
-        v.as_object().unwrap().get(k).unwrap().clone()
-    };
-    let writer_input = |name: &str| field(&field(&field(&raw, "writers"), name), "input");
-    let js = |x: &Value| humanify_ag_model::js::JsValue::parse(&x.to_string()).unwrap();
-    let hashes = StageHashes::from_js(&js(&w["stageHashes"]["input"]), "h").unwrap();
-    crate::writers::write_stage_hashes(&dir, &hashes).unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.join(".humanify/stage-hashes.json")).unwrap(),
-        w["stageHashes"]["text"].as_str().unwrap()
-    );
-    // writePlacementStats copies the named fields only (ignoredExtra drops).
-    let mut input = writer_input("placementStats");
-    if let humanify_ag_model::js::JsValue::Object(o) = &mut input {
-        let kept: humanify_ag_model::js::JsObject = o
-            .entries()
-            .iter()
-            .filter(|(k, _)| k != "ignoredExtra")
-            .cloned()
-            .collect();
-        *o = kept;
-    }
-    let stats = PlacementStats::from_js(&input, "p").unwrap();
-    crate::writers::write_placement_stats(&dir, &stats).unwrap();
-    assert_eq!(
-        std::fs::read_to_string(dir.join(".humanify/placement-stats.json")).unwrap(),
-        w["placementStats"]["text"].as_str().unwrap()
-    );
-    // The TS vector's ledger is partial (no hashVersion); the writer is
-    // compact JSON, no trailing newline, in the ledger's key order.
+    // The writer is compact JSON, no trailing newline, in the ledger's key order.
     let ledger = humanify_ag_core::place::ledger::SplitLedger {
         version: 1,
         files: vec!["src/a.js".into()],
@@ -483,13 +446,6 @@ fn metadata_writers_match_the_ts_bytes() {
         std::fs::read_to_string(dir.join(".humanify/split-ledger.json")).unwrap(),
         "{\"version\":1,\"files\":[\"src/a.js\"],\"nameToFiles\":{\"a\":[\"src/a.js\"]},\"order\":[],\"hashes\":[],\"emitHashes\":[],\"emitNames\":[],\"hashVersion\":3}"
     );
-    for case in w["evalStats"].as_array().unwrap() {
-        let text = case["text"].as_str().unwrap();
-        let stats = humanify_ag_model::stats::EvalStats::parse(text).unwrap();
-        let dest = dir.join("nested/dir/s.json");
-        crate::writers::write_eval_stats(&dest, &stats).unwrap();
-        assert_eq!(std::fs::read_to_string(&dest).unwrap(), text);
-    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -15,7 +15,7 @@ use humanify_ag_core::profiling::Profiler;
 use humanify_ag_core::unpack::webcrack::WebcrackShim;
 use humanify_ag_core::unpack::{AdapterOutcome, AdapterRun, UnpackedFile, bun, run_adapter};
 use humanify_ag_model::llm::NameProvider;
-use humanify_ag_model::profiling::JsObject;
+use humanify_ag_model::profiling::Fields;
 
 use crate::log::verbose;
 use crate::progress::ProgressRenderer;
@@ -174,7 +174,7 @@ pub fn unpack_bundle(
         ),
     };
     span.end(Some(
-        JsObject::new()
+        Fields::new()
             .with("fileCount", files.len())
             .with("adapter", adapter.name()),
     ));
@@ -322,7 +322,7 @@ pub fn filter_libraries(
     let span = profiler.pipeline_span("library-detection");
     let detection = detect_libraries(detector, &files)?;
     span.end(Some(
-        JsObject::new()
+        Fields::new()
             .with("libraryCount", detection.library_files.len())
             .with("mixedCount", detection.mixed_files.len())
             .with("detector", detector.name()),

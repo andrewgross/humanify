@@ -27,7 +27,6 @@ use humanify_ag_core::place::tiers::{PLACEMENT_TIERS, PlacementSwitches, placeme
 use humanify_ag_core::place::trail::PlacementTrail;
 use humanify_ag_core::rename::transfer::carry::PriorCarry;
 use humanify_ag_model::js::{JsObject, JsValue, stringify};
-use humanify_ag_model::jsshape::CountMap;
 use humanify_ag_model::llm::NameProvider;
 use humanify_ag_model::stats::SplitMethodStats;
 
@@ -536,21 +535,21 @@ fn commit_and_finish(
         }
     }
     let stats = &outcome.stats;
-    let by_tier = CountMap(
+    let by_tier = humanify_ag_model::ordered::OrderedMap(
         PLACEMENT_TIERS
             .iter()
             .zip(stats.tiers.by_tier)
-            .map(|(t, n)| (t.name().to_string(), n as f64))
+            .map(|(t, n)| (t.name().to_string(), n as u64))
             .collect(),
     );
     write_placement_stats(
         out,
         &PlacementStats {
-            statements: stats.statements as f64,
-            files: stats.files as f64,
-            folders: stats.folders as f64,
-            inherited: stats.tiers.inherited as f64,
-            residue_locality: stats.tiers.residue_locality as f64,
+            statements: stats.statements as u64,
+            files: stats.files as u64,
+            folders: stats.folders as u64,
+            inherited: stats.tiers.inherited as u64,
+            residue_locality: stats.tiers.residue_locality as u64,
             by_tier,
         },
     )

@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use humanify_ag_model::call_ledger::CallLedger;
-use humanify_ag_model::js::JsValue;
 use humanify_ag_model::llm::{
     BatchRenameRequest, CacheKeyParams, CallSite, LlmCall, LlmConfig, NameProvider, RateLimitConfig,
 };
@@ -53,16 +52,13 @@ fn live(server: &StubServer, ledger: &Arc<CallLedger>) -> LlmClient<crate::provi
     .unwrap()
 }
 
-fn n(v: &JsValue, path: &str) -> f64 {
-    let leaf = path.split('.').fold(v, |v, k| {
-        v.as_object()
-            .and_then(|o| o.get(k))
-            .unwrap_or_else(|| panic!("no {k} in {path}"))
+fn n(stats: &humanify_ag_model::call_ledger::CallStats, path: &str) -> f64 {
+    let v = serde_json::to_value(stats).expect("the stats serialize");
+    let leaf = path.split('.').fold(&v, |v, k| {
+        v.get(k).unwrap_or_else(|| panic!("no {k} in {path}"))
     });
-    match leaf {
-        JsValue::Number(x) => *x,
-        other => panic!("{path} is {other:?}"),
-    }
+    leaf.as_f64()
+        .unwrap_or_else(|| panic!("{path} is not a number"))
 }
 
 /// The first request gets a 503 (retried by the client), every later one

@@ -260,7 +260,6 @@ fn post_split_rows_are_keyed_in_their_split_file() {
 #[test]
 fn post_split_trail_rows_name_their_split_file() {
     use crate::naming::report::diagnostics::{AnchorTexts, ExtraText, trail_report};
-    use humanify_ag_model::js::JsValue;
     let text = "var é = 1;\nvar a = 2;\n";
     let extra = vec![ExtraText {
         file: "src/tools/a.js".into(),
@@ -275,20 +274,9 @@ fn post_split_trail_rows_name_their_split_file() {
         },
         &extra,
     );
-    let JsValue::Object(report) = report else {
-        panic!("an object")
-    };
-    let Some(JsValue::Array(trails)) = report.get("trails") else {
-        panic!("trails")
-    };
-    let JsValue::Object(row) = &trails[0] else {
-        panic!("a row")
-    };
-    assert_eq!(row.get("declText"), Some(&JsValue::str("src/tools/a.js")));
-    let Some(JsValue::Object(span)) = row.get("declSpan") else {
-        panic!("declSpan")
-    };
+    let row = &report.trails[0];
+    assert_eq!(row.decl_text, "src/tools/a.js");
     // `é` is 2 bytes / 1 unit: `a` sits at byte 16, JS index 15.
-    assert_eq!(span.get("start"), Some(&JsValue::Number(15.0)));
-    assert_eq!(row.get("loc"), Some(&JsValue::str("2:4")));
+    assert_eq!(row.decl_span.start, 15);
+    assert_eq!(row.loc, "2:4");
 }

@@ -105,16 +105,15 @@ pub fn report_vendor_naming(stats: &VendorNamingStats) -> Report {
     if !stats.attempted() {
         return Report::default();
     }
-    let n = humanify_ag_model::js::number_to_string;
-    let mut parts = vec![format!("{} named", n(stats.named))];
-    if stats.declined > 0.0 {
-        parts.push(format!("{} declined", n(stats.declined)));
+    let mut parts = vec![format!("{} named", stats.named)];
+    if stats.declined > 0 {
+        parts.push(format!("{} declined", stats.declined));
     }
-    if stats.echoed > 0.0 {
-        parts.push(format!("{} echoed the key", n(stats.echoed)));
+    if stats.echoed > 0 {
+        parts.push(format!("{} echoed the key", stats.echoed));
     }
-    if stats.batches_failed > 0.0 {
-        parts.push(format!("{} batch(es) failed", n(stats.batches_failed)));
+    if stats.batches_failed > 0 {
+        parts.push(format!("{} batch(es) failed", stats.batches_failed));
     }
     Report {
         messages: vec![format!("Vendor naming: {}", parts.join(", "))],

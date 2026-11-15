@@ -742,14 +742,11 @@ fn a_bound_prior_does_not_warn() {
 /// `x` (never processed). All three are single letters, so the general
 /// split and its single-letter slice assert the same numbers.
 fn assert_survivor_split(p: &humanify_ag_model::stats::ProvenanceSplit) {
-    assert_eq!(p.total, 3.0, "i, j and x all survive");
-    assert_eq!(p.model_chosen, 1.0, "the deliberately applied i");
-    assert_eq!(p.asked_kept, 1.0, "the declined j");
-    assert_eq!(p.exhausted, 0.0);
-    assert_eq!(
-        p.never_asked, 1.0,
-        "the taint-hidden x — finding #64's class"
-    );
+    assert_eq!(p.total, 3, "i, j and x all survive");
+    assert_eq!(p.model_chosen, 1, "the deliberately applied i");
+    assert_eq!(p.asked_kept, 1, "the declined j");
+    assert_eq!(p.exhausted, 0);
+    assert_eq!(p.never_asked, 1, "the taint-hidden x — finding #64's class");
 }
 
 /// The same fixture's in-stage per-binding classification: the eval-taint
@@ -759,17 +756,17 @@ fn assert_survivor_split(p: &humanify_ag_model::stats::ProvenanceSplit) {
 fn assert_binding_split(b: &humanify_ag_model::stats::BindingProvenance) {
     assert_eq!(b.join, "per-binding");
     assert_eq!(
-        b.total, 2.0,
+        b.total, 2,
         "i and j — the eval-taint rule keeps the rest out"
     );
     assert_eq!(
-        b.renamed, 0.0,
+        b.renamed, 0,
         "the waves' fn renames sit in the frozen module scope"
     );
-    assert_eq!(b.model_chosen, 1.0, "the carried i");
-    assert_eq!(b.asked_kept, 1.0, "the declined j");
-    assert_eq!(b.exhausted, 0.0);
-    assert_eq!(b.never_asked, 0.0);
+    assert_eq!(b.model_chosen, 1, "the carried i");
+    assert_eq!(b.asked_kept, 1, "the declined j");
+    assert_eq!(b.exhausted, 0);
+    assert_eq!(b.never_asked, 0);
 }
 
 /// Andrew's 2026-09-30 decision, end to end: single letters are
@@ -903,17 +900,17 @@ fn the_stats_reask_block_maps_the_processor_and_sweep_counters() {
     assert_eq!(
         stats,
         humanify_ag_model::stats::ReaskStats {
-            unrecoverable_rejections: 1.0,
-            late_rejections: 2.0,
-            invalid_suggestion_finishes: 3.0,
-            all_failed_windows: 4.0,
-            sweep_reasked: 6.0,
-            sweep_reask_applied: 4.0,
-            sweep_reask_dropped: 2.0,
-            collision_handoffs: Some(7.0),
-            lane_end_handoffs: Some(8.0),
-            ladder_at_lane_end: Some(2.0),
-            ladder_at_barrier: Some(1.0),
+            unrecoverable_rejections: 1,
+            late_rejections: 2,
+            invalid_suggestion_finishes: 3,
+            all_failed_windows: 4,
+            sweep_reasked: 6,
+            sweep_reask_applied: 4,
+            sweep_reask_dropped: 2,
+            collision_handoffs: Some(7),
+            lane_end_handoffs: Some(8),
+            ladder_at_lane_end: Some(2),
+            ladder_at_barrier: Some(1),
         }
     );
     // An absent sweep is zero, not an error; the backup counters are
@@ -926,10 +923,10 @@ fn the_stats_reask_block_maps_the_processor_and_sweep_counters() {
     assert_eq!(
         empty,
         humanify_ag_model::stats::ReaskStats {
-            collision_handoffs: Some(0.0),
-            lane_end_handoffs: Some(0.0),
-            ladder_at_lane_end: Some(0.0),
-            ladder_at_barrier: Some(0.0),
+            collision_handoffs: Some(0),
+            lane_end_handoffs: Some(0),
+            ladder_at_lane_end: Some(0),
+            ladder_at_barrier: Some(0),
             ..humanify_ag_model::stats::ReaskStats::default()
         }
     );

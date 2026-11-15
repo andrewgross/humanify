@@ -8,9 +8,10 @@
 
 use std::collections::HashMap;
 
-use humanify_ag_model::js::{JsObject, JsValue, math_round};
-use humanify_ag_model::jsshape::JsType;
+use humanify_ag_model::js::math_round;
+use humanify_ag_model::ordered::OrderedMap;
 use humanify_ag_model::stats::{CoverageSummary, TransferStatsByTier};
+use serde::Serialize;
 
 use super::{ContentionEvent, IdentifierOutcome, RenameReport, Status};
 use crate::babel_view::BabelLines;
@@ -63,48 +64,60 @@ impl Utf16Map {
     }
 }
 
-fn num(n: impl Into<f64>) -> JsValue {
-    JsValue::Number(n.into())
+/// One attempt of a report entry's trail.
+#[derive(Clone, Serialize)]
+struct AttemptRow {
+    round: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proposed: Option<String>,
+    result: &'static str,
 }
 
-fn obj(entries: Vec<(&str, Option<JsValue>)>) -> JsValue {
-    let mut o = JsObject::new();
-    for (k, v) in entries {
-        o.insert_opt(k, v);
+/// One per-identifier outcome row: the outcome's own fields, then the
+/// report's shared provenance (`functionId`, `strategy`, `structuralHash`,
+/// `trail`).
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutcomeRow {
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    new_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    round: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    suggestion: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attempts: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
+    function_id: String,
+    strategy: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    structural_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    trail: Option<Vec<AttemptRow>>,
+}
+
+/// A row carrying `report`'s provenance, the outcome fields left empty.
+fn provenance(report: &RenameReport, outcome: &IdentifierOutcome, name: &str) -> OutcomeRow {
+    OutcomeRow {
+        name: name.to_string(),
+        function_id: report.target_id.clone(),
+        strategy: report.strategy.as_str(),
+        structural_hash: report.structural_hash.clone(),
+        trail: outcome.trail.as_ref().map(|t| {
+            t.iter()
+                .map(|a| AttemptRow {
+                    round: a.round,
+                    proposed: a.proposed.clone(),
+                    result: a.result.as_str(),
+                })
+                .collect()
+        }),
+        ..OutcomeRow::default()
     }
-    JsValue::Object(o)
-}
-
-/// The report entries' shared provenance (`functionId`, `strategy`,
-/// `structuralHash`, `trail`).
-fn provenance(
-    report: &RenameReport,
-    outcome: &IdentifierOutcome,
-) -> Vec<(&'static str, Option<JsValue>)> {
-    vec![
-        ("functionId", Some(JsValue::str(&report.target_id))),
-        ("strategy", Some(JsValue::str(report.strategy.as_str()))),
-        (
-            "structuralHash",
-            report.structural_hash.as_deref().map(JsValue::str),
-        ),
-        (
-            "trail",
-            outcome.trail.as_ref().map(|t| {
-                JsValue::Array(
-                    t.iter()
-                        .map(|a| {
-                            obj(vec![
-                                ("round", Some(num(a.round as f64))),
-                                ("proposed", a.proposed.as_deref().map(JsValue::str)),
-                                ("result", Some(JsValue::str(a.result.as_str()))),
-                            ])
-                        })
-                        .collect(),
-                )
-            }),
-        ),
-    ]
 }
 
 /// `Map<K, number>` bump in insertion order.
@@ -117,11 +130,11 @@ fn bump<K: PartialEq + Clone>(m: &mut Vec<(K, u64)>, k: &K) {
 
 #[derive(Default)]
 struct Buckets {
-    unchanged: Vec<JsValue>,
-    missing: Vec<JsValue>,
-    duplicate: Vec<JsValue>,
-    invalid: Vec<JsValue>,
-    renamed: Vec<JsValue>,
+    unchanged: Vec<OutcomeRow>,
+    missing: Vec<OutcomeRow>,
+    duplicate: Vec<OutcomeRow>,
+    invalid: Vec<OutcomeRow>,
+    renamed: Vec<OutcomeRow>,
     renamed_names: Vec<String>,
     unrenamed_names: [Vec<String>; 4],
     collision_targets: Vec<(String, u64)>,
@@ -134,30 +147,26 @@ fn classify(reports: &[RenameReport]) -> Buckets {
     let mut b = Buckets::default();
     for report in reports {
         for (name, outcome) in report.outcomes.iter() {
-            let prov = provenance(report, outcome);
-            let head = |mut v: Vec<(&'static str, Option<JsValue>)>| {
-                v.extend(prov.clone());
-                obj(v)
-            };
+            let row = provenance(report, outcome, name);
             match &outcome.status {
                 Status::Renamed { new_name, round } => {
-                    b.renamed.push(head(vec![
-                        ("name", Some(JsValue::str(name))),
-                        ("newName", Some(JsValue::str(new_name))),
-                        ("round", Some(num(*round as f64))),
-                    ]));
+                    b.renamed.push(OutcomeRow {
+                        new_name: Some(new_name.clone()),
+                        round: Some(*round),
+                        ..row
+                    });
                     b.renamed_names.push(new_name.clone());
                 }
                 Status::Unchanged {
                     attempts,
                     suggestion,
                 } => {
-                    b.unchanged.push(head(vec![
-                        ("name", Some(JsValue::str(name))),
-                        ("suggestion", suggestion.as_deref().map(JsValue::str)),
-                        ("reason", Some(JsValue::str("LLM returned original name"))),
-                        ("attempts", Some(num(*attempts as f64))),
-                    ]));
+                    b.unchanged.push(OutcomeRow {
+                        suggestion: suggestion.clone(),
+                        reason: Some("LLM returned original name"),
+                        attempts: Some(*attempts),
+                        ..row
+                    });
                     b.unchanged_names.push(name.clone());
                     b.unrenamed_names[0].push(name.clone());
                     bump(&mut b.by_attempts, attempts);
@@ -166,19 +175,15 @@ fn classify(reports: &[RenameReport]) -> Buckets {
                     attempts,
                     last_finish_reason,
                 } => {
-                    let detail = last_finish_reason
-                        .as_deref()
-                        .filter(|r| !r.is_empty())
-                        .map(|r| JsValue::str(format!("finish_reason: {r}")));
-                    b.missing.push(head(vec![
-                        ("name", Some(JsValue::str(name))),
-                        (
-                            "reason",
-                            Some(JsValue::str("LLM did not return this identifier")),
-                        ),
-                        ("attempts", Some(num(*attempts as f64))),
-                        ("detail", detail),
-                    ]));
+                    b.missing.push(OutcomeRow {
+                        reason: Some("LLM did not return this identifier"),
+                        attempts: Some(*attempts),
+                        detail: last_finish_reason
+                            .as_deref()
+                            .filter(|r| !r.is_empty())
+                            .map(|r| format!("finish_reason: {r}")),
+                        ..row
+                    });
                     b.unrenamed_names[1].push(name.clone());
                     bump(&mut b.by_attempts, attempts);
                     let fr = last_finish_reason
@@ -191,16 +196,13 @@ fn classify(reports: &[RenameReport]) -> Buckets {
                     attempts,
                     suggestion,
                 } => {
-                    b.duplicate.push(head(vec![
-                        ("name", Some(JsValue::str(name))),
-                        ("suggestion", suggestion.as_deref().map(JsValue::str)),
-                        ("reason", Some(JsValue::str("Name collision unresolved"))),
-                        ("attempts", Some(num(*attempts as f64))),
-                        (
-                            "detail",
-                            Some(JsValue::str(format!("conflicted with: {conflicted_with}"))),
-                        ),
-                    ]));
+                    b.duplicate.push(OutcomeRow {
+                        suggestion: suggestion.clone(),
+                        reason: Some("Name collision unresolved"),
+                        attempts: Some(*attempts),
+                        detail: Some(format!("conflicted with: {conflicted_with}")),
+                        ..row
+                    });
                     b.unrenamed_names[2].push(name.clone());
                     bump(&mut b.collision_targets, conflicted_with);
                     bump(&mut b.by_attempts, attempts);
@@ -209,12 +211,12 @@ fn classify(reports: &[RenameReport]) -> Buckets {
                     attempts,
                     suggestion,
                 } => {
-                    b.invalid.push(head(vec![
-                        ("name", Some(JsValue::str(name))),
-                        ("suggestion", suggestion.as_deref().map(JsValue::str)),
-                        ("reason", Some(JsValue::str("Invalid identifier returned"))),
-                        ("attempts", Some(num(*attempts as f64))),
-                    ]));
+                    b.invalid.push(OutcomeRow {
+                        suggestion: suggestion.clone(),
+                        reason: Some("Invalid identifier returned"),
+                        attempts: Some(*attempts),
+                        ..row
+                    });
                     b.unrenamed_names[3].push(name.clone());
                     bump(&mut b.by_attempts, attempts);
                 }
@@ -244,7 +246,11 @@ pub type ExtraTrail = [ExtraText];
 /// run's rows, then the extra rows (the TS's one trail keyed by binding
 /// NODE: a later pass's rows are new entries, appended), each converted in
 /// its own text.
-pub fn trail_report(trail: &StrategyTrail, texts: &AnchorTexts<'_>, extra: &ExtraTrail) -> JsValue {
+pub fn trail_report(
+    trail: &StrategyTrail,
+    texts: &AnchorTexts<'_>,
+    extra: &ExtraTrail,
+) -> TrailReport {
     let anchors = [
         Anchor::Fresh,
         Anchor::Generated,
@@ -265,7 +271,7 @@ pub fn trail_report(trail: &StrategyTrail, texts: &AnchorTexts<'_>, extra: &Extr
             BabelLines::new(text),
         ));
     }
-    let mut trails: Vec<JsValue> = trail
+    let mut trails: Vec<TrailRow> = trail
         .entries()
         .iter()
         .map(|e| {
@@ -281,18 +287,70 @@ pub fn trail_report(trail: &StrategyTrail, texts: &AnchorTexts<'_>, extra: &Extr
         let lines = BabelLines::new(&x.text);
         trails.extend(x.rows.iter().map(|e| trail_entry(e, &x.file, &map, &lines)));
     }
-    let mut funnel = JsObject::new();
-    for (tier, outcomes) in funnel_of(all_entries(trail, extra)) {
-        let mut o = JsObject::new();
-        for (outcome, n) in outcomes {
-            o.insert(outcome.as_str(), num(n as f64));
-        }
-        funnel.insert(tier.as_str(), JsValue::Object(o));
+    let funnel = funnel_of(all_entries(trail, extra))
+        .into_iter()
+        .map(|(tier, outcomes)| {
+            let row = outcomes
+                .into_iter()
+                .map(|(outcome, n)| (outcome.as_str().to_string(), n))
+                .collect();
+            (tier.as_str().to_string(), OrderedMap(row))
+        })
+        .collect();
+    TrailReport {
+        trails,
+        funnel: OrderedMap(funnel),
     }
-    obj(vec![
-        ("trails", Some(JsValue::Array(trails))),
-        ("funnel", Some(JsValue::Object(funnel))),
-    ])
+}
+
+/// The strategy trail (`trails` + `funnel`: per tier, per outcome, the
+/// attempt count, both in first-seen order).
+#[derive(Serialize)]
+pub struct TrailReport {
+    pub trails: Vec<TrailRow>,
+    pub funnel: OrderedMap<OrderedMap<u64>>,
+}
+
+/// One trail row; `declText` labels the text its spans index (an anchor,
+/// or a split file's path). Spans are UTF-16 offsets.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrailRow {
+    pub old_name: String,
+    pub loc: String,
+    pub decl_span: Utf16Span,
+    pub decl_text: String,
+    pub trail: Vec<TrailAttempt>,
+    pub post_settle_attempts: u32,
+    pub post_settle_votes: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settled_by: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_by: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub final_name: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct Utf16Span {
+    pub start: u32,
+    pub end: u32,
+}
+
+/// One attempt of a trail row.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrailAttempt {
+    pub strategy: &'static str,
+    pub outcome: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ref_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope_block: Option<String>,
 }
 
 /// Every position a row's report reads (declaration + scope blocks).
@@ -345,51 +403,37 @@ fn funnel_of<'e>(
     funnel
 }
 
-/// One diag.json trail row; `text` labels the text its spans index (an
-/// anchor, or a split file's path).
-fn trail_entry(e: &TrailEntry, text: &str, map: &Utf16Map, lines: &BabelLines<'_>) -> JsValue {
+/// One trail row, its spans converted to UTF-16 offsets in `text`.
+fn trail_entry(e: &TrailEntry, text: &str, map: &Utf16Map, lines: &BabelLines<'_>) -> TrailRow {
     let (line, col) = lines.loc(e.target.decl_span.start);
-    let attempts: Vec<JsValue> = e
-        .attempts
-        .iter()
-        .map(|a| {
-            obj(vec![
-                ("strategy", Some(JsValue::str(a.tier.as_str()))),
-                ("outcome", Some(JsValue::str(a.outcome.as_str()))),
-                ("reason", a.reason.as_deref().map(JsValue::str)),
-                ("newName", a.proposed_name.as_deref().map(JsValue::str)),
-                ("refCount", a.ref_count.map(num)),
-                (
-                    "scopeBlock",
-                    a.scope_block
-                        .map(|s| JsValue::str(format!("{}:{}", map.get(s.start), map.get(s.end)))),
-                ),
-            ])
-        })
-        .collect();
-    let mut v = vec![
-        ("oldName", Some(JsValue::str(&e.old_name))),
-        ("loc", Some(JsValue::str(format!("{line}:{col}")))),
-        (
-            "declSpan",
-            Some(obj(vec![
-                ("start", Some(num(map.get(e.target.decl_span.start)))),
-                ("end", Some(num(map.get(e.target.decl_span.end)))),
-            ])),
-        ),
-        ("declText", Some(JsValue::str(text))),
-        ("trail", Some(JsValue::Array(attempts))),
-        ("postSettleAttempts", Some(num(e.post_settle_attempts))),
-        ("postSettleVotes", Some(num(e.post_settle_votes))),
-    ];
-    if let Some(s) = e.settled_by {
-        v.push(("settledBy", Some(JsValue::str(s.as_str()))));
+    TrailRow {
+        old_name: e.old_name.clone(),
+        loc: format!("{line}:{col}"),
+        decl_span: Utf16Span {
+            start: map.get(e.target.decl_span.start),
+            end: map.get(e.target.decl_span.end),
+        },
+        decl_text: text.to_string(),
+        trail: e
+            .attempts
+            .iter()
+            .map(|a| TrailAttempt {
+                strategy: a.tier.as_str(),
+                outcome: a.outcome.as_str(),
+                reason: a.reason.clone(),
+                new_name: a.proposed_name.clone(),
+                ref_count: a.ref_count,
+                scope_block: a
+                    .scope_block
+                    .map(|s| format!("{}:{}", map.get(s.start), map.get(s.end))),
+            })
+            .collect(),
+        post_settle_attempts: e.post_settle_attempts,
+        post_settle_votes: e.post_settle_votes,
+        settled_by: e.settled_by.map(|s| s.as_str()),
+        terminal_by: e.terminal_by.map(|t| t.as_str()),
+        final_name: e.terminal_by.and(e.final_name.clone()),
     }
-    if let Some(t) = e.terminal_by {
-        v.push(("terminalBy", Some(JsValue::str(t.as_str()))));
-        v.push(("finalName", e.final_name.as_deref().map(JsValue::str)));
-    }
-    obj(v)
 }
 
 /// `creditPools` + `buildTerminalState` + `buildIdentifierLedger`.
@@ -398,7 +442,7 @@ fn identifier_ledger<'e>(
     entries: impl Iterator<Item = &'e TrailEntry> + Clone,
     renamed: &[String],
     unrenamed: &[String],
-) -> JsValue {
+) -> IdentifierLedger {
     let mut transfer_settled: Vec<(String, u64)> = Vec::new();
     let mut named_by_tier: Vec<(String, u64)> = Vec::new();
     let mut credits: Vec<(String, u64)> = Vec::new();
@@ -444,89 +488,113 @@ fn identifier_ledger<'e>(
             _ => unaccounted.push(name),
         }
     }
-    let counts = |m: &[(String, u64)]| {
-        let mut o = JsObject::new();
-        for (k, n) in m {
-            o.insert(k.clone(), num(*n as f64));
-        }
-        JsValue::Object(o)
-    };
-    let total = census.and_then(|c| c.total_bindings).map(num);
-    let terminal = obj(vec![
-        ("totalBindings", total.clone()),
-        ("namedByTier", Some(counts(&named_by_tier))),
-        ("llmNamed", Some(num(coverage.identifiers.llm))),
-        ("mintedAccounted", Some(num(accounted as f64))),
-        ("mintedUnaccounted", Some(JsValue::str_array(&unaccounted))),
-    ]);
-    obj(vec![
-        ("totalBindings", total),
-        ("transferSettled", Some(counts(&transfer_settled))),
-        ("llmNamed", Some(num(coverage.identifiers.llm))),
-        (
-            "libraryPrefix",
-            Some(num(coverage.identifiers.library_prefix)),
-        ),
-        ("fallback", Some(num(coverage.identifiers.fallback))),
-        ("notRenamed", Some(num(coverage.identifiers.not_renamed))),
-        ("remainingMinted", census.map(|c| num(c.total))),
-        ("terminalState", Some(terminal)),
-    ])
+    let total = census.and_then(|c| c.total_bindings);
+    let ids = &coverage.identifiers;
+    IdentifierLedger {
+        total_bindings: total,
+        transfer_settled: OrderedMap(transfer_settled),
+        llm_named: ids.llm,
+        library_prefix: ids.library_prefix,
+        fallback: ids.fallback,
+        not_renamed: ids.not_renamed,
+        remaining_minted: census.map(|c| c.total),
+        terminal_state: TerminalState {
+            total_bindings: total,
+            named_by_tier: OrderedMap(named_by_tier),
+            llm_named: ids.llm,
+            minted_accounted: accounted,
+            minted_unaccounted: unaccounted,
+        },
+    }
 }
 
-fn patterns(reports: &[RenameReport], b: &Buckets) -> JsValue {
+/// The totals-first identifier ledger.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentifierLedger {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total_bindings: Option<u64>,
+    transfer_settled: OrderedMap<u64>,
+    llm_named: u64,
+    library_prefix: u64,
+    fallback: u64,
+    not_renamed: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remaining_minted: Option<u64>,
+    terminal_state: TerminalState,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TerminalState {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total_bindings: Option<u64>,
+    named_by_tier: OrderedMap<u64>,
+    llm_named: u64,
+    minted_accounted: u64,
+    minted_unaccounted: Vec<String>,
+}
+
+/// The pattern roll-ups.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Patterns {
+    top_collision_targets: Vec<CollisionTarget>,
+    unchanged_identifiers: Vec<String>,
+    lowest_coverage_functions: Vec<FunctionCoverage>,
+    /// Keyed by attempt count, ascending.
+    failures_by_attempts: OrderedMap<u64>,
+    missing_by_finish_reason: OrderedMap<u64>,
+}
+
+#[derive(Serialize)]
+struct CollisionTarget {
+    name: String,
+    count: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FunctionCoverage {
+    function_id: String,
+    total: u64,
+    renamed: u64,
+    pct: f64,
+}
+
+fn patterns(reports: &[RenameReport], b: &Buckets) -> Patterns {
     let mut targets = b.collision_targets.clone();
     targets.sort_by_key(|x| std::cmp::Reverse(x.1));
-    let top: Vec<JsValue> = targets
-        .iter()
-        .take(20)
-        .map(|(n, c)| {
-            obj(vec![
-                ("name", Some(JsValue::str(n))),
-                ("count", Some(num(*c as f64))),
-            ])
-        })
-        .collect();
-    let mut lowest: Vec<(f64, JsValue)> = reports
+    let mut lowest: Vec<FunctionCoverage> = reports
         .iter()
         .filter(|r| r.total_identifiers > 0)
-        .map(|r| {
-            let pct = math_round(r.renamed_count as f64 / r.total_identifiers as f64 * 100.0);
-            (
-                pct,
-                obj(vec![
-                    ("functionId", Some(JsValue::str(&r.target_id))),
-                    ("total", Some(num(r.total_identifiers as f64))),
-                    ("renamed", Some(num(r.renamed_count as f64))),
-                    ("pct", Some(num(pct))),
-                ]),
-            )
+        .map(|r| FunctionCoverage {
+            function_id: r.target_id.clone(),
+            total: r.total_identifiers as u64,
+            renamed: r.renamed_count as u64,
+            pct: math_round(r.renamed_count as f64 / r.total_identifiers as f64 * 100.0),
         })
         .collect();
-    lowest.sort_by(|x, y| x.0.total_cmp(&y.0));
-    let mut attempts = JsObject::new();
-    for (a, n) in &b.by_attempts {
-        attempts.insert(a.to_string(), num(*n as f64));
-    }
-    let mut finish = JsObject::new();
-    for (r, n) in &b.missing_by_finish {
-        finish.insert(r.clone(), num(*n as f64));
-    }
-    obj(vec![
-        ("topCollisionTargets", Some(JsValue::Array(top))),
-        (
-            "unchangedIdentifiers",
-            Some(JsValue::str_array(&b.unchanged_names)),
+    lowest.sort_by(|x, y| x.pct.total_cmp(&y.pct));
+    lowest.truncate(20);
+    let mut by_attempts = b.by_attempts.clone();
+    by_attempts.sort_by_key(|(a, _)| *a);
+    Patterns {
+        top_collision_targets: targets
+            .into_iter()
+            .take(20)
+            .map(|(name, count)| CollisionTarget { name, count })
+            .collect(),
+        unchanged_identifiers: b.unchanged_names.clone(),
+        lowest_coverage_functions: lowest,
+        failures_by_attempts: OrderedMap(
+            by_attempts
+                .into_iter()
+                .map(|(a, n)| (a.to_string(), n))
+                .collect(),
         ),
-        (
-            "lowestCoverageFunctions",
-            Some(JsValue::Array(
-                lowest.into_iter().take(20).map(|(_, v)| v).collect(),
-            )),
-        ),
-        ("failuresByAttempts", Some(JsValue::Object(attempts))),
-        ("missingByFinishReason", Some(JsValue::Object(finish))),
-    ])
+        missing_by_finish_reason: OrderedMap(b.missing_by_finish.clone()),
+    }
 }
 
 /// What `buildDiagnosticsReport` reads.
@@ -542,52 +610,87 @@ pub struct DiagnosticsInputs<'a, 't> {
     pub extra_trail: &'a ExtraTrail,
 }
 
-/// `buildDiagnosticsReport` (without `placementTrails`, the split's).
-pub fn build_diagnostics_report(inp: &DiagnosticsInputs<'_, '_>) -> JsValue {
+/// The `--diagnostics` record. The CLI sets `placement_trails` (the
+/// split's) and appends its run-level blocks to `extra`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsReport<'a> {
+    pub timestamp: String,
+    pub coverage: &'a CoverageSummary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transfer_stats: Option<&'a TransferStatsByTier>,
+    pub unrenamed: Unrenamed,
+    pub renamed: Vec<OutcomeRow>,
+    pub strategy_trails: TrailReport,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placement_trails: Option<serde_json::Value>,
+    pub name_contention: NameContention,
+    pub identifier_ledger: IdentifierLedger,
+    pub patterns: Patterns,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// The identifiers left unrenamed, by outcome.
+#[derive(Serialize)]
+pub struct Unrenamed {
+    pub unchanged: Vec<OutcomeRow>,
+    pub missing: Vec<OutcomeRow>,
+    pub duplicate: Vec<OutcomeRow>,
+    pub invalid: Vec<OutcomeRow>,
+}
+
+#[derive(Serialize)]
+pub struct NameContention {
+    pub events: Vec<ContentionRow>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentionRow {
+    requested: String,
+    resolved_to: String,
+    old_name: String,
+    site: &'static str,
+}
+
+/// `buildDiagnosticsReport`.
+pub fn build_diagnostics_report<'a>(inp: &DiagnosticsInputs<'a, '_>) -> DiagnosticsReport<'a> {
     let b = classify(inp.reports);
     let unrenamed_names: Vec<String> = b.unrenamed_names.iter().flatten().cloned().collect();
-    let events: Vec<JsValue> = inp
+    let events = inp
         .contention
         .iter()
-        .map(|e| {
-            obj(vec![
-                ("requested", Some(JsValue::str(&e.requested))),
-                ("resolvedTo", Some(JsValue::str(&e.resolved_to))),
-                ("oldName", Some(JsValue::str(&e.old_name))),
-                ("site", Some(JsValue::str(e.site))),
-            ])
+        .map(|e| ContentionRow {
+            requested: e.requested.clone(),
+            resolved_to: e.resolved_to.clone(),
+            old_name: e.old_name.clone(),
+            site: e.site,
         })
         .collect();
-    let ledger = identifier_ledger(
+    let identifier_ledger = identifier_ledger(
         inp.coverage,
         all_entries(inp.trail, inp.extra_trail),
         &b.renamed_names,
         &unrenamed_names,
     );
-    let pats = patterns(inp.reports, &b);
-    obj(vec![
-        ("timestamp", Some(JsValue::str(&inp.timestamp))),
-        ("coverage", Some(inp.coverage.to_js())),
-        ("transferStats", inp.transfer_stats.map(JsType::to_js)),
-        (
-            "unrenamed",
-            Some(obj(vec![
-                ("unchanged", Some(JsValue::Array(b.unchanged))),
-                ("missing", Some(JsValue::Array(b.missing))),
-                ("duplicate", Some(JsValue::Array(b.duplicate))),
-                ("invalid", Some(JsValue::Array(b.invalid))),
-            ])),
-        ),
-        ("renamed", Some(JsValue::Array(b.renamed))),
-        (
-            "strategyTrails",
-            Some(trail_report(inp.trail, &inp.texts, inp.extra_trail)),
-        ),
-        (
-            "nameContention",
-            Some(obj(vec![("events", Some(JsValue::Array(events)))])),
-        ),
-        ("identifierLedger", Some(ledger)),
-        ("patterns", Some(pats)),
-    ])
+    let patterns = patterns(inp.reports, &b);
+    DiagnosticsReport {
+        timestamp: inp.timestamp.clone(),
+        coverage: inp.coverage,
+        transfer_stats: inp.transfer_stats,
+        strategy_trails: trail_report(inp.trail, &inp.texts, inp.extra_trail),
+        unrenamed: Unrenamed {
+            unchanged: b.unchanged,
+            missing: b.missing,
+            duplicate: b.duplicate,
+            invalid: b.invalid,
+        },
+        renamed: b.renamed,
+        placement_trails: None,
+        name_contention: NameContention { events },
+        identifier_ledger,
+        patterns,
+        extra: serde_json::Map::new(),
+    }
 }
