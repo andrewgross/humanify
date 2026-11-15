@@ -8,8 +8,9 @@ byte-identical.
 
 ## Totals
 
-Against origin/main: **-4,355 code lines, -1,861 test lines, -41,219 data
-lines** (net). The 578 data files are the 43 TS-era eval labels.
+Against origin/main: **-4,354 code lines, -1,864 test lines, -41,143 data
+lines** (net). The data is the 43 TS-era eval labels (578 files) and the
+seeded launch golden.
 
 | Item | Code (net) | Test (net) | Data |
 |---|---:|---:|---:|
