@@ -4,11 +4,11 @@
 use crate::call_ledger::{
     Attempt, AttemptRecord, CallLedger, FailKind, SentOutcome, Served, classify_sent, judge_answer,
 };
-use crate::js::JsValue;
 use crate::llm::{
     BatchRenameRequest, BatchRenameResponse, CallSite, LlmCall, LlmError, LlmErrorKind, Renames,
     StrMap, Usage,
 };
+use serde_json::Value;
 
 fn legal(name: &str) -> bool {
     !name.is_empty() && name != "class" && name.chars().all(|c| c.is_alphanumeric() || c == '_')
@@ -39,19 +39,16 @@ fn answer(pairs: &[(&str, Option<&str>)]) -> BatchRenameResponse {
     }
 }
 
-fn at<'a>(v: &'a JsValue, path: &str) -> &'a JsValue {
+fn at<'a>(v: &'a Value, path: &str) -> &'a Value {
     path.split('.').fold(v, |v, k| {
-        v.as_object()
-            .and_then(|o| o.get(k))
-            .unwrap_or_else(|| panic!("no {k} in {path}"))
+        v.get(k).unwrap_or_else(|| panic!("no {k} in {path}"))
     })
 }
 
-fn n(v: &JsValue, path: &str) -> f64 {
-    match at(v, path) {
-        JsValue::Number(x) => *x,
-        other => panic!("{path} is {other:?}"),
-    }
+fn n(v: &Value, path: &str) -> f64 {
+    at(v, path)
+        .as_f64()
+        .unwrap_or_else(|| panic!("{path} is not a number"))
 }
 
 fn rec(result: Attempt, ms: u64) -> AttemptRecord {
@@ -158,7 +155,7 @@ fn the_three_views_are_kept_apart_and_sum_into_total() {
     );
     ledger.outcome(&n_call, &failed);
 
-    let s = ledger.stats();
+    let s = serde_json::to_value(ledger.stats()).unwrap();
     for (path, want) in [
         ("outcomes.vendor.calls", 2.0),
         ("outcomes.vendor.answered", 2.0),
@@ -212,7 +209,7 @@ fn the_outcomes_view_does_not_depend_on_completion_order_or_transport() {
         warm.served(c.site, Served::Disk);
         warm.outcome(c, r);
     }
-    let text = |l: &CallLedger| crate::js::stringify(at(&l.stats(), "outcomes"));
+    let text = |l: &CallLedger| serde_json::to_string(&l.stats().outcomes).unwrap();
     assert_eq!(text(&cold), text(&warm));
 }
 

@@ -153,3 +153,57 @@ fn the_applier_replays_exactly_and_in_linear_time() {
     assert!(took.as_secs_f64() < 30.0, "apply.mjs took {took:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+fn placement_tiers_by_count() -> Vec<(String, u64)> {
+    humanify_ag_core::place::tiers::PLACEMENT_TIERS
+        .iter()
+        .enumerate()
+        .map(|(i, t)| (t.name().to_string(), (i as u64) * 7))
+        .collect()
+}
+
+/// The two in-tree records keep their bytes: `.humanify/stage-hashes.json`
+/// (indent 2, trailing newline) and `.humanify/placement-stats.json`
+/// (indent 2, no trailing newline, `byTier` in the placement registry's
+/// order). A changed byte here changes every written tree.
+#[test]
+fn the_in_tree_records_keep_their_bytes() {
+    let dir = temp_dir("in-tree");
+    crate::writers::write_stage_hashes(
+        &dir,
+        &crate::writers::StageHashes {
+            after_naming: "e45d254255d266fa".into(),
+            after_placement: "253ca5dceb1d0254".into(),
+        },
+    )
+    .expect("writes");
+    assert_eq!(
+        std::fs::read_to_string(dir.join(".humanify/stage-hashes.json")).expect("read"),
+        "{\n  \"afterNaming\": \"e45d254255d266fa\",\n  \"afterPlacement\": \"253ca5dceb1d0254\"\n}\n"
+    );
+    crate::writers::write_placement_stats(
+        &dir,
+        &crate::writers::PlacementStats {
+            statements: 22425,
+            files: 3567,
+            folders: 533,
+            inherited: 0,
+            residue_locality: 12,
+            by_tier: placement_tiers_by_count().into(),
+        },
+    )
+    .expect("writes");
+    let by_tier: String = placement_tiers_by_count()
+        .iter()
+        .map(|(t, n)| format!("    \"{t}\": {n}"))
+        .collect::<Vec<_>>()
+        .join(",\n");
+    assert_eq!(
+        std::fs::read_to_string(dir.join(".humanify/placement-stats.json")).expect("read"),
+        format!(
+            "{{\n  \"statements\": 22425,\n  \"files\": 3567,\n  \"folders\": 533,\n  \
+\"inherited\": 0,\n  \"residueLocality\": 12,\n  \"byTier\": {{\n{by_tier}\n  }}\n}}"
+        )
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -176,10 +176,10 @@ impl IndexJob {
 }
 
 /// The wait span's metadata: the outcome line the profile summary prints.
-fn outcome_metadata(answer: &JobAnswer) -> humanify_ag_model::profiling::JsObject {
-    use humanify_ag_model::profiling::JsObject;
+fn outcome_metadata(answer: &JobAnswer) -> humanify_ag_model::profiling::Fields {
+    use humanify_ag_model::profiling::Fields;
     use serde_json::Value;
-    let mut m = JsObject::new();
+    let mut m = Fields::new();
     let mut set = |k: &str, v: Value| m.set(k, v);
     match answer {
         JobAnswer::Found(_, trail) => {

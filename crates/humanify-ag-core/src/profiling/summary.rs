@@ -25,20 +25,19 @@ fn stage_lines(stages: &[StageSummary], total: f64, lines: &mut Vec<String>) {
     // Stable, descending — ties keep report order (JS Array.sort is stable).
     sorted.sort_by(|a, b| {
         b.duration_ms
-            .0
-            .partial_cmp(&a.duration_ms.0)
+            .partial_cmp(&a.duration_ms)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     for stage in sorted {
         let pct = if total > 0.0 {
-            js_to_fixed(stage.duration_ms.0 / total * 100.0, 1)
+            js_to_fixed(stage.duration_ms / total * 100.0, 1)
         } else {
             "0.0".to_string()
         };
         let mut line = format!(
             "  {} {}  ({pct}%)",
             pad_end(&stage.name, 25),
-            pad_start(&format_duration(stage.duration_ms.0), 10)
+            pad_start(&format_duration(stage.duration_ms), 10)
         );
         if stage.span_count > 1 {
             let _ = write!(line, "  [{} spans]", stage.span_count);
@@ -98,7 +97,7 @@ fn library_index_lines(report: &ProfileReport, lines: &mut Vec<String>) {
     }
     let mut stages: Vec<(String, f64, usize)> = Vec::new();
     for span in &spans {
-        let dur = span.end_ms.0 - span.start_ms.0;
+        let dur = span.end_ms - span.start_ms;
         match stages.iter_mut().find(|(n, _, _)| n == &span.name) {
             Some((_, total, count)) => {
                 *total += dur;
@@ -129,7 +128,7 @@ fn library_index_lines(report: &ProfileReport, lines: &mut Vec<String>) {
 
 /// TS `formatProfileSummary`.
 pub fn format_profile_summary(report: &ProfileReport) -> String {
-    let total = report.meta.total_duration_ms.0;
+    let total = report.meta.total_duration_ms;
     let mut lines = vec![
         "=== Performance Profile ===".to_string(),
         format!("Total duration: {}", format_duration(total)),
@@ -146,14 +145,14 @@ pub fn format_profile_summary(report: &ProfileReport) -> String {
         lines.push(format!("Rename timing ({} functions):", rt.count));
         lines.push(format!(
             "  p50: {}  p95: {}  p99: {}",
-            format_duration(rt.p50.0),
-            format_duration(rt.p95.0),
-            format_duration(rt.p99.0)
+            format_duration(rt.p50),
+            format_duration(rt.p95),
+            format_duration(rt.p99)
         ));
         lines.push(format!(
             "  min: {}  max: {}",
-            format_duration(rt.min_ms.0),
-            format_duration(rt.max_ms.0)
+            format_duration(rt.min_ms),
+            format_duration(rt.max_ms)
         ));
         lines.push(String::new());
     }

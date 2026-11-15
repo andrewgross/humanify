@@ -9,10 +9,10 @@
 use std::time::Duration;
 
 use humanify_ag_model::profiling::{
-    ConcurrencyCounts, ConcurrencySnapshot, JsNumber, JsObject, ProfileMeta, ProfileReport,
-    ProfileSpan, RenameTiming, StageSummary,
+    ConcurrencyCounts, ConcurrencySnapshot, Fields, ProfileMeta, ProfileReport, ProfileSpan,
+    RenameTiming, StageSummary,
 };
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::profiling::{Profiler, compute_percentile, format_profile_summary, to_trace_events};
 
@@ -27,8 +27,8 @@ fn records_spans_with_correct_timing() {
     assert_eq!(r.spans[0].name, "test-span");
     assert_eq!(r.spans[0].category, "test");
     assert_eq!(r.spans[0].tid, 1);
-    assert!(r.spans[0].start_ms.0 >= 0.0);
-    assert!(r.spans[0].end_ms.0 >= r.spans[0].start_ms.0);
+    assert!(r.spans[0].start_ms >= 0.0);
+    assert!(r.spans[0].end_ms >= r.spans[0].start_ms);
     assert_eq!(r.spans[0].metadata, None);
 }
 
@@ -39,9 +39,9 @@ fn supports_custom_tid_and_metadata() {
         "fn:test",
         "rename",
         2,
-        Some(JsObject::new().with("waitMs", 42)),
+        Some(Fields::new().with("waitMs", 42)),
     )
-    .end(Some(JsObject::new().with("outcome", "ok")));
+    .end(Some(Fields::new().with("outcome", "ok")));
     let r = p.finalize(None);
     assert_eq!(r.spans[0].tid, 2);
     assert_eq!(
@@ -78,7 +78,7 @@ fn computes_rename_timing_percentiles() {
     }
     let t = p.finalize(None).rename_timing.expect("rename timing");
     assert_eq!(t.count, 5);
-    assert!(t.p50.0 >= 0.0 && t.p95.0 >= 0.0 && t.p99.0 >= 0.0);
+    assert!(t.p50 >= 0.0 && t.p95 >= 0.0 && t.p99 >= 0.0);
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn records_concurrency_snapshots() {
     assert_eq!(r.concurrency_snapshots.len(), 2);
     assert_eq!(r.concurrency_snapshots[0].in_flight, 5);
     assert_eq!(r.concurrency_snapshots[1].in_flight, 8);
-    assert!(r.concurrency_snapshots[0].time_ms.0 >= 0.0);
+    assert!(r.concurrency_snapshots[0].time_ms >= 0.0);
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn finalize_includes_metadata() {
     let r = p.finalize(Some("test.js"));
     assert_eq!(r.meta.input_file.as_deref(), Some("test.js"));
     assert!(!r.meta.started_at.is_empty());
-    assert!(r.meta.total_duration_ms.0 >= 0.0);
+    assert!(r.meta.total_duration_ms >= 0.0);
 }
 
 #[test]
@@ -122,10 +122,10 @@ fn disabled_profiler_is_callable_and_records_nothing() {
     assert!(r.spans.is_empty());
     assert!(r.concurrency_snapshots.is_empty());
     assert!(r.stage_summaries.is_empty());
-    assert_eq!(r.meta.total_duration_ms.0, 0.0);
+    assert_eq!(r.meta.total_duration_ms, 0.0);
     assert_eq!(
         serde_json::to_string(&r).unwrap(),
-        r#"{"spans":[],"concurrencySnapshots":[],"stageSummaries":[],"meta":{"totalDurationMs":0,"startedAt":""}}"#
+        r#"{"spans":[],"concurrencySnapshots":[],"stageSummaries":[],"meta":{"totalDurationMs":0.0,"startedAt":""}}"#
     );
 }
 
@@ -197,7 +197,7 @@ fn make_report(spans: Vec<ProfileSpan>, snapshots: Vec<ConcurrencySnapshot>) -> 
         stage_summaries: Vec::new(),
         rename_timing: None,
         meta: ProfileMeta {
-            total_duration_ms: JsNumber(1000.0),
+            total_duration_ms: 1000.0,
             started_at: "2024-01-01T00:00:00Z".to_string(),
             input_file: None,
         },
@@ -208,8 +208,8 @@ fn span(name: &str, cat: &str, start: f64, end: f64, tid: u32) -> ProfileSpan {
     ProfileSpan {
         name: name.to_string(),
         category: cat.to_string(),
-        start_ms: JsNumber(start),
-        end_ms: JsNumber(end),
+        start_ms: start,
+        end_ms: end,
         tid,
         metadata: None,
     }
@@ -233,14 +233,14 @@ fn includes_process_metadata_event() {
 #[test]
 fn converts_spans_to_x_events_with_microsecond_timestamps() {
     let mut s = span("parse", "pipeline", 100.0, 250.0, 1);
-    s.metadata = Some(JsObject::new().with("codeLength", 5000));
+    s.metadata = Some(Fields::new().with("codeLength", 5000));
     let t = to_trace_events(&make_report(vec![s], vec![]));
     let x: Vec<_> = t.trace_events.iter().filter(|e| e.ph == "X").collect();
     assert_eq!(x.len(), 1);
     assert_eq!(x[0].name, "parse");
     assert_eq!(x[0].cat, "pipeline");
-    assert_eq!(x[0].ts.0, 100_000.0);
-    assert_eq!(x[0].dur.map(|d| d.0), Some(150_000.0));
+    assert_eq!(x[0].ts, 100_000.0);
+    assert_eq!(x[0].dur, Some(150_000.0));
     assert_eq!(x[0].tid, 1);
     assert_eq!(
         serde_json::to_value(&x[0].args).unwrap(),
@@ -271,7 +271,7 @@ fn converts_concurrency_snapshots_to_c_events() {
     let t = to_trace_events(&make_report(
         vec![],
         vec![ConcurrencySnapshot {
-            time_ms: JsNumber(500.0),
+            time_ms: 500.0,
             in_flight: 10,
             ready: 5,
             blocked: 20,
@@ -279,7 +279,7 @@ fn converts_concurrency_snapshots_to_c_events() {
     ));
     let c: Vec<_> = t.trace_events.iter().filter(|e| e.ph == "C").collect();
     assert_eq!(c.len(), 1);
-    assert_eq!(c[0].ts.0, 500_000.0);
+    assert_eq!(c[0].ts, 500_000.0);
     assert_eq!(
         serde_json::to_value(&c[0].args).unwrap(),
         json!({"inFlight": 10, "ready": 5, "blocked": 20})
@@ -300,32 +300,6 @@ fn omits_args_when_span_has_no_metadata() {
     assert!(!serde_json::to_string(x).unwrap().contains("args"));
 }
 
-// ---- JS object semantics ----------------------------------------------------
-
-#[test]
-fn js_object_enumerates_index_keys_first_and_spread_keeps_position() {
-    let mut o = JsObject::new().with("b", 1).with("2", "two").with("10", 0);
-    o.spread(
-        &JsObject::new()
-            .with("b", 9)
-            .with("a", true)
-            .with("0", Value::Null),
-    );
-    assert_eq!(
-        serde_json::to_string(&o).unwrap(),
-        r#"{"0":null,"2":"two","10":0,"b":9,"a":true}"#
-    );
-    // Non-canonical numerals are plain string keys.
-    let o = JsObject::new()
-        .with("z", 1)
-        .with("01", 2)
-        .with("4294967295", 3);
-    assert_eq!(
-        serde_json::to_string(&o).unwrap(),
-        r#"{"z":1,"01":2,"4294967295":3}"#
-    );
-}
-
 // ---- the console summary (the retained half of the retired wpb5 layer) ---
 
 /// The summary block keeps finding #11's deliberate departures from the
@@ -335,36 +309,36 @@ fn js_object_enumerates_index_keys_first_and_spread_keeps_position() {
 #[test]
 fn summary_text_renders_the_report() {
     let mut report = make_report(vec![], vec![]);
-    report.meta.total_duration_ms = JsNumber(65000.0);
+    report.meta.total_duration_ms = 65000.0;
     report.stage_summaries = vec![
         StageSummary {
             name: "parse".to_string(),
-            duration_ms: JsNumber(5000.0),
+            duration_ms: 5000.0,
             span_count: 1,
         },
         StageSummary {
             name: "naming".to_string(),
-            duration_ms: JsNumber(59999.0),
+            duration_ms: 59999.0,
             span_count: 3,
         },
     ];
     report.rename_timing = Some(RenameTiming {
-        p50: JsNumber(10.0),
-        p95: JsNumber(59999.0),
-        p99: JsNumber(3599999.0),
-        min_ms: JsNumber(1.0),
-        max_ms: JsNumber(59999.0),
+        p50: 10.0,
+        p95: 59999.0,
+        p99: 3599999.0,
+        min_ms: 1.0,
+        max_ms: 59999.0,
         count: 7,
     });
     report.concurrency_snapshots = vec![
         ConcurrencySnapshot {
-            time_ms: JsNumber(0.0),
+            time_ms: 0.0,
             in_flight: 10,
             ready: 5,
             blocked: 0,
         },
         ConcurrencySnapshot {
-            time_ms: JsNumber(500.0),
+            time_ms: 500.0,
             in_flight: 30,
             ready: 5,
             blocked: 0,
@@ -408,14 +382,14 @@ fn summary_text_renders_the_library_index_block() {
         s
     };
     let mut search = lib_span("library.index.search-store", 0.0, 5.0);
-    search.metadata = Some(JsObject::new().with("outcome", "miss"));
+    search.metadata = Some(Fields::new().with("outcome", "miss"));
     let mut registry = lib_span("library.index.registry", 5.0, 100.0);
     registry.metadata = None;
     let mut plan = lib_span("library.index.plan", 100.0, 205.0);
     plan.metadata = None;
     let mut wait = lib_span("library.index.wait", 205.0, 72000.0);
     wait.metadata = Some(
-        JsObject::new()
+        Fields::new()
             .with("outcome", "built")
             .with("indexId", "deadbeef".to_string())
             .with("versions", 3_u64)
@@ -426,7 +400,7 @@ fn summary_text_renders_the_library_index_block() {
     let mut report = make_report(vec![search, registry, plan, wait], vec![]);
     report.stage_summaries.push(StageSummary {
         name: "parse".to_string(),
-        duration_ms: JsNumber(1000.0),
+        duration_ms: 1000.0,
         span_count: 1,
     });
     let text = format_profile_summary(&report);
@@ -449,13 +423,13 @@ fn summary_text_renders_the_library_index_block() {
 fn summary_text_library_index_block_only_when_it_ran() {
     let mut search = span("library.index.search-store", "library-index", 0.0, 5.0, 5);
     search.metadata = Some(
-        JsObject::new()
+        Fields::new()
             .with("outcome", "found")
             .with("indexId", "cafe".to_string()),
     );
     let mut wait = span("library.index.wait", "library-index", 5.0, 12.0, 5);
     wait.metadata = Some(
-        JsObject::new()
+        Fields::new()
             .with("outcome", "found")
             .with("indexId", "cafe".to_string()),
     );

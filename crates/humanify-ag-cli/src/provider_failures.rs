@@ -36,12 +36,12 @@ impl ProviderFailures {
     /// The `--stats-json` `providerErrors` block (always written).
     pub fn stats(&self) -> ProviderErrorStats {
         ProviderErrorStats {
-            total: self.total() as f64,
-            naming: self.naming as f64,
-            modules: self.modules as f64,
-            vendor: self.vendor as f64,
-            split: self.split as f64,
-            tree_reviser: self.tree_reviser as f64,
+            total: self.total() as u64,
+            naming: self.naming as u64,
+            modules: self.modules as u64,
+            vendor: self.vendor as u64,
+            split: self.split as u64,
+            tree_reviser: self.tree_reviser as u64,
         }
     }
 
