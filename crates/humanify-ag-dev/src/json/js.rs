@@ -6,7 +6,7 @@
 
 use std::fmt::Write as _;
 
-use humanify_ag_model::js::number_to_string;
+use humanify_ag_model::js::{array_index, number_to_string};
 
 /// A JSON value with JS object semantics (ordered, index keys first).
 #[derive(Clone, Debug, PartialEq)]
@@ -25,21 +25,6 @@ pub enum JsValue {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct JsObject {
     entries: Vec<(String, JsValue)>,
-}
-
-/// The numeric value of an array-index key, or None for an ordinary key.
-/// An array index is a canonical decimal (no sign, no leading zero unless
-/// it is "0") below 2^32 - 1.
-pub fn array_index(key: &str) -> Option<u32> {
-    let bytes = key.as_bytes();
-    if bytes.is_empty() || bytes.len() > 10 || !bytes.iter().all(u8::is_ascii_digit) {
-        return None;
-    }
-    if bytes.len() > 1 && bytes[0] == b'0' {
-        return None;
-    }
-    let value: u64 = key.parse().ok()?;
-    (value < u64::from(u32::MAX)).then_some(value as u32)
 }
 
 impl JsObject {
@@ -346,8 +331,7 @@ impl Parser<'_> {
     }
 
     /// `\uXXXX`, pairing surrogates. A LONE surrogate is legal in a JS
-    /// string but not in a Rust one: it becomes U+FFFD (never seen in the
-    /// cache — every key and name there is ASCII, 2026-09-24).
+    /// string but not in a Rust one: it becomes U+FFFD.
     fn unicode_escape(&mut self, out: &mut String) -> Result<(), String> {
         let unit = self.hex4()?;
         if (0xD800..0xDC00).contains(&unit) && self.text[self.pos..].starts_with("\\u") {

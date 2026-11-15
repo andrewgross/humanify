@@ -6,7 +6,7 @@
 //! the walk report): a field it reads keeps its name and meaning.
 //!
 //! Absent is not zero: `vendorNaming` is OMITTED when the vendor namer was
-//! never asked, `renameClaims` is always written (all-zero included), and
+//! not asked, `renameClaims` is always written (all-zero included), and
 //! `bindingResolutionStats` is always present, `null` when no binding
 //! matching ran. Every other `Option` block is omitted when the run did
 //! not produce it.

@@ -434,8 +434,8 @@ fn rank(sorted: &[u64], p: f64) -> u64 {
     sorted[idx]
 }
 
-/// The percentiles of a latency list, sorted first so the order the calls
-/// completed in never shows.
+/// The percentiles of a latency list, sorted first so they are
+/// independent of the order the calls completed in.
 fn percentiles(values: &[u64]) -> Percentiles {
     let mut sorted = values.to_vec();
     sorted.sort_unstable();

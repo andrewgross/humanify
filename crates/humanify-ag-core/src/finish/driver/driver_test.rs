@@ -61,7 +61,7 @@ fn the_finish_reconcile_records_its_constituent_spans() {
     let raw = std::fs::read_to_string(&path).unwrap();
     let fx: serde_json::Value = serde_json::from_str(&raw).unwrap();
     // The probe's ledger with the `hashVersion` this binary always writes
-    // (the spans recorded here do not depend on the ledger's key order).
+    // (the spans recorded here are independent of the ledger's key order).
     let mut ledger = fx["ledgerIn"].clone();
     ledger["hashVersion"] = serde_json::json!(3);
     let s = Scratch::new("wp54");

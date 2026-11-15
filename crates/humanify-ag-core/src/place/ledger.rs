@@ -7,7 +7,7 @@
 //!
 //! Two shapes: [`SplitLedger`] is what this run writes and patches (key
 //! order fixed, `nameToFiles` in declaration order); [`StableSplitLedger`]
-//! is the prior's, read only — its `nameToFiles` is looked up, never
+//! is the prior's, read only — its `nameToFiles` is only looked up, not
 //! iterated, so a hash map is safe for it.
 
 use std::collections::HashMap;

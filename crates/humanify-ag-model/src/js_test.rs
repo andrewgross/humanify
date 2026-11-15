@@ -1,6 +1,5 @@
-//! The JS runtime rules, pinned to vectors recorded from the real TS
-//! functions: test/parity/wp41-js-vectors.json (generator
-//! test/parity/wp41-js-probe.ts). The cache key's pins live in
+//! The JS runtime rules, pinned to vectors recorded from JavaScript:
+//! test/parity/wp41-js-vectors.json. The cache key's pins live in
 //! `llm_test.rs`.
 
 use crate::js::{math_round, number_to_string, to_fixed};

@@ -207,7 +207,7 @@ fn build_ledger(
     SplitLedger {
         version: 1,
         files: files.to_vec(),
-        // Declared names are identifiers, never array-index keys, so the
+        // Declared names are identifiers, not array-index keys, so the
         // record keeps declaration order.
         name_to_files: name_to_files.into_iter().collect(),
         order: assignment.to_vec(),
