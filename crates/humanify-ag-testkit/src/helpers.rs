@@ -6,7 +6,7 @@ pub fn strings(items: &[&str]) -> Vec<String> {
 }
 
 /// A fresh, empty temp directory, removed when dropped. The name carries
-/// the tag, the process and the thread, so parallel tests never share one.
+/// the tag, the process and the thread, so parallel tests get their own.
 pub struct ScratchDir(std::path::PathBuf);
 
 impl ScratchDir {

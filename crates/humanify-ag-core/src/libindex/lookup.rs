@@ -440,8 +440,8 @@ impl LibraryIndex {
 
     /// Does the index hold the flat callee-print table (`edges/2`, exp155)
     /// to answer [`LibraryIndex::callee_recorders`] with? False for an
-    /// index without edges — whose silence is no evidence, so a caller
-    /// gating on this must stay silent in turn.
+    /// index without edges, whose silence is no evidence; callers that
+    /// gate on this stay silent in turn.
     pub fn has_callee_prints(&self) -> bool {
         self.callee_prints.is_some()
     }

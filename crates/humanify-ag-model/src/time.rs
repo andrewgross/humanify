@@ -1,5 +1,5 @@
 //! The wall clock as UTC text: the one owner of the civil-date arithmetic.
-//! Wall time is recorded, never a decision input.
+//! Wall time is recorded in reports and logs; no decision reads it.
 
 /// Days since 1970-01-01 to a proleptic Gregorian `(year, month, day)`
 /// (Howard Hinnant's `civil_from_days`).
