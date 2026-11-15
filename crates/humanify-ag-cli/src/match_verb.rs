@@ -113,9 +113,12 @@ pub struct MatchVerbArgs<'a> {
 /// matched. Deterministic: inventory rows are in build order and pair
 /// rows are sorted by prior span (matches_dump's dump order).
 pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
-    let code = humanify_ag_core::unpack::input::read_input(std::path::Path::new(args.input))
-        .map_err(|e| e.to_string())?
-        .text;
+    let code = humanify_ag_core::unpack::input::read_input(
+        std::path::Path::new(args.input),
+        &crate::output_tree::Disk,
+    )
+    .map_err(|e| e.to_string())?
+    .text;
     let prior = read_text(args.prior_version)?;
     if humanify_ag_model::js::trim(&prior).is_empty() {
         return Err(format!(
@@ -219,7 +222,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
         for (path, text) in &candidates {
             run.add_file(&ctx, path, text)?;
         }
-        Ok(())
+        Ok::<_, String>(())
     });
     built?;
     if owned && !args.keep_work_dir {

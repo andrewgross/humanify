@@ -350,8 +350,8 @@ struct WaveStart {
 /// Why a naming era could not be built.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EraError {
-    /// The fresh text does not parse (the side parser's message).
-    Parse(String),
+    /// The fresh text does not parse.
+    Parse(crate::prior::SideParseError),
     /// The library classification failed.
     Carry(CarryError),
     /// Carrying the prior version's names failed.
@@ -363,7 +363,7 @@ pub enum EraError {
 impl std::fmt::Display for EraError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Parse(e) => f.write_str(e),
+            Self::Parse(e) => e.fmt(f),
             Self::Carry(e) => e.fmt(f),
             Self::Transfer(e) => e.fmt(f),
             Self::CloseNoSpan { prior_id } => write!(f, "close prior {prior_id} has no span"),

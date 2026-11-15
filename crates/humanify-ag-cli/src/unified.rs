@@ -314,9 +314,12 @@ fn pipeline_body(
     let ph = phase("read+detect");
     // The one reader of the input file: a Bun code-split entry comes back
     // linked into one program (exp216), anything else as read.
-    let input_bundle =
-        humanify_ag_core::unpack::input::input_from_text(Path::new(input), read_utf8(input)?)
-            .map_err(|e| Crash(format!("cannot link the input {input}: {e}")))?;
+    let input_bundle = humanify_ag_core::unpack::input::input_from_text(
+        Path::new(input),
+        read_utf8(input)?,
+        &crate::output_tree::Disk,
+    )
+    .map_err(|e| Crash(format!("cannot link the input {input}: {e}")))?;
     let input_link = input_bundle.link.clone();
     if let Some(link) = &input_link {
         renderer.message(&format!(
@@ -382,11 +385,14 @@ fn pipeline_body(
             // dispatch — the accumulated dispatch records were the ~99GB
             // holder of a full-bundle fresh run.
             let dispatch_log = match outputs.dump_artifacts.as_deref() {
-                Some(dir) => humanify_ag_core::artifact_dump::DispatchLog::dump(
-                    naming_config.params.clone(),
-                    Path::new(dir),
-                )
-                .map_err(|e| Crash(node_fs_error(&e, "open", dir)))?,
+                Some(dir) => crate::writers::DumpDir::create(Path::new(dir))
+                    .and_then(|folder| {
+                        humanify_ag_core::artifact_dump::DispatchLog::dump(
+                            naming_config.params.clone(),
+                            Box::new(folder),
+                        )
+                    })
+                    .map_err(|e| Crash(node_fs_error(&e, "open", dir)))?,
                 None => {
                     if outputs.dump_asks.is_some() {
                         humanify_ag_core::artifact_dump::DispatchLog::asks(
@@ -618,11 +624,8 @@ its init name, {} renamed to it, {} refused",
             ));
         }
         if let Some(dest) = &outputs.dump_asks {
-            let n = humanify_ag_core::artifact_dump::write_ask_rows(
-                Path::new(dest),
-                dispatch_log.ask_rows(),
-            )
-            .map_err(|e| Crash(e.to_string()))?;
+            let n = crate::writers::write_ask_log(Path::new(dest), dispatch_log.ask_rows())
+                .map_err(|e| Crash(e.to_string()))?;
             renderer.message(&format!("Ask log: {n} ask(s) → {dest}"));
         }
         reports.write_rename_ledger(renderer)?;
@@ -1223,9 +1226,13 @@ impl RunReports<'_> {
         if self.outcome.coverage.is_none() {
             return Ok(());
         }
+        let dir = Path::new(ctx.dir);
+        let folder = crate::writers::DumpDir::create(dir).map_err(|e| {
+            use humanify_ag_core::error::{FileError, FileOp};
+            Crash(FileError::at(FileOp::Mkdir, dir)(e).to_string())
+        })?;
         humanify_ag_core::artifact_dump::write_artifact_dump(
             &humanify_ag_core::artifact_dump::DumpInputs {
-                dir: Path::new(ctx.dir),
                 minified: ctx.minified,
                 outcome: self.outcome,
                 split: self.split,
@@ -1234,6 +1241,7 @@ impl RunReports<'_> {
                 module_wrappers: ctx.module_wrappers,
                 extra_trail: &self.post_split.trail,
             },
+            &folder,
         )
         .map_err(|e| Crash(e.to_string()))?;
         renderer.message(&format!("Artifact dump written to {}", ctx.dir));

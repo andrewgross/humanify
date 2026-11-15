@@ -1,8 +1,9 @@
 //! The error a file operation in core reports: which operation, on which
 //! path, and the system's reason. `Display` prints `<op> <path>: <reason>`,
 //! the words each site used when its errors were strings, so the run's
-//! messages are unchanged. Core's remaining disk sites are legacy (listed
-//! in the effects census); this type moves with them to the shell.
+//! messages are unchanged. Core opens no file itself: the operations are
+//! the shell's, done through the seams core hands it (the output tree's
+//! reader, the dump folder), and the shell reports them with this type.
 
 use std::path::{Path, PathBuf};
 

@@ -197,16 +197,18 @@ fn an_unlisted_effect_in_a_pure_crate_fails_naming_the_shell() {
         out.contains("crates/humanify-ag-core/src/x.rs:1  save  —  fs"),
         "{out}"
     );
-    assert!(out.contains("move the effect to the shell"), "{out}");
-    assert!(out.contains("\"role\": \"legacy\""), "{out}");
+    assert!(out.contains("Move the effect to the shell"), "{out}");
+    assert!(!out.contains("To confirm it"), "no entry to paste: {out}");
 }
 
+const CLI_X: &str = "crates/humanify-ag-cli/src/x.rs";
+
 #[test]
-fn a_listed_legacy_site_passes_and_a_stale_one_fails() {
-    let listed = [entry(CORE_X, "save", "fs", "legacy")];
-    let (code, out) = census_with(&with(base(), CORE_X, WRITES), &listed);
+fn a_listed_shell_site_passes_and_a_stale_one_fails() {
+    let listed = [entry(CLI_X, "save", "fs", "shell")];
+    let (code, out) = census_with(&with(base(), CLI_X, WRITES), &listed);
     assert_eq!(code, 0, "{out}");
-    let (code, out) = census_with(&with(base(), CORE_X, "pub fn save() {}\n"), &listed);
+    let (code, out) = census_with(&with(base(), CLI_X, "pub fn save() {}\n"), &listed);
     assert_eq!(code, 1, "{out}");
     assert!(out.contains("1 stale allowlist entry"), "{out}");
     assert!(out.contains("the list only shrinks"), "{out}");
@@ -216,14 +218,14 @@ fn a_listed_legacy_site_passes_and_a_stale_one_fails() {
 fn a_role_must_fit_the_crate() {
     let cli = "crates/humanify-ag-cli/src/main.rs";
     let files = with(
-        with(base(), CORE_X, WRITES),
+        with(base(), CLI_X, STRING_ERROR),
         cli,
         "fn main() { println!(\"hi\"); }\n",
     );
     let (code, out) = census_with(
         &files,
         &[
-            entry(CORE_X, "save", "fs", "shell"),
+            entry(CLI_X, "parse", "result-string", "shell"),
             entry(cli, "main", "stdio", "legacy"),
         ],
     );
@@ -236,50 +238,68 @@ fn a_role_must_fit_the_crate() {
         out.contains("role \"legacy\" is not allowed here — one of: shell"),
         "{out}"
     );
-    let (code, out) = census_with(&files, &[entry(CORE_X, "save", "fs", "observation")]);
+    let (code, out) = census_with(&files, &[entry(cli, "main", "stdio", "observation")]);
     assert_eq!(
         code, 1,
         "observation is only for the profiling files: {out}"
     );
 }
 
+const STRING_ERROR: &str =
+    "pub fn parse(s: &str) -> Result<u8, String> { s.parse().map_err(|e| format!(\"{e}\")) }\n";
+
 #[test]
-fn a_string_error_signature_is_listed_as_legacy() {
-    let src =
-        "pub fn parse(s: &str) -> Result<u8, String> { s.parse().map_err(|e| format!(\"{e}\")) }\n";
-    let files = with(base(), CORE_X, src);
+fn a_string_error_signature_in_a_shell_crate_is_listed_as_legacy() {
+    let files = with(base(), CLI_X, STRING_ERROR);
     let (code, out) = census_with(&files, &[]);
     assert_eq!(code, 1, "{out}");
     assert!(out.contains("parse  —  result-string"), "{out}");
     assert!(out.contains("typed error"), "{out}");
-    let (code, out) = census_with(&files, &[entry(CORE_X, "parse", "result-string", "legacy")]);
+    let (code, out) = census_with(&files, &[entry(CLI_X, "parse", "result-string", "legacy")]);
     assert_eq!(code, 0, "{out}");
 }
 
 const MODEL_X: &str = "crates/humanify-ag-model/src/x.rs";
 
+/// Both pure crates are strict: an effect or a string error in either
+/// has no role it may be listed under.
 #[test]
-fn a_strict_crate_refuses_every_entry() {
-    let files = with(base(), MODEL_X, WRITES);
-    let (code, out) = census_with(&files, &[]);
-    assert_eq!(code, 1, "{out}");
-    assert!(
-        out.contains("crates/humanify-ag-model/src/x.rs:1  save  —  fs"),
-        "{out}"
-    );
-    assert!(out.contains("strict"), "{out}");
-    assert!(!out.contains("To confirm it"), "no entry to paste: {out}");
-    for role in ["legacy", "observation", "shell"] {
-        let (code, out) = census_with(&files, &[entry(MODEL_X, "save", "fs", role)]);
-        assert_eq!(code, 1, "{role}: {out}");
-        assert!(out.contains("no role is allowed here"), "{role}: {out}");
+fn a_pure_crate_refuses_every_entry() {
+    for (file, line) in [
+        (CORE_X, "crates/humanify-ag-core/src/x.rs:1  save  —  fs"),
+        (MODEL_X, "crates/humanify-ag-model/src/x.rs:1  save  —  fs"),
+    ] {
+        let files = with(base(), file, WRITES);
+        let (code, out) = census_with(&files, &[]);
+        assert_eq!(code, 1, "{out}");
+        assert!(out.contains(line), "{out}");
+        assert!(out.contains("pure crate"), "{out}");
+        assert!(!out.contains("To confirm it"), "no entry to paste: {out}");
+        for role in ["legacy", "observation", "shell"] {
+            let (code, out) = census_with(&files, &[entry(file, "save", "fs", role)]);
+            assert_eq!(code, 1, "{role}: {out}");
+            assert!(out.contains("no role is allowed here"), "{role}: {out}");
+        }
+        let files = with(base(), file, STRING_ERROR);
+        let listed = [entry(file, "parse", "result-string", "legacy")];
+        let (code, out) = census_with(&files, &listed);
+        assert_eq!(code, 1, "{out}");
+        assert!(out.contains("no role is allowed here"), "{out}");
     }
-    let src = "pub fn parse(s: &str) -> Result<u8, String> { Err(s.into()) }\n";
-    let files = with(base(), MODEL_X, src);
-    let listed = [entry(MODEL_X, "parse", "result-string", "legacy")];
-    let (code, out) = census_with(&files, &listed);
+}
+
+/// The profiling clock is the one effect a pure crate keeps, listed as an
+/// `observation`; `legacy` is refused there.
+#[test]
+fn the_profiling_clock_is_an_observation_only() {
+    let profiling = "crates/humanify-ag-core/src/profiling.rs";
+    let src = "pub fn now() -> u64 { let _t = std::time::Instant::now(); 0 }\n";
+    let files = with(base(), profiling, src);
+    let (code, out) = census_with(&files, &[entry(profiling, "now", "clock", "observation")]);
+    assert_eq!(code, 0, "{out}");
+    let (code, out) = census_with(&files, &[entry(profiling, "now", "clock", "legacy")]);
     assert_eq!(code, 1, "{out}");
-    assert!(out.contains("no role is allowed here"), "{out}");
+    assert!(out.contains("role \"legacy\" is not allowed here"), "{out}");
 }
 
 #[test]

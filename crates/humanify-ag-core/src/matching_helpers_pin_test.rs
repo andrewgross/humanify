@@ -372,7 +372,7 @@ fn match_stage_and_transfers_are_pinned() {
             )
             .map_err(|e| e.to_string())?;
             let _ = writeln!(s, "{:?}", outcome.rename.trail().transfer_rows());
-            Ok(s)
+            Ok::<_, String>(s)
         })
         .unwrap_or_else(|e| format!("ERR {e}\n"));
         let _ = write!(out, "# {name}\n{line}");

@@ -28,6 +28,10 @@ impl FolderReader for Disk {
         }
         Ok(out)
     }
+
+    fn has_file(&self, path: &Path) -> bool {
+        path.is_file()
+    }
 }
 
 /// A tree for the folder `root`, over the real disk.
@@ -51,5 +55,35 @@ pub(crate) fn write(tree: &OutputTree) {
                 std::fs::copy(from, path).unwrap();
             }
         }
+    }
+}
+
+/// A dump folder on the real disk (the product's is the shell's, cli
+/// `writers::DumpDir`).
+pub(crate) struct DumpDisk(std::path::PathBuf);
+
+impl DumpDisk {
+    /// The folder `dir`, made when missing.
+    pub(crate) fn create(dir: &Path) -> DumpDisk {
+        std::fs::create_dir_all(dir).unwrap();
+        DumpDisk(dir.to_path_buf())
+    }
+}
+
+impl crate::artifact_dump::DumpFolder for DumpDisk {
+    fn path(&self) -> &Path {
+        &self.0
+    }
+
+    fn create(&self, name: &str) -> std::io::Result<Box<dyn std::io::Write + Send>> {
+        Ok(Box::new(std::fs::File::create(self.0.join(name))?))
+    }
+
+    fn open(&self, name: &str) -> std::io::Result<Box<dyn std::io::Read>> {
+        Ok(Box::new(std::fs::File::open(self.0.join(name))?))
+    }
+
+    fn remove(&self, name: &str) -> std::io::Result<()> {
+        std::fs::remove_file(self.0.join(name))
     }
 }

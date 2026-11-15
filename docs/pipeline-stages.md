@@ -36,7 +36,8 @@ editing the caller.
 | 12  | Emit + finish (in memory)| `emit::cjs`, `finish` (scaffold, relink, ledgers)                         | **no**                                                                                                                                                      |
 
 Stage 0, the input layout (exp216, 2026-11-12): before detection, the one
-reader of the input file (`unpack::input::read_input`) asks the INPUT-LAYOUT
+reader of the input file (`unpack::input::read_input`, which reads the input
+and its chunks and embedded files through the shell's `FolderReader`) asks the INPUT-LAYOUT
 registry (`INPUT_LAYOUTS`: `bun-chunks`, then the `single-file` fallback)
 which layout reads it. `bun-chunks` (`unpack::chunk_link`) recognises a Bun
 code-split layout — an ESM entry under `// @bun` (not `@bun-cjs`) that
@@ -162,7 +163,8 @@ trail), `--stats-json`, `--dump-artifacts`, `--rename-ledger`. They observe
 decisions already made — except `--rename-ledger`, which is NOT inert: it
 gates the family permute off (plugin.ts `finalizeWithFamilyPermute`), so a
 ledger run ships a different tree. (`humanify_ag_cli::unified::RunReports`, the
-dump in `humanify_ag_core::artifact_dump`.)
+dump's records in `humanify_ag_core::artifact_dump`, written through the
+shell's `humanify_ag_cli::writers::DumpDir`.)
 
 ## What was missing from the four-stage model
 

@@ -7,6 +7,9 @@
 //! exception is modules: the minified text classified again by the
 //! unpack's own classifier ([`crate::modules::classify_site`]).
 //!
+//! Core decides each file's name and bytes; the shell owns the folder and
+//! its files ([`DumpFolder`]). Core opens no file (enforced: census:effects).
+//!
 //! Sections: functions, modules, matches, matches-close, twin-gates,
 //! private-renames, transfers, transfers-mechanical, votes, names,
 //! regions, placement, emit, partitions (each `<name>.json`), and prompts.jsonl,
@@ -21,8 +24,8 @@
 //! flag retains nothing per ask.
 
 use std::collections::HashMap;
-use std::io::{BufWriter, Write};
-use std::path::{Path, PathBuf};
+use std::io::{BufWriter, Read, Write};
+use std::path::Path;
 
 use humanify_ag_model::llm::{BatchRenameRequest, CacheKeyParams, LlmCall};
 use serde::Serialize;
@@ -92,39 +95,40 @@ impl From<crate::modules::UnparsedSite> for DumpError {
     }
 }
 
-/// One dump directory: a section is `<dir>/<name>.json`, its records as
-/// serde writes them (pretty, a trailing newline).
-pub struct DumpSink {
-    dir: PathBuf,
+/// The dump folder, made and owned by the shell: the files core names
+/// are created, read back and removed through it.
+pub trait DumpFolder: Send {
+    /// The folder (its files' paths in error messages).
+    fn path(&self) -> &Path;
+    /// The file `name`, created (or emptied) for writing.
+    fn create(&self, name: &str) -> std::io::Result<Box<dyn Write + Send>>;
+    /// The file `name`, for reading back.
+    fn open(&self, name: &str) -> std::io::Result<Box<dyn Read>>;
+    /// Remove the file `name`.
+    fn remove(&self, name: &str) -> std::io::Result<()>;
 }
 
-impl DumpSink {
-    /// The sink over `dir`, created when missing.
-    // io: legacy effect site, listed in dev/census/effects-allowlist.json
-    #[allow(clippy::disallowed_methods)]
-    pub fn create(dir: &Path) -> Result<DumpSink, DumpError> {
-        std::fs::create_dir_all(dir).map_err(FileError::at(FileOp::Mkdir, dir))?;
-        Ok(DumpSink {
-            dir: dir.to_path_buf(),
-        })
-    }
-
-    /// Write one section: `records` serialized to `<name>.json`.
-    // io: legacy effect site, listed in dev/census/effects-allowlist.json
-    #[allow(clippy::disallowed_methods)]
-    pub fn section<T: Serialize + ?Sized>(&self, name: &str, records: &T) -> Result<(), DumpError> {
-        let path = self.dir.join(format!("{name}.json"));
-        let file = std::fs::File::create(&path).map_err(FileError::at(FileOp::Write, &path))?;
-        let mut out = BufWriter::new(file);
-        serde_json::to_writer_pretty(&mut out, records).map_err(|source| DumpError::Serialize {
-            name: name.to_string(),
-            source,
-        })?;
-        out.write_all(b"\n")
-            .and_then(|()| out.flush())
-            .map_err(FileError::at(FileOp::Write, &path))?;
-        Ok(())
-    }
+/// Write one section: `records` serialized to `<name>.json`, as serde
+/// writes them (pretty, a trailing newline).
+pub fn write_section<T: Serialize + ?Sized>(
+    folder: &dyn DumpFolder,
+    name: &str,
+    records: &T,
+) -> Result<(), DumpError> {
+    let file_name = format!("{name}.json");
+    let path = folder.path().join(&file_name);
+    let file = folder
+        .create(&file_name)
+        .map_err(FileError::at(FileOp::Write, &path))?;
+    let mut out = BufWriter::new(file);
+    serde_json::to_writer_pretty(&mut out, records).map_err(|source| DumpError::Serialize {
+        name: name.to_string(),
+        source,
+    })?;
+    out.write_all(b"\n")
+        .and_then(|()| out.flush())
+        .map_err(FileError::at(FileOp::Write, &path))?;
+    Ok(())
 }
 
 /// The split's dump sections, snapshotted when the split ran.
@@ -143,7 +147,6 @@ pub struct SplitSections {
 
 /// What the writer reads.
 pub struct DumpInputs<'a> {
-    pub dir: &'a Path,
     pub minified: &'a str,
     pub outcome: &'a NamingOutcome,
     pub split: Option<&'a SplitSections>,
@@ -159,23 +162,23 @@ pub struct DumpInputs<'a> {
     pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
 }
 
-/// Write every section the run reached.
-pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), DumpError> {
-    let sink = DumpSink::create(inp.dir)?;
+/// Write every section the run reached into `folder`.
+pub fn write_artifact_dump(inp: &DumpInputs<'_>, folder: &dyn DumpFolder) -> Result<(), DumpError> {
     let out = inp.outcome;
     let capture = out.capture.as_ref();
     for (name, records) in capture.iter().flat_map(|c| &c.sections) {
-        sink.section(name, records)?;
+        write_section(folder, name, records)?;
     }
     if let Some(site) =
         crate::modules::classify_site(inp.minified, inp.layout, inp.module_wrappers)?
     {
-        sink.section("modules", &site)?;
+        write_section(folder, "modules", &site)?;
     }
     let mut transfers = out.trail.transfer_rows();
     transfers.extend(extra_rows(inp.extra_trail));
-    sink.section("transfers", &transfers)?;
-    sink.section(
+    write_section(folder, "transfers", &transfers)?;
+    write_section(
+        folder,
         "names",
         &json!({
             "final": final_names(&transfers),
@@ -183,14 +186,16 @@ pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), DumpError> {
             "library": out.library_names,
         }),
     )?;
-    sink.section(
+    write_section(
+        folder,
         "partitions",
         &json!({
             "structuralHash": capture.map(|c| &c.structural_family),
             "statementHash": inp.split.map(|s| &s.statement_family),
         }),
     )?;
-    sink.section(
+    write_section(
+        folder,
         "regions",
         &json!({
             "commentRegions": inp.comment_regions,
@@ -198,8 +203,8 @@ pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), DumpError> {
         }),
     )?;
     if let Some(split) = inp.split {
-        sink.section("placement", &split.placement)?;
-        sink.section("emit", &split.emit)?;
+        write_section(folder, "placement", &split.placement)?;
+        write_section(folder, "emit", &split.emit)?;
     }
     Ok(())
 }
@@ -310,13 +315,10 @@ impl DispatchLog {
         log
     }
 
-    /// `--dump-artifacts`: the part files opened in `dir` now (the dump's
-    /// other files are still written once, at the end).
-    // io: legacy effect site, listed in dev/census/effects-allowlist.json
-    #[allow(clippy::disallowed_methods)]
-    pub fn dump(params: CacheKeyParams, dir: &Path) -> std::io::Result<Self> {
-        std::fs::create_dir_all(dir)?;
-        let rows = LogRows::open(dir)?;
+    /// `--dump-artifacts`: the part files opened in `folder` now (the
+    /// dump's other files are still written once, at the end).
+    pub fn dump(params: CacheKeyParams, folder: Box<dyn DumpFolder>) -> std::io::Result<Self> {
+        let rows = LogRows::Files(LogFiles::open(folder)?);
         let mut log = Self::off(params);
         log.asks = Some(Vec::new());
         log.rows = Some(rows);
@@ -472,10 +474,6 @@ enum LogRows {
 }
 
 impl LogRows {
-    fn open(dir: &Path) -> std::io::Result<Self> {
-        Ok(LogRows::Files(LogFiles::open(dir)?))
-    }
-
     fn in_memory() -> Self {
         LogRows::Memory {
             rows: Vec::new(),
@@ -530,27 +528,25 @@ const NAMING_PART: &str = "prompts.jsonl.namingpart";
 /// [`DispatchLog::begin_named_file`], so a multi-file run dumps the last
 /// file's rows. [`LogFiles::close`] concatenates the parts.
 struct LogFiles {
-    dir: PathBuf,
-    vendor: BufWriter<std::fs::File>,
+    folder: Box<dyn DumpFolder>,
+    vendor: BufWriter<Box<dyn Write + Send>>,
     /// None once a re-create failed (the run keeps going; the error
     /// surfaces at close, like any dump write error).
-    naming: Option<BufWriter<std::fs::File>>,
+    naming: Option<BufWriter<Box<dyn Write + Send>>>,
     rows: u64,
     error: Option<std::io::Error>,
 }
 
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-fn part(dir: &Path, name: &str) -> std::io::Result<BufWriter<std::fs::File>> {
-    Ok(BufWriter::new(std::fs::File::create(dir.join(name))?))
+fn part(folder: &dyn DumpFolder, name: &str) -> std::io::Result<BufWriter<Box<dyn Write + Send>>> {
+    Ok(BufWriter::new(folder.create(name)?))
 }
 
 impl LogFiles {
-    fn open(dir: &Path) -> std::io::Result<LogFiles> {
+    fn open(folder: Box<dyn DumpFolder>) -> std::io::Result<LogFiles> {
         Ok(LogFiles {
-            dir: dir.to_path_buf(),
-            vendor: part(dir, VENDOR_PART)?,
-            naming: Some(part(dir, NAMING_PART)?),
+            vendor: part(&*folder, VENDOR_PART)?,
+            naming: Some(part(&*folder, NAMING_PART)?),
+            folder,
             rows: 0,
             error: None,
         })
@@ -574,7 +570,7 @@ impl LogFiles {
         if self.error.is_some() {
             return;
         }
-        self.naming = match part(&self.dir, NAMING_PART) {
+        self.naming = match part(&*self.folder, NAMING_PART) {
             Ok(w) => Some(w),
             Err(e) => {
                 self.error = Some(e);
@@ -584,23 +580,23 @@ impl LogFiles {
     }
 
     /// Remove the part files, no assembly.
-    // io: legacy effect site, listed in dev/census/effects-allowlist.json
     // default: legacy, untriaged: a Result error becomes a value here
-    #[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
+    #[allow(clippy::let_underscore_must_use)]
     fn discard(self) {
-        let _ = std::fs::remove_file(self.dir.join(VENDOR_PART));
-        let _ = std::fs::remove_file(self.dir.join(NAMING_PART));
+        drop(self.vendor);
+        drop(self.naming);
+        let _ = self.folder.remove(VENDOR_PART);
+        let _ = self.folder.remove(NAMING_PART);
     }
 
-    // io: legacy effect site, listed in dev/census/effects-allowlist.json
     // default: legacy, untriaged: a Result error becomes a value here
-    #[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
+    #[allow(clippy::let_underscore_must_use)]
     fn close(self) -> Result<(), DumpError> {
         if let Some(e) = self.error {
             return Err(DumpError::Part(e));
         }
         let LogFiles {
-            dir,
+            folder,
             mut vendor,
             naming,
             rows,
@@ -617,13 +613,13 @@ impl LogFiles {
             .map_err(write)?;
         drop(vendor);
         drop(naming);
-        let path = dir.join(PROMPTS);
+        let mut out = folder.create(PROMPTS).map_err(write)?;
         if rows == 0 {
-            std::fs::write(&path, "\n").map_err(write)?;
+            out.write_all(b"\n").map_err(write)?;
         } else {
-            let mut out = std::fs::File::create(&path).map_err(write)?;
             for name in [VENDOR_PART, NAMING_PART] {
-                let mut r = std::fs::File::open(dir.join(name))
+                let mut r = folder
+                    .open(name)
                     .map_err(|source| DumpError::ReadPart { name, source })?;
                 std::io::copy(&mut r, &mut out).map_err(|source| DumpError::Prompts {
                     op: "assemble",
@@ -631,29 +627,25 @@ impl LogFiles {
                 })?;
             }
         }
-        let _ = std::fs::remove_file(dir.join(VENDOR_PART));
-        let _ = std::fs::remove_file(dir.join(NAMING_PART));
+        out.flush().map_err(write)?;
+        drop(out);
+        let _ = folder.remove(VENDOR_PART);
+        let _ = folder.remove(NAMING_PART);
         Ok(())
     }
 }
 
-/// Write the reason-labeled ask log (`--dump-asks`): the ask rows the run
-/// recorded, in commit order, one JSON line each. Recording only — no
-/// decision reads it, and no row exists unless the flag asks for it.
-/// Returns the row count.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub fn write_ask_rows(path: &Path, rows: &[AskRow]) -> Result<usize, DumpError> {
+/// The reason-labeled ask log (`--dump-asks`): the ask rows the run
+/// recorded, in commit order, one JSON line each, for the shell to write.
+/// Recording only — no decision reads it, and no row exists unless the
+/// flag asks for it.
+pub fn ask_log(rows: &[AskRow]) -> Result<String, DumpError> {
     let mut text = String::new();
     for row in rows {
         text.push_str(&serde_json::to_string(row).map_err(DumpError::AskRow)?);
         text.push('\n');
     }
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(FileError::at(FileOp::Mkdir, parent))?;
-    }
-    std::fs::write(path, text).map_err(FileError::at(FileOp::Write, path))?;
-    Ok(rows.len())
+    Ok(text)
 }
 
 /// One ask-log row's material — small enough to retain for a whole run:

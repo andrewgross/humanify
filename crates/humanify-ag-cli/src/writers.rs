@@ -158,3 +158,48 @@ pub fn write_rename_ledger(
     std::fs::write(dir.join("source.js"), &bundle.source)?;
     std::fs::write(dir.join("apply.mjs"), RENAME_LEDGER_APPLIER)
 }
+
+/// The `--dump-artifacts` folder on disk: core names the dump's files and
+/// writes their bytes through it (`humanify_ag_core::artifact_dump`).
+pub struct DumpDir(std::path::PathBuf);
+
+impl DumpDir {
+    /// The folder `dir`, made when missing.
+    pub fn create(dir: &Path) -> std::io::Result<DumpDir> {
+        std::fs::create_dir_all(dir)?;
+        Ok(DumpDir(dir.to_path_buf()))
+    }
+}
+
+impl humanify_ag_core::artifact_dump::DumpFolder for DumpDir {
+    fn path(&self) -> &Path {
+        &self.0
+    }
+
+    fn create(&self, name: &str) -> std::io::Result<Box<dyn std::io::Write + Send>> {
+        Ok(Box::new(std::fs::File::create(self.0.join(name))?))
+    }
+
+    fn open(&self, name: &str) -> std::io::Result<Box<dyn std::io::Read>> {
+        Ok(Box::new(std::fs::File::open(self.0.join(name))?))
+    }
+
+    fn remove(&self, name: &str) -> std::io::Result<()> {
+        std::fs::remove_file(self.0.join(name))
+    }
+}
+
+/// `--dump-asks`: the ask log written to `dest` (its folder made when
+/// missing). Returns the row count.
+pub fn write_ask_log(
+    dest: &Path,
+    rows: &[humanify_ag_core::artifact_dump::AskRow],
+) -> Result<usize, humanify_ag_core::artifact_dump::DumpError> {
+    use humanify_ag_core::error::{FileError, FileOp};
+    let text = humanify_ag_core::artifact_dump::ask_log(rows)?;
+    if let Some(parent) = dest.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(FileError::at(FileOp::Mkdir, parent))?;
+    }
+    std::fs::write(dest, text).map_err(FileError::at(FileOp::Write, dest))?;
+    Ok(rows.len())
+}

@@ -997,6 +997,8 @@ fn a_prior_manifest_entry_missing_its_fields_is_refused() {
       {"fileName":"vendor/a.js","name":"a","nameSource":"carry-over"},
       {"fileName":"vendor/c.js","name":"c","nameSource":"carry-over","structuralHash":"h3"}
     ]}"#;
-    let err = PriorManifest::parse(manifest).expect_err("refused");
+    let err = PriorManifest::parse(manifest)
+        .expect_err("refused")
+        .to_string();
     assert!(err.contains("`structuralHash`"), "{err}");
 }

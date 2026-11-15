@@ -10,11 +10,14 @@
 //! and requires each one to be on dev/census/effects-allowlist.json with
 //! its role:
 //!
-//! - `legacy`: an effect in a pure crate, or a `Result<_, String>`, that a
-//!   migration step removes. The list only shrinks: a stale entry (its
-//!   site is gone) fails, so each step deletes what it migrated (enforced: census:effects);
+//! - `legacy`: a `Result<_, String>` in a shell crate, that a migration
+//!   step removes. The list only shrinks: a stale entry (its site is gone)
+//!   fails, so each step deletes what it migrated (enforced: census:effects);
 //! - `observation`: the profiling clock and recorder (its files only);
 //! - `shell`: an effect in a shell crate, an inventory.
+//!
+//! The pure crates are strict: no other site in them can be listed
+//! (enforced: census:effects).
 //!
 //! An unlisted site fails. Keys are (file, scope, construct) named by the
 //! concurrency census's scanner; line numbers are not part of a key.
@@ -53,7 +56,7 @@ use crate::paths::EFFECTS_ALLOWLIST;
 use crate::settings::Parsed;
 use rules::{
     EFFECTS, OBSERVATION_FILES, PURE_CRATES, PURE_LIB_DENY, RESULT_STRING, ROLES, STATE_TYPES,
-    STATIC_STATE, STRICT_CRATES, is_product, pure_crate_of, rule_of,
+    STATIC_STATE, is_product, pure_crate_of, rule_of,
 };
 
 const DOC: &str = "docs/responsibility.md";
@@ -291,26 +294,19 @@ pub fn sites_of(file: &str, text: &[u8]) -> Vec<Site> {
 
 // ─── entries ──────────────────────────────────────────────────────────
 
-fn is_strict(file: &str) -> bool {
-    STRICT_CRATES.iter().any(|c| file.starts_with(c))
-}
-
-/// The roles a site may carry (the first is the one suggested); none in a
-/// strict crate.
+/// The roles a site may carry (the first is the one suggested): in a pure
+/// crate only the profiling clock's `observation`.
 fn allowed_roles(file: &str, construct: &str) -> &'static [&'static str] {
-    if is_strict(file) {
+    if pure_crate_of(file).is_some() {
+        if construct != RESULT_STRING && OBSERVATION_FILES.contains(&file) {
+            return &["observation"];
+        }
         return &[];
     }
     if construct == RESULT_STRING {
-        return &["legacy"];
-    }
-    if pure_crate_of(file).is_none() {
-        return &["shell"];
-    }
-    if OBSERVATION_FILES.contains(&file) {
-        &["observation", "legacy"]
-    } else {
         &["legacy"]
+    } else {
+        &["shell"]
     }
 }
 
@@ -334,7 +330,7 @@ fn entry_problems(e: &EffectSite, i: usize) -> Vec<String> {
     let roles = allowed_roles(&e.file, &e.construct);
     if !e.role.is_empty() && roles.is_empty() {
         problems.push(format!(
-            "  {place}: no role is allowed here — the crate is strict (rules::STRICT_CRATES): move the effect to the shell, or return a typed error"
+            "  {place}: no role is allowed here — a pure crate (rules::PURE_CRATES): move the effect to the shell, or return a typed error"
         ));
     } else if !e.role.is_empty() && !roles.contains(&e.role.as_str()) {
         let meaning: Vec<String> = ROLES
@@ -377,7 +373,7 @@ fn unlisted_message(s: &Site) -> String {
     let Some(role) = allowed_roles(&s.file, &s.construct).first() else {
         return [
             head,
-            "    This crate is strict (rules::STRICT_CRATES): no allowlist entry is accepted. Move the effect to the shell and pass the value in, or return a typed error.".to_string(),
+            "    A pure crate (rules::PURE_CRATES): no allowlist entry is accepted. Move the effect to the shell and pass the value in, or return a typed error.".to_string(),
         ]
         .join("\n");
     };
@@ -392,9 +388,7 @@ fn unlisted_message(s: &Site) -> String {
         (_, RESULT_STRING) => {
             "Return a typed error (an enum with Display) instead; the shell formats it once."
         }
-        (Some(_), _) => {
-            "This is a pure crate: move the effect to the shell (cli) and hand core the value, or inject a trait. Listing it as legacy grows a list that only shrinks."
-        }
+        (Some(_), _) => "The profiling clock: confirm the site as an observation.",
         (None, _) => "A shell crate: confirm the site and add it to the inventory.",
     };
     [

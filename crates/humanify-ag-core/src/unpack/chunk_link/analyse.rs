@@ -21,6 +21,7 @@ use super::ROOT;
 use super::embedded::{Callee, FileRef, is_bun_module};
 use super::error::LinkError;
 use crate::error::{FileError, FileOp};
+use crate::output_tree::FolderReader;
 
 /// A text edit: replace `[start, end)` with `text`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -169,16 +170,19 @@ pub(super) struct Chunk {
 
 /// The load queue: every chunk path gets an index the first time any
 /// chunk names it.
-pub(super) struct Loader {
+pub(super) struct Loader<'d> {
+    /// The shell's reader of the files beside the entry.
+    pub disk: &'d dyn FolderReader,
     pub dir: PathBuf,
     pub index: BTreeMap<PathBuf, usize>,
     pub queue: Vec<PathBuf>,
 }
 
-impl Loader {
-    pub fn new(entry: &Path) -> Loader {
+impl<'d> Loader<'d> {
+    pub fn new(entry: &Path, disk: &'d dyn FolderReader) -> Loader<'d> {
         let dir = entry.parent().unwrap_or(Path::new(".")).to_path_buf();
         Loader {
+            disk,
             dir,
             index: BTreeMap::from([(entry.to_path_buf(), 0)]),
             queue: vec![entry.to_path_buf()],
@@ -188,14 +192,12 @@ impl Loader {
     /// A `/$bunfs/root/<rest>` specifier → its sibling file, queued;
     /// anything else is external. A bunfs specifier whose file is
     /// missing fails: the layout would be linked with a hole.
-    // io: legacy effect site, listed in dev/census/effects-allowlist.json
-    #[allow(clippy::disallowed_methods)]
     pub fn spec(&mut self, s: &str) -> Result<Spec, LinkError> {
         let Some(rest) = s.strip_prefix(ROOT) else {
             return Ok(Spec::External(s.to_string()));
         };
         let path = self.dir.join(rest);
-        if !path.is_file() {
+        if !self.disk.has_file(&path) {
             return Err(LinkError::Missing {
                 spec: s.to_string(),
                 path,
@@ -211,10 +213,11 @@ impl Loader {
 }
 
 /// Read and analyse one chunk.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub(super) fn analyse(path: &Path, loader: &mut Loader) -> Result<Chunk, LinkError> {
-    let bytes = std::fs::read(path).map_err(FileError::at(FileOp::CannotRead, path))?;
+pub(super) fn analyse(path: &Path, loader: &mut Loader<'_>) -> Result<Chunk, LinkError> {
+    let bytes = loader
+        .disk
+        .read(path)
+        .map_err(FileError::at(FileOp::CannotRead, path))?;
     let text = String::from_utf8_lossy(&bytes).into_owned();
     let alloc = Allocator::default();
     let ret = Parser::new(&alloc, &text, SourceType::mjs()).parse();
@@ -920,7 +923,7 @@ impl Ctx<'_, '_> {
 /// beside the entry), not an embedded file?
 fn is_chunk_specifier(loader: &Loader, spec: &str) -> bool {
     spec.strip_prefix(ROOT)
-        .is_some_and(|rest| is_bun_module(&loader.dir.join(rest)))
+        .is_some_and(|rest| is_bun_module(loader.disk, &loader.dir.join(rest)))
 }
 
 fn import_specifier(s: &ImportDeclarationSpecifier<'_>) -> (Imported, SymbolId) {

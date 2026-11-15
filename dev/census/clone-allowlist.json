@@ -7,6 +7,20 @@
         "crates/humanify-ag-core/src/output_tree/disk_test.rs:Disk::list"
       ],
       "justification": "the core's copy is its unit tests' disk under an OutputTree: core cannot link the cli (the shell depends on core), and the shell's I/O crate cannot implement a core trait"
+    },
+    {
+      "members": [
+        "crates/humanify-ag-cli/src/writers.rs:DumpDir::create",
+        "crates/humanify-ag-core/src/output_tree/disk_test.rs:DumpDisk::create"
+      ],
+      "justification": "the core's copy is its unit tests' dump folder on disk: core cannot link the cli (the shell depends on core), and the shell's I/O crate cannot implement a core trait"
+    },
+    {
+      "members": [
+        "crates/humanify-ag-cli/src/writers.rs:DumpDir::open",
+        "crates/humanify-ag-core/src/output_tree/disk_test.rs:DumpDisk::open"
+      ],
+      "justification": "the core's copy is its unit tests' dump folder on disk: core cannot link the cli (the shell depends on core), and the shell's I/O crate cannot implement a core trait"
     }
   ]
 }

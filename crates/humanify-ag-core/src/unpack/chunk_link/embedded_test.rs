@@ -9,6 +9,7 @@
 // io: test code reads fixtures and writes scratch trees; it is not the pipeline
 #![allow(clippy::disallowed_methods)]
 
+use crate::output_tree::disk_test::Disk;
 use std::path::{Path, PathBuf};
 
 use super::{EMBEDDED_DIR, EmbeddedFile, LinkReport};
@@ -40,7 +41,7 @@ fn layout(files: &[(&str, &[u8])]) -> PathBuf {
 }
 
 fn linked(entry: &Path) -> (String, LinkReport) {
-    let bundle = read_input(entry).unwrap();
+    let bundle = read_input(entry, &Disk).unwrap();
     let report = bundle.link.expect("the layout is linked");
     (bundle.text, report)
 }
@@ -229,7 +230,7 @@ fn the_same_file_named_twice_is_copied_once() {
 #[test]
 fn a_missing_embedded_file_is_refused() {
     let entry = layout(&[("index.js", reads_text("gone-1.md").as_bytes()), RUNTIME]);
-    let err = read_input(&entry).unwrap_err();
+    let err = read_input(&entry, &Disk).unwrap_err();
     assert!(err.to_string().contains("gone-1.md"), "{err}");
 }
 
@@ -243,7 +244,7 @@ fn a_name_that_leaves_the_root_is_refused() {
         ("app/c.js", b"// @bun\n"),
         ("secret.txt", b"s"),
     ]);
-    let err = read_input(&entry).unwrap_err();
+    let err = read_input(&entry, &Disk).unwrap_err();
     assert!(err.to_string().contains("secret.txt"), "{err}");
 }
 
@@ -279,7 +280,7 @@ fn a_path_where_dirname_is_rebound_is_refused() {
         ("p.bin", b"x"),
         CHUNK,
     ]);
-    let err = read_input(&entry).unwrap_err();
+    let err = read_input(&entry, &Disk).unwrap_err();
     assert!(err.to_string().contains("__dirname"), "{err}");
 }
 
@@ -312,6 +313,6 @@ fn a_require_with_more_than_the_name_is_refused() {
         CHUNK,
         ("db-1.sqlite", b"SQLite format 3\x00"),
     ]);
-    let err = read_input(&entry).unwrap_err();
+    let err = read_input(&entry, &Disk).unwrap_err();
     assert!(err.to_string().contains("db-1.sqlite"), "{err}");
 }
