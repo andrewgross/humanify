@@ -193,6 +193,9 @@ pub struct SplitRecords {
     /// The split's LLM calls that failed after every retry: (file/folder
     /// namer, tree reviser) — the run's `providerErrors`.
     pub failed_calls: SplitFailedCalls,
+    /// Why the runnable emit declined (the review tree was written in
+    /// its place); the run's closing report fails the run on it.
+    pub declined: Option<String>,
 }
 
 /// The split namer's and the tree reviser's failed calls.
@@ -298,6 +301,7 @@ pub fn run_split(
     }
     let dump = split_dump(code, &outcome, &trail);
     Ok(SplitRecords {
+        declined: outcome.declined.as_ref().map(ToString::to_string),
         ended,
         trail,
         dump: Some(dump),
@@ -339,6 +343,7 @@ is written unsplit to {written}"
         method: not_split_record(why),
         post_split: PostSplitRecords::default(),
         failed_calls: SplitFailedCalls::default(),
+        declined: None,
     }
 }
 
@@ -397,15 +402,11 @@ fn split_before_commit(
         outcome.method.reason
     ));
     report_namer(&namer, renderer);
+    report_cycle_moves(&outcome.cycle_moves, renderer);
     let failed_calls = SplitFailedCalls {
         namer: namer.failed_batches,
         tree_reviser: reviser.failed_calls,
     };
-    if let Some(reason) = &outcome.declined {
-        renderer.message(&format!(
-            "Runnable emit declined: {reason} — writing byte-exact review tree instead"
-        ));
-    }
     for call in reviser.take_recorded() {
         input
             .log
@@ -416,6 +417,25 @@ fn split_before_commit(
             });
     }
     Ok((outcome, prior.is_some(), failed_calls))
+}
+
+/// The statements the load-time cycle guard moved so the runnable tree
+/// loads (silent when it moved none).
+fn report_cycle_moves(moves: &[(usize, String, String)], renderer: &mut dyn ProgressRenderer) {
+    if moves.is_empty() {
+        return;
+    }
+    let listed: Vec<String> = moves
+        .iter()
+        .take(10)
+        .map(|(s, from, to)| format!("statement {s} {from} -> {to}"))
+        .collect();
+    renderer.message(&format!(
+        "Load-time cycle guard: moved {} statement(s) so no two files read each other at load: {}{}",
+        moves.len(),
+        listed.join(", "),
+        if moves.len() > 10 { ", ..." } else { "" }
+    ));
 }
 
 /// The split namer's batch outcome (finding #39: its failures used to be

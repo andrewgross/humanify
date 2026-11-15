@@ -100,6 +100,22 @@ pub fn report_internal_errors(internal_errors: usize) -> Report {
     }
 }
 
+/// The runnable emit declined (`reason`): the tree on disk is the
+/// byte-exact review tree, which does not run, so the run fails. None:
+/// a runnable tree was written, or none was asked for.
+pub fn report_runnable_declined(reason: Option<&str>) -> Report {
+    let Some(reason) = reason else {
+        return Report::default();
+    };
+    Report {
+        messages: vec![format!(
+            "ERROR: no runnable tree was written ({reason}); only the byte-exact review tree was \
+written, and this run is marked failed."
+        )],
+        fails_run: true,
+    }
+}
+
 /// `reportVendorNaming`: silent when the namer never ran.
 pub fn report_vendor_naming(stats: &VendorNamingStats) -> Report {
     if !stats.attempted() {

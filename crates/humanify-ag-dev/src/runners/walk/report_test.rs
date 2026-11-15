@@ -57,3 +57,23 @@ fn hash_named_vendor_files_are_the_turnover_population() {
     assert!(!super::is_hash_named("module-E972B138.js"));
     assert!(!super::is_hash_named("module-e972b13.js"));
 }
+
+#[test]
+fn a_hop_the_pipeline_marked_failed_is_flagged_whatever_its_noise() {
+    let mut failed = row("2", "3", 100.0, (0, 10));
+    failed.hop = JsValue::parse("{\"exitCode\":1}").unwrap();
+    let rows = vec![
+        row("1", "2", 100.0, (0, 10)),
+        failed,
+        row("3", "4", 100.0, (0, 10)),
+    ];
+    let out = hops_to_look_at("rust", &rows).join("\n");
+    assert!(
+        out.contains("**2→3** — the pipeline exited 1 (the run declared itself invalid)"),
+        "{out}"
+    );
+    assert!(
+        !out.contains("**1→2**") && !out.contains("**3→4**"),
+        "{out}"
+    );
+}

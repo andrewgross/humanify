@@ -101,6 +101,10 @@ fn dissenters(alternatives: Option<&[(String, String)]>, file: &str) -> Option<M
     (!out.is_empty()).then_some(out)
 }
 
+/// The tier a statement moved by the load-time cycle guard is counted
+/// under.
+pub const CYCLE_GUARD_TIER: &str = "load-time-cycle-guard";
+
 impl PlacementTrail {
     /// `record(entry)`.
     pub fn record(&mut self, entry: TrailEntry) {
@@ -149,6 +153,24 @@ impl PlacementTrail {
                 Value::Object(Map::new())
             },
         });
+    }
+
+    /// The load-time cycle guard moved statement `index` into `file`
+    /// ([`crate::emit::cycle_guard`]): its row says so, the move counted
+    /// under the guard's tier instead of the one that placed it.
+    pub fn moved_by_cycle_guard(&mut self, index: usize, file: &str) {
+        let Some(row) = self.rows.iter_mut().find(|r| r.index == index as u64) else {
+            return;
+        };
+        if let Some((_, n)) = self.tiers.iter_mut().find(|(t, _)| *t == row.placed_by) {
+            *n = n.saturating_sub(1);
+        }
+        row.placed_by = CYCLE_GUARD_TIER.to_string();
+        row.file = file.to_string();
+        match self.tiers.iter_mut().find(|(t, _)| t == CYCLE_GUARD_TIER) {
+            Some((_, n)) => *n += 1,
+            None => self.tiers.push((CYCLE_GUARD_TIER.to_string(), 1)),
+        }
     }
 
     /// The `--diagnostics` placement report: `tiers` in first-seen order,

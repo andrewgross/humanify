@@ -582,6 +582,14 @@ fn rebase(run: &Run, plan: &Planned) -> Result<Base, String> {
     let stdout = run.results.join(format!("{from}-rebase.stdout"));
     let code = run.launch(&args, &stdout);
     let rebuilt = out.join(".humanify/humanified.js");
+    if code != 0 {
+        // A base the pipeline itself marked invalid (no runnable tree, a
+        // rename-invariant failure) is no base, even when a tree is on disk.
+        return Err(failed(format!(
+            "exit {code}, the run declared itself invalid (see {})",
+            text(&stdout)
+        )));
+    }
     if !rebuilt.is_file() {
         return Err(failed(format!(
             "exit {code}, no {} (see {})",
@@ -944,7 +952,14 @@ fn scored_leg(run: &Run, pair: &str, to: &str, input: &str, base: &Base) -> Pair
         ));
         return Err(format!("the scored leg wrote no {}", missing.join(", ")));
     }
-    analyze_and_boot(run, pair, to, &out, base, &diag, &stats)
+    let analyzed = analyze_and_boot(run, pair, to, &out, base, &diag, &stats);
+    if exit == 0 {
+        return analyzed;
+    }
+    Err(match analyzed {
+        Ok(()) => format!("the pipeline exited {exit}"),
+        Err(e) => format!("the pipeline exited {exit}; {e}"),
+    })
 }
 
 /// Record the run status. Err when the card is REFUSED (no card is
@@ -985,7 +1000,9 @@ fn record_status(
         for l in stdout.lines().filter(|l| l.starts_with("ERROR:")).take(5) {
             ctx.say(format!("    {l}"));
         }
-        ctx.say("  Scoring anyway, but summary.json is stamped and the table will say so.");
+        ctx.say(
+            "  Scoring anyway for inspection, but the pair FAILED: summary.json is stamped and the table will say so.",
+        );
     }
     Ok(())
 }

@@ -666,6 +666,61 @@ fn a_failed_rebase_fails_its_pair_and_the_run_never_falls_back() {
     );
 }
 
+/// The pipeline shim writes its tree, then exits `code` on the launch
+/// whose arguments match `pattern` (a shell `case` glob).
+fn exit_after_tree(rec: &Rec, pattern: &str, code: u8) {
+    let wrapped = format!(
+        "#!/usr/bin/env bash\n\"{real}\" \"$@\"\ncase \"$*\" in {pattern}) exit {code} ;; esac\nexit 0\n",
+        real = rec.root.join("real-humanify").display()
+    );
+    write_exec(&rec.root.join("real-humanify"), RUN_RECORDER);
+    write_exec(&rec.shims.join("humanify"), &wrapped);
+}
+
+#[test]
+fn a_scored_leg_that_exits_non_zero_fails_its_pair_even_with_a_tree_written() {
+    // the pipeline writes the review tree and exits 1 when it could not
+    // write the runnable tree: the card is still scored for inspection,
+    // but the pair is a listed failure and the run exits 1.
+    let first = pairs()[0].clone();
+    let pair = format!("{}->{}", first.0, first.1);
+    let glob = format!("*/{}.toml*", first.1);
+    let h = run_score(&bin_flags(), |rec| exit_after_tree(rec, &glob, 1)).unwrap();
+    assert_eq!(h.status, 1, "{}", h.said);
+    assert!(
+        h.said.contains(&format!("PIPELINE EXITED 1 for {pair}")),
+        "{}",
+        h.said
+    );
+    let verdict = h.said.rfind("!! eval score FAILED").expect(&h.said);
+    assert!(
+        h.said[verdict..].contains(&format!("{pair}: the pipeline exited 1")),
+        "{}",
+        h.said
+    );
+}
+
+#[test]
+fn a_rebase_that_exits_non_zero_fails_its_pair_even_with_a_tree_written() {
+    let first = pairs()[0].clone();
+    let pair = format!("{}->{}", first.0, first.1);
+    let glob = format!("*{}-rebased*", first.0);
+    let h = run_score(&bin_flags(), |rec| exit_after_tree(rec, &glob, 1)).unwrap();
+    assert_eq!(h.status, 1, "{}", h.said);
+    assert_eq!(
+        h.said.matches(&format!("REBASE FAILED for {pair}")).count(),
+        1,
+        "{}",
+        h.said
+    );
+    let verdict = h.said.rfind("!! eval score FAILED").expect(&h.said);
+    assert!(
+        h.said[verdict..].contains(&format!("{pair}: rebase failed")),
+        "{}",
+        h.said
+    );
+}
+
 #[test]
 fn a_missing_input_is_refused_before_anything_builds_or_launches() {
     let (from, to) = pairs()[1].clone();
