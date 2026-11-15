@@ -31,7 +31,9 @@ pairs (warm, standing priors, 0 cache writes on both legs). Branch
   `legacy` entry added. Core `legacy` disk sites outside profiling: 33 → 16
   (what is left: the input reader and chunk linker, the artifact dump —
   step G).
-- **Peak memory: see "Peak memory" below** (2.1.197 → 2.1.198, warm cache).
+- **Peak memory: unchanged within noise.** 2.1.197 → 2.1.198, warm cache,
+  two runs each: 16,031 / 16,007 MB on origin/main, 16,059 / 16,141 MB
+  here (+0.2% to +0.8%; the written tree is 113 MB on disk).
 - **No new `Result<_, String>`.** The writer's error is typed
   (`output_tree::WriteError`, `Display` printing the old texts:
   `mkdir <path>: …`, `write <path>: …`, `copy the embedded file <from> to
@@ -41,10 +43,10 @@ Raw diff lines against origin/main `1e1c69628` (comments included):
 
 | | added | removed |
 | --- | ---: | ---: |
-| product code (core, cli) | CODE_ADD | CODE_DEL |
-| tests | TEST_ADD | TEST_DEL |
-| census allowlist | 18 | 126 |
-| docs (responsibility, pipeline-stages) | DOC_ADD | DOC_DEL |
+| product code (core, cli) | 974 | 599 |
+| tests | 514 | 68 |
+| census allowlists (effects, clones) | 25 | 126 |
+| docs (responsibility, pipeline-stages) | 9 | 5 |
 
 The product code grew: the tree type and its overlay (core, about 240
 lines with docs), the one writer and disk reader (cli, about 150) and the
@@ -110,11 +112,34 @@ origin/main, where it passes (the behaviour it pins is today's).
 
 ## Neutrality
 
-NEUTRALITY
+`cargo dev eval neutrality 1e1c69628199 <pair> --priors /work/neutrality-priors
+--cache /work/neutrality-cache` on the committed candidate `a6d54103e`,
+one at a time under `/work/neutrality.lock`:
+
+| pair | differing files | differing lines | exit codes | cache writes (candidate / baseline) | verdict |
+| --- | ---: | ---: | --- | --- | --- |
+| 2.1.118 → 2.1.119 | 0 | 0 | 0 / 0 | +0 / +0 | NEUTRAL |
+| 2.1.197 → 2.1.198 | 0 | 0 | 0 / 0 | +0 / +0 | NEUTRAL |
+
+Logs: `/work/exp249-neutrality-118.log`, `/work/exp249-neutrality-197.log`.
 
 ## Peak memory
 
-PEAK
+Each binary run by hand on 2.1.197 → 2.1.198 with the neutrality leg's
+flags and config (warm cache, standing prior), one run at a time under
+the neutrality lock, peak RSS from `getrusage(RUSAGE_CHILDREN)`
+(`/work/exp249-rss/peak.py`, log `/work/exp249-rss/peak.log`). Base is
+origin/main `1e1c69628` built by `cargo dev build-bin`.
+
+| run | origin/main | this branch |
+| --- | ---: | ---: |
+| 1 | 16,031 MB | 16,059 MB |
+| 2 | 16,007 MB | 16,141 MB |
+
+The two output trees are byte-identical (`diff -r`, 113 MB each). The
+difference (+28 to +134 MB) is the order of the tree's size, as
+expected: it is held from the unpack to the write, and the run's peak is
+elsewhere (the naming waves). The dispatch log is unchanged (it streams).
 
 ## Open items
 
