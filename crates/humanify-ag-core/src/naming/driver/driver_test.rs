@@ -996,7 +996,7 @@ console.log(require_dep().label(appCounter));
     let rows: Vec<String> = log
         .ask_rows()
         .iter()
-        .map(humanify_ag_model::js::stringify)
+        .map(|r| serde_json::to_string(r).expect("a row"))
         .collect();
     let asked_in = |site: &str, name: &str| {
         rows.iter().any(|r| {

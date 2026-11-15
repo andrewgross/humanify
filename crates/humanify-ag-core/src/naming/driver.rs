@@ -25,7 +25,6 @@
 //! ported (the Rust has no source-map output; `sourceMap` / the ledger flag
 //! only gate passes here, exactly as the TS conditions read them).
 
-pub mod dump;
 pub mod era;
 pub mod library;
 pub mod validate;

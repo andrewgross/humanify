@@ -26,6 +26,8 @@ use oxc_syntax::operator::UnaryOperator;
 const WRAPPER_IIFE_BINDING_THRESHOLD: usize = 50;
 
 /// The detected wrapper (WrapperFunctionResult's dumpable fields).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WrapperFunction {
     /// The wrapper function's span (for marking as pre-done).
     pub span: Span,

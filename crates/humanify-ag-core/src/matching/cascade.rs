@@ -267,7 +267,7 @@ impl MatchResult {
 }
 
 /// One observation row: prior → fresh with the tier that closed it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct PairResolution {
     pub prior: String,
     pub fresh: String,
@@ -278,7 +278,7 @@ pub struct PairResolution {
 }
 
 /// One rejection row with its class (fingerprint-index.ts :853).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct PairRejection {
     pub prior: String,
     pub kind: RejectionKind,
@@ -287,7 +287,8 @@ pub struct PairRejection {
 }
 
 /// TS `pairRejections`' kind union (:853-856).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum RejectionKind {
     Unmatched,
     StillAmbiguous,

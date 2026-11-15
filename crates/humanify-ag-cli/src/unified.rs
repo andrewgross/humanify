@@ -655,10 +655,10 @@ fn pipeline_body(
                 .filter(|(p, _)| p == path)
                 .flat_map(|(_, m)| m.regions.iter().cloned())
                 .collect();
-            // The streamed dispatch rows are the dump's prompts.jsonl +
-            // cache-keys.jsonl: assemble them exactly when the dump itself
-            // is written (an invalid output keeps the TS behavior — no
-            // dump files at all — by discarding the parts).
+            // The streamed dispatch rows are the dump's prompts.jsonl:
+            // assemble them exactly when the dump itself is written (an
+            // invalid output writes no dump files at all — the parts are
+            // discarded).
             if outcome.coverage.is_some() {
                 dispatch_log.close().map_err(Crash)?;
             } else {
@@ -667,10 +667,7 @@ fn pipeline_body(
             reports.write_dump(
                 &DumpContext {
                     dir,
-                    output_dir: Path::new(out_dir),
                     minified: &bundled_code,
-                    prior: prior.as_deref(),
-                    flags: dump_flags(config, &toolchain),
                     regions: &regions,
                     layout: toolchain.layout.piece,
                     module_wrappers: toolchain.module_wrappers.piece,
@@ -815,10 +812,7 @@ struct RunReports<'a> {
 /// What `--dump-artifacts` reads beyond the naming outcome.
 struct DumpContext<'a> {
     dir: &'a str,
-    output_dir: &'a Path,
     minified: &'a str,
-    prior: Option<&'a str>,
-    flags: humanify_ag_model::js::JsValue,
     regions: &'a [humanify_ag_core::libdetect::CommentRegion],
     layout: humanify_ag_core::toolchain::BundleLayout,
     module_wrappers: humanify_ag_core::toolchain::ModuleWrapperGrammar,
@@ -977,90 +971,6 @@ fn load_library_index(
         }
     };
     Ok(load)
-}
-
-/// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved
-/// selection and the decision levers; unset optional flags are absent.
-/// The switch lists are the applied switches in registry order.
-fn dump_flags(config: &Config, toolchain: &Toolchain) -> humanify_ag_model::js::JsValue {
-    use humanify_ag_model::js::{JsObject, JsValue};
-    let mut f = JsObject::new();
-    f.insert("split", JsValue::Bool(config.split.enabled));
-    f.insert("splitPure", JsValue::Bool(config.split.pure));
-    f.insert("bundler", JsValue::str(enum_name(toolchain.bundler)));
-    f.insert("minifier", JsValue::str(enum_name(toolchain.minifier)));
-    f.insert(
-        "skipLibraries",
-        JsValue::Bool(config.library.skips_libraries()),
-    );
-    f.insert(
-        "reconcilePriorDiff",
-        JsValue::Bool(config.matching.reconcile_prior_diff),
-    );
-    f.insert("namingFloor", JsValue::Bool(config.naming.naming_floor));
-    f.insert(
-        "namingFloorSweep",
-        JsValue::Bool(config.naming.naming_floor_sweep),
-    );
-    f.insert("model", JsValue::str(config.llm.model.as_str()));
-    f.insert_opt(
-        "reasoningEffort",
-        config.llm.reasoning_effort.map(|e| JsValue::str(e.name())),
-    );
-    let list = |disable: bool| -> Option<JsValue> {
-        let names: Vec<&str> = config
-            .switches
-            .active()
-            .into_iter()
-            .filter(|s| s.is_disable() == disable)
-            .map(|s| s.name())
-            .collect();
-        (!names.is_empty()).then(|| JsValue::str(names.join(",")))
-    };
-    f.insert_opt("disable", list(true));
-    f.insert_opt("probe", list(false));
-    JsValue::Object(f)
-}
-
-/// `gitShortSha()`: the CWD's `git rev-parse --short HEAD`, "unknown" when
-/// git cannot answer.
-/// The `git rev-parse` deadline: 1 minute. It answers in milliseconds
-/// from a local checkout; only a hung git (a stuck network filesystem, a
-/// wedged credential helper) reaches it.
-const GIT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
-
-/// The dump manifest's commit, `git rev-parse --short HEAD`.
-fn git_short_sha(renderer: &mut dyn ProgressRenderer) -> String {
-    let mut command = std::process::Command::new("git");
-    command.args(["rev-parse", "--short", "HEAD"]);
-    let (sha, warning) = short_sha(&mut command, GIT_DEADLINE);
-    if let Some(warning) = warning {
-        renderer.message(&warning);
-    }
-    sha
-}
-
-/// Run a `rev-parse`-shaped command: its trimmed stdout, or "unknown".
-/// Not a git checkout, or no git at all, is the decided quiet "unknown"
-/// (the binary runs outside checkouts); a git past `deadline` is killed
-/// and the "unknown" comes with a WARNING (docs/concurrency.md rule 4).
-fn short_sha(
-    command: &mut std::process::Command,
-    deadline: std::time::Duration,
-) -> (String, Option<String>) {
-    use humanify_ag_core::subprocess::SubprocessError;
-    match humanify_ag_core::subprocess::run(command, None, deadline) {
-        Ok(o) if o.status.success() => {
-            (String::from_utf8_lossy(&o.stdout).trim().to_string(), None)
-        }
-        Ok(_) | Err(SubprocessError::Spawn(_)) => ("unknown".to_string(), None),
-        Err(e) => (
-            "unknown".to_string(),
-            Some(format!(
-                "WARNING: git rev-parse failed ({e}) — the dump's manifest records commit \"unknown\""
-            )),
-        ),
-    }
 }
 
 impl RunReports<'_> {
@@ -1231,7 +1141,7 @@ impl RunReports<'_> {
         Ok(())
     }
 
-    /// `--dump-artifacts` (writeDumpArtifacts): the 07 §2 catalog.
+    /// `--dump-artifacts`: every section the run reached.
     fn write_dump(
         &self,
         ctx: &DumpContext<'_>,
@@ -1243,13 +1153,7 @@ impl RunReports<'_> {
         humanify_ag_core::artifact_dump::write_artifact_dump(
             &humanify_ag_core::artifact_dump::DumpInputs {
                 dir: Path::new(ctx.dir),
-                output_dir: ctx.output_dir,
-                flags: ctx.flags.clone(),
-                commit: git_short_sha(renderer),
-                generated_at: humanify_ag_model::js::iso_now(),
                 minified: ctx.minified,
-                prior: ctx.prior,
-                fresh: self.fresh,
                 outcome: self.outcome,
                 split: self.split,
                 comment_regions: ctx.regions,
@@ -1922,6 +1826,3 @@ fn load_prior_version_code(
     renderer.message(&format!("Prior version: loaded from {path}"));
     Ok(Some(code))
 }
-
-#[cfg(test)]
-mod unified_test;

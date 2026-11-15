@@ -154,7 +154,8 @@ pub struct DispatchRecord {
 
 /// One recorded name (the dump's `recordName`): the declaration identifier
 /// span, old/new names, kind and functionId.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NameRecord {
     pub span: Span,
     pub old_name: String,

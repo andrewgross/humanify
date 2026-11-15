@@ -50,7 +50,8 @@ use crate::hash::serialize::{SymbolTables, canonical_serialize};
 
 /// A function node in the graph (the FunctionNode's ported fields — the
 /// matching/naming phases add the rest).
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GraphFunction {
     /// `input.js:LINE:COL` — babel's loc convention on the shipped text.
     pub session_id: String,
@@ -76,6 +77,7 @@ pub struct GraphFunction {
     /// The fingerprint's structural features (the TS computes them at
     /// graph build — computeFingerprintAndPlaceholders), from the same row
     /// JSON the hash walks. NOT dumped.
+    #[serde(skip)]
     pub features: crate::matching::StructuralFeatures,
 }
 
@@ -123,7 +125,8 @@ impl DeclaratorInit {
 
 /// One module-level binding node (ModuleBindingNode's dumped fields plus
 /// the alternation's identity inputs — the NOT-dumped fields are marked).
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModuleBindingNode {
     /// `module:<name>` — the minified binding name.
     pub session_id: String,
@@ -134,6 +137,7 @@ pub struct ModuleBindingNode {
     /// keys its reference-identity maps by (prior-version.ts:1748-1807);
     /// oxc's SymbolId is the same resolved-identity standard the hash
     /// placeholders use (07 §1). NOT dumped.
+    #[serde(skip)]
     pub symbol: SymbolId,
     /// Spans of the dependency nodes — other module bindings' identifiers
     /// and functions (wireModuleBindingCallees copies the dependency set).
@@ -146,6 +150,7 @@ pub struct ModuleBindingNode {
     /// internalCallees only).
     pub callers: Vec<Span>,
     /// The declaration shape (see [`DeclaratorInit`]) — NOT dumped.
+    #[serde(skip)]
     pub declarator_init: DeclaratorInit,
     /// The OTHER declarators of the same name in the container (the babel
     /// `constantViolations` redeclarations, minus the binding's own
@@ -1551,84 +1556,19 @@ fn collect_function_entries(nodes: &AstNodes<'_>) -> (Vec<FnEntry>, HashMap<Node
     (entries, idx_by_node)
 }
 
-/// The graph's rows in the `--dump-artifacts` catalog (functions.json and
-/// the partitions' structuralHash family).
-pub mod functions_dump {
-
-    use serde_json::{Value, json};
-
-    /// `captureGraphDump`'s rows (functions.json): every graph node's
-    /// PRE-NAMING state — span key, session id, kind, the name binding,
-    /// the structural hash (a module binding without a fingerprint writes
-    /// `""`, the TS's `?? ""`), callee edges, scope parent, the placeholder
-    /// slots with their ORIGINAL names — sorted by span (`spanKeyOrder`).
-    /// The dump writer's owner.
-    pub fn function_rows(graph: &crate::graph::UnifiedGraph) -> Vec<Value> {
-        let key =
-            |span: oxc_span::Span| json!({"text": "fresh", "start": span.start, "end": span.end});
-        let mut rows: Vec<Value> = Vec::new();
-        for f in &graph.functions {
-            rows.push(json!({
-                "key": key(f.span),
-                "sessionId": f.session_id,
-                "kind": "function",
-                "name": f.name,
-                "nameBinding": f.name_binding.map(&key),
-                "structuralHash": f.structural_hash,
-                "internalCallees": f.internal_callees.iter().map(|s| key(*s)).collect::<Vec<_>>(),
-                "scopeParent": f.scope_parent.map(&key),
-                "bindings": f.placeholder_bindings.iter()
-                    .zip(&f.placeholder_id_spans)
-                    .map(|((slot, _, name), id_span)| json!({
-                        "slot": slot,
-                        "span": key(*id_span),
-                        "name": name
-                    }))
-                    .collect::<Vec<_>>()
-            }));
-        }
-        for mb in &graph.module_bindings {
-            rows.push(json!({
-                "key": key(mb.span),
-                "sessionId": mb.session_id,
-                "kind": "module-binding",
-                "name": mb.name,
-                "nameBinding": key(mb.span),
-                "structuralHash": mb.fingerprint_hash.clone().unwrap_or_default(),
-                "internalCallees": mb.internal_callees.iter().map(|s| key(*s)).collect::<Vec<_>>(),
-                "scopeParent": Value::Null,
-                "bindings": []
-            }));
-        }
-        rows.sort_by(|a, b| {
-            let key = |v: &Value| {
-                (
-                    v["key"]["start"].as_u64().unwrap_or(0),
-                    v["key"]["end"].as_u64().unwrap_or(0),
-                )
-            };
-            key(a).cmp(&key(b))
-        });
-        rows
-    }
-
-    /// The partitions' `structuralHash` family (`captureGraphDump`): every
-    /// function's hash and every FINGERPRINTED module binding's, keyed by
-    /// the node's fresh span.
-    pub fn structural_hash_members(
-        graph: &crate::graph::UnifiedGraph,
-    ) -> Vec<(oxc_span::Span, String)> {
-        let mut out: Vec<(oxc_span::Span, String)> = graph
-            .functions
+/// The partitions' `structuralHash` family: every function's hash and
+/// every FINGERPRINTED module binding's, keyed by the node's fresh span.
+pub fn structural_hash_members(graph: &UnifiedGraph) -> Vec<(oxc_span::Span, String)> {
+    let mut out: Vec<(oxc_span::Span, String)> = graph
+        .functions
+        .iter()
+        .map(|f| (f.span, f.structural_hash.clone()))
+        .collect();
+    out.extend(
+        graph
+            .module_bindings
             .iter()
-            .map(|f| (f.span, f.structural_hash.clone()))
-            .collect();
-        out.extend(
-            graph
-                .module_bindings
-                .iter()
-                .filter_map(|mb| mb.fingerprint_hash.clone().map(|h| (mb.span, h))),
-        );
-        out
-    }
+            .filter_map(|mb| mb.fingerprint_hash.clone().map(|h| (mb.span, h))),
+    );
+    out
 }

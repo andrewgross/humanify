@@ -238,23 +238,23 @@ fn split_dump(code: &str, outcome: &SplitOutcome, trail: &PlacementTrail) -> Spl
             _ => None,
         })
         .unwrap_or_default();
-    let mut imports: std::collections::HashMap<&str, std::collections::BTreeMap<String, String>> =
-        std::collections::HashMap::new();
-    for (importer, module, alias) in &outcome.aliases {
-        imports
-            .entry(importer.as_str())
-            .or_default()
-            .insert(module.clone(), alias.clone());
-    }
+    let files: Vec<serde_json::Value> = outcome
+        .layout
+        .iter()
+        .map(|(path, statements)| serde_json::json!({"path": path, "statements": statements}))
+        .collect();
+    let aliases: Vec<serde_json::Value> = outcome
+        .aliases
+        .iter()
+        .map(|(importer, module, alias)| {
+            serde_json::json!({"importer": importer, "module": module, "alias": alias})
+        })
+        .collect();
     SplitSections {
         statement_family: outcome.spans.iter().copied().zip(hashes).collect(),
-        placement: trail.placement_json(),
+        placement: serde_json::to_value(&trail.rows).expect("the placement rows serialize"),
         shipped: code.to_string(),
-        emit: humanify_ag_core::emit::emit_dump::layout_rows(
-            &outcome.layout,
-            &outcome.spans,
-            |p| imports.get(p).cloned().unwrap_or_default(),
-        ),
+        emit: serde_json::json!({"files": files, "aliases": aliases}),
     }
 }
 
