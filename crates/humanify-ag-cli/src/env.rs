@@ -37,3 +37,9 @@ pub fn get(name: &str, fallback: Option<&str>) -> Option<String> {
 pub fn user_args() -> Vec<String> {
     std::env::args().skip(1).collect()
 }
+
+/// The working directory, read once at the parse point: relative paths
+/// resolve against it (`humanify_ag_model::js::node_path_resolve`).
+pub fn working_dir() -> std::io::Result<std::path::PathBuf> {
+    std::env::current_dir()
+}

@@ -548,10 +548,14 @@ fn pipeline_body(
             .iter()
             .map(|r| r.factory_var.clone())
             .collect();
+        let working_dir = config.io.working_dir.as_deref().ok_or_else(|| {
+            Crash("no working directory: the config was not read from a process".into())
+        })?;
         let mut split = crate::split_stage::SplitStageInput {
             output_dir: Path::new(out_dir),
             embedded_files: input_link.as_ref().map_or(&[], |l| l.embedded.as_slice()),
             input_file: Path::new(input),
+            working_dir,
             processed_source: Some(source),
             toolchain,
             vendor_record: unpacked.vendor_record.as_ref(),
@@ -1028,7 +1032,7 @@ impl RunReports<'_> {
             .as_ref()
             .map(humanify_ag_core::naming::driver::transfer_stats_by_tier);
         let mut report = build_diagnostics_report(&DiagnosticsInputs {
-            timestamp: humanify_ag_model::js::iso_now(),
+            timestamp: humanify_ag_model::time::iso_from_system_time(std::time::SystemTime::now()),
             reports: &out.reports,
             coverage,
             transfer_stats: transfer.as_ref(),

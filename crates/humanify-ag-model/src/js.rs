@@ -6,14 +6,11 @@
 //! JavaScript (test/parity/wp41-js-vectors.json, wpb4-vectors.json). JSON
 //! itself is written with serde_json.
 
-pub use crate::time::iso_now;
 use std::cmp::Ordering;
 
 /// The numeric value of an array-index key, or None for an ordinary key.
 /// An array index is a canonical decimal (no sign, no leading zero unless
 /// it is "0") below 2^32 - 1.
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods)]
 pub fn array_index(key: &str) -> Option<u32> {
     let bytes = key.as_bytes();
     if bytes.is_empty() || bytes.len() > 10 || !bytes.iter().all(u8::is_ascii_digit) {
@@ -22,7 +19,8 @@ pub fn array_index(key: &str) -> Option<u32> {
     if bytes.len() > 1 && bytes[0] == b'0' {
         return None;
     }
-    let value: u64 = key.parse().ok()?;
+    // At most ten digits: the value fits a u64 with no overflow to handle.
+    let value = bytes.iter().fold(0u64, |v, b| v * 10 + u64::from(b - b'0'));
     (value < u64::from(u32::MAX)).then_some(value as u32)
 }
 
@@ -181,7 +179,9 @@ pub fn math_log(x: f64) -> f64 {
 /// parsed one ulp high). Handles `_` separators, hex/octal/binary radix
 /// prefixes, and sloppy-mode legacy octal (`017` = 15, `019` = 19).
 /// `None` for a BigInt (`…n`) or anything that is not a numeric literal.
-// default: legacy, untriaged: a Result error becomes a value here
+// default: a spelling the radix or float parser refuses is "not a numeric
+// literal", this function's documented None (one gap: a radix literal
+// above u128::MAX also reads None where JS has a float)
 #[allow(clippy::disallowed_methods)]
 pub fn numeric_literal_value(raw: &str) -> Option<f64> {
     let s: String = raw.chars().filter(|c| *c != '_').collect();
@@ -307,19 +307,15 @@ pub fn is_js_whitespace(c: char) -> bool {
     )
 }
 
-/// Node's `path.resolve(p)` (POSIX): absolute against the working
-/// directory, then `.` and `..` normalized LEXICALLY — never through the
-/// filesystem, and before any parent walk (`std::path::absolute` keeps
-/// `..`, so a raw `parent()` walk from `a/x/../b` visits `a/x`).
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods)]
-pub fn node_path_resolve(p: &std::path::Path) -> std::path::PathBuf {
+/// Node's `path.resolve(p)` (POSIX) from `cwd`, the working directory the
+/// shell read: `p` joined to `cwd` (an absolute `p` replaces it), then `.`
+/// and `..` normalized LEXICALLY (not through the filesystem), and
+/// before any parent walk (a raw `parent()` walk from `a/x/../b` visits
+/// `a/x`). An empty `p` (a bare file's directory) is `cwd`, as in Node.
+pub fn node_path_resolve(cwd: &std::path::Path, p: &std::path::Path) -> std::path::PathBuf {
     use std::path::{Component, PathBuf};
-    // `absolute` joins the working directory WITHOUT normalizing.
-    let abs = std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
     let mut out = PathBuf::from("/");
-    for c in abs.components() {
+    for c in cwd.join(p).components() {
         match c {
             Component::Normal(s) => out.push(s),
             Component::ParentDir => {

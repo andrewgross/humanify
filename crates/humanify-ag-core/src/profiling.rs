@@ -15,7 +15,7 @@ pub mod trace_events;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use humanify_ag_model::profiling::{
     ConcurrencyCounts, ConcurrencySnapshot, Fields, ProfileMeta, ProfileReport, ProfileSpan,
@@ -108,7 +108,7 @@ impl Profiler {
             enabled,
             start: Instant::now(),
             started_at: if enabled {
-                humanify_ag_model::time::iso_now()
+                humanify_ag_model::time::iso_from_system_time(SystemTime::now())
             } else {
                 String::new()
             },

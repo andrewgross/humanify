@@ -759,11 +759,7 @@ pub(crate) fn bundle_revealed_seeds(code: &str) -> Vec<Seed> {
 
 /// Today UTC as `YYYY-MM-DD`: the run-time build's as-of.
 fn today() -> String {
-    let ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    humanify_ag_model::time::iso_from_unix_ms(ms)
+    humanify_ag_model::time::iso_from_system_time(std::time::SystemTime::now())
         .chars()
         .take(10)
         .collect()

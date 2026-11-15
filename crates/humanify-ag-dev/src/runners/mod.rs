@@ -34,6 +34,11 @@ use std::time::Duration;
 use crate::env;
 use crate::proc::Spawn;
 
+/// Now, as UTC ISO text: the wall time a run record carries.
+pub fn now_iso() -> String {
+    humanify_ag_model::time::iso_from_system_time(std::time::SystemTime::now())
+}
+
 /// What a runner may know about where it runs.
 pub struct Ctx {
     /// The checkout whose committed files (pairs.json, ...) the run reads

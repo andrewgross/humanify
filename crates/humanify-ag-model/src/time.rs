@@ -17,7 +17,26 @@ pub fn civil_from_days(days: i64) -> (i64, i64, i64) {
 
 /// A Unix-epoch millisecond count as `YYYY-MM-DDTHH:MM:SS.mmmZ`.
 pub fn iso_from_unix_ms(ms: u128) -> String {
-    let secs = i64::try_from(ms / 1000).expect("a time before year 292 billion");
+    iso_from_signed_ms(i128::try_from(ms).expect("a time before year 292 billion"))
+}
+
+/// A clock reading, as [`iso_from_unix_ms`] (JS `new Date().toISOString()`).
+/// The shell reads the clock and hands the reading in. A reading before
+/// 1970 prints its pre-1970 date, as JS does.
+pub fn iso_from_system_time(at: std::time::SystemTime) -> String {
+    let ms = match at.duration_since(std::time::UNIX_EPOCH) {
+        Ok(after) => i128::try_from(after.as_millis()),
+        // Floor, as JS does: 0.5 ms before the epoch is -1 ms.
+        Err(before) => {
+            i128::try_from(before.duration().as_nanos().div_ceil(1_000_000)).map(|ms| -ms)
+        }
+    };
+    iso_from_signed_ms(ms.expect("a time within year 292 billion"))
+}
+
+/// Signed epoch milliseconds (negative before 1970) as ISO text.
+fn iso_from_signed_ms(ms: i128) -> String {
+    let secs = i64::try_from(ms.div_euclid(1000)).expect("a time before year 292 billion");
     let (y, m, d) = civil_from_days(secs.div_euclid(86_400));
     let rem = secs.rem_euclid(86_400);
     format!(
@@ -25,17 +44,6 @@ pub fn iso_from_unix_ms(ms: u128) -> String {
         rem / 3600,
         rem % 3600 / 60,
         rem % 60,
-        ms % 1000
+        ms.rem_euclid(1000)
     )
-}
-
-/// Now, as [`iso_from_unix_ms`] (JS `new Date().toISOString()`).
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods)]
-pub fn iso_now() -> String {
-    let since = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    iso_from_unix_ms(since.as_millis())
 }

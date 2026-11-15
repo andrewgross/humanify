@@ -214,7 +214,7 @@ pub fn run_leg(
     api_key: &str,
     prior_kind: &str,
 ) -> Result<LegOutcome, String> {
-    let started_at = humanify_ag_model::js::iso_now();
+    let started_at = crate::runners::now_iso();
     let t0 = Instant::now();
     let cache = spec.cache_dir.as_deref().map(Path::new);
     let before = cache.map_or(0, count_files);

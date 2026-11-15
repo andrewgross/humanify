@@ -46,6 +46,9 @@ pub struct SplitStageInput<'a> {
     pub embedded_files: &'a [humanify_ag_core::unpack::chunk_link::EmbeddedFile],
     /// The run's input bundle (`filename`).
     pub input_file: &'a Path,
+    /// The working directory, read once by the shell: relative paths
+    /// resolve against it (`node_path_resolve`).
+    pub working_dir: &'a Path,
     /// The unpacked file the naming stage processed (removed once the tree
     /// supersedes it).
     pub processed_source: Option<&'a Path>,
@@ -142,8 +145,13 @@ fn load_prior_split_ledger(
 
 /// `removeConsumedSourceFile`: never outside the output dir, never the
 /// run's own input.
-fn remove_consumed_source_file(output_dir: &Path, source: &Path, input_file: &Path) {
-    let abs = |p: &Path| humanify_ag_model::js::node_path_resolve(p);
+fn remove_consumed_source_file(
+    output_dir: &Path,
+    source: &Path,
+    input_file: &Path,
+    working_dir: &Path,
+) {
+    let abs = |p: &Path| humanify_ag_model::js::node_path_resolve(working_dir, p);
     let resolved = abs(source);
     if resolved == abs(input_file) {
         return;
@@ -457,7 +465,7 @@ fn commit_and_finish(
     let out = input.output_dir;
     let ph = humanify_ag_core::profiling::phase("split:write-tree");
     if let Some(source) = input.processed_source {
-        remove_consumed_source_file(out, source, input.input_file);
+        remove_consumed_source_file(out, source, input.input_file, input.working_dir);
     }
     for (path, content) in &outcome.files {
         write_file(&out.join(path), content).map_err(before)?;
@@ -497,6 +505,7 @@ fn commit_and_finish(
         runnable: outcome.runnable.as_deref(),
         prior_version: input.prior_version,
         input_file: input.input_file,
+        working_dir: input.working_dir,
         switches: finish_switches,
         // Finding #60: the vendor captures the split resolved to owner
         // files + live accessor names, for the finish's vendor bridge.

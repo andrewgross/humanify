@@ -256,6 +256,32 @@ fn a_string_error_signature_is_listed_as_legacy() {
     assert_eq!(code, 0, "{out}");
 }
 
+const MODEL_X: &str = "crates/humanify-ag-model/src/x.rs";
+
+#[test]
+fn a_strict_crate_refuses_every_entry() {
+    let files = with(base(), MODEL_X, WRITES);
+    let (code, out) = census_with(&files, &[]);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("crates/humanify-ag-model/src/x.rs:1  save  —  fs"),
+        "{out}"
+    );
+    assert!(out.contains("strict"), "{out}");
+    assert!(!out.contains("To confirm it"), "no entry to paste: {out}");
+    for role in ["legacy", "observation", "shell"] {
+        let (code, out) = census_with(&files, &[entry(MODEL_X, "save", "fs", role)]);
+        assert_eq!(code, 1, "{role}: {out}");
+        assert!(out.contains("no role is allowed here"), "{role}: {out}");
+    }
+    let src = "pub fn parse(s: &str) -> Result<u8, String> { Err(s.into()) }\n";
+    let files = with(base(), MODEL_X, src);
+    let listed = [entry(MODEL_X, "parse", "result-string", "legacy")];
+    let (code, out) = census_with(&files, &listed);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("no role is allowed here"), "{out}");
+}
+
 #[test]
 fn a_test_file_and_a_harness_crate_are_not_scanned() {
     let files = with(

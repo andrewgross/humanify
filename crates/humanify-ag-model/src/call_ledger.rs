@@ -488,13 +488,12 @@ impl CallLedger {
     }
 
     /// The outermost layer: every call, whatever answered it.
-    // default: legacy, untriaged: a Result error becomes a value here
-    #[allow(clippy::disallowed_methods)]
     pub fn outcome(&self, call: &LlmCall, result: &Result<BatchRenameResponse, LlmError>) {
-        let verdicts = result
-            .as_ref()
-            .ok()
-            .map(|r| judge_answer(call, r, self.is_legal));
+        // Judged outside the lock; a failed call is tallied below.
+        let verdicts = match result {
+            Ok(r) => Some(judge_answer(call, r, self.is_legal)),
+            Err(_) => None,
+        };
         self.with(call.site, |t| {
             t.calls += 1;
             match result {

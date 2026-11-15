@@ -53,7 +53,7 @@ use crate::paths::EFFECTS_ALLOWLIST;
 use crate::settings::Parsed;
 use rules::{
     EFFECTS, OBSERVATION_FILES, PURE_CRATES, PURE_LIB_DENY, RESULT_STRING, ROLES, STATE_TYPES,
-    STATIC_STATE, is_product, pure_crate_of, rule_of,
+    STATIC_STATE, STRICT_CRATES, is_product, pure_crate_of, rule_of,
 };
 
 const DOC: &str = "docs/responsibility.md";
@@ -291,8 +291,16 @@ pub fn sites_of(file: &str, text: &[u8]) -> Vec<Site> {
 
 // ─── entries ──────────────────────────────────────────────────────────
 
-/// The roles a site may carry (the first is the one suggested).
+fn is_strict(file: &str) -> bool {
+    STRICT_CRATES.iter().any(|c| file.starts_with(c))
+}
+
+/// The roles a site may carry (the first is the one suggested); none in a
+/// strict crate.
 fn allowed_roles(file: &str, construct: &str) -> &'static [&'static str] {
+    if is_strict(file) {
+        return &[];
+    }
     if construct == RESULT_STRING {
         return &["legacy"];
     }
@@ -324,7 +332,11 @@ fn entry_problems(e: &EffectSite, i: usize) -> Vec<String> {
         ));
     }
     let roles = allowed_roles(&e.file, &e.construct);
-    if !e.role.is_empty() && !roles.contains(&e.role.as_str()) {
+    if !e.role.is_empty() && roles.is_empty() {
+        problems.push(format!(
+            "  {place}: no role is allowed here — the crate is strict (rules::STRICT_CRATES): move the effect to the shell, or return a typed error"
+        ));
+    } else if !e.role.is_empty() && !roles.contains(&e.role.as_str()) {
         let meaning: Vec<String> = ROLES
             .iter()
             .filter(|(r, _)| roles.contains(r))
@@ -339,6 +351,19 @@ fn entry_problems(e: &EffectSite, i: usize) -> Vec<String> {
     problems
 }
 
+/// The site's place and the rule it breaks.
+fn unlisted_head(s: &Site) -> String {
+    let lines: Vec<String> = s.lines.iter().map(ToString::to_string).collect();
+    format!(
+        "  {}:{}  {}  —  {}\n    Rule: {}",
+        s.file,
+        lines.join(","),
+        s.scope,
+        s.construct,
+        rule_of(&s.construct).unwrap_or("")
+    )
+}
+
 #[derive(Serialize)]
 struct Suggested<'a> {
     file: &'a str,
@@ -348,7 +373,14 @@ struct Suggested<'a> {
 }
 
 fn unlisted_message(s: &Site) -> String {
-    let role = allowed_roles(&s.file, &s.construct)[0];
+    let head = unlisted_head(s);
+    let Some(role) = allowed_roles(&s.file, &s.construct).first() else {
+        return [
+            head,
+            "    This crate is strict (rules::STRICT_CRATES): no allowlist entry is accepted. Move the effect to the shell and pass the value in, or return a typed error.".to_string(),
+        ]
+        .join("\n");
+    };
     let entry = Suggested {
         file: &s.file,
         scope: &s.scope,
@@ -356,7 +388,6 @@ fn unlisted_message(s: &Site) -> String {
         role,
     };
     let json = serde_json::to_string_pretty(&entry).unwrap_or_default();
-    let lines: Vec<String> = s.lines.iter().map(ToString::to_string).collect();
     let advice = match (pure_crate_of(&s.file), s.construct.as_str()) {
         (_, RESULT_STRING) => {
             "Return a typed error (an enum with Display) instead; the shell formats it once."
@@ -367,14 +398,7 @@ fn unlisted_message(s: &Site) -> String {
         (None, _) => "A shell crate: confirm the site and add it to the inventory.",
     };
     [
-        format!(
-            "  {}:{}  {}  —  {}",
-            s.file,
-            lines.join(","),
-            s.scope,
-            s.construct
-        ),
-        format!("    Rule: {}", rule_of(&s.construct).unwrap_or("")),
+        head,
         format!("    {advice}"),
         format!("    To confirm it, add to {EFFECTS_ALLOWLIST}:"),
         json.lines()

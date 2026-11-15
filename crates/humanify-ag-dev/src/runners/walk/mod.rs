@@ -331,7 +331,7 @@ fn record_manifest(w: &Walk, fresh: JsValue) -> Result<(), String> {
     let Some(old) = old else {
         let mut m = fresh;
         if let JsValue::Object(o) = &mut m {
-            o.insert("startedAt", JsValue::str(humanify_ag_model::js::iso_now()));
+            o.insert("startedAt", JsValue::str(crate::runners::now_iso()));
         }
         return write(&path, &format!("{}\n", js_pretty(&m)));
     };
@@ -529,7 +529,7 @@ fn hop(w: &Walk, v: &str, prior: Option<&str>) -> Result<(), String> {
     });
     ctx.say(format!(
         "=== {} hop {v} (prior: {}) ===",
-        humanify_ag_model::js::iso_now(),
+        crate::runners::now_iso(),
         prior.unwrap_or("COLD")
     ));
     remove(&tree);
@@ -645,7 +645,7 @@ fn write_hop(
         ("cacheWritten", field(&["config", "cache", "written"])),
         ("errors", errors),
         ("boot", boot),
-        ("finishedAt", JsValue::str(humanify_ag_model::js::iso_now())),
+        ("finishedAt", JsValue::str(crate::runners::now_iso())),
     ]);
     write(path, &format!("{}\n", js_pretty(&rec)))
 }
@@ -667,7 +667,7 @@ fn finished_hop(w: &Walk, v: &str, tree: &Path, hop_path: &Path) -> Result<(), S
             &w.cfg.dir.join("runs").join(format!("{v}-boot.json")),
         );
         if let JsValue::Object(b) = &mut boot {
-            b.insert("rerecorded", JsValue::str(humanify_ag_model::js::iso_now()));
+            b.insert("rerecorded", JsValue::str(crate::runners::now_iso()));
         }
         if let JsValue::Object(o) = &mut hop {
             o.insert("boot", boot);
