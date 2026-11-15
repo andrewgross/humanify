@@ -1,5 +1,4 @@
-//! The 034 eval's committed files: `pairs.json` (read by FOUR parsers
-//! today — eval.ts twice, run.sh, launch_parity_test.rs), `noise-bands.json`,
+//! The eval's committed files: `pairs.json`, `noise-bands.json`,
 //! `self-hop-reference.json` and the launch goldens.
 
 use std::collections::BTreeMap;
@@ -19,7 +18,6 @@ pub struct Pairs {
     #[serde(rename = "_paths")]
     pub paths_note: String,
     pub inputs_base: String,
-    pub priors_base: String,
     #[serde(rename = "_libraryIndex")]
     pub library_index_note: String,
     pub library_index: String,

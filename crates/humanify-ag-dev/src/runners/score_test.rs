@@ -1,10 +1,9 @@
 //! `eval score` run for real against the run.sh recorder: every launch
-//! must be byte-identical to `run-launch.golden.txt` (scratch bases, the
-//! default) and `run-launch.seeded-base.golden.txt` — the protocol every
-//! binary-scored reference ran with (proof (c)). Ported with them: the
-//! behaviours `run-launch.test.ts` held (base modes, refusals, the warm
-//! self-hop's two failure modes, `--pipeline-set` at all three sites, the
-//! last-scored-pair self-hop, the label record).
+//! must be byte-identical to `run-launch.golden.txt` — the protocol every
+//! binary-scored reference ran with. Also held: refusals before anything
+//! launches, a failed pair failing the run loudly (never a fallback), the
+//! warm self-hop's two failure modes, `--pipeline-set` at all three sites,
+//! the last-scored-pair self-hop, the label record.
 
 use std::path::{Path, PathBuf};
 
@@ -50,10 +49,6 @@ fn fake_corpus(root: &Path) {
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("index.js"), "input\n").unwrap();
         }
-        let prior = root.join(format!("priors/claude-code-{from}/.humanify"));
-        std::fs::create_dir_all(&prior).unwrap();
-        std::fs::write(prior.join("humanified.js"), "prior\n").unwrap();
-        std::fs::write(prior.join("split-ledger.json"), "{}\n").unwrap();
     }
 }
 
@@ -65,8 +60,6 @@ fn args(rec: &Rec, label: &str, flags: &[&str]) -> Vec<String> {
         format!("{r}/work"),
         "--inputs-base".into(),
         format!("{r}/inputs"),
-        "--priors-base".into(),
-        format!("{r}/priors"),
         "--endpoint".into(),
         "http://127.0.0.1:9/v1".into(),
     ];
@@ -243,31 +236,6 @@ fn every_launch_is_byte_identical_to_the_scratch_golden() {
 }
 
 #[test]
-fn seeded_base_launches_are_byte_identical_to_the_seeded_golden() {
-    let h = run_score(
-        &with(&["--base-mode", "seeded", "--parallel-pairs", "1"]),
-        |_| {},
-    )
-    .unwrap();
-    assert_ran(&h);
-    assert_golden("run-launch.seeded-base.golden.txt", &h.launches);
-    assert_scored_launches_match_runcfgs(&h);
-}
-
-#[test]
-fn archive_mode_rebuilds_nothing() {
-    let h = run_score(&with(&["--base-mode", "archive"]), |_| {}).unwrap();
-    assert_ran(&h);
-    assert!(!h.launches.contains("-rebased "), "{}", h.launches);
-    assert_eq!(
-        h.launches.matches("\"baseMode\": \"archive\"").count(),
-        pairs().len()
-    );
-    let p = std::fs::read_to_string(h.results.join("pipeline.json")).unwrap();
-    assert!(p.contains("\"baseMode\":\"archive\""), "{p}");
-}
-
-#[test]
 fn the_label_records_the_binary_the_run_config_and_the_boot_model() {
     let h = run_score(&bin_flags(), |_| {}).unwrap();
     let p = std::fs::read_to_string(h.results.join("pipeline.json")).unwrap();
@@ -276,6 +244,10 @@ fn the_label_records_the_binary_the_run_config_and_the_boot_model() {
         "{p}"
     );
     assert!(p.contains("\"bootGateModel\":\"claude-opus-4-1\""), "{p}");
+    assert!(
+        !p.contains("baseMode"),
+        "one base mode: nothing to record {p}"
+    );
     let cfg = h
         .rec
         .root
@@ -330,6 +302,9 @@ fn refusals_happen_before_anything_launches() {
         &["--no-vendor"],
         &["--heap-mb", "1"],
         &["--seeded-base"],
+        &["--base-mode", "scratch"],
+        &["--base-mode", "seeded"],
+        &["--priors-base", "/p"],
     ] {
         let r = run_score(&with(bad), |_| {});
         match r {
@@ -462,38 +437,6 @@ fn plant(rec: &Rec, pipeline: Option<&str>, manifest: Option<&str>) {
 }
 
 #[test]
-fn a_scratch_run_into_a_seeded_label_is_refused_and_a_legacy_label_reads_its_manifests() {
-    let h = run_score(&bin_flags_strict(), |rec| plant(rec, Some("{\"pipeline\":{\"kind\":\"rust-bin\"},\"baseMode\":\"seeded\",\"namingMode\":\"names\",\"libraryIndex\":\"/work/library-index/cb64c1f5fd507bee7f80efd46e0d01cec405a8b3028a9c05d56e94d7c071ec28\"}\n"), None)).unwrap();
-    assert_eq!(h.status, 2, "{}", h.said);
-    assert!(
-        h.said
-            .contains("base modes: the label holds seeded, this run would add scratch"),
-        "{}",
-        h.said
-    );
-    // no baseMode in pipeline.json: a rebased prior in the manifests WAS seeded
-    let legacy = "{\"pair\":\"2.1.85->2.1.86\",\"inputs\":{\"prior\":\"/w/x/2.1.85-rebased/.humanify/humanified.js\",\"priorKind\":\"rebased\"}}";
-    let h = run_score(&bin_flags_strict(), |rec| {
-        plant(rec, Some("{\"pipeline\":{\"kind\":\"rust-bin\"},\"namingMode\":\"names\",\"libraryIndex\":\"/work/library-index/cb64c1f5fd507bee7f80efd46e0d01cec405a8b3028a9c05d56e94d7c071ec28\"}\n"), Some(legacy))
-    })
-    .unwrap();
-    assert_eq!(h.status, 2, "{}", h.said);
-    assert!(h.said.contains("the label holds seeded"), "{}", h.said);
-    // and --force-mixed proceeds, saying so
-    let mut forced = bin_flags_strict();
-    forced.push("--force-mixed");
-    let h = run_score(&forced, |rec| {
-        plant(
-            rec,
-            Some("{\"pipeline\":{\"kind\":\"rust-bin\"},\"baseMode\":\"seeded\"}\n"),
-            None,
-        )
-    })
-    .unwrap();
-    assert!(h.said.contains("!! MIXED BASE MODES"), "{}", h.said);
-}
-
-#[test]
 fn a_run_with_another_naming_mode_or_index_into_a_label_is_refused() {
     let h = run_score(&with_strict(&["--pipeline-set", "library.matching=off"]), |rec| {
         plant(rec, Some("{\"pipeline\":{\"kind\":\"rust-bin\"},\"baseMode\":\"scratch\",\"namingMode\":\"names\",\"libraryIndex\":\"/ix\"}\n"), None)
@@ -527,15 +470,20 @@ fn with_strict(extra: &[&'static str]) -> Vec<&'static str> {
 }
 
 /// The run went to the end. The recorder's trees are not bundles, so the
-/// scorer (scorer v2, lane L2a) writes no card and the summary fails with
-/// exit 1 — the one failure a recorder run is allowed.
+/// scorer writes no card for any pair: the run fails loudly on exactly
+/// that (ANALYZE FAILED, then the closing FAILED verdict), the one failure
+/// a recorder run is allowed.
 fn assert_ran(h: &Harness) {
     assert!(h.said.contains("=== summarizing model"), "{}", h.said);
-    assert!(
-        h.status == 0 || (h.status == 1 && h.said.contains("SUMMARY FAILED: no scorecards")),
-        "{}",
-        h.said
-    );
+    assert_eq!(h.status, 1, "{}", h.said);
+    let verdict = h.said.rfind("!! eval score FAILED").expect(&h.said);
+    for line in h.said[verdict..].lines().skip(1) {
+        assert!(
+            line.contains(": analysis failed") || line.starts_with("  the summary:"),
+            "{line}\n{}",
+            h.said
+        );
+    }
 }
 
 /// Two runs of one label must not write one work folder: a run whose
@@ -681,9 +629,10 @@ fn the_label_records_how_many_lanes_ran_and_each_launchs_llm_concurrency() {
 }
 
 #[test]
-fn a_failing_lane_fails_its_pair_and_not_the_others() {
-    // the first pair's rebase writes no tree: that pair falls back to the
-    // archive prior (said in ITS block), every other pair is rebased
+fn a_failed_rebase_fails_its_pair_and_the_run_never_falls_back() {
+    // the first pair's rebase writes no tree: that pair is NOT scored (no
+    // archive prior to fall back to), every other pair is, and the run
+    // exits non-zero naming the failed pair last.
     let h = run_score(&bin_flags(), |rec| {
         let wrapped = format!(
             "#!/usr/bin/env bash\ncase \"$*\" in *2.1.85-rebased*) exit 3 ;; esac\nexec \"{}\" \"$@\"\n",
@@ -693,19 +642,69 @@ fn a_failing_lane_fails_its_pair_and_not_the_others() {
         write_exec(&rec.shims.join("humanify"), &wrapped);
     })
     .unwrap();
-    assert_ran(&h);
-    assert_eq!(h.said.matches("rebase FAILED").count(), 1, "{}", h.said);
-    let first = h.said.find("rebase FAILED").unwrap();
+    assert!(h.said.contains("=== summarizing model"), "{}", h.said);
+    assert_eq!(h.status, 1, "{}", h.said);
+    assert!(!h.said.contains("falling back"), "{}", h.said);
+    assert!(!h.said.to_lowercase().contains("archive"), "{}", h.said);
+    let first = pairs()[0].clone();
+    let pair = format!("{}->{}", first.0, first.1);
+    let line = format!("REBASE FAILED for {pair}");
+    assert_eq!(h.said.matches(&line).count(), 1, "{}", h.said);
+    let at = h.said.find(&line).unwrap();
     let second_pair = h.said.find(&format!("=== {}->", pairs()[1].0)).unwrap();
     assert!(
-        first < second_pair,
+        at < second_pair,
         "the failure is said in its own pair's block:\n{}",
         h.said
     );
-    assert_eq!(
-        h.said.matches("prior rebased (scratch)").count(),
-        pairs().len() - 1
+    assert!(
+        !h.scored
+            .iter()
+            .any(|b| b.contains(&format!("/<LABEL>/{}.toml ", first.1))),
+        "the failed pair's scored leg never launched"
     );
+    assert_eq!(h.said.matches("prior rebased").count(), pairs().len() - 1);
+    let verdict = h.said.rfind("!! eval score FAILED").expect(&h.said);
+    assert!(
+        h.said[verdict..].contains(&format!("{pair}: rebase failed")),
+        "{}",
+        h.said
+    );
+}
+
+#[test]
+fn a_missing_input_is_refused_before_anything_builds_or_launches() {
+    let (from, to) = pairs()[1].clone();
+    for missing in [from, to] {
+        let h = run_score(&bin_flags(), |rec| {
+            std::fs::remove_file(rec.root.join(format!(
+                "inputs/claude-code-{missing}/binary-decompiled/src/entrypoints/index.js"
+            )))
+            .unwrap();
+        })
+        .unwrap();
+        assert_eq!(h.status, 2, "{}", h.said);
+        assert!(
+            h.said.contains(&format!("claude-code-{missing}/")) && h.said.contains("no input"),
+            "{}",
+            h.said
+        );
+        assert!(!h.said.contains("building and recording"), "{}", h.said);
+        assert!(h.launches.is_empty(), "nothing launched: {}", h.launches);
+    }
+}
+
+#[test]
+fn a_missing_input_outside_the_selected_pairs_is_not_needed() {
+    let (from, _) = pairs()[1].clone();
+    let h = run_score(&with(&["--pairs", "85->86"]), |rec| {
+        std::fs::remove_file(rec.root.join(format!(
+            "inputs/claude-code-{from}/binary-decompiled/src/entrypoints/index.js"
+        )))
+        .unwrap();
+    })
+    .unwrap();
+    assert_ran(&h);
 }
 
 #[test]

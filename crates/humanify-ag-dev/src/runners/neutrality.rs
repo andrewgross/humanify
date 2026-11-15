@@ -167,9 +167,22 @@ impl Legs<'_> {
             .ctx
             .spawn(&text(bin), &["--help".into()], HELP_PROBE_DEADLINE);
         probe.cwd = Some(self.ctx.repo.clone());
-        let help = crate::proc::run(&probe)
-            .map(|d| String::from_utf8_lossy(&d.stdout).into_owned())
-            .unwrap_or_default();
+        let help = match crate::proc::run(&probe) {
+            Ok(d) if d.status.success() => String::from_utf8_lossy(&d.stdout).into_owned(),
+            Ok(d) => {
+                return Err(format!(
+                    "FATAL: leg {label}'s binary {} --help did not run (exit {:?})",
+                    text(bin),
+                    d.status.code()
+                ));
+            }
+            Err(e) => {
+                return Err(format!(
+                    "FATAL: leg {label}'s binary {} --help did not run: {e}",
+                    text(bin)
+                ));
+            }
+        };
         let out_t = text(out);
         if !is_legacy_help(&help) {
             let toml = self.work(&format!("neutrality-{label}.toml"));
@@ -232,12 +245,14 @@ impl Legs<'_> {
         let bin = match ctx.build(src) {
             Ok(r) => r.path,
             Err(e) => {
-                let _ = write(&log, &e);
-                return Err(format!(
-                    "FATAL: cargo build failed in {} — see {}",
-                    text(src),
-                    text(&log)
-                ));
+                return Err(match write(&log, &e) {
+                    Ok(()) => format!(
+                        "FATAL: cargo build failed in {} — see {}",
+                        text(src),
+                        text(&log)
+                    ),
+                    Err(w) => format!("FATAL: cargo build failed in {}: {e} ({w})", text(src)),
+                });
             }
         };
         ctx.say(format!("    binary: {}", text(&bin)));
@@ -293,24 +308,17 @@ impl Legs<'_> {
     }
 }
 
-/// The prior BUNDLE (the rebased tree preferred: scoring against the
-/// archive reads ~3.7x worse for no reason).
+/// The prior BUNDLE: the pair's rebased tree under the prior root, and
+/// nothing else (a non-rebased tree of the same version is not a base).
 fn prior_of(cfg: &NeutralityConfig) -> Result<String, String> {
-    let mut base = cfg.priors.join(format!("{}-rebased", cfg.from));
-    if !base.is_dir() {
-        base = cfg.priors.join(&cfg.from);
-    }
-    let prior = base.join(".humanify/humanified.js");
+    let prior = cfg
+        .priors
+        .join(format!("{}-rebased", cfg.from))
+        .join(".humanify/humanified.js");
     if prior.is_file() {
         return Ok(text(&prior));
     }
-    let mut msg = format!(
-        "FATAL: no prior bundle at {}\n       (looked under {} for '{}-rebased' then '{}')",
-        text(&prior),
-        text(&cfg.priors),
-        cfg.from,
-        cfg.from
-    );
+    let mut msg = format!("FATAL: no prior bundle at {}", text(&prior));
     if !cfg.priors.is_dir() {
         msg.push_str(&format!(
             "\n       {} does not exist at all.\n       The workdir is also the default prior root. To use a separate\n       \

@@ -335,17 +335,6 @@ pub fn library_refusal(status: &JsValue, label: &str) -> Vec<String> {
 
 // ─── run manifest (run-manifest.ts) ──────────────────────────────────────
 
-/// Whether a prior path is a REBASED tree or the committed archive.
-pub fn prior_kind_of(prior: &str) -> &'static str {
-    if prior.is_empty() {
-        "unknown"
-    } else if prior.contains("-rebased/") || prior.ends_with("-rebased") {
-        "rebased"
-    } else {
-        "archive"
-    }
-}
-
 fn str_at<'a>(v: &'a JsValue, path: &[&str]) -> Option<&'a str> {
     let mut cur = v;
     for k in path {
@@ -360,18 +349,6 @@ fn at<'a>(v: &'a JsValue, path: &[&str]) -> Option<&'a JsValue> {
         cur = field(cur, k)?;
     }
     Some(cur)
-}
-
-/// The base mode one manifest was scored on (`baseModeOf`).
-pub fn base_mode_of(m: &JsValue) -> &str {
-    if let Some(b) = str_at(m, &["inputs", "baseMode"]) {
-        return b;
-    }
-    match str_at(m, &["inputs", "priorKind"]) {
-        Some("rebased") => "seeded",
-        Some("archive") => "archive",
-        _ => "unknown",
-    }
 }
 
 /// The run's kill switches (the binary's record), sorted; None = unknown.
@@ -411,12 +388,6 @@ pub fn manifest_warnings(m: &JsValue) -> Vec<String> {
     let cache_written = at(m, &["config", "cache", "written"]) == Some(&num(0));
     if is_true(at(m, &["config", "cache", "enabled"])) && cache_written {
         out.push("LLM CACHE ON and 0 entries written — every prompt was REPLAYED, not asked. This run cannot settle anything about naming (measurement-pitfalls rule 10, born from exactly this).".to_string());
-    }
-    if str_at(m, &["inputs", "priorKind"]) == Some("archive") {
-        out.push("scored against the ARCHIVE prior, not a rebased one. Expect KPIs to read far worse than a like-for-like base would give.".to_string());
-    }
-    if base_mode_of(m) == "seeded" {
-        out.push("base SEEDED by the archive (--base-mode seeded): v-1 inherits the archive's names, so this pair is comparable only to other seeded runs — every reference scored before 2026-10-03 — not to the scratch default.".to_string());
     }
     match active_switches(m) {
         Some(on) if !on.is_empty() => out.push(format!(

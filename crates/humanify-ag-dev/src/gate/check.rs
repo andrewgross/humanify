@@ -20,8 +20,7 @@
 //!
 //! Adding a check is ONE entry in [`STAGES`]. If it is not in that list it
 //! does not run, and that list is the only place to look to find out what
-//! the gate covers. [`SUCCESSORS`] maps every stage of the TS gate it
-//! replaces to its successor here (a test holds the mapping complete).
+//! the gate covers.
 
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -149,28 +148,6 @@ pub const STAGES: &[Stage] = &[
         advisory: false,
         deadline: Duration::from_secs(45 * 60),
     },
-];
-
-/// Every stage of the deleted TS gate (`scripts/check.ts` `STAGES`, 13; tag
-/// `experiments-code-final` has it) and what
-/// replaces it here: a stage name in [`STAGES`], or `MOOT: <why>`.
-pub const SUCCESSORS: &[(&str, &str)] = &[
-    ("typecheck", "shims"),
-    ("lint", "shims"),
-    ("rust:fmt", "rust:fmt"),
-    ("rust:clippy", "rust:clippy"),
-    ("knip", "shims"),
-    ("knip:prod", "shims"),
-    ("census:clones", "census:clones"),
-    ("census:concurrency", "census:concurrency"),
-    (
-        "unit",
-        "MOOT: the harness's *.test.ts are ported into the dev crate's Rust tests, which rust:unit runs",
-    ),
-    ("rust:unit", "rust:unit"),
-    ("rust:build", "rust:build"),
-    ("rust:format-golden", "format-golden"),
-    ("e2e", "e2e"),
 ];
 
 /// How one stage came out.

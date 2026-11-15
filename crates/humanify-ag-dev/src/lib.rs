@@ -17,7 +17,6 @@ pub mod identity;
 pub mod json;
 pub mod launch;
 pub mod library;
-pub mod match_truth;
 pub mod paths;
 pub mod proc;
 pub mod runners;
@@ -25,12 +24,3 @@ pub mod settings;
 
 /// The host environment a verb receives from main (read once, in `env`).
 pub use env::HostEnv;
-
-/// What a verb whose L4 sub-lane has not landed yet answers.
-pub fn under_construction(verb: &str) -> (u8, String, String) {
-    (
-        2,
-        String::new(),
-        format!("humanify-ag-dev {verb}: under construction (lane L4)\n"),
-    )
-}

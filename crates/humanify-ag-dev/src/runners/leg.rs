@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use humanify_ag_model::js::{JsObject, JsValue};
 
-use super::records::{js_pretty, manifest_warnings, num, obj, prior_kind_of};
+use super::records::{js_pretty, manifest_warnings, num, obj};
 use super::{Ctx, count_files, text, write};
 
 /// How often the child's RSS is sampled (the first sample is taken at
@@ -205,18 +205,14 @@ fn bun_version(ctx: &Ctx) -> String {
 
 /// Run the leg: spawn `bin.path args` in the repo with stdout + stderr to
 /// `stdout_path`, sample RSS, count the cache, then write `<v>-run.json`
-/// and print its one summary line and every warning.
-pub fn run_leg(ctx: &Ctx, spec: &LegSpec, api_key: &str) -> Result<LegOutcome, String> {
-    run_leg_with_prior_kind(ctx, spec, api_key, None)
-}
-
-/// [`run_leg`], recording `prior_kind` instead of the path rule's (a walk
-/// hop's prior is the walk's previous hop, not the archive).
-pub fn run_leg_with_prior_kind(
+/// (its prior recorded as `prior_kind`: `rebased` for an eval base, the
+/// walk's own kind for a walk hop) and print its one summary line and
+/// every warning.
+pub fn run_leg(
     ctx: &Ctx,
     spec: &LegSpec,
     api_key: &str,
-    prior_kind: Option<&str>,
+    prior_kind: &str,
 ) -> Result<LegOutcome, String> {
     let started_at = humanify_ag_model::js::iso_now();
     let t0 = Instant::now();
@@ -278,7 +274,7 @@ struct RunFacts {
     peak: Option<u64>,
 }
 
-fn manifest_of(ctx: &Ctx, spec: &LegSpec, run: &RunFacts, prior_kind: Option<&str>) -> JsValue {
+fn manifest_of(ctx: &Ctx, spec: &LegSpec, run: &RunFacts, prior_kind: &str) -> JsValue {
     let (before, after) = run.cache;
     let (exit_code, peak, wall) = (run.exit_code, run.peak, run.wall);
     let stats = spec
@@ -305,10 +301,7 @@ fn manifest_of(ctx: &Ctx, spec: &LegSpec, run: &RunFacts, prior_kind: Option<&st
     let mut inputs = vec![
         ("input", JsValue::str(spec.input.as_str())),
         ("prior", JsValue::str(spec.prior.as_str())),
-        (
-            "priorKind",
-            JsValue::str(prior_kind.unwrap_or_else(|| prior_kind_of(&spec.prior))),
-        ),
+        ("priorKind", JsValue::str(prior_kind)),
     ];
     if let Some(b) = &spec.base_mode {
         inputs.push(("baseMode", JsValue::str(b.as_str())));

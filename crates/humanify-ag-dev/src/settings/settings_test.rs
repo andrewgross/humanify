@@ -44,18 +44,10 @@ fn positionals_flags_and_defaults_resolve() {
         "eval score",
         SCORE,
         &[],
-        &args(&[
-            "mylabel",
-            "--base-mode",
-            "seeded",
-            "--no-self-hop",
-            "--pairs",
-            "2.1.85->2.1.86",
-        ]),
+        &args(&["mylabel", "--no-self-hop", "--pairs", "2.1.85->2.1.86"]),
     )
     .expect("parses");
     assert_eq!(p.positionals, vec!["mylabel"]);
-    assert_eq!(p.settings.text("eval.base_mode").as_deref(), Some("seeded"));
     assert!(!p.settings.flag_on("eval.self_hop"));
     assert!(p.settings.flag_on("eval.boot_prompt"), "default on");
     // the work dir's default is per verb (eval score: /work/eval-work)
@@ -77,38 +69,24 @@ fn an_unknown_flag_fails_upfront_with_a_suggestion() {
 }
 
 #[test]
-fn retired_spellings_are_refused_naming_their_replacement() {
-    for (old, new) in [
-        ("--seeded-base", "--base-mode seeded"),
-        ("--archive-prior", "--base-mode archive"),
-        ("--no-vendor", "always scores vendor"),
-        ("--heap-mb", "Rust binary"),
-        ("--pipeline-arg", "--pipeline-set"),
-    ] {
-        let e = refusals(SCORE, &["x", old]);
-        assert!(e[0].contains(old) && e[0].contains(new), "{old}: {e:?}");
-    }
-}
-
-#[test]
 fn a_flag_of_another_verb_is_refused_by_name() {
-    let e = refusals(NEUTRALITY, &["ref", "--base-mode", "seeded"]);
+    let e = refusals(NEUTRALITY, &["ref", "--pairs", "85->86"]);
     assert_eq!(
         e,
-        vec!["--base-mode is not a setting of `eval score` (it sets eval.base_mode)"]
+        vec!["--pairs is not a setting of `eval score` (it sets eval.pairs)"]
     );
 }
 
 #[test]
 fn type_and_range_errors_are_collected_together() {
     let e = refusals(
-        SCORE,
-        &["x", "--base-mode", "fresh", "--endpoint", "localhost:8000"],
+        &["libscore", "llm"],
+        &["x", "--rule", "fresh", "--endpoint", "localhost:8000"],
     );
     assert_eq!(e.len(), 2, "{e:?}");
     assert!(
         e.iter()
-            .any(|m| m.contains("--base-mode") && m.contains("scratch, seeded, archive"))
+            .any(|m| m.contains("--rule") && m.contains("agreement, structural"))
     );
     assert!(
         e.iter()
@@ -193,7 +171,7 @@ fn the_run_config_records_every_accepted_setting_once() {
         "unset is null: {text}"
     );
     assert!(
-        !text.contains("eval.base_mode"),
+        !text.contains("eval.pairs"),
         "not a neutrality setting: {text}"
     );
     assert!(

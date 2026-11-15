@@ -77,7 +77,7 @@ fn the_bin_flag_family_is_flags_and_retired_switches_fail_upfront() {
         Some("/x/humanify-ag")
     );
     for (flag, why) in [
-        ("--skip-preflight", "preflight retired"),
+        ("--skip-preflight", "unknown flag --skip-preflight"),
         ("--warm-self-hop", "unknown flag --warm-self-hop"),
     ] {
         let refused = settings::parse("eval score", &["run"], &[], &args(&["label", flag]))

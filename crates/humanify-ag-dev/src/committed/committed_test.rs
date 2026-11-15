@@ -49,7 +49,7 @@ fn every_launch_golden_loads() {
     let g = eval::launch_goldens(&repo_root()).expect("goldens");
     assert!(g.contains_key("run-launch.golden.txt"));
     assert!(g.contains_key("neutrality-names.golden.txt"));
-    assert!(g.len() >= 13, "{:?}", g.keys().collect::<Vec<_>>());
+    assert!(g.len() >= 10, "{:?}", g.keys().collect::<Vec<_>>());
 }
 
 #[test]

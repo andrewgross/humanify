@@ -14,13 +14,10 @@ fn every_verb_declares_usage_proves_and_cannot_prove() {
         );
         assert!(!v.proves.trim().is_empty(), "{n}: no proves");
         assert!(!v.cannot_prove.trim().is_empty(), "{n}: no cannotProve");
-        if v.lane.is_some() {
-            assert!(!v.today.is_empty(), "{n}: say what runs until it is ported");
-        }
     }
 }
 
-/// The full subcommand map of docs/dev-harness.md §2.4 is in the table.
+/// Every supported instrument is in the table.
 #[test]
 fn the_table_holds_the_whole_subcommand_map() {
     let names: Vec<String> = VERBS.iter().map(name).collect();
@@ -34,7 +31,6 @@ fn the_table_holds_the_whole_subcommand_map() {
         "eval diff",
         "eval neutrality",
         "eval vendor-precision",
-        "eval cjs-placement",
         "eval walk",
         "run stub",
         "library score",
@@ -51,10 +47,6 @@ fn the_table_holds_the_whole_subcommand_map() {
         "census concurrency",
         "census slop",
         "census comments",
-        "ask-trace",
-        "diff-asks",
-        "match-truth",
-        "env-check",
         "precommit",
         "stub-llm serve",
     ] {
@@ -85,23 +77,6 @@ fn no_arguments_prints_the_table() {
     assert!(
         out.contains("eval neutrality") && out.contains("cannot prove:"),
         "{out}"
-    );
-}
-
-#[test]
-fn a_verb_not_yet_ported_says_so_and_fails() {
-    let Some(v) = VERBS.iter().find(|v| v.lane.is_some()) else {
-        return; // every verb is ported
-    };
-    let mut a: Vec<String> = v.words.iter().map(|w| w.to_string()).collect();
-    a.push("x".into());
-    let (code, out, err) = dispatch(&a);
-    assert_ne!(code, 0);
-    assert!(out.is_empty());
-    assert!(
-        err.contains(&format!("not yet ported (lane {})", v.lane.unwrap()))
-            && err.contains(v.today),
-        "{err}"
     );
 }
 
@@ -144,7 +119,6 @@ fn every_heavy_verb_declares_its_footprint() {
         "eval neutrality",
         "eval walk",
         "eval vendor-precision",
-        "eval cjs-placement",
         "run stub",
         "library score",
         "library npm",
@@ -153,8 +127,6 @@ fn every_heavy_verb_declares_its_footprint() {
         "boot-gate",
         "build-bin",
         "e2e",
-        "ask-trace",
-        "match-truth",
     ];
     for v in VERBS {
         let n = name(v);

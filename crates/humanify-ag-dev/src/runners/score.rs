@@ -1,25 +1,26 @@
 //! `eval score <label>`: score the CURRENT pipeline on the eval's version
 //! pairs (the port of `scripts/eval.ts score` + `034-eval-harness/run.sh`).
 //!
-//! Per pair: rebuild the base v-1 (the BASE MODE: `scratch`, the default,
-//! rebuilds it with no prior; `seeded` with the archive as its prior;
-//! `archive` does not rebuild), run the scored leg (`leg::run_leg`: the
-//! run manifest), record the run status (and REFUSE the card when a run
-//! lost LLM answers or skipped library matching), score the card
-//! (`scoring`), write the evidence page, boot the tree. Then the self-hop
-//! on the last attempted pair — COLD into a fresh cache, then WARM
-//! replaying a copy of it, which must be byte-identical with 0 cache
-//! writes — and the summary.
+//! Per pair: rebuild the base v-1 with the current pipeline and no prior
+//! (a scratch base), run the scored leg (`leg::run_leg`: the run
+//! manifest), record the run status (and REFUSE the card when a run lost
+//! LLM answers or skipped library matching), score the card (`scoring`),
+//! write the evidence page, boot the tree. Then the self-hop on the last
+//! attempted pair — COLD into a fresh cache, then WARM replaying a copy of
+//! it, which must be byte-identical with 0 cache writes — and the summary.
 //!
 //! The binary runs at ALL THREE launch sites (rebase, scored leg,
 //! self-hop); the harness builds it first and refuses one not built from
 //! the label's commit (`bin`). Every launch passes its settings in a
-//! `--config` file (`launch`); run-launch.golden.txt and
-//! run-launch.seeded-base.golden.txt hold every launch byte for byte.
+//! `--config` file (`launch`); run-launch.golden.txt holds every launch
+//! byte for byte.
 //!
-//! A failed pair is logged and skipped, never aborts the sweep. No LLM
-//! cache by default: a cached run is never a verdict about LLM-dependent
-//! behaviour (rule 10).
+//! Nothing falls back. A missing input is refused before anything builds;
+//! a pair that fails (rebase, scored leg, analysis, a refused card, the
+//! self-hop) is said in its own block, the other pairs still run, and the
+//! run ends with one `!! eval score FAILED` verdict naming every failed
+//! pair and exits 1. No LLM cache by default: a cached run is never a
+//! verdict about LLM-dependent behaviour (rule 10).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -62,14 +63,12 @@ pub const DEFAULT_WORKDIR: &str = "/work/eval-work";
 #[derive(Clone, Debug)]
 pub struct ScoreConfig {
     pub label: String,
-    pub base_mode: String,
     pub pairs: Option<Vec<String>>,
     pub endpoint_flag: Option<String>,
     pub llm_cache: Option<String>,
     pub boot_prompt: bool,
     pub self_hop: bool,
     pub inputs_base: String,
-    pub priors_base: String,
     pub workdir: PathBuf,
     pub bin: PathBuf,
     pub force_mixed: bool,
@@ -145,7 +144,6 @@ pub fn config_from(parsed: &Parsed, pairs: &Pairs, ctx: &Ctx) -> Result<ScoreCon
     )?;
     Ok(ScoreConfig {
         label: label.clone(),
-        base_mode: s.text("eval.base_mode").unwrap_or_else(|| "scratch".into()),
         pairs: s.list("eval.pairs").filter(|p| !p.is_empty()),
         endpoint_flag: s.text("llm.endpoint"),
         llm_cache: s.text("eval.llm_cache"),
@@ -154,9 +152,6 @@ pub fn config_from(parsed: &Parsed, pairs: &Pairs, ctx: &Ctx) -> Result<ScoreCon
         inputs_base: s
             .text("eval.inputs_base")
             .unwrap_or_else(|| pairs.inputs_base.clone()),
-        priors_base: s
-            .text("eval.priors_base")
-            .unwrap_or_else(|| pairs.priors_base.clone()),
         workdir: absolute(
             &s.text("run.workdir")
                 .unwrap_or_else(|| DEFAULT_WORKDIR.into()),
@@ -197,9 +192,7 @@ fn selected(filter: &Option<Vec<String>>, from: &str, to: &str) -> bool {
 // ─── the label guards ────────────────────────────────────────────────────
 
 /// Refuse a label already holding cards that this run would mix with:
-/// another commit (eval.ts `guardLabel`), another pipeline (`guardPipeline`),
-/// another base mode (`guardBaseMode`), and — new, the gap the design
-/// names — another naming mode or library index. `--force-mixed` turns
+/// another commit, naming mode or library index. `--force-mixed` turns
 /// each refusal into a loud line.
 fn guard_label(ctx: &Ctx, dir: &Path, cfg: &ScoreConfig) -> Result<(), String> {
     let Ok(recorded) = std::fs::read_to_string(dir.join("commit.txt")) else {
@@ -225,16 +218,7 @@ fn guard_label(ctx: &Ctx, dir: &Path, cfg: &ScoreConfig) -> Result<(), String> {
     if !recorded.is_empty() && !crate::bin_build::same_commit(&recorded, &head) {
         mixed.push(("commits".into(), short(&recorded), short(&head)));
     }
-    let kind = get(&["pipeline", "kind"]).unwrap_or_else(|| "ts".into());
-    if kind != "rust-bin" {
-        mixed.push(("pipelines".into(), kind, "rust-bin".into()));
-    }
     let checks = [
-        (
-            "base modes",
-            get(&["baseMode"]).or_else(|| recorded_base_modes(dir)),
-            cfg.base_mode.clone(),
-        ),
         (
             "naming modes",
             get(&["namingMode"]),
@@ -280,23 +264,6 @@ fn short(sha: &str) -> String {
     sha.chars().take(12).collect()
 }
 
-/// A label from before `pipeline.json` recorded its base mode: the modes
-/// its run manifests record (`labelBaseModes`: a rebased prior then WAS
-/// seeded); None when no manifest records one.
-fn recorded_base_modes(dir: &Path) -> Option<String> {
-    let mut modes: Vec<String> = std::fs::read_dir(dir)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_name().to_string_lossy().ends_with("-run.json"))
-        .filter_map(|e| JsValue::parse(&std::fs::read_to_string(e.path()).ok()?).ok())
-        .map(|m| records::base_mode_of(&m).to_string())
-        .filter(|m| m != "unknown")
-        .collect();
-    modes.sort();
-    modes.dedup();
-    (!modes.is_empty()).then(|| modes.join(" + "))
-}
-
 fn announce(ctx: &Ctx, cfg: &ScoreConfig) {
     if let Some(p) = &cfg.pairs {
         ctx.say(format!(
@@ -304,11 +271,6 @@ fn announce(ctx: &Ctx, cfg: &ScoreConfig) {
             p.join(",")
         ));
     }
-    ctx.say(match cfg.base_mode.as_str() {
-        "archive" => "ARCHIVE-PRIOR MODE: scoring against archive bases — KPIs read ~3.7x worse than rebuilt bases; not comparable to the standing reference.",
-        "seeded" => "SEEDED-BASE MODE: each base rebuilt with the archive as its prior — it inherits the archive's names. Comparable only to seeded labels (every reference scored before 2026-10-03).",
-        _ => "SCRATCH BASES (default): each base rebuilt with no prior — a full cold run per base. NOT comparable to the seeded references (main-2026-09-18 and every label before 2026-10-03); the leaderboard refuses the mix.",
-    });
 }
 
 // ─── the run ─────────────────────────────────────────────────────────────
@@ -393,8 +355,9 @@ impl<'a> Run<'a> {
     }
 }
 
-/// `eval score`: exit 0 unless refused (2), the build failed (1), or the
-/// summary failed.
+/// `eval score`: exit 0 only when every selected pair was scored, the
+/// self-hop ran and passed its warm half, the summary and the identities
+/// were written; refused (2) before anything builds; 1 otherwise.
 pub fn run(ctx: &Ctx, cfg: &ScoreConfig, run_config: &JsValue) -> u8 {
     match run_inner(ctx, cfg, run_config) {
         Ok(code) => code,
@@ -417,6 +380,7 @@ fn run_inner(ctx: &Ctx, cfg: &ScoreConfig, run_config: &JsValue) -> Result<u8, (
     guard_label(ctx, &results, cfg).map_err(|e| (2, e))?;
     announce(ctx, cfg);
     let pairs = load_pairs(&ctx.repo).map_err(|e| (2, e))?.value;
+    let plans = plan_pairs(cfg, &pairs).map_err(|e| (2, e))?;
     let cfg_path = cfg.workdir.join(format!("{}.run-config.json", cfg.label));
     let cfg_text = crate::json::js_text(run_config, true);
     write(&cfg_path, &cfg_text).map_err(|e| (2, e))?;
@@ -436,11 +400,26 @@ fn run_inner(ctx: &Ctx, cfg: &ScoreConfig, run_config: &JsValue) -> Result<u8, (
         bin,
     };
     record_label(&run, &cfg_path, &cfg_sha).map_err(|e| (1, e))?;
-    run_lanes(&run);
+    let mut failures = run_lanes(&run, &plans);
     ctx.say(format!("=== summarizing model '{}' ===", cfg.label));
-    let code = scoring::summarize(ctx, &cfg.label);
-    write_identities(ctx, &run.results);
-    Ok(u8::try_from(code).unwrap_or(1))
+    if scoring::summarize(ctx, &cfg.label) != 0 {
+        failures.push("the summary: it failed (see SUMMARY FAILED above)".into());
+    }
+    if let Err(e) = write_identities(ctx, &run.results) {
+        failures.push(format!("the identities: {e}"));
+    }
+    if failures.is_empty() {
+        return Ok(0);
+    }
+    ctx.say(format!(
+        "!! eval score FAILED: {} failure(s); label '{}' is NOT a complete run:",
+        failures.len(),
+        cfg.label
+    ));
+    for f in &failures {
+        ctx.say(format!("  {f}"));
+    }
+    Ok(1)
 }
 
 fn build_bin(ctx: &Ctx, cfg: &ScoreConfig) -> Result<LabelBin, (u8, String)> {
@@ -495,18 +474,13 @@ fn record_label(run: &Run, cfg_path: &Path, cfg_sha: &str) -> Result<(), String>
             cfg.naming_mode
         )),
     }
-    ctx.say(match cfg.base_mode.as_str() {
-        "seeded" => "BASE: seeded (--base-mode seeded) — each v-1 rebuilt with the ARCHIVE as --prior-version; it inherits the archive's names. Comparable only to seeded labels.",
-        "archive" => "BASE: archive (--base-mode archive) — no rebuild; scored against the archive tree (~3.7x worse)",
-        _ => "BASE: scratch — each v-1 rebuilt by this pipeline with NO prior (a full cold run per base)",
-    });
+    ctx.say("BASE: scratch — each v-1 rebuilt by this pipeline with NO prior (a full cold run per base)");
     let mut pipeline = vec![("kind", JsValue::str("rust-bin")), ("bin", run.bin.to_js())];
     if !cfg.pipeline_sets.is_empty() {
         pipeline.push(("pipelineSettings", JsValue::str_array(&cfg.pipeline_sets)));
     }
     let record = obj(vec![
         ("pipeline", obj(pipeline)),
-        ("baseMode", JsValue::str(cfg.base_mode.as_str())),
         ("namingMode", JsValue::str(cfg.naming_mode.as_str())),
         (
             "libraryIndex",
@@ -541,42 +515,38 @@ fn record_label(run: &Run, cfg_path: &Path, cfg_sha: &str) -> Result<(), String>
         None => ctx.say("LLM CACHE: OFF (cold, every prompt live) -- gate-valid"),
     }
     let commit = super::head(&ctx.repo, true);
-    if !commit.is_empty() {
-        write(&run.results.join("commit.txt"), &format!("{commit}\n"))?;
+    if commit.is_empty() {
+        return Err(format!(
+            "FATAL: cannot read this checkout's commit ({}): a label must record it",
+            ctx.repo.display()
+        ));
     }
-    Ok(())
+    write(&run.results.join("commit.txt"), &format!("{commit}\n"))
 }
 
-/// The base a pair is scored against: (prior bundle, prior ledger, the
-/// base mode it actually got, the rebuilt base's stdout when rebuilt).
+/// The base a pair is scored against: the rebuilt prior bundle and the
+/// rebase's stdout.
 struct Base {
     prior: PathBuf,
-    mode: String,
-    rebase_stdout: Option<PathBuf>,
+    rebase_stdout: PathBuf,
 }
 
-fn rebase(run: &Run, from: &str, to: &str, archive: &Path) -> Base {
-    let (ctx, cfg) = (run.ctx, run.cfg);
-    let mut base = Base {
-        prior: archive.to_path_buf(),
-        mode: "archive".into(),
-        rebase_stdout: None,
-    };
-    if cfg.base_mode == "archive" {
-        return base;
-    }
-    let input_from = input_of(&cfg.inputs_base, from);
-    if !Path::new(&input_from).is_file() {
-        ctx.say(format!("  no input for {from}; scoring against the archive prior (recorded as baseMode archive)"));
-        return base;
-    }
-    let pair = format!("{from}->{to}");
-    let seeded = cfg.base_mode == "seeded";
-    ctx.say(if seeded {
-        format!("=== {pair}: rebasing prior (re-humanify {from}, current pipeline, SEEDED by the archive) ===")
-    } else {
-        format!("=== {pair}: rebasing prior (re-humanify {from} from SCRATCH, current pipeline, no prior) ===")
-    });
+/// The base mode every run manifest records: the only one (each v-1
+/// rebuilt with no prior).
+const BASE_MODE: &str = "scratch";
+
+/// One pair's failure: said in its block, collected for the closing verdict.
+type PairResult = Result<(), String>;
+
+/// Rebuild `from` with the current pipeline and no prior. Err: the pair
+/// cannot be scored (there is nothing to fall back to).
+fn rebase(run: &Run, plan: &Planned) -> Result<Base, String> {
+    let ctx = run.ctx;
+    let from = plan.from.as_str();
+    let pair = format!("{from}->{}", plan.to);
+    ctx.say(format!(
+        "=== {pair}: rebasing prior (re-humanify {from} from SCRATCH, current pipeline, no prior) ==="
+    ));
     let out = run.work.join(format!("{from}-rebased"));
     remove(&out);
     let toml = run.work.join(format!("{from}-rebased.toml"));
@@ -591,67 +561,103 @@ fn rebase(run: &Run, from: &str, to: &str, archive: &Path) -> Base {
         "diagnostics.log_file={}",
         text(&run.results.join(format!("{from}-rebase.log")))
     ));
-    if let Err(e) = write_config(&toml, &run.settings(&own)) {
-        ctx.say(e);
-        return base;
-    }
-    let archive_text = text(archive);
+    let failed = |why: String| {
+        ctx.say(format!(
+            "REBASE FAILED for {pair}: {why} — this pair is NOT scored"
+        ));
+        "rebase failed".to_string()
+    };
+    write_config(&toml, &run.settings(&own)).map_err(failed)?;
     let (toml_t, out_t) = (text(&toml), text(&out));
     let args = HumanifyArgs {
-        input: &input_from,
+        input: &plan.from_input,
         config: &toml_t,
         endpoint: &run.endpoint,
         model: &run.pairs.llm.model,
         out: &out_t,
-        prior: seeded.then_some(archive_text.as_str()),
+        prior: None,
         verbose: true,
     }
     .argv();
     let stdout = run.results.join(format!("{from}-rebase.stdout"));
-    run.launch(&args, &stdout);
+    let code = run.launch(&args, &stdout);
     let rebuilt = out.join(".humanify/humanified.js");
-    if rebuilt.is_file() {
-        ctx.say(format!(
-            "  prior rebased ({}) -> {}",
-            cfg.base_mode,
-            text(&rebuilt)
-        ));
-        base = Base {
-            prior: rebuilt,
-            mode: cfg.base_mode.clone(),
-            rebase_stdout: Some(stdout),
-        };
-    } else {
-        ctx.say("  rebase FAILED; falling back to archive prior (recorded as baseMode archive)");
+    if !rebuilt.is_file() {
+        return Err(failed(format!(
+            "exit {code}, no {} (see {})",
+            text(&rebuilt),
+            text(&stdout)
+        )));
     }
-    base
+    ctx.say(format!("  prior rebased -> {}", text(&rebuilt)));
+    Ok(Base {
+        prior: rebuilt,
+        rebase_stdout: stdout,
+    })
 }
 
-/// What one pair will do, decided from the files before anything
-/// launches (so the self-hop's lane is known up front): its input and
-/// archive prior, or the SKIP line it says instead.
+/// One selected pair: its two inputs.
+struct Planned {
+    from: String,
+    to: String,
+    input: String,
+    from_input: String,
+}
+
+/// What one pair will do, decided before anything launches (so the
+/// self-hop's lane is known up front).
 enum PairPlan {
+    /// Not in `--pairs`.
     Skip(String),
-    Go { input: String, archive: PathBuf },
+    Go(Planned),
 }
 
-fn plan_pair(cfg: &ScoreConfig, from: &str, to: &str) -> PairPlan {
-    let pair = format!("{from}->{to}");
-    if !selected(&cfg.pairs, from, to) {
-        return PairPlan::Skip(format!("SKIP {pair} (not in --pairs)"));
+impl PairPlan {
+    fn go(&self) -> Option<&Planned> {
+        match self {
+            PairPlan::Go(p) => Some(p),
+            PairPlan::Skip(_) => None,
+        }
     }
-    let input = input_of(&cfg.inputs_base, to);
-    let archive = PathBuf::from(format!(
-        "{}/claude-code-{from}/.humanify/humanified.js",
-        cfg.priors_base
-    ));
-    if !Path::new(&input).is_file() {
-        return PairPlan::Skip(format!("SKIP {pair} (no input {input})"));
+}
+
+/// Every pair's plan; Err lists every input a selected pair needs that is
+/// not on this host (refused before anything builds).
+fn plan_pairs(cfg: &ScoreConfig, pairs: &Pairs) -> Result<Vec<PairPlan>, String> {
+    let mut missing = Vec::new();
+    let plans: Vec<PairPlan> = pairs
+        .pairs
+        .iter()
+        .map(|p| {
+            let (from, to) = (&p.from, &p.to);
+            if !selected(&cfg.pairs, from, to) {
+                return PairPlan::Skip(format!("SKIP {from}->{to} (not in --pairs)"));
+            }
+            let input = input_of(&cfg.inputs_base, to);
+            let from_input = input_of(&cfg.inputs_base, from);
+            for i in [&from_input, &input] {
+                if !Path::new(i).is_file() {
+                    missing.push(format!("  {from}->{to}: no input {i}"));
+                }
+            }
+            PairPlan::Go(Planned {
+                from: from.clone(),
+                to: to.clone(),
+                input,
+                from_input,
+            })
+        })
+        .collect();
+    if missing.is_empty() {
+        return Ok(plans);
     }
-    if !archive.is_file() {
-        return PairPlan::Skip(format!("SKIP {pair} (no prior {})", text(&archive)));
-    }
-    PairPlan::Go { input, archive }
+    missing.dedup();
+    Err(format!(
+        "REFUSED: a selected pair has no input on this host (--inputs-base {}):\n{}\n\
+         Pass --inputs-base <dir>, or --pairs to score only the pairs this host has.",
+        cfg.inputs_base,
+        missing.join("\n")
+    ))
 }
 
 /// The order lanes are started in: pairs.json's, except that with fewer
@@ -683,18 +689,15 @@ fn work_order(n: usize, hop: Option<usize>, jobs: usize) -> Vec<usize> {
 /// driver beside the lanes, and each lane waits for its own base (said as
 /// one `base: waited` line) before its CPU-bound scored leg, which then
 /// overlaps the next rebase. Otherwise each lane rebases inline.
-fn run_lanes(run: &Run) {
+///
+/// Returns every failure, `<pair>: <reason>`, in pairs.json order.
+fn run_lanes(run: &Run, plans: &[PairPlan]) -> Vec<String> {
     let (ctx, cfg) = (run.ctx, run.cfg);
-    let list = run.pairs.pairs.clone();
-    let plans: Vec<PairPlan> = list
-        .iter()
-        .map(|p| plan_pair(cfg, &p.from, &p.to))
-        .collect();
     let hop = cfg
         .self_hop
-        .then(|| plans.iter().rposition(|p| matches!(p, PairPlan::Go { .. })))
+        .then(|| plans.iter().rposition(|p| p.go().is_some()))
         .flatten();
-    let n = list.len();
+    let n = plans.len();
     let lanes_n = cfg.parallel_pairs.min(n.max(1));
     let gated = cfg.parallel_rebases < lanes_n;
     let rebases_n = cfg.parallel_rebases.min(lanes_n);
@@ -706,22 +709,20 @@ fn run_lanes(run: &Run) {
     let lanes = Arc::new(Lanes::new(n + 1, ctx.echo));
     let lane = Lane {
         run,
-        list: &list,
-        plans: &plans,
+        plans,
         hop,
         lanes: &lanes,
     };
-    if gated {
-        lane.run_gated(cfg.parallel_pairs, cfg.parallel_rebases);
+    let mut outcomes: Vec<(usize, Vec<String>)> = if gated {
+        lane.run_gated(cfg.parallel_pairs, cfg.parallel_rebases)
     } else {
         let order = work_order(n, hop, cfg.parallel_pairs);
-        super::each(&order, cfg.parallel_pairs, |&i| {
-            lane.run_one(i, |run, from, to, archive| {
-                Some(rebase(run, from, to, archive))
-            });
-        });
-    }
+        let results = super::each(&order, cfg.parallel_pairs, |&i| lane.run_one(i, rebase));
+        order.into_iter().zip(results).collect()
+    };
     ctx.absorb(lanes.close());
+    outcomes.sort_by_key(|(i, _)| *i);
+    outcomes.into_iter().flat_map(|(_, f)| f).collect()
 }
 
 /// The planned pairs' rebase order: the self-hop's pair first (its chain
@@ -729,16 +730,13 @@ fn run_lanes(run: &Run) {
 /// others in pairs.json order.
 fn rebase_order(plans: &[PairPlan], hop: Option<usize>) -> Vec<usize> {
     let mut order: Vec<usize> = hop.into_iter().collect();
-    order.extend(
-        (0..plans.len()).filter(|&i| Some(i) != hop && matches!(plans[i], PairPlan::Go { .. })),
-    );
+    order.extend((0..plans.len()).filter(|&i| Some(i) != hop && plans[i].go().is_some()));
     order
 }
 
 /// What every lane of one run shares.
 struct Lane<'r, 'a> {
     run: &'r Run<'a>,
-    list: &'r [crate::committed::eval::Pair],
     plans: &'r [PairPlan],
     hop: Option<usize>,
     lanes: &'r Arc<Lanes>,
@@ -746,45 +744,58 @@ struct Lane<'r, 'a> {
 
 impl Lane<'_, '_> {
     /// Pair `i`'s lane: its base from `base_of`, its scored leg, then the
-    /// self-hop when it is the hop's pair.
-    fn run_one(&self, i: usize, base_of: impl FnOnce(&Run, &str, &str, &Path) -> Option<Base>) {
+    /// self-hop when it is the hop's pair. Returns its failures,
+    /// `<pair>: <reason>` (the pair's, then the self-hop's).
+    fn run_one(
+        &self,
+        i: usize,
+        base_of: impl FnOnce(&Run, &Planned) -> Result<Base, String>,
+    ) -> Vec<String> {
         let ctx = self.run.ctx;
         let lane_ctx = ctx.for_lane(self.lanes, i);
         let run = self.run.with_ctx(&lane_ctx);
-        let p = &self.list[i];
-        match &self.plans[i] {
-            PairPlan::Skip(line) => lane_ctx.say(line.as_str()),
-            PairPlan::Go { input, archive } => {
-                if let Some(base) = base_of(&run, &p.from, &p.to, archive) {
-                    score_on_base(&run, i, &p.from, &p.to, input, &base);
-                }
+        let mut failures = Vec::new();
+        let plan = match &self.plans[i] {
+            PairPlan::Skip(line) => {
+                lane_ctx.say(line.as_str());
+                None
+            }
+            PairPlan::Go(plan) => Some(plan),
+        };
+        if let Some(plan) = plan {
+            let scored = base_of(&run, plan).and_then(|base| score_on_base(&run, i, plan, &base));
+            if let Err(why) = scored {
+                failures.push(format!("{}->{}: {why}", plan.from, plan.to));
             }
         }
         self.lanes.finish(i);
         if self.hop == Some(i)
-            && let PairPlan::Go { input, .. } = &self.plans[i]
+            && let Some(plan) = plan
         {
-            let hop_ctx = ctx.for_lane(self.lanes, self.list.len());
-            self_hop(&self.run.with_ctx(&hop_ctx), &p.to, input);
+            let hop_ctx = ctx.for_lane(self.lanes, self.plans.len());
+            if let Err(why) = self_hop(&self.run.with_ctx(&hop_ctx), &plan.to, &plan.input) {
+                failures.push(format!("{} self-hop: {why}", plan.to));
+            }
         }
+        failures
     }
 
     /// The gated schedule: a driver runs the rebases `rebases` at a time
     /// in [`rebase_order`] and hands each base to its lane through that
     /// lane's bounded channel; the lanes (`jobs` at a time, in the same
     /// order, skipped pairs last) wait for theirs under a deadline.
-    fn run_gated(&self, jobs: usize, rebases: usize) {
+    fn run_gated(&self, jobs: usize, rebases: usize) -> Vec<(usize, Vec<String>)> {
         let order = rebase_order(self.plans, self.hop);
-        let n = self.list.len();
+        let n = self.plans.len();
         // concurrency: one bounded (1) channel per pair, carrying its ONE
         // base from the rebase driver to the lane; the lane waits with
         // recv_timeout, never a sleep-and-poll.
         let (senders, receivers): (Vec<_>, Vec<_>) = (0..n)
-            .map(|_| std::sync::mpsc::sync_channel::<Base>(1))
+            .map(|_| std::sync::mpsc::sync_channel::<Result<Base, String>>(1))
             .unzip();
         // concurrency: each receiver taken once by its own lane (a short
         // lock around one Option::take).
-        let receivers: Vec<std::sync::Mutex<Option<std::sync::mpsc::Receiver<Base>>>> = receivers
+        let receivers: Vec<_> = receivers
             .into_iter()
             .map(|r| std::sync::Mutex::new(Some(r)))
             .collect();
@@ -798,19 +809,18 @@ impl Lane<'_, '_> {
                 super::each(&order, rebases, |&i| {
                     let lane_ctx = self.run.ctx.for_lane(self.lanes, i);
                     let run = self.run.with_ctx(&lane_ctx);
-                    let p = &self.list[i];
-                    if let PairPlan::Go { archive, .. } = &self.plans[i] {
-                        let base = rebase(&run, &p.from, &p.to, archive);
-                        let _ = senders[i].send(base);
+                    if let Some(plan) = self.plans[i].go() {
+                        let _ = senders[i].send(rebase(&run, plan));
                     }
                 });
             });
-            super::each(&lane_order, jobs, |&i| {
+            let results = super::each(&lane_order, jobs, |&i| {
                 let rx = receivers[i].lock().expect("a lane's receiver").take();
                 let place = order.iter().position(|&o| o == i).unwrap_or(0);
-                self.run_one(i, |run, _, _, _| wait_for_base(run, rx, place, order.len()));
+                self.run_one(i, |run, _| wait_for_base(run, rx, place, order.len()))
             });
-        });
+            lane_order.iter().copied().zip(results).collect()
+        })
     }
 }
 
@@ -818,10 +828,10 @@ impl Lane<'_, '_> {
 /// rebase ahead of it and its own; says how long it waited.
 fn wait_for_base(
     run: &Run,
-    rx: Option<std::sync::mpsc::Receiver<Base>>,
+    rx: Option<std::sync::mpsc::Receiver<Result<Base, String>>>,
     place: usize,
     of: usize,
-) -> Option<Base> {
+) -> Result<Base, String> {
     let t0 = Instant::now();
     let deadline = leg::PIPELINE_DEADLINE * u32::try_from(place + 1).unwrap_or(u32::MAX);
     let got = rx
@@ -834,31 +844,35 @@ fn wait_for_base(
                 t0.elapsed().as_secs_f64().round(),
                 place + 1
             ));
-            Some(base)
+            base
         }
         Err(e) => {
             run.ctx.say(format!(
                 "  base: NEVER ARRIVED ({e}) after {}s — this pair is NOT scored",
                 t0.elapsed().as_secs_f64().round()
             ));
-            None
+            Err("its rebase never arrived".into())
         }
     }
 }
 
 /// Score one planned pair on its base: its scored leg.
-fn score_on_base(run: &Run, i: usize, from: &str, to: &str, input: &str, base: &Base) {
-    let pair = format!("{from}->{to}");
+fn score_on_base(run: &Run, i: usize, plan: &Planned, base: &Base) -> PairResult {
+    let pair = format!("{}->{}", plan.from, plan.to);
     run.ctx.say(format!(
         "=== [{}/{}] {pair}: pipeline ===",
         i + 1,
         run.pairs.pairs.len()
     ));
-    scored_leg(run, &pair, to, input, base);
+    scored_leg(run, &pair, &plan.to, &plan.input, base)
 }
 
-fn scored_leg(run: &Run, pair: &str, to: &str, input: &str, base: &Base) {
+fn scored_leg(run: &Run, pair: &str, to: &str, input: &str, base: &Base) -> PairResult {
     let (ctx, cfg) = (run.ctx, run.cfg);
+    let failed = |what: &str, e: String| {
+        ctx.say(format!("PIPELINE FAILED for {pair}: {e}"));
+        what.to_string()
+    };
     let out = run.work.join(to);
     remove(&out);
     let stats = run.results.join(format!("{to}.stats.json"));
@@ -871,13 +885,8 @@ fn scored_leg(run: &Run, pair: &str, to: &str, input: &str, base: &Base) {
         text(&run.results.join(format!("{to}.log")))
     ));
     own.push(format!("diagnostics.diagnostics_file={}", text(&diag)));
-    let config_toml = match write_config(&toml, &run.settings(&own)) {
-        Ok(t) => t,
-        Err(e) => {
-            ctx.say(e);
-            return;
-        }
-    };
+    let config_toml = write_config(&toml, &run.settings(&own))
+        .map_err(|e| failed("its launch config could not be written", e))?;
     let (toml_t, out_t, prior_t) = (text(&toml), text(&out), text(&base.prior));
     let args = HumanifyArgs {
         input,
@@ -898,7 +907,7 @@ fn scored_leg(run: &Run, pair: &str, to: &str, input: &str, base: &Base) {
         results_dir: run.results.clone(),
         input: input.to_string(),
         prior: prior_t.clone(),
-        base_mode: Some(base.mode.clone()),
+        base_mode: Some(BASE_MODE.to_string()),
         output_dir: out.clone(),
         repo: ctx.repo.clone(),
         args,
@@ -912,20 +921,12 @@ fn scored_leg(run: &Run, pair: &str, to: &str, input: &str, base: &Base) {
         artifacts: vec![text(&bundle), text(&ledger), text(&stats)],
         bin: run.bin.clone(),
     };
-    if let Err(e) = leg::write_spec(&spec, &run.work.join(format!("{to}.runcfg.json"))) {
-        ctx.say(e);
-        return;
-    }
-    let exit = match leg::run_leg(ctx, &spec, &run.pairs.llm.api_key) {
-        Ok(o) => o.exit_code,
-        Err(e) => {
-            ctx.say(format!("  run: {e}"));
-            -1
-        }
-    };
-    if !record_status(run, to, pair, exit, &stats, base) {
-        return;
-    }
+    leg::write_spec(&spec, &run.work.join(format!("{to}.runcfg.json")))
+        .map_err(|e| failed("its run config could not be written", e))?;
+    let exit = leg::run_leg(ctx, &spec, &run.pairs.llm.api_key, "rebased")
+        .map_err(|e| failed("the scored leg did not run", e))?
+        .exit_code;
+    record_status(run, to, pair, exit, &stats, base)?;
     let missing: Vec<String> = spec
         .artifacts
         .iter()
@@ -941,35 +942,39 @@ fn scored_leg(run: &Run, pair: &str, to: &str, input: &str, base: &Base) {
             "  (see {}; an OOM here means the box ran out of memory — run the eval alone)",
             text(&spec.stdout_path)
         ));
-        return;
+        return Err(format!("the scored leg wrote no {}", missing.join(", ")));
     }
-    analyze_and_boot(run, pair, to, &out, base, &diag, &stats);
+    analyze_and_boot(run, pair, to, &out, base, &diag, &stats)
 }
 
-/// Record the run status; false when the card is REFUSED (no card is
-/// written, a stale one is removed).
-fn record_status(run: &Run, to: &str, pair: &str, exit: i32, stats: &Path, base: &Base) -> bool {
+/// Record the run status. Err when the card is REFUSED (no card is
+/// written, a stale one is removed) or the status cannot be recorded.
+fn record_status(
+    run: &Run,
+    to: &str,
+    pair: &str,
+    exit: i32,
+    stats: &Path,
+    base: &Base,
+) -> PairResult {
     let ctx = run.ctx;
     let sources = StatusSources {
         stats: Some(stats),
-        rebase_stdout: base.rebase_stdout.as_deref(),
+        rebase_stdout: Some(&base.rebase_stdout),
         pair: Some(pair),
     };
-    match records::write_run_status(&run.results, to, exit, &sources) {
-        Ok(status) => {
-            let mut refusal = provider_error_refusal(&status, &run.cfg.label);
-            refusal.extend(library_refusal(&status, &run.cfg.label));
-            if !refusal.is_empty() {
-                for line in refusal {
-                    ctx.say(line);
-                }
-                remove(&run.results.join(format!("{to}.json")));
-                return false;
-            }
+    let status = records::write_run_status(&run.results, to, exit, &sources).map_err(|e| {
+        ctx.say(format!("RUN STATUS FAILED for {pair}: {e}"));
+        "its run status could not be recorded".to_string()
+    })?;
+    let mut refusal = provider_error_refusal(&status, &run.cfg.label);
+    refusal.extend(library_refusal(&status, &run.cfg.label));
+    if !refusal.is_empty() {
+        for line in refusal {
+            ctx.say(line);
         }
-        Err(e) => ctx.say(format!(
-            "  (warning: could not record run status for {pair}: {e})"
-        )),
+        remove(&run.results.join(format!("{to}.json")));
+        return Err("card refused (see its block)".into());
     }
     if exit != 0 {
         ctx.say(format!(
@@ -982,7 +987,7 @@ fn record_status(run: &Run, to: &str, pair: &str, exit: i32, stats: &Path, base:
         }
         ctx.say("  Scoring anyway, but summary.json is stamped and the table will say so.");
     }
-    true
+    Ok(())
 }
 
 fn tree_of(bundle: &Path) -> PathBuf {
@@ -993,6 +998,10 @@ fn tree_of(bundle: &Path) -> PathBuf {
         .unwrap_or_default()
 }
 
+/// Score the card, write the evidence page, boot the tree. Err names
+/// what failed (analysis, the card's write, the boot gate); the page and
+/// the boot still run after a failed analysis, so the pair's block says
+/// everything at once.
 fn analyze_and_boot(
     run: &Run,
     pair: &str,
@@ -1001,7 +1010,7 @@ fn analyze_and_boot(
     base: &Base,
     diag: &Path,
     stats: &Path,
-) {
+) -> PairResult {
     let ctx = run.ctx;
     ctx.say(format!("=== {pair}: churn analysis ==="));
     let prior_tree = tree_of(&base.prior);
@@ -1011,15 +1020,19 @@ fn analyze_and_boot(
         stats,
         pair,
     };
-    let card = match scoring::analyze(ctx, &inputs) {
-        Ok(c) => c,
+    let mut failed: Vec<&str> = Vec::new();
+    match scoring::analyze(ctx, &inputs) {
+        Ok(card) => {
+            if let Err(e) = write(&run.results.join(format!("{to}.json")), &card) {
+                ctx.say(format!("CARD NOT WRITTEN for {pair}: {e}"));
+                failed.push("its card could not be written");
+            }
+        }
         Err(e) => {
             ctx.say(format!("ANALYZE FAILED for {pair}: {e}"));
-            String::new()
+            remove(&run.results.join(format!("{to}.json")));
+            failed.push("analysis failed");
         }
-    };
-    if let Err(e) = write(&run.results.join(format!("{to}.json")), &card) {
-        ctx.say(e);
     }
     if !diag.is_file() {
         ctx.say(format!(
@@ -1030,38 +1043,50 @@ fn analyze_and_boot(
             "  See {}. Every KPI above is unaffected.",
             text(&run.results.join(format!("{to}.stdout")))
         ));
-    } else if scoring::trail_report(
+    } else if let Err(e) = scoring::trail_report(
         ctx,
         diag,
         &run.results.join(format!("{to}-report.html")),
         &inputs,
-    )
-    .is_err()
-    {
-        ctx.say(format!("REPORT PAGE FAILED for {pair}"));
+    ) {
+        ctx.say(format!(
+            "REPORT PAGE FAILED for {pair}: {e} (every KPI is unaffected)"
+        ));
     }
-    boot_pair(run, pair, to, out);
+    if let Err(e) = boot_pair(run, pair, to, out) {
+        failed.push(e);
+    }
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(failed.join("; "))
+    }
 }
 
-fn boot_pair(run: &Run, pair: &str, to: &str, out: &Path) {
+/// Boot the tree and record the verdict; Err when it did not boot or the
+/// verdict could not be recorded.
+fn boot_pair(run: &Run, pair: &str, to: &str, out: &Path) -> Result<(), &'static str> {
     let (ctx, cfg) = (run.ctx, run.cfg);
     if !out.join("run.cjs").is_file() {
         ctx.say(format!("BOOT GATE FAILED for {pair}: no run.cjs to boot"));
-        return;
+        return Err("boot gate failed");
     }
     let b = boot::boot(ctx, out, to, cfg.boot_prompt, &cfg.boot_model);
     let ok = b.ok();
     let line = records::boot_verdict_line(&b.version, &b.prompt, &cfg.boot_model, ok);
     if let Err(e) = write(&run.results.join(format!("{to}-boot.json")), &line) {
-        ctx.say(e);
+        ctx.say(format!("BOOT VERDICT NOT WRITTEN for {pair}: {e}"));
+        return Err("its boot verdict could not be written");
     }
     if ok {
         ctx.say(format!("BOOT GATE: OK ({})", b.version));
+        Ok(())
     } else {
         ctx.say(format!(
             "BOOT GATE FAILED for {pair}: version='{}' prompt='{}'",
             b.version, b.prompt
         ));
+        Err("boot gate failed")
     }
 }
 
@@ -1093,12 +1118,16 @@ fn self_hop_leg(run: &Run, input: &str, base: &Path, out: &Path, log: &Path, cac
 /// re-humanify the last attempted pair's TO with its own fresh output as
 /// the prior. COLD into a fresh cache (judged against the reference range
 /// by the summary), then WARM replaying a copy of that cache: with the
-/// model held fixed it must be byte-identical with 0 cache writes.
-fn self_hop(run: &Run, to: &str, input: &str) {
+/// model held fixed it must be byte-identical with 0 cache writes. Err:
+/// the check did not happen, or the warm leg failed.
+fn self_hop(run: &Run, to: &str, input: &str) -> Result<(), String> {
     let ctx = run.ctx;
     let base = run.work.join(to);
     if !base.join(".humanify/humanified.js").is_file() {
-        return;
+        ctx.say(format!(
+            "SELF-HOP DID NOT RUN for {to}: its scored leg wrote no tree"
+        ));
+        return Err("did not run (no scored tree)".into());
     }
     let out = run.work.join(format!("{to}-selfhop"));
     ctx.say(format!(
@@ -1107,14 +1136,19 @@ fn self_hop(run: &Run, to: &str, input: &str) {
     remove(&out);
     let cache = run.work.join(format!("{to}-selfhop-cache"));
     remove(&cache);
+    let cache_failed = |e: String| {
+        ctx.say(format!("SELF-HOP DID NOT RUN for {to}: its cache: {e}"));
+        "did not run (its cache could not be made)".to_string()
+    };
     let cold_cache = match &run.cfg.llm_cache {
         Some(c) => {
-            let _ = super::copy_tree(Path::new(c), &cache);
+            super::copy_tree(Path::new(c), &cache).map_err(cache_failed)?;
             ctx.say("  cold self-hop leg SEEDED from --llm-cache: it is NOT cold; its count will not be judged");
             "seeded"
         }
         None => {
-            let _ = std::fs::create_dir_all(&cache);
+            std::fs::create_dir_all(&cache)
+                .map_err(|e| cache_failed(format!("{}: {e}", text(&cache))))?;
             "fresh"
         }
     };
@@ -1145,16 +1179,16 @@ fn self_hop(run: &Run, to: &str, input: &str) {
                 ("diffLines", JsValue::Null),
             ]),
         )]);
-        let _ = write(&verdict_path, &js_compact_line(&v));
+        write(&verdict_path, &js_compact_line(&v))?;
         ctx.say(format!(
             "SELF-HOP DID NOT RUN for {to} — missing: {}",
             missing.join(" ")
         ));
         ctx.say("  This is NOT a passing invariant and NOT a violation; the check did not happen.");
-        return;
+        return Err("did not run (the cold leg wrote no tree)".into());
     }
     let (identical, diff) = cold_verdict(run, to, &base, &out, cold_cache);
-    let warm = warm_self_hop(run, to, input, &base, &out, &cache, rc, cold_writes);
+    let (warm, warm_ok) = warm_self_hop(run, to, input, &base, &out, &cache, rc, cold_writes)?;
     let v = obj(vec![(
         "selfHop",
         obj(vec![
@@ -1166,7 +1200,12 @@ fn self_hop(run: &Run, to: &str, input: &str) {
             ("warm", warm),
         ]),
     )]);
-    let _ = write(&verdict_path, &js_compact_line(&v));
+    write(&verdict_path, &js_compact_line(&v))?;
+    if warm_ok {
+        Ok(())
+    } else {
+        Err("warm self-hop failed (see its block)".into())
+    }
 }
 
 fn cold_verdict(run: &Run, to: &str, base: &Path, out: &Path, cold_cache: &str) -> (bool, u64) {
@@ -1207,14 +1246,19 @@ fn warm_self_hop(
     cold_cache: &Path,
     cold_rc: i32,
     cold_writes: i64,
-) -> JsValue {
+) -> Result<(JsValue, bool), String> {
     let ctx = run.ctx;
     let cache = run.work.join(format!("{to}-selfhop-warm-cache"));
     let out = run.work.join(format!("{to}-selfhop-warm"));
     ctx.say("=== warm self-hop: replaying a copy of the cold leg's cache ===");
     remove(&cache);
     remove(&out);
-    let _ = super::copy_tree(cold_cache, &cache);
+    super::copy_tree(cold_cache, &cache).map_err(|e| {
+        ctx.say(format!(
+            "!! WARM SELF-HOP DID NOT RUN for {to}: copying the cold cache: {e}"
+        ));
+        "warm self-hop did not run (the cold cache could not be copied)".to_string()
+    })?;
     let before = count_files(&cache);
     let rc = self_hop_leg(
         run,
@@ -1228,7 +1272,7 @@ fn warm_self_hop(
     let n = |x: f64| records::num(x);
     if !out.join(".humanify/humanified.js").is_file() {
         ctx.say(format!("!! WARM SELF-HOP DID NOT RUN for {to}"));
-        return obj(vec![
+        let v = obj(vec![
             ("ran", JsValue::Bool(false)),
             ("identical", JsValue::Bool(false)),
             ("diffFiles", n(-1.0)),
@@ -1238,6 +1282,7 @@ fn warm_self_hop(
             ("warmExit", n(f64::from(rc))),
             ("ok", JsValue::Bool(false)),
         ]);
+        return Ok((v, false));
     }
     let files = super::tree_diff::differing_files(cold_out, &out).map_or(0, |f| f.len() as u64);
     let lines = super::tree_diff::changed_lines_in_trees(cold_out, &out).unwrap_or(0);
@@ -1249,7 +1294,7 @@ fn warm_self_hop(
         ctx.say(format!("!! WARM SELF-HOP FAILED for {to}: {files} file(s) / {lines} ln differ, {writes} cache write(s), exit {cold_rc} vs {rc}"));
         ctx.say("   (must be 0 / 0 / 0 / equal — nondeterminism with the model held fixed)");
     }
-    obj(vec![
+    let v = obj(vec![
         ("ran", JsValue::Bool(true)),
         ("identical", JsValue::Bool(identical)),
         ("diffFiles", n(files as f64)),
@@ -1258,35 +1303,23 @@ fn warm_self_hop(
         ("coldExit", n(f64::from(cold_rc))),
         ("warmExit", n(f64::from(rc))),
         ("ok", JsValue::Bool(ok)),
-    ])
+    ]);
+    Ok((v, ok))
 }
 
 /// One `<v>.identity.json` beside every card (docs/dev-harness.md §3.1),
-/// read off what the label recorded by the one backfill reader; a label
-/// whose cards disagree is said out loud.
-fn write_identities(ctx: &Ctx, results: &Path) {
-    let cards = match crate::identity::backfill::eval_label(results) {
-        Ok(c) => c,
-        Err(e) => {
-            ctx.say(format!("  (identity: {e})"));
-            return;
-        }
-    };
+/// read off what the label recorded; Err when one cannot be derived or
+/// written, or the label's cards disagree.
+fn write_identities(ctx: &Ctx, results: &Path) -> Result<(), String> {
+    let cards = crate::identity::backfill::eval_label(results)?;
     for card in &cards {
-        let v = card
-            .corpus
-            .entry
-            .rsplit("->")
-            .next()
-            .unwrap_or("")
-            .to_string();
-        if !v.is_empty() {
-            let _ = write(&results.join(format!("{v}.identity.json")), &card.to_text());
-        }
+        let v = card.corpus.entry.rsplit("->").next().unwrap_or("");
+        write(&results.join(format!("{v}.identity.json")), &card.to_text())?;
     }
-    if let Err(errors) = crate::identity::label_cards(&cards) {
-        for e in errors {
+    crate::identity::label_cards(&cards).map_err(|errors| {
+        for e in &errors {
             ctx.say(format!("!! LABEL IDENTITY: {e}"));
         }
-    }
+        "the label's cards disagree (see LABEL IDENTITY above)".to_string()
+    })
 }

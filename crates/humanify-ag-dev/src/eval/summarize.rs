@@ -592,32 +592,8 @@ fn sorted_unique(mut xs: Vec<String>) -> Vec<String> {
     xs
 }
 
-/// The run manifests' base mode (`baseModeOf`).
-fn base_mode_of(m: &JsValue) -> String {
-    if let Some(b) = str_at(m, "inputs.baseMode") {
-        return b.to_string();
-    }
-    let prior = str_at(m, "inputs.prior").unwrap_or("");
-    let kind = str_at(m, "inputs.priorKind")
-        .map(str::to_string)
-        .unwrap_or_else(|| {
-            if prior.is_empty() {
-                "unknown".into()
-            } else if prior.contains("-rebased/") || prior.ends_with("-rebased") {
-                "rebased".into()
-            } else {
-                "archive".into()
-            }
-        });
-    match kind.as_str() {
-        "rebased" => "seeded".into(),
-        "archive" => "archive".into(),
-        _ => "unknown".into(),
-    }
-}
-
 /// What produced a label's numbers: its manifests' models, endpoints and
-/// efforts, its base modes and naming modes.
+/// efforts and naming modes.
 pub fn provenance(dir: &Path) -> JsValue {
     let manifests: Vec<JsValue> = files(dir)
         .iter()
@@ -633,12 +609,10 @@ pub fn provenance(dir: &Path) -> JsValue {
                 .collect(),
         )
     };
-    let base = sorted_unique(manifests.iter().map(base_mode_of).collect());
     obj(vec![
         ("models", texts(&pick("config.model"))),
         ("endpoints", texts(&pick("config.endpoint"))),
         ("reasoningEfforts", texts(&pick("config.reasoningEffort"))),
-        ("baseModes", texts(&base)),
         ("namingModes", texts(&naming_modes(dir, &manifests))),
     ])
 }
@@ -790,17 +764,8 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
             .collect::<Vec<_>>(),
         _ => Vec::new(),
     };
-    let base = list("baseModes");
     let naming = list("namingModes");
     let mut head = vec![
-        match base.len() {
-            1 => format!("BASE: {}", base[0]),
-            0 => "BASE: UNKNOWN (no run manifests)".into(),
-            _ => format!(
-                "!! BASE: MIXED ({}) — this label's pairs were scored on different bases",
-                base.join(" + ")
-            ),
-        },
         if naming.len() == 1 {
             format!("NAMING: {}", naming[0])
         } else {
