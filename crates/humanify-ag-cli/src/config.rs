@@ -16,7 +16,7 @@
 //!
 //! It replaced four resolvers that each owned a slice of the run's
 //! configuration (`Settings`, the kill-switch `SwitchState`, the naming
-//! schedule's `Levers`, and the raw option fields `unified.rs` read
+//! schedule's levers, and the raw option fields `unified.rs` read
 //! directly), and the defaults that lived twice. Every knob has ONE
 //! default: its registry entry, at the one constant it names.
 //!
@@ -27,7 +27,6 @@
 
 use serde::Serialize;
 
-use humanify_ag_core::fast::{FastTier, Lever, Levers};
 use humanify_ag_core::naming::waves::batch::WaveTunables;
 use humanify_ag_model::detection::{BundlerType, MinifierType};
 use humanify_ag_model::llm::RateLimitConfig;
@@ -244,12 +243,10 @@ impl Matching {
     }
 }
 
-/// The naming stage's schedule and budgets.
+/// The naming stage's budgets.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Naming {
-    #[serde(serialize_with = "serialize_schedule")]
-    pub schedule: FastTier,
     pub batch_size: usize,
     /// Per-identifier LLM call limit, initial + retries.
     pub max_retries: u32,
@@ -639,62 +636,8 @@ pub struct Perf {
     pub simulate_llm_latency: Option<String>,
 }
 
-fn serialize_schedule<S: serde::Serializer>(tier: &FastTier, s: S) -> Result<S::Ok, S::Error> {
-    use serde::ser::SerializeMap;
-    let mut m = s.serialize_map(Some(2))?;
-    match tier {
-        FastTier::Off => m.serialize_entry("tier", "off")?,
-        FastTier::Exact => m.serialize_entry("tier", "sequential")?,
-        FastTier::Relaxed(set) => {
-            m.serialize_entry("tier", "relaxed")?;
-            let on: Vec<&str> = Lever::ALL
-                .iter()
-                .filter(|l| set.has(**l))
-                .map(|l| l.name())
-                .collect();
-            m.serialize_entry("levers", &on)?;
-        }
-    }
-    m.end()
-}
-
-/// `naming.relaxed_levers`: the named levers (each name was checked
-/// against the registry when the file was read).
-pub fn parse_levers(list: &[String]) -> Levers {
-    Lever::ALL
-        .iter()
-        .filter(|l| list.iter().any(|n| n == l.name()))
-        .fold(Levers::default(), |acc, l| acc.with(*l))
-}
-
-/// The naming schedule: the DEFAULT is the relaxed tier with every lever
-/// on; `naming.schedule = "sequential"` selects the conservative one (the
-/// relaxed levers OFF, the exact tier's byte-identical parallelization
-/// kept — the pre-2026-09-28 default's bytes at the same batch size), and
-/// `naming.relaxed_levers` sizes a subset. Refused: both.
-pub fn schedule(sequential: bool, relaxed_levers: Option<Vec<String>>) -> Result<FastTier, String> {
-    match (sequential, relaxed_levers) {
-        (true, Some(_)) => Err(
-            "naming.schedule = \"sequential\" already turns the relaxed \
-                                levers off; naming.relaxed_levers has nothing to select"
-                .to_string(),
-        ),
-        (true, None) => Ok(FastTier::Exact),
-        (false, None) => Ok(FastTier::Relaxed(Levers::all())),
-        (false, Some(list)) => Ok(FastTier::Relaxed(parse_levers(&list))),
-    }
-}
-
 fn parse_enum<T: serde::de::DeserializeOwned>(v: Option<String>) -> Option<T> {
     v.and_then(|s| serde_json::from_value(serde_json::Value::String(s)).ok())
-}
-
-/// `run.order = "ordered"` — the ONE reader of the key (the config rule:
-/// one parse point per decision). Everything the mode forces derives from
-/// the schedule it selects: the turn driver, sequential `par`, one-call
-/// dispatch windows.
-fn ordered_mode(r: &Resolved) -> bool {
-    r.text("run.order").as_deref() == Some("ordered")
 }
 
 /// The `[library]` section, resolved.
@@ -855,18 +798,6 @@ pub fn cross_key_violations(r: &Resolved) -> Vec<String> {
     if r.text("split.ledger").is_some() && !split {
         out.push("split.ledger requires split.enabled".to_string());
     }
-    let sequential = r.text("naming.schedule").as_deref() == Some("sequential");
-    if ordered_mode(r)
-        && r.list("naming.relaxed_levers")
-            .is_some_and(|l| !l.is_empty())
-    {
-        out.push(
-            "run.order = \"ordered\" forces the conservative naming schedule; \
-             naming.relaxed_levers has nothing to select"
-                .to_string(),
-        );
-    }
-    out.extend(schedule(sequential, r.list("naming.relaxed_levers")).err());
     let context = r
         .int("llm.context_tokens")
         .unwrap_or(DEFAULT_CONTEXT_TOKENS);
@@ -917,19 +848,6 @@ impl Config {
         if !errors.is_empty() {
             return Err(errors);
         }
-        let sequential = r.text("naming.schedule").as_deref() == Some("sequential");
-        // The ordered TEST mode (run.order = "ordered"; docs/concurrency.md
-        // rule 9): it FORCES the turn-driver schedule — the mode admits
-        // proven byte-identical territory only (a relaxed tier + turn
-        // driver asks different questions than the pipelined driver, so it
-        // is not the same bytes; the replay test holds the proof). The
-        // relaxed levers are refused in validation: under the forced
-        // schedule they have nothing to select.
-        let schedule = if ordered_mode(&r) {
-            FastTier::Off
-        } else {
-            schedule(sequential, r.list("naming.relaxed_levers")).expect("validated above")
-        };
         Ok(Config {
             io: Io {
                 input: input.to_string(),
@@ -940,7 +858,7 @@ impl Config {
                 r.text("matching.prior_version"),
                 r.flag_on("matching.reconcile_prior_diff"),
             ),
-            naming: Config::naming(&r, schedule),
+            naming: Config::naming(&r),
             library: library_of(&r),
             unpack: Unpack {
                 bundler: parse_enum(r.text("unpack.bundler")),
@@ -990,11 +908,10 @@ impl Config {
         }
     }
 
-    fn naming(r: &Resolved, schedule: FastTier) -> Naming {
+    fn naming(r: &Resolved) -> Naming {
         let count = |k: &str| r.int(k).expect("defaulted");
         let naming_floor = r.flag_on("naming.naming_floor");
         Naming {
-            schedule,
             batch_size: count("naming.batch_size") as usize,
             max_retries: count("naming.max_retries") as u32,
             rename_retries: count("naming.rename_retries") as usize,

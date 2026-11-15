@@ -5,7 +5,6 @@
 //! the clap command from it). `Config::build` reads every value through
 //! it; `humanify.example.toml` and `--help` are rendered from it.
 
-use humanify_ag_core::fast::Lever;
 use humanify_ag_core::naming::waves::batch::WaveTunables;
 use humanify_ag_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 use humanify_ag_model::llm::DEFAULT_LLM_TIMEOUT_MS;
@@ -51,15 +50,6 @@ fn tunables() -> WaveTunables {
 
 fn efforts() -> Vec<String> {
     ["low", "medium", "high"].map(String::from).to_vec()
-}
-fn schedules() -> Vec<String> {
-    ["relaxed", "sequential"].map(String::from).to_vec()
-}
-fn orders() -> Vec<String> {
-    ["throughput", "ordered"].map(String::from).to_vec()
-}
-fn levers() -> Vec<String> {
-    Lever::ALL.iter().map(|l| l.name().to_string()).collect()
 }
 fn bundlers() -> Vec<String> {
     SELECTABLE_BUNDLERS.iter().map(|b| enum_name(*b)).collect()
@@ -197,7 +187,6 @@ pub const COUNTED_FLAG: &str = "diagnostics.verbosity";
 
 /// Each section's `--help` heading (the TOML table is shown beside it).
 pub const SECTION_TITLES: &[(&str, &str)] = &[
-    ("run", "Run"),
     ("io", "Output"),
     ("llm", "LLM"),
     ("matching", "Cross-version matching"),
@@ -239,22 +228,6 @@ pub static PIPELINE: Registry = Registry {
 
 /// Every setting, in the order the example file lists them.
 pub static KEYS: &[Key] = &[
-    // [run]
-    Key {
-        section: "run",
-        name: "order",
-        kind: Kind::Choice(orders),
-        flag: None,
-        default: || text("throughput"),
-        unset: "",
-        doc: "\"throughput\" (the default: work through items as fast as the pool and \
-              the semaphore allow; results land in canonical order where they are \
-              consumed) or \"ordered\" (the TEST MODE: the waves' turn driver, the \
-              parallel helpers sequential, one-call dispatch windows). Ordered forces \
-              the conservative naming schedule and refuses naming.relaxed_levers. \
-              Determinism-sensitive tests opt in; regular runs never pay for it \
-              (docs/concurrency.md, rule 9).",
-    },
     // [io]
     Key {
         section: "io",
@@ -378,25 +351,6 @@ pub static KEYS: &[Key] = &[
         doc: "With a prior: snap rename-noise diff hunks back to the prior's names.",
     },
     // [naming]
-    Key {
-        section: "naming",
-        name: "schedule",
-        kind: Kind::Choice(schedules),
-        flag: None,
-        default: || text("relaxed"),
-        unset: "",
-        doc: "\"relaxed\" (both relaxed levers on) or \"sequential\" (the pre-2026-09-28 \
-              default's bytes at the same batch_size).",
-    },
-    Key {
-        section: "naming",
-        name: "relaxed_levers",
-        kind: Kind::List(Some(levers)),
-        flag: None,
-        default: none,
-        unset: "every lever",
-        doc: "Lever-sizing knob: the relaxed levers to turn on (relaxed schedule only).",
-    },
     Key {
         section: "naming",
         name: "batch_size",

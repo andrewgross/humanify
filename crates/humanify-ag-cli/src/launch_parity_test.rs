@@ -146,8 +146,6 @@ const COMMANDER_SPELLINGS: &[(&str, &str)] = &[
     ("--rename-retries", "--naming-rename-retries"),
     ("--max-free-retries", "--naming-max-free-retries"),
     ("--lane-threshold", "--naming-lane-threshold"),
-    ("--sequential", "--naming-schedule sequential"),
-    ("--relaxed-levers", "--naming-relaxed-levers"),
     (
         "--no-reconcile-prior-diff",
         "--no-matching-reconcile-prior-diff",
@@ -376,7 +374,6 @@ pub(crate) fn record(input: &str, opts: &CommandOptions, file: Option<&ConfigFil
     json!({
         "input": c.io.input,
         "settings": { "Ok": settings_json(&c) },
-        "fastTier": format!("{:?}", Ok::<_, String>(c.naming.schedule)),
         "switches": format!("{:?}", Ok::<_, String>(c.switches.clone())),
         "invariants": Vec::<String>::new(),
         "verbose": d.verbosity,
@@ -601,16 +598,11 @@ fn every_golden_launch_resolves_to_a_captured_launchs_settings() {
 /// captured launch exactly; each key's own resolution is pinned by the
 /// one-row-per-flag captures):
 ///
-/// - `e2e.golden.txt` `split`: the unsplittable fixtures (ES modules,
-///   `disambiguation`, `r1b-synthetic`) run their `--sequential` legs
-///   UNSPLIT; the captured e2e sequential legs were split ones.
 /// - `ask-trace.golden.txt` `split` and `settings.batchSize`: the ask
-///   trace grew a split leg, and its sequential prior leg asks in batches
-///   of 10 (captured: 25).
-const NEW_COMBINATIONS: [(&str, &[&str]); 2] = [
-    ("e2e.golden.txt", &["split"]),
-    ("ask-trace.golden.txt", &["split", "settings.batchSize"]),
-];
+///   trace grew a split leg, and its prior leg asks in batches of 10
+///   (captured: 25).
+const NEW_COMBINATIONS: [(&str, &[&str]); 1] =
+    [("ask-trace.golden.txt", &["split", "settings.batchSize"])];
 
 /// The keys (`settings.<key>` inside the settings block) in which `got`
 /// differs from `captured`, as `key: got vs captured`.

@@ -145,17 +145,6 @@ fn an_out_of_range_value_is_refused_naming_the_key() {
         ["cfg.toml: llm.concurrency = 5000000000 is outside 1..=4294967295"]
     );
     assert_eq!(
-        parse_refusals("[naming]\nschedule = \"fast\"\n"),
-        ["cfg.toml: naming.schedule must be one of: relaxed, sequential (got \"fast\")"]
-    );
-    assert_eq!(
-        parse_refusals("[naming]\nrelaxed_levers = [\"bogus\"]\n"),
-        [
-            "cfg.toml: naming.relaxed_levers must be one of: window-lanes, defer-shadowed \
-             (got \"bogus\")"
-        ]
-    );
-    assert_eq!(
         parse_refusals("[diagnostics]\nlog_file = \"\"\n"),
         ["cfg.toml: diagnostics.log_file must not be empty"]
     );
@@ -169,6 +158,8 @@ fn a_removed_key_gets_the_unknown_key_error() {
         ("llm", "api_key"),
         ("perf", "profile"),
         ("naming", "sequential"),
+        ("naming", "schedule"),
+        ("naming", "relaxed_levers"),
     ] {
         let errs = parse_refusals(&format!("[{section}]\n{name} = \"x\"\n"));
         assert_eq!(errs.len(), 1, "{errs:?}");
@@ -177,6 +168,11 @@ fn a_removed_key_gets_the_unknown_key_error() {
             "{errs:?}"
         );
     }
+    // The whole `[run]` table went with its one key.
+    assert_eq!(
+        parse_refusals("[run]\norder = \"ordered\"\n"),
+        ["cfg.toml: unknown key run"]
+    );
 }
 
 #[test]

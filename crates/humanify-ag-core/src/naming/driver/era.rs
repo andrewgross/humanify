@@ -80,9 +80,6 @@ pub struct EraOptions<'o> {
     pub tunables: crate::naming::waves::batch::WaveTunables,
     /// `--probe shingle-probe`: the close pairs' shingle census lines.
     pub shingle_probe: bool,
-    /// The naming schedule (the relaxed tier by default; `--sequential`
-    /// the conservative one — see `NamingConfig::fast`).
-    pub fast: crate::fast::FastTier,
     /// The rendered-prompt window (finding #65; `NamingConfig::prompt_window`).
     pub prompt_window: usize,
     /// `NamingConfig::module_naming`.
@@ -387,7 +384,7 @@ pub fn prior_era<P: NameProvider>(
         capture
     });
     let ph = crate::profiling::phase("era:close-contexts");
-    let close = close_contexts(stage, &outcome.fn_close_prior, opts.fast.on())?;
+    let close = close_contexts(stage, &outcome.fn_close_prior)?;
     drop(ph);
     let pending = PendingCarry {
         matcher: outcome.carry.clone(),
@@ -741,7 +738,6 @@ fn run_era<P: NameProvider>(
         params: opts.params.clone(),
         single_epoch: start.single_epoch,
         tunables: opts.tunables,
-        fast: opts.fast,
         window: opts.prompt_window,
         stems: &stems,
     };
@@ -1215,7 +1211,6 @@ fn statement_of_span(body_spans: &[(u32, u32)], span: oxc_span::Span) -> Option<
 fn close_contexts(
     stage: &crate::prior::MatchStage<'_, '_>,
     close_prior: &[Option<String>],
-    fast: bool,
 ) -> Result<Vec<Option<CloseContext>>, String> {
     let prior_semantic = stage.prior.ingest.semantic();
     let prior_view = TextView::build(prior_semantic);
@@ -1239,7 +1234,7 @@ fn close_contexts(
     let prior_spans = stage.prior.spans;
     let prior_graph = stage.prior.graph;
     // One function's context: a pure read of plain data (the text view,
-    // the identifier index, the JSON, the graphs), so the fast schedule maps it on
+    // the identifier index, the JSON, the graphs), so it is mapped on
     // the pool — results in input order, the first error first.
     let one = |(f, prior_id): (usize, &Option<String>)| {
         let Some(prior_id) = prior_id else {
@@ -1283,14 +1278,10 @@ fn close_contexts(
             snaps,
         }))
     };
-    if fast {
-        let items: Vec<(usize, &Option<String>)> = close_prior.iter().enumerate().collect();
-        crate::par::map_ordered(&items, |&item| one(item))
-            .into_iter()
-            .collect()
-    } else {
-        close_prior.iter().enumerate().map(one).collect()
-    }
+    let items: Vec<(usize, &Option<String>)> = close_prior.iter().enumerate().collect();
+    crate::par::map_ordered(&items, |&item| one(item))
+        .into_iter()
+        .collect()
 }
 
 /// Every identifier occurrence of a text, (start, symbol's declaration

@@ -266,7 +266,6 @@ fn with_twin_sides_classified(
         fresh: fresh_code,
         prior: prior_code,
         never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
-        fast: false,
         same_program_check: true,
     };
     match_prior_version(input, |stage| {

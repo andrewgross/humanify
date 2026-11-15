@@ -13,7 +13,7 @@ fn settings_render_as_pipeline_config_ts_renders_them() {
         "diagnostics.log_file=/r/2.1.85-rebase.log",
         "library.index=/work/library-index/cb64",
         "library.lookup.agreement=false",
-        "naming.schedule=sequential",
+        "naming.lane_threshold=30",
         "naming.batch_size=10",
         "x.list=[\"a\",\"b\"]",
         "x.quoted=\"q\"",
@@ -24,7 +24,7 @@ fn settings_render_as_pipeline_config_ts_renders_them() {
         "[llm]\nreasoning_effort = \"low\"\nconcurrency = 472\n[split]\nenabled = true\n\
          [diagnostics]\nlog_file = \"/r/2.1.85-rebase.log\"\n[library]\n\
          index = \"/work/library-index/cb64\"\n[library.lookup]\nagreement = false\n\
-         [naming]\nschedule = \"sequential\"\nbatch_size = 10\n\
+         [naming]\nlane_threshold = 30\nbatch_size = 10\n\
          [x]\nlist = [\"a\", \"b\"]\nquoted = \"q\"\n"
     );
 }

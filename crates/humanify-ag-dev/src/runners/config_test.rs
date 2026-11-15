@@ -111,7 +111,7 @@ fn every_score_default_is_resolved_once() {
             "--pipeline-set",
             "naming.batch_size=10",
             "--pipeline-set",
-            "naming.schedule=sequential",
+            "naming.lane_threshold=30",
         ]),
     )
     .unwrap();
@@ -120,7 +120,7 @@ fn every_score_default_is_resolved_once() {
     assert_eq!(c.pairs, Some(a(&["85->86", "215->216"])));
     assert_eq!(
         c.pipeline_sets,
-        a(&["naming.batch_size=10", "naming.schedule=sequential"]),
+        a(&["naming.batch_size=10", "naming.lane_threshold=30"]),
         "order kept"
     );
 }

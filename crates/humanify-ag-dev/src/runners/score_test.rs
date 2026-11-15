@@ -319,7 +319,7 @@ fn pipeline_sets_reach_all_three_sites_once_each_in_order() {
     let h = run_score(
         &with(&[
             "--pipeline-set",
-            "naming.schedule=sequential",
+            "naming.lane_threshold=30",
             "--pipeline-set",
             "naming.batch_size=10",
         ]),
@@ -327,16 +327,14 @@ fn pipeline_sets_reach_all_three_sites_once_each_in_order() {
     )
     .unwrap();
     assert_ran(&h);
-    let want = "humanify-config| [naming]\nhumanify-config| schedule = \"sequential\"\nhumanify-config| batch_size = 10";
+    let want = "humanify-config| [naming]\nhumanify-config| lane_threshold = 30\nhumanify-config| batch_size = 10";
     // Every scored leg plus the two self-hop legs (cold and warm).
     let n = pairs().len();
     assert_eq!(h.launches.matches(want).count(), n + 2, "{}", h.launches);
     assert_eq!(h.scored.iter().filter(|b| b.contains(want)).count(), n);
     let p = std::fs::read_to_string(h.results.join("pipeline.json")).unwrap();
     assert!(
-        p.contains(
-            "\"pipelineSettings\":[\"naming.schedule=sequential\",\"naming.batch_size=10\"]"
-        ),
+        p.contains("\"pipelineSettings\":[\"naming.lane_threshold=30\",\"naming.batch_size=10\"]"),
         "{p}"
     );
 }

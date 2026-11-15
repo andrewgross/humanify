@@ -48,7 +48,7 @@
 //! ONCE per verb invocation (`humanify_ag_core::prior::with_prior_match_side`)
 //! and every file's match stage borrows it. The per-call rebuild the
 //! single-call design did — the whole 33MB prior re-parsed and its ~63k
-//! function index rebuilt per file, twice per file in the fast schedule
+//! function index rebuilt per file, twice per file
 //! — cost ~23s per file against the revalidation corpus, turning a
 //! multi-file run into the 12h re-validation of finding #68 where the
 //! actual comparison work is milliseconds per file. Byte-identical per
@@ -181,8 +181,8 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
     // Stages 6-8 per candidate: format, then the match stage, then stop —
     // no naming, no LLM. The PRIOR side is built ONCE for the whole run
     // (`with_prior_match_side`) and every file's stage borrows it: the
-    // per-file reparse the single-call design did (~14s × 2 per file in
-    // the fast schedule, against a ~33MB prior) turned minutes of
+    // per-file reparse the single-call design did (~14s × 2 per file,
+    // against a ~33MB prior) turned minutes of
     // matching on a multi-file work dir into hours of rebuilding the
     // same index — and the parse-count pin (tests/match_prior_side_cache)
     // holds the amortization in place.

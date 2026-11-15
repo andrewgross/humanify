@@ -12,39 +12,11 @@
 //! Decision code — the cascade's tier loop, ambiguous-map insertion,
 //! propagation, demote/revoke, pool assignment — stays sequential and
 //! never calls here.
-//!
-//! The ordered mode (rule 9, docs/concurrency.md) is a TEST-MODE property:
-//! [`set_ordered_mode`] makes every helper run its work sequentially, one
-//! item at a time, with identical results. It is set ONCE at startup,
-//! before any stage runs; a regular run never pays for it.
-
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use rayon::prelude::*;
 
-/// The ordered mode's flag: set once at startup (run.order = "ordered"),
-/// read-only during the run. Both branches of every helper produce
-/// identical results, so nothing that decides OUTPUT reads this — it
-/// schedules work only (pattern `order-mode`, docs/concurrency.md).
-static ORDERED: AtomicBool = AtomicBool::new(false);
-
-/// Turn the ordered mode on or off. Called once at startup, before any
-/// parallel work; flipping it mid-run is unsupported (tests set and
-/// restore it around a whole helper call).
-pub fn set_ordered_mode(ordered: bool) {
-    ORDERED.store(ordered, Ordering::SeqCst);
-}
-
-/// Whether the ordered mode is on.
-pub fn ordered_mode() -> bool {
-    ORDERED.load(Ordering::SeqCst)
-}
-
 /// `items.iter().map(f).collect()`, with `f` run on the rayon pool.
 pub fn map_ordered<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync + Send) -> Vec<R> {
-    if ordered_mode() {
-        return items.iter().map(f).collect();
-    }
     // An indexed parallel iterator's collect writes each result into its
     // input slot — the order is by construction, not by completion.
     items.par_iter().map(f).collect()
@@ -62,14 +34,6 @@ pub fn produce_then_map<P: Send, R: Send>(
     produce: impl FnMut(usize) -> P,
     consume: impl Fn(P) -> R + Sync + Send,
 ) -> Vec<R> {
-    if ordered_mode() {
-        let mut produce = produce;
-        let mut out = Vec::with_capacity(n);
-        for i in 0..n {
-            out.push(consume(produce(i)));
-        }
-        return out;
-    }
     let mut produce = produce;
     let chunk = chunk.max(1);
     let mut out = Vec::with_capacity(n);
@@ -90,9 +54,6 @@ pub fn join<A: Send, B: Send>(
     a: impl FnOnce() -> A + Send,
     b: impl FnOnce() -> B + Send,
 ) -> (A, B) {
-    if ordered_mode() {
-        return (a(), b());
-    }
     rayon::join(a, b)
 }
 
@@ -104,11 +65,6 @@ pub fn beside<A: Send, B>(
     background: impl FnOnce() -> A + Send,
     here: impl FnOnce() -> B,
 ) -> (A, B) {
-    if ordered_mode() {
-        // One at a time: the background job, then the caller's. The two
-        // are independent, so the order between them cannot matter.
-        return (background(), here());
-    }
     std::thread::scope(|scope| {
         let handle = scope.spawn(background);
         let here_result = here();

@@ -149,6 +149,9 @@ fn a_removed_flag_gets_the_parsers_unknown_argument_error() {
         "--concurrency",
         "--stats-json",
         "-c",
+        "--run-order",
+        "--naming-schedule",
+        "--naming-relaxed-levers",
     ] {
         let err = refusal(&["in.js", old, "x"], old);
         assert!(err.contains("unexpected argument"), "{old}: {err}");
@@ -235,35 +238,6 @@ fn the_short_flags_alias_their_keys() {
 }
 
 // (The `--no-` lever spellings: config_test.rs.)
-
-// --- schedule and Rust-only flags -----------------------------------------
-
-/// The naming schedule (docs/rust-port/20-fast-mode.md, flipped
-/// 2026-09-28): the DEFAULT is the relaxed tier, every lever on, no key.
-#[test]
-fn the_naming_schedule_defaults_to_relaxed() {
-    use humanify_ag_core::fast::{FastTier, Lever, Levers};
-    let tier = |toml: &str| {
-        let f = crate::config_test::file(toml);
-        crate::config::Config::build("in.js", &parse_opts(&["in.js"]), Some(&f), |_| {
-            Some("k".to_string())
-        })
-        .map(|c| c.naming.schedule)
-    };
-    assert_eq!(tier(""), Ok(FastTier::Relaxed(Levers::all())));
-    assert_eq!(
-        tier("[naming]\nschedule = \"sequential\"\n"),
-        Ok(FastTier::Exact)
-    );
-    let lanes = FastTier::Relaxed(Levers::default().with(Lever::WindowLanes));
-    assert_eq!(
-        tier("[naming]\nrelaxed_levers = [\"window-lanes\"]\n"),
-        Ok(lanes)
-    );
-    assert!(
-        tier("[naming]\nschedule = \"sequential\"\nrelaxed_levers = [\"window-lanes\"]\n").is_err()
-    );
-}
 
 // --- help and version -----------------------------------------------------
 

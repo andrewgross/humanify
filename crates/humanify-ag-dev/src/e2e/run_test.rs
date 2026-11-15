@@ -166,7 +166,6 @@ fn an_unsplit_leg_holding_a_runnable_tree_fails() {
     let legs = Legs {
         fresh: d.join("f"),
         prior: d.join("p"),
-        sequential: d.join("s"),
     };
     assert!(check_unsplit("L", &legs).is_ok());
     std::fs::create_dir_all(d.join("p")).unwrap();

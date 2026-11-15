@@ -377,10 +377,7 @@ fn the_configured_batch_size_and_retry_limit_shape_the_loop() {
     assert_eq!(WaveTunables::default().reask_limit, 2);
 }
 
-/// The default window is 25 identifiers (the 2026-09-28 relaxed-default
-/// flip, docs/rust-port/20-fast-mode.md §defaults; was the TS's 10 — the
-/// conservative schedule recovers it explicitly with `--batch-size 10`,
-/// which the e2e gate pins against the committed legacy goldens).
+/// The default window is 25 identifiers.
 #[test]
 fn the_default_batch_size_is_25() {
     assert_eq!(super::DEFAULT_BATCH_SIZE, 25);

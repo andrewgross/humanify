@@ -16,7 +16,7 @@ use crate::naming::ask_trace::RetryCause;
 use crate::naming::waves::jsset::{JsRecord, JsSet};
 use crate::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
 
-/// The plain `--sequential`-shaped config the collision pins run under.
+/// The plain config the collision pins run under.
 fn plain_config() -> crate::naming::driver::NamingConfig {
     crate::naming::driver::NamingConfig {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
@@ -40,7 +40,6 @@ fn plain_config() -> crate::naming::driver::NamingConfig {
         capture_dump: false,
         tunables: Default::default(),
         shingle_probe: false,
-        fast: crate::fast::FastTier::Off,
         prompt_window: DEFAULT_PROMPT_WINDOW,
         module_naming: None,
     }
@@ -268,6 +267,10 @@ fn a_cross_lane_collision_gets_exactly_one_disclosed_reask() {
         "function hooks({params}) {{\n{vars}  return a + e + v00;\n}}\nconsole.log(hooks(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1));\n"
     );
     let provider = map_provider();
+    // Windows of 10: the function's 37 bindings run as four lanes, `e`
+    // in the third and `a` in the fourth.
+    let mut config = plain_config();
+    config.tunables.batch_size = 10;
     let out = crate::naming::driver::run_naming(
         &crate::naming::driver::NamingInput {
             fresh: &fresh,
@@ -279,7 +282,7 @@ fn a_cross_lane_collision_gets_exactly_one_disclosed_reask() {
             restorations: crate::naming::driver::no_restorations(),
             statement_holds: &[],
         },
-        &plain_config(),
+        &config,
         &provider,
         &mut retain_log(),
     )

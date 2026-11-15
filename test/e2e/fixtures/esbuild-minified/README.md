@@ -22,8 +22,7 @@ registrar beside it (`{get:e[r],enumerable:!0}` — Bun's adds
 `configurable`) makes it an esbuild `shape` signal, which outranks it.
 
 The e2e holds the fixture to its `expect` block: bundler and adapter
-esbuild, 26 files in `vendor/`, the fresh grouping, fresh + prior +
-`--sequential` (twice each) deterministic, and the split tree booting with
+esbuild, 26 files in `vendor/`, the fresh grouping, the prior leg (run twice) deterministic, and the split tree booting with
 the input's exact stdout.
 
 ## The build (PINNED: esbuild 0.27.2)

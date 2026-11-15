@@ -1,8 +1,8 @@
-//! `--fast` (docs/rust-port/20-fast-mode.md): the pipelined LLM dispatch
-//! must be DETERMINISTIC under any completion order. The provider here
-//! completes calls in the worst order it can (last started, first done),
-//! so a lane's follow-up races the rest of its round; the run must ship
-//! the bytes — and record the dispatches — of the turn-by-turn driver.
+//! The pipelined LLM dispatch is deterministic under any completion order.
+//! One provider here completes calls in the worst order it can (last
+//! started, first done), so a lane's follow-up races the rest of its
+//! round; others complete in seeded shuffled orders. The tests below
+//! compare every order's bytes and dispatch records.
 
 use std::cell::Cell;
 
@@ -72,15 +72,7 @@ impl NameProvider for LifoProvider {
     }
 }
 
-fn config(fast: bool) -> NamingConfig {
-    config_tier(if fast {
-        crate::fast::FastTier::Exact
-    } else {
-        crate::fast::FastTier::Off
-    })
-}
-
-fn config_tier(fast: crate::fast::FastTier) -> NamingConfig {
+fn config() -> NamingConfig {
     NamingConfig {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
         module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
@@ -107,7 +99,6 @@ fn config_tier(fast: crate::fast::FastTier) -> NamingConfig {
             ..Default::default()
         },
         shingle_probe: false,
-        fast,
         prompt_window: DEFAULT_PROMPT_WINDOW,
         module_naming: None,
     }
@@ -117,9 +108,7 @@ fn config_tier(fast: crate::fast::FastTier) -> NamingConfig {
 /// for the fingerprints, and the streamed rows land in its in-memory
 /// oracle (the bulk builders' byte-identity comparison).
 fn retain_log() -> crate::artifact_dump::DispatchLog {
-    crate::artifact_dump::DispatchLog::retain_for_tests(
-        config_tier(crate::fast::FastTier::Off).params,
-    )
+    crate::artifact_dump::DispatchLog::retain_for_tests(config().params)
 }
 
 /// One run over the fixture under `cfg`'s window, through the retaining
@@ -165,8 +154,8 @@ fn fixture() -> String {
     )
 }
 
-fn run(fresh: &str, fast: bool, provider: &LifoProvider) -> NamingOutcome {
-    run_cfg(fresh, &config(fast), provider)
+fn run(fresh: &str, provider: &dyn NameProvider) -> NamingOutcome {
+    run_cfg(fresh, &config(), provider)
 }
 
 /// What a run decided and recorded, in comparable form.
@@ -189,36 +178,50 @@ fn fingerprint(out: &NamingOutcome) -> (String, Vec<String>, String) {
     )
 }
 
-#[test]
-fn pipelined_dispatch_ships_the_turn_drivers_bytes_under_lifo_completion() {
-    let fresh = fixture();
-    let parity = run(&fresh, false, &LifoProvider::default());
-    let provider = LifoProvider::default();
-    let fast = run(&fresh, true, &provider);
-    assert!(
-        provider.overlapped.get(),
-        "the fast run never pipelined: no follow-up started while its round was in flight"
-    );
-    assert_eq!(fingerprint(&fast), fingerprint(&parity));
-    assert!(
-        parity.waves.dispatches.len() > 10,
-        "the fixture exercises lanes"
-    );
+/// Answers like [`LifoProvider`] but completes every pipelined round in
+/// a SEEDED SHUFFLED order (the testkit's one fake): any other order the
+/// real provider may produce.
+fn shuffled(seed: u64) -> humanify_ag_testkit::fake::ShuffledFake {
+    humanify_ag_testkit::fake::ShuffledFake::answering(seed, answer)
 }
 
 #[test]
-fn a_fast_run_is_byte_identical_to_itself() {
+fn pipelined_dispatch_ships_the_same_bytes_under_any_completion_order() {
     let fresh = fixture();
-    let a = run(&fresh, true, &LifoProvider::default());
-    let b = run(&fresh, true, &LifoProvider::default());
+    let provider = LifoProvider::default();
+    let lifo = run(&fresh, &provider);
+    assert!(
+        provider.overlapped.get(),
+        "the run never pipelined: no follow-up started while its round was in flight"
+    );
+    assert!(
+        lifo.waves.dispatches.len() > 10,
+        "the fixture exercises lanes"
+    );
+    assert!(lifo.output_valid, "{:?}", lifo.verdict);
+    for seed in 1..=3 {
+        let other = run(&fresh, &shuffled(seed));
+        assert_eq!(
+            fingerprint(&lifo),
+            fingerprint(&other),
+            "LIFO vs shuffled (seed {seed})"
+        );
+    }
+}
+
+#[test]
+fn a_run_is_byte_identical_to_itself() {
+    let fresh = fixture();
+    let a = run(&fresh, &LifoProvider::default());
+    let b = run(&fresh, &LifoProvider::default());
     assert_eq!(fingerprint(&a), fingerprint(&b));
 }
 
-/// With a prior: the prior match, the close contexts (mapped on the pool
-/// under the fast schedule) and the speculative reconcile beside the verdict must
-/// ship the parity bytes too.
+/// With a prior: the prior match, the close contexts (mapped on the pool)
+/// and the speculative reconcile beside the verdict ship the same bytes
+/// under any completion order too.
 #[test]
-fn with_a_prior_fast_ships_the_parity_bytes() {
+fn with_a_prior_any_completion_order_ships_the_same_bytes() {
     let fresh = fixture();
     // The prior release: humanified names, one function body different
     // (a close match), one extra statement.
@@ -233,7 +236,7 @@ fn with_a_prior_fast_ships_the_parity_bytes() {
             "var r = combine(p, m1);\n  var s = combine(r, m2);",
         )
         .replace("console.log(f(4));", "console.log(f(4));\nconsole.log(1);");
-    let run_with = |fast: bool| {
+    let run_with = |provider: &dyn NameProvider| {
         // A fresh log per leg (the reconcile test reads the outcomes, not
         // the accumulated rows).
         let mut log = retain_log();
@@ -248,105 +251,25 @@ fn with_a_prior_fast_ships_the_parity_bytes() {
                 restorations: crate::naming::driver::no_restorations(),
                 statement_holds: &[],
             },
-            &config(fast),
-            &LifoProvider::default(),
+            &config(),
+            &provider,
             &mut log,
         )
         .expect("the stage runs")
     };
-    let parity = run_with(false);
-    let fast = run_with(true);
-    assert!(parity.reconcile.is_some(), "the reconcile ran");
-    let counts = parity.prior.as_ref().expect("a prior run").counts;
+    let lifo = run_with(&LifoProvider::default());
+    assert!(lifo.reconcile.is_some(), "the reconcile ran");
+    let counts = lifo.prior.as_ref().expect("a prior run").counts;
     assert!(counts.close_match_count > 0, "a close match: {counts:?}");
-    assert_eq!(fingerprint(&fast), fingerprint(&parity));
-    assert_eq!(
-        fast.reconcile.as_ref().map(|r| &r.code),
-        parity.reconcile.as_ref().map(|r| &r.code)
-    );
-}
-
-/// The tier names this file's cases use, resolved directly (the CLI's tier
-/// strings went with `--fast`; the schedule is the relaxed tier by default
-/// and `--sequential` selects the exact one).
-fn tier_of(name: &str) -> crate::fast::FastTier {
-    use crate::fast::{FastTier, Lever, Levers};
-    match name.strip_prefix("relaxed:") {
-        Some(list) => FastTier::Relaxed(list.split(',').fold(Levers::default(), |set, n| {
-            let l = Lever::ALL
-                .into_iter()
-                .find(|l| l.name() == n)
-                .expect("lever names");
-            set.with(l)
-        })),
-        None if name == "relaxed" => FastTier::Relaxed(Levers::all()),
-        _ => FastTier::Exact,
+    for seed in 1..=3 {
+        let other = run_with(&shuffled(seed));
+        assert_eq!(fingerprint(&other), fingerprint(&lifo), "seed {seed}");
+        assert_eq!(
+            other.reconcile.as_ref().map(|r| &r.code),
+            lifo.reconcile.as_ref().map(|r| &r.code),
+            "seed {seed}"
+        );
     }
-}
-
-fn run_tier(fresh: &str, tier: &str, provider: &dyn NameProvider) -> NamingOutcome {
-    run_cfg(fresh, &config_tier(tier_of(tier)), provider)
-}
-
-/// Answers like [`LifoProvider`] but completes every pipelined round in
-/// a SEEDED SHUFFLED order (the testkit's one fake): any other order the
-/// real provider may produce. (Before lane L4 this was a generational
-/// provider — the trait's in-order default, the other extreme from LIFO;
-/// three shuffled orders now stand in for it.)
-fn shuffled(seed: u64) -> humanify_ag_testkit::fake::ShuffledFake {
-    humanify_ag_testkit::fake::ShuffledFake::answering(seed, answer)
-}
-
-#[test]
-fn relaxed_levers_are_deterministic_and_order_independent() {
-    let fresh = fixture();
-    for tier in ["relaxed", "relaxed:window-lanes", "relaxed:defer-shadowed"] {
-        let a = run_tier(&fresh, tier, &LifoProvider::default());
-        let b = run_tier(&fresh, tier, &LifoProvider::default());
-        assert_eq!(fingerprint(&a), fingerprint(&b), "{tier}: twice");
-        for seed in 1..=3 {
-            let g = run_tier(&fresh, tier, &shuffled(seed));
-            assert_eq!(
-                fingerprint(&a),
-                fingerprint(&g),
-                "{tier}: LIFO vs shuffled (seed {seed})"
-            );
-        }
-        assert!(a.output_valid, "{tier}: {:?}", a.verdict);
-    }
-}
-
-/// window-lanes: no lane chain is as long as the exact tier's longest.
-#[test]
-fn window_lanes_shorten_the_longest_chain() {
-    let fresh = fixture();
-    let exact = LifoProvider::default();
-    run_tier(&fresh, "exact", &exact);
-    let lanes = LifoProvider::default();
-    run_tier(&fresh, "relaxed:window-lanes", &lanes);
-    assert!(
-        lanes.longest_chain.get() < exact.longest_chain.get(),
-        "window-lanes chain {} vs exact {}",
-        lanes.longest_chain.get(),
-        exact.longest_chain.get()
-    );
-}
-
-/// defer-shadowed: the shadowed pass costs no round of its own.
-#[test]
-fn defer_shadowed_saves_rounds() {
-    let fresh = fixture();
-    let exact = LifoProvider::default();
-    // `k`'s second `let t` is a shadowed block binding: a round-B call.
-    run_tier(&fresh, "exact", &exact);
-    let deferred = LifoProvider::default();
-    run_tier(&fresh, "relaxed:defer-shadowed", &deferred);
-    assert!(
-        deferred.rounds.get() < exact.rounds.get(),
-        "defer-shadowed rounds {} vs exact {}",
-        deferred.rounds.get(),
-        exact.rounds.get()
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +285,7 @@ fn defer_shadowed_saves_rounds() {
 #[test]
 fn a_bounded_prompt_window_ships_the_unbounded_rounds_bytes() {
     let fresh = fixture();
-    let mut unbounded = config_tier(tier_of("relaxed"));
+    let mut unbounded = config();
     unbounded.prompt_window = usize::MAX;
     let wide = run_cfg(&fresh, &unbounded, &LifoProvider::default());
     assert!(
@@ -370,7 +293,7 @@ fn a_bounded_prompt_window_ships_the_unbounded_rounds_bytes() {
         "the fixture fills an unbounded round (peak {})",
         wide.waves.peak_live_dispatches
     );
-    let mut bounded = config_tier(tier_of("relaxed"));
+    let mut bounded = config();
     bounded.prompt_window = 2;
     let narrow = run_cfg(&fresh, &bounded, &LifoProvider::default());
     assert_eq!(
@@ -406,7 +329,7 @@ fn the_log_streams_the_bulk_builders_bytes() {
             restorations: crate::naming::driver::no_restorations(),
             statement_holds: &[],
         },
-        &config_tier(tier_of("relaxed")),
+        &config(),
         &LifoProvider::default(),
         &mut log,
     )
@@ -430,7 +353,7 @@ fn the_log_streams_the_bulk_builders_bytes() {
         })
         .unwrap_or_default();
     dispatches.extend(sweep);
-    let params = config_tier(crate::fast::FastTier::Off).params;
+    let params = config().params;
     let prompts = dispatch_rows(&dispatches, &params);
     let mut streamed = String::new();
     for p in log.memory_rows() {
@@ -449,7 +372,7 @@ fn the_log_streams_the_bulk_builders_bytes() {
 #[test]
 fn the_off_log_retains_nothing_and_the_asks_log_keeps_rows_only() {
     let fresh = fixture();
-    let params = config_tier(crate::fast::FastTier::Off).params;
+    let params = config().params;
     let mut off = crate::artifact_dump::DispatchLog::off(params.clone());
     let out = run_naming(
         &NamingInput {
@@ -462,7 +385,7 @@ fn the_off_log_retains_nothing_and_the_asks_log_keeps_rows_only() {
             restorations: crate::naming::driver::no_restorations(),
             statement_holds: &[],
         },
-        &config_tier(tier_of("relaxed")),
+        &config(),
         &LifoProvider::default(),
         &mut off,
     )
@@ -486,7 +409,7 @@ fn the_off_log_retains_nothing_and_the_asks_log_keeps_rows_only() {
             restorations: crate::naming::driver::no_restorations(),
             statement_holds: &[],
         },
-        &config_tier(tier_of("relaxed")),
+        &config(),
         &LifoProvider::default(),
         &mut asks,
     )
@@ -514,13 +437,9 @@ fn the_off_log_retains_nothing_and_the_asks_log_keeps_rows_only() {
 #[test]
 fn a_dump_streaming_run_replays_the_prepared_records_bytes() {
     let fresh = fixture();
-    let params = config_tier(crate::fast::FastTier::Off).params;
+    let params = config().params;
     // The bulk oracle: the same fixture through the retaining log.
-    let retained = run_cfg(
-        &fresh,
-        &config_tier(tier_of("relaxed")),
-        &LifoProvider::default(),
-    );
+    let retained = run_cfg(&fresh, &config(), &LifoProvider::default());
     let mut dispatches: Vec<Dispatch<'_>> = retained
         .waves
         .dispatches
@@ -554,7 +473,7 @@ fn a_dump_streaming_run_replays_the_prepared_records_bytes() {
             restorations: crate::naming::driver::no_restorations(),
             statement_holds: &[],
         },
-        &config_tier(tier_of("relaxed")),
+        &config(),
         &LifoProvider::default(),
         &mut log,
     )

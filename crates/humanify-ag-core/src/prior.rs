@@ -72,11 +72,6 @@ pub struct PriorMatchInput<'t> {
     pub prior: &'t str,
     pub never_rename: NeverRename,
     pub layout: BundleLayout,
-    /// The fast schedule (the relaxed default and `--sequential` alike):
-    /// build the prior side's graph on a thread of its own
-    /// (from its own parse of the same text — the AST is not `Send`),
-    /// beside the fresh side's. Byte-identical: a parse is deterministic.
-    pub fast: bool,
     /// Run the same-program sanity check ([`assert_prior_looks_like_same_program`])
     /// on THIS call. Every file of a multi-file work dir is matched against
     /// the whole prior tree, so the check's granularity is the dump, not
@@ -151,7 +146,6 @@ pub fn match_prior_version<T>(
         never_rename,
         layout,
         same_program_check,
-        fast,
     } = input;
 
     // ── both sides: parse, then each side's program JSON ONCE ───────────
@@ -163,8 +157,8 @@ pub fn match_prior_version<T>(
     let fresh_allocator = Allocator::default();
     let prior_allocator = Allocator::default();
     let fresh_eligibility = Eligibility::SkipSet(never_rename);
-    let (fresh_ingest, prior_ingest, fresh_json, prior_json, fresh_parts, prior_parts) = if fast {
-        drop(ph);
+    drop(ph);
+    let (fresh_ingest, prior_ingest, fresh_json, prior_json, fresh_parts, prior_parts) = {
         let _ph = phase("prior:sides-parallel");
         // The prior side's graph on its own thread, from its own parse;
         // this thread builds the fresh side, then parses the prior again
@@ -187,38 +181,6 @@ pub fn match_prior_version<T>(
         );
         let (prior_json, prior_parts) = prior_side?;
         let (fresh_ingest, fresh_json, fresh_parts, prior_ingest) = fresh_side?;
-        (
-            fresh_ingest,
-            prior_ingest,
-            fresh_json,
-            prior_json,
-            fresh_parts,
-            prior_parts,
-        )
-    } else {
-        let fresh_ingest = parse_side(&fresh_allocator, fresh, "input.js")?;
-        let prior_ingest = parse_prior(&prior_allocator, prior)?;
-        let (fresh_json, prior_json) = program_jsons(&fresh_ingest, &prior_ingest);
-        drop(ph);
-        let ph = phase("prior:graph-fresh");
-        // ── the fresh side (the pipeline's own eligibility) ─────────────
-        let fresh_parts = build_side_parts(
-            &fresh_ingest,
-            &fresh_json,
-            "input.js",
-            fresh_eligibility,
-            layout,
-        );
-        drop(ph);
-        // ── the prior side (ALL bindings eligible — prior-version.ts:284-288)
-        let _ph = phase("prior:graph-prior");
-        let prior_parts = build_side_parts(
-            &prior_ingest,
-            &prior_json,
-            "prior.js",
-            Eligibility::All,
-            layout,
-        );
         (
             fresh_ingest,
             prior_ingest,
@@ -267,7 +229,7 @@ pub fn match_prior_version<T>(
 ///
 /// The amortization this owns: against a ~33MB prior the build is ~14
 /// seconds, and the single-call design the match verb grew from redid it
-/// per file — twice per file in the fast schedule — turning minutes of
+/// per file — twice per file — turning minutes of
 /// actual matching into hours of rebuilding the same index on a
 /// multi-file work dir. Byte-identical to per-call building: a parse is
 /// deterministic, so one parse's side IS every call's side.
@@ -503,17 +465,6 @@ pub fn reset_prior_parse_count() {
 fn parse_prior<'a>(allocator: &'a Allocator, prior: &'a str) -> Result<Ingest<'a>, String> {
     PRIOR_PARSES.fetch_add(1, Relaxed);
     parse_side(allocator, prior, "prior.js")
-}
-
-/// The two sides' program JSON ([`crate::ingest::program_estree_json`]):
-/// serialized here (the AST is not thread-safe), parsed concurrently.
-pub(crate) fn program_jsons(fresh: &Ingest<'_>, prior: &Ingest<'_>) -> (Value, Value) {
-    let fresh_text = fresh.program.to_estree_json(false, true);
-    let prior_text = prior.program.to_estree_json(false, true);
-    crate::par::join(
-        || crate::ingest::parse_estree_json(&fresh_text),
-        || crate::ingest::parse_estree_json(&prior_text),
-    )
 }
 
 /// The prior side's program JSON and built parts from a parse of its own

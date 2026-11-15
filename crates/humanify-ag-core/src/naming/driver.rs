@@ -102,8 +102,6 @@ pub struct NamingConfig {
     pub tunables: crate::naming::waves::batch::WaveTunables,
     /// `--probe shingle-probe`.
     pub shingle_probe: bool,
-    /// `--fast [tier]` (docs/rust-port/20-fast-mode.md, `crate::fast`).
-    pub fast: crate::fast::FastTier,
     /// How many rendered prompts may be alive at once (finding #65) — the
     /// CLI sizes it over the rate limiter's `max_concurrent`
     /// [`crate::naming::waves::processor::DEFAULT_PROMPT_WINDOW`]).
@@ -277,7 +275,6 @@ pub fn run_naming<P: NameProvider>(
         capture: config.capture_dump,
         tunables: config.tunables,
         shingle_probe: config.shingle_probe,
-        fast: config.fast,
         prompt_window: config.prompt_window,
         module_naming: config.module_naming,
         claimed_regions: input.claimed_regions,
@@ -286,14 +283,13 @@ pub fn run_naming<P: NameProvider>(
         restorations: input.restorations,
         statement_holds: input.statement_holds,
     };
-    let mut run_era = || match input.prior {
+    let run_era = || match input.prior {
         Some(prior) => match_prior_version(
             PriorMatchInput {
                 fresh: input.fresh,
                 prior,
                 never_rename: opts.never_rename,
                 layout: config.layout,
-                fast: config.fast.on(),
                 same_program_check: true,
             },
             |stage| era::prior_era(stage, &opts, provider, log),
@@ -301,28 +297,22 @@ pub fn run_naming<P: NameProvider>(
         None => era::fresh_era(input.fresh, &opts, provider, log),
     };
     // `captureSemanticBaseline` reads only the fresh text, and the family
-    // permute's prior index only the prior text: the fast schedule (the
-    // relaxed default and `--sequential` alike) builds both on
-    // a thread of their own while the era runs.
+    // permute's prior index only the prior text: both are built on a
+    // thread of their own while the era runs.
     let permute_may_run = !config.family_permute_disabled
         && config.reconcile_prior_diff
         && !config.source_map
         && !config.emit_rename_ledger;
-    let ((baseline, mut prior_members), era) = if config.fast.on() {
-        crate::par::beside(
-            || {
-                let prior_members = input
-                    .prior
-                    .filter(|_| permute_may_run)
-                    .map(|p| PriorMembers::of(p, config.name_profile, config.layout));
-                (Some(validate::baseline_of(input.fresh)), prior_members)
-            },
-            run_era,
-        )
-    } else {
-        let era = run_era();
-        ((None, None), era)
-    };
+    let ((baseline, mut prior_members), era) = crate::par::beside(
+        || {
+            let prior_members = input
+                .prior
+                .filter(|_| permute_may_run)
+                .map(|p| PriorMembers::of(p, config.name_profile, config.layout));
+            (validate::baseline_of(input.fresh), prior_members)
+        },
+        run_era,
+    );
     let era = era?;
     let NamingEra {
         generated,
@@ -439,31 +429,19 @@ pub fn run_naming<P: NameProvider>(
         )
     };
     let (verdict, reconciled, trail) = match input.prior.filter(|_| reconcile_gates) {
-        // The fast schedule: the verdict (a re-parse of the generated text) runs
-        // beside a SPECULATIVE reconcile on a copy of the trail; an
-        // invalid output discards the speculation — the parity outcome.
-        Some(prior) if config.fast.on() => {
-            let (verdict, (spec_trail, spec)) = crate::par::beside(
-                || verdict_of(baseline.unwrap_or_else(|| validate::baseline_of(input.fresh))),
-                || reconcile(prior, trail.clone()),
-            );
+        // The verdict (a re-parse of the generated text) runs beside a
+        // SPECULATIVE reconcile on a copy of the trail; an invalid output
+        // discards the speculation.
+        Some(prior) => {
+            let (verdict, (spec_trail, spec)) =
+                crate::par::beside(|| verdict_of(baseline), || reconcile(prior, trail.clone()));
             if verdict == validate::Verdict::Valid {
                 (verdict, Some(spec), spec_trail)
             } else {
                 (verdict, None, trail)
             }
         }
-        prior => {
-            let verdict =
-                verdict_of(baseline.unwrap_or_else(|| validate::baseline_of(input.fresh)));
-            match prior.filter(|_| verdict == validate::Verdict::Valid) {
-                Some(prior) => {
-                    let (trail, done) = reconcile(prior, trail);
-                    (verdict, Some(done), trail)
-                }
-                None => (verdict, None, trail),
-            }
-        }
+        None => (verdict_of(baseline), None, trail),
     };
     out.output_valid = verdict == validate::Verdict::Valid;
     out.verdict = Some(verdict);
