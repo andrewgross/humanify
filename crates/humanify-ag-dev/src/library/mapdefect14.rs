@@ -7,7 +7,7 @@
 //! ported acorn tokenizer instead of Node.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde_json::Value;
 
@@ -110,24 +110,9 @@ fn clean(toks: Vec<Vec<u16>>, common: &HashSet<&str>) -> HashSet<Token> {
 }
 
 /// `package_of`: (package name, root dir) of a path under node_modules
-/// (its innermost node_modules segment).
+/// (its innermost node_modules segment); none for a dot entry (`.bin`).
 fn package_of(path: &str) -> Option<(String, String)> {
-    let k = path.rfind("/node_modules/")?;
-    let (head, rest) = (&path[..k], &path[k + "/node_modules/".len()..]);
-    let parts: Vec<&str> = rest.split('/').collect();
-    if parts[0].is_empty() || parts[0].starts_with('.') {
-        return None;
-    }
-    let n = if parts[0].starts_with('@') && parts.len() > 1 {
-        2
-    } else {
-        1
-    };
-    let mut root = pypath::join(head, "node_modules");
-    for p in &parts[..n] {
-        root = pypath::join(&root, p);
-    }
-    Some((parts[..n].join("/"), root))
+    super::misattr13::package_root(path).filter(|(n, _)| !n.is_empty() && !n.starts_with('.'))
 }
 
 fn realpath(p: &str) -> String {
@@ -455,19 +440,8 @@ fn source_paths(entry: &CorpusEntry, map_path: &Path, role: Role) -> Result<Vec<
 }
 
 /// `label_source`: the source of package `lab` holding most of [s, e).
-fn label_source(truth: &Truth, offs: &[i64], s: i64, e: i64, lab: &str) -> Option<i64> {
-    let segs = &truth.segments;
-    let mut k = offs.partition_point(|&o| o <= s).saturating_sub(1);
-    let mut files: Counter<i64> = Counter::new();
-    while k < segs.len() && segs[k].0 < e {
-        let a = segs[k].0.max(s);
-        let b = if k + 1 < segs.len() { segs[k + 1].0 } else { e }.min(e);
-        if b > a {
-            files.add(segs[k].1, b - a);
-        }
-        k += 1;
-    }
-    files
+fn label_source(truth: &Truth, s: i64, e: i64, lab: &str) -> Option<i64> {
+    truth::source_bytes(&truth.segments, s, e)
         .most_common()
         .into_iter()
         .map(|(si, _)| *si)
@@ -787,10 +761,9 @@ fn entry_layer(
             )
         });
         let mut tree = Tree::new(&tops, &ev);
-        let offs: Vec<i64> = truth.segments.iter().map(|x| x.0).collect();
         for (ci, ((s0, e0), _u, row)) in cands.iter().enumerate() {
             let lab = row.label.as_str();
-            let path = label_source(&truth, &offs, *s0, *e0, lab)
+            let path = label_source(&truth, *s0, *e0, lab)
                 .and_then(|si| paths.get(si as usize))
                 .map_or("", String::as_str);
             let (reason, relabel) =
@@ -886,21 +859,19 @@ pub fn build(
     out: &Path,
 ) -> Result<(BTreeMap<String, String>, String), String> {
     let fams = Families::shipped();
-    let entries: Vec<&CorpusEntry> = corpus
-        .entries()
-        .iter()
-        .filter(|e| e.truth.method == "sourcemap")
-        .collect();
     let mut shas = BTreeMap::new();
     let mut by_set: BTreeMap<String, Counter<String>> = BTreeMap::new();
-    for e in entries {
+    for e in super::layers::mapped_entries(corpus) {
         let (doc, agg) = entry_layer(corpus, e, labels, &fams)?;
         by_set.entry(e.set.clone()).or_default().update(&agg);
-        let p: PathBuf = out
-            .join("truth")
-            .join(format!("{}.mapdefect14.json.gz", e.id));
-        super::gz::write_gz(&p, crate::json::frozen::identity_text(&doc).as_bytes())?;
-        shas.insert(e.id.clone(), super::corpus::sha256_file(&p)?);
+        let text = crate::json::frozen::identity_text(&doc);
+        super::layers::write_entry(
+            out,
+            crate::committed::library::LayerKind::Mapdefect14,
+            &e.id,
+            &text,
+            &mut shas,
+        )?;
     }
     let bytes = dict(
         by_set
@@ -917,10 +888,7 @@ pub fn build(
         kv("schema", s(SCHEMA)),
         kv("corpusSha256", s(&corpus.loaded.manifest_id)),
         kv("unitsLabels", list_s(labels.iter().map(String::as_str))),
-        kv(
-            "entries",
-            dict(shas.iter().map(|(k, v)| (k.clone(), s(v))).collect()),
-        ),
+        kv("entries", super::layers::entries_block(&shas)),
         kv("rules", rules()),
         kv("bytes", bytes),
         kv("about", s(ABOUT)),

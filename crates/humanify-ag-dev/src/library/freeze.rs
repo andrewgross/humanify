@@ -49,7 +49,7 @@ pub struct Plan {
 
 /// truth.py `package_root`: (package, its root in the source string,
 /// the file inside it).
-fn package_root(src: &str) -> Option<(String, String, String)> {
+pub fn package_root(src: &str) -> Option<(String, String, String)> {
     let k = src.rfind("node_modules/")?;
     let (head, rest) = (&src[..k], &src[k + "node_modules/".len()..]);
     let parts: Vec<&str> = rest.split('/').collect();

@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use super::corpus::{Corpus, read_map};
+use super::freeze::package_root;
 use super::pypath::{basename, dirname, join, normpath, relpath, walk_files};
 use super::value::{dict, kv, s};
 use crate::committed::library::{CorpusEntry, LayerKind};
@@ -26,7 +27,7 @@ fn package_maps(nm_dirs: &[String]) -> Vec<PathBuf> {
         let p = Path::new(d);
         if p.is_dir() {
             let mut files = Vec::new();
-            walk_files(p, &mut files);
+            walk_files(p, None, &mut files);
             out.extend(
                 files
                     .into_iter()
@@ -148,16 +149,6 @@ fn map_holders(
         }
     }
     holders
-}
-
-/// truth.py `package_root`: (package, its root path, file inside).
-fn package_root(source: &str) -> Option<(String, String, String)> {
-    let (head, rest) = source.rsplit_once("node_modules/")?;
-    let parts: Vec<&str> = rest.split('/').collect();
-    let n = if parts[0].starts_with('@') { 2 } else { 1 };
-    let pkg = parts[..n.min(parts.len())].join("/");
-    let file = parts.get(n..).map_or(String::new(), |x| x.join("/"));
-    Some((pkg.clone(), format!("{head}node_modules/{pkg}"), file))
 }
 
 /// chained.py `holder_row`: [package, version, path relative to its
@@ -406,11 +397,7 @@ pub fn refreeze(
     };
     let mut npm = Npm::new(npm_cache);
     let mut shas = BTreeMap::new();
-    for entry in corpus
-        .entries()
-        .iter()
-        .filter(|e| e.truth.method == "sourcemap")
-    {
+    for entry in super::layers::mapped_entries(corpus) {
         let input = entry_input(corpus, entry, kind == LayerKind::Chained11)?;
         let rows = match kind {
             LayerKind::Chained => layer5(&input),
@@ -418,19 +405,13 @@ pub fn refreeze(
             _ => layer11(&input, &mut npm)?,
         };
         let doc = dict(vec![kv("schema", s(schema)), kv("sources", dict(rows))]);
-        let p = out
-            .join("truth")
-            .join(format!("{}.{}.json.gz", entry.id, kind.prefix()));
-        super::gz::write_gz(&p, crate::json::frozen::identity_text(&doc).as_bytes())?;
-        shas.insert(entry.id.clone(), super::corpus::sha256_file(&p)?);
+        let text = crate::json::frozen::identity_text(&doc);
+        super::layers::write_entry(out, kind, &entry.id, &text, &mut shas)?;
     }
     let mut man = vec![
         kv("schema", s(schema)),
         kv("corpusSha256", s(&corpus.loaded.manifest_id)),
-        kv(
-            "entries",
-            dict(shas.iter().map(|(k, v)| (k.clone(), s(v))).collect()),
-        ),
+        kv("entries", super::layers::entries_block(&shas)),
         kv("about", s(about)),
     ];
     if kind == LayerKind::Chained9 {

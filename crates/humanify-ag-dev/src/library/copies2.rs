@@ -707,11 +707,7 @@ pub fn build(
     ixs: &[PathBuf],
     out: &Path,
 ) -> Result<(BTreeMap<String, String>, String), String> {
-    let entries: Vec<&CorpusEntry> = corpus
-        .entries()
-        .iter()
-        .filter(|e| e.truth.method == "sourcemap")
-        .collect();
+    let entries = super::layers::mapped_entries(corpus);
     // step 1: every print hash the corpus's judged units hold
     let per_entry =
         humanify_ag_core::par::map_ordered(&entries, |e| -> Result<HashSet<u64>, String> {
@@ -754,9 +750,13 @@ pub fn build(
         for (k, v) in stats.items() {
             tot.add(k.clone(), v);
         }
-        let p = out.join("truth").join(format!("{}.copies2.json.gz", e.id));
-        super::gz::write_gz(&p, compact(&doc).as_bytes())?;
-        shas.insert(e.id.clone(), super::corpus::sha256_file(&p)?);
+        super::layers::write_entry(
+            out,
+            crate::committed::library::LayerKind::Copies2,
+            &e.id,
+            &compact(&doc),
+            &mut shas,
+        )?;
     }
     let table_names: Vec<Value> = tables
         .paths
@@ -786,10 +786,7 @@ pub fn build(
             "bytes",
             dict(tot.items().map(|(k, v)| (k.clone(), int(v))).collect()),
         ),
-        kv(
-            "entries",
-            dict(shas.iter().map(|(k, v)| (k.clone(), s(v))).collect()),
-        ),
+        kv("entries", super::layers::entries_block(&shas)),
     ]);
     Ok((shas, crate::json::frozen::identity_text(&man)))
 }

@@ -30,8 +30,7 @@ const NOT_LIBRARY: &[&str] = &["<app>", "<self>", "<unmapped>", "<foreign>"];
 pub enum TruthAt {
     /// bun-dev: the frozen segment table (raw, as truth.json.gz holds it).
     Segments {
-        offs: Vec<i64>,
-        srcs: Vec<i64>,
+        segs: Vec<(i64, i64)>,
         labels: Vec<String>,
     },
     /// cc216: the labelled sample's units INSIDE the span.
@@ -42,15 +41,9 @@ impl TruthAt {
     fn at(&self, s: i64, e: i64) -> Counter<String> {
         let mut votes = Counter::new();
         match self {
-            TruthAt::Segments { offs, srcs, labels } => {
-                let mut k = offs.partition_point(|&o| o <= s).saturating_sub(1);
-                while k < offs.len() && offs[k] < e {
-                    let a = offs[k].max(s);
-                    let b = if k + 1 < offs.len() { offs[k + 1] } else { e }.min(e);
-                    if b > a {
-                        votes.add(labels[srcs[k] as usize].clone(), b - a);
-                    }
-                    k += 1;
+            TruthAt::Segments { segs, labels } => {
+                for (k, n) in super::truth::segment_bytes(segs, s, e) {
+                    votes.add(labels[segs[k].1 as usize].clone(), n);
                 }
             }
             TruthAt::Sample { units } => {
@@ -86,8 +79,7 @@ pub fn truth_bundev(repo: &Path, entry_id: &str) -> Result<TruthAt, String> {
     let t: RawTruth =
         super::corpus::read_gz_json(&corpus.truth_file(entry, ".truth.json.gz"), None, "")?;
     Ok(TruthAt::Segments {
-        offs: t.segments.iter().map(|s| s.0).collect(),
-        srcs: t.segments.iter().map(|s| s.1).collect(),
+        segs: t.segments,
         labels: t
             .sources
             .iter()
