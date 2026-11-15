@@ -9,18 +9,19 @@
 //!
 //! [`comparable`] is the one guard: one function and one table
 //! ([`Purpose::fields`]) of the fields each purpose requires to be equal.
-//! It replaces eval.ts's `guardLabel` / `guardPipeline` / `guardBaseMode`,
-//! the leaderboard's base- and naming-mode comparisons, leaderboard.py's
-//! corpus / scorer refusal and pipeline-bin's commit refusal — none of
-//! which checked the library index. A field nobody recorded is
-//! [`F::Unknown`], and UNKNOWN NEVER EQUALS ANYTHING (stricter than today,
-//! on purpose: a missing record is unknown, not passing); `--force-mixed`
-//! is the only override, and it prints every mismatch by field name.
+//! A field nobody recorded is [`F::Unknown`], and UNKNOWN NEVER EQUALS
+//! ANYTHING (a missing record is unknown, not passing); `--force-mixed` is
+//! the only override, and it prints every mismatch by field name.
+//!
+//! An eval label's identities are the `<v>.identity.json` records beside
+//! its cards ([`read_eval_label`]): `eval score` writes them, and `eval
+//! rescore` writes them for the label it re-scores ([`derive`]).
 
-pub mod backfill;
+pub mod derive;
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -168,8 +169,6 @@ pub struct Identity {
     pub kind: CardKind,
     pub harness: Harness,
     pub binary: Binary,
-    /// scratch / seeded / archive; None outside the eval.
-    pub base_mode: F<Option<String>>,
     /// names / off: the EFFECTIVE mode (the binary's own record); None
     /// where naming does not apply (a library entry).
     pub naming_mode: F<Option<String>>,
@@ -193,9 +192,62 @@ impl Identity {
         crate::json::js_text(&value, true)
     }
 
+    /// A record as written. One written before the base mode was retired
+    /// carries `baseMode`: `scratch` (the mode that is left) reads, any
+    /// other is refused.
     pub fn from_text(text: &str) -> Result<Identity, String> {
-        serde_json::from_str(text).map_err(|e| format!("identity.json: {e}"))
+        let mut v: Value = serde_json::from_str(text).map_err(|e| format!("identity.json: {e}"))?;
+        if let Some(mode) = v.as_object_mut().and_then(|o| o.remove("baseMode"))
+            && mode != Value::String("scratch".into())
+        {
+            return Err(format!(
+                "identity.json: scored on the retired base mode {mode}; only scratch-base labels can be read"
+            ));
+        }
+        serde_json::from_value(v).map_err(|e| format!("identity.json: {e}"))
     }
+}
+
+/// A pair card's version from its file name (`2.1.86.json` -> `2.1.86`).
+pub fn card_version(name: &str) -> Option<&str> {
+    let v = name.strip_suffix(".json")?;
+    let parts: Vec<&str> = v.split('.').collect();
+    (parts.len() == 3
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())))
+    .then_some(v)
+}
+
+/// The versions of every pair card in an eval label, sorted.
+pub fn card_versions(dir: &Path) -> Result<Vec<String>, String> {
+    let mut versions: Vec<String> = std::fs::read_dir(dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter_map(|n| card_version(&n).map(str::to_string))
+        .collect();
+    versions.sort();
+    Ok(versions)
+}
+
+/// Every pair card's identity in the eval label `dir`, read from its
+/// `<v>.identity.json`. A card without one is refused: the label was
+/// scored before identities, and `eval rescore` writes them.
+pub fn read_eval_label(dir: &Path) -> Result<Vec<Identity>, String> {
+    card_versions(dir)?
+        .iter()
+        .map(|v| {
+            let path = dir.join(format!("{v}.identity.json"));
+            let text = std::fs::read_to_string(&path).map_err(|e| {
+                format!(
+                    "{}: {e} — this label was scored before identities; `cargo dev eval rescore` \
+                     re-scores it into a label that has them",
+                    path.display()
+                )
+            })?;
+            Identity::from_text(&text).map_err(|e| format!("{}: {e}", path.display()))
+        })
+        .collect()
 }
 
 /// What a comparison is for; each purpose has its own equal-field list.
@@ -228,7 +280,6 @@ const PER_CARD: &[&str] = &[
 ];
 
 const LEADERBOARD: &[&str] = &[
-    "baseMode",
     "namingMode",
     "libraryIndex.id",
     "scorer",

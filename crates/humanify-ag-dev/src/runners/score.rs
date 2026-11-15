@@ -1311,7 +1311,7 @@ fn warm_self_hop(
 /// read off what the label recorded; Err when one cannot be derived or
 /// written, or the label's cards disagree.
 fn write_identities(ctx: &Ctx, results: &Path) -> Result<(), String> {
-    let cards = crate::identity::backfill::eval_label(results)?;
+    let cards = crate::identity::derive::eval_label(results)?;
     for card in &cards {
         let v = card.corpus.entry.rsplit("->").next().unwrap_or("");
         write(&results.join(format!("{v}.identity.json")), &card.to_text())?;

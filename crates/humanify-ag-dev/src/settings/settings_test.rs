@@ -179,3 +179,31 @@ fn the_run_config_records_every_accepted_setting_once() {
         "{text}"
     );
 }
+
+/// `--bin` and `--force-mixed` are settings parsed upfront (flags, never
+/// env vars); a retired switch is an unknown flag, refused before anything
+/// runs.
+#[test]
+fn the_bin_flag_family_is_flags_and_retired_switches_fail_upfront() {
+    let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let p = parse(
+        "eval score",
+        &["run"],
+        &[],
+        &args(&["label", "--bin", "/x/humanify-ag", "--force-mixed"]),
+    )
+    .unwrap();
+    assert_eq!(
+        p.settings.text("run.bin").as_deref(),
+        Some("/x/humanify-ag")
+    );
+    for (flag, why) in [
+        ("--skip-preflight", "unknown flag --skip-preflight"),
+        ("--warm-self-hop", "unknown flag --warm-self-hop"),
+    ] {
+        let refused = parse("eval score", &["run"], &[], &args(&["label", flag]))
+            .expect_err(flag)
+            .join("\n");
+        assert!(refused.contains(why), "{flag}: {refused}");
+    }
+}

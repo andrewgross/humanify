@@ -1,7 +1,7 @@
 //! `eval leaderboard <label>...`: labels side by side, the first the
 //! baseline (TS: `034/leaderboard.ts`). Before any number is printed, every
 //! named label is put through the ONE comparison guard
-//! (`identity::guard`, purpose `Leaderboard`): base mode, naming mode,
+//! (`identity::guard`, purpose `Leaderboard`): naming mode,
 //! library index, SCORER VERSION, model, reasoning effort and the pair
 //! inputs must agree pair by pair, or the comparison is refused —
 //! `--force-mixed` prints every mismatch by field and shows it anyway.
@@ -17,7 +17,7 @@ use super::card::at;
 use super::kpis::{Kpi, caveat_lines, named};
 use crate::committed::eval::NoiseBands;
 use crate::identity::{
-    Identity, LabelScope, Purpose, backfill::eval_label, guard_labels, label_cards, pairs_of,
+    Identity, LabelScope, Purpose, guard_labels, label_cards, pairs_of, read_eval_label,
 };
 
 const COLUMNS: &[&str] = &[
@@ -102,7 +102,7 @@ fn load(results: &Path, name: &str) -> Result<Label, String> {
         name: name.to_string(),
         totals: at(&summary, "totals").cloned().unwrap_or(JsValue::Null),
         summary,
-        ids: eval_label(&dir)?,
+        ids: read_eval_label(&dir)?,
         commit: std::fs::read_to_string(dir.join("commit.txt"))
             .ok()
             .and_then(|c| c.split_whitespace().next().map(str::to_string)),
@@ -334,9 +334,8 @@ pub fn leaderboard(
             .map(|l| {
                 let i = l.ids.first();
                 format!(
-                    "{}=base:{}/naming:{}/scorer:v{}",
+                    "{}=naming:{}/scorer:v{}",
                     l.name,
-                    i.map_or("?".into(), |i| known(&i.base_mode)),
                     i.map_or("?".into(), |i| known(&i.naming_mode)),
                     i.and_then(|i| i.scorer.version.known().cloned())
                         .unwrap_or_else(|| "?".into())

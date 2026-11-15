@@ -20,7 +20,6 @@ fn card(entry: &str) -> Identity {
             dirty: known(false),
             name: known("humanify-ag".into()),
         },
-        base_mode: known(Some("scratch".into())),
         naming_mode: known(Some("names".into())),
         library_index: known(Some(LibraryIndex {
             id: known("cb64".into()),
@@ -143,10 +142,10 @@ fn neutrality_legs_compare_settings_not_the_binary() {
 fn force_mixed_turns_the_refusal_into_loud_lines_naming_each_field() {
     let a = card("p");
     let mut b = card("p");
-    b.base_mode = known(Some("seeded".into()));
+    b.naming_mode = known(Some("off".into()));
     let refusal = guard(Purpose::Leaderboard, ("A", &a), ("B", &b), false).unwrap_err();
     assert!(
-        refusal.contains("baseMode: A = \"scratch\" vs B = \"seeded\""),
+        refusal.contains("namingMode: A = \"names\" vs B = \"off\""),
         "{refusal}"
     );
     assert!(refusal.contains("--force-mixed"), "{refusal}");
@@ -229,4 +228,53 @@ fn bands_refuse_repeats_over_different_pair_sets_even_when_forced() {
     let err = guard_labels(Purpose::Bands, ("r1", &four), ("r2", &five), true).unwrap_err();
     assert!(err.contains("different pairs"), "{err}");
     assert!(err.contains("only r2: 2.1.179->2.1.181"), "{err}");
+}
+
+#[test]
+fn an_identity_record_of_a_retired_base_mode_is_refused_and_scratch_reads() {
+    let text = card("2.1.85->2.1.86").to_text();
+    assert!(!text.contains("baseMode"), "{text}");
+    let with = |mode: &str| text.replacen("{\n", &format!("{{\n  \"baseMode\": \"{mode}\",\n"), 1);
+    assert_eq!(
+        Identity::from_text(&with("scratch")).unwrap(),
+        card("2.1.85->2.1.86"),
+        "a record from before the field went reads (scratch was the only mode left)"
+    );
+    let e = Identity::from_text(&with("seeded")).unwrap_err();
+    assert!(e.contains("seeded") && e.contains("retired"), "{e}");
+}
+
+fn label_dir(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("identity-label-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+#[test]
+fn an_eval_label_is_read_from_its_identity_records() {
+    let dir = label_dir("read");
+    for (v, entry) in [
+        ("2.1.86", "2.1.85->2.1.86"),
+        ("2.1.119", "2.1.118->2.1.119"),
+    ] {
+        std::fs::write(dir.join(format!("{v}.json")), "{}\n").unwrap();
+        std::fs::write(
+            dir.join(format!("{v}.identity.json")),
+            card(entry).to_text(),
+        )
+        .unwrap();
+    }
+    // run records are not cards
+    std::fs::write(dir.join("2.1.86-run.json"), "{}\n").unwrap();
+    let ids = read_eval_label(&dir).unwrap();
+    let entries: Vec<&str> = ids.iter().map(|i| i.corpus.entry.as_str()).collect();
+    assert_eq!(entries, ["2.1.118->2.1.119", "2.1.85->2.1.86"]);
+    std::fs::remove_file(dir.join("2.1.86.identity.json")).unwrap();
+    let e = read_eval_label(&dir).unwrap_err();
+    assert!(
+        e.contains("2.1.86.identity.json") && e.contains("eval rescore"),
+        "{e}"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
 }

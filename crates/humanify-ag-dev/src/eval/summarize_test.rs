@@ -107,3 +107,24 @@ fn the_matching_counts_come_from_each_pairs_stats_file() {
     let bc = text.lines().find(|l| l.starts_with("b->c")).unwrap();
     assert!(bc.split_whitespace().skip(1).all(|c| c == "-"), "{bc}");
 }
+
+/// A card no scorer of this harness wrote (no `scorerVersion`) is refused,
+/// never read as some default version.
+#[test]
+fn a_card_without_a_scorer_version_is_refused() {
+    let dir = std::env::temp_dir().join(format!("dev-summarize-v-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let text = humanify_ag_model::js::stringify(&card("2.1.85->2.1.86", 1.0, true))
+        .replace("\"scorerVersion\":2,", "");
+    std::fs::write(dir.join("2.1.86.json"), text).unwrap();
+    let reference = crate::committed::eval::self_hop_reference(&crate::paths::repo_root())
+        .unwrap()
+        .value;
+    let e = summarize(&dir, "x", &reference).unwrap_err();
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(
+        e.contains("2.1.85->2.1.86") && e.contains("scorerVersion"),
+        "{e}"
+    );
+}

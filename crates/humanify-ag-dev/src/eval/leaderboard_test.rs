@@ -1,44 +1,28 @@
 use super::*;
 
 /// A copy of a frozen reference label (cards + run records) with every
-/// card's `scorerVersion` set. The frozen cards live on this box only
-/// (`/work/dev-harness-proof`); the test FAILS without them, never passes.
-fn label(root: &Path, name: &str, scorer: Option<u64>) {
+/// card's `scorerVersion` set and its identity records written. The frozen
+/// cards live on this box only (`/work/dev-harness-proof`); the test FAILS
+/// without them, never passes.
+fn label(root: &Path, name: &str, scorer: u64) {
     let src = Path::new("/work/dev-harness-proof/oracles/a/ref-scratch-0f338ffa-r1");
-    let dir = root.join(name);
-    std::fs::create_dir_all(&dir).unwrap();
-    for e in std::fs::read_dir(src).expect("the frozen reference cards") {
-        let p = e.unwrap().path();
-        let n = p.file_name().unwrap().to_str().unwrap().to_string();
-        let mut text = std::fs::read_to_string(&p).unwrap();
-        if let (Some(v), true) = (
-            scorer,
-            crate::eval::card::is_scorecard(&JsValue::parse(&text).unwrap_or(JsValue::Null)),
-        ) {
-            text = text.replacen(
-                "{\n  \"pair\"",
-                &format!("{{\n  \"scorerVersion\": {v},\n  \"pair\""),
-                1,
-            );
-        }
-        std::fs::write(dir.join(n), text).unwrap();
-    }
+    crate::eval::test_support::frozen_label(src, &root.join(name), scorer);
 }
 
 #[test]
 fn a_mixed_scorer_comparison_is_refused_unless_forced() {
     let root = std::env::temp_dir().join(format!("dev-leaderboard-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    label(&root, "v1", None);
-    label(&root, "v1b", None);
-    label(&root, "v2", Some(2));
+    label(&root, "v2", 2);
+    label(&root, "v2b", 2);
+    label(&root, "v3", 3);
     let names = |a: &str, b: &str| vec![a.to_string(), b.to_string()];
-    let text = leaderboard(&root, &names("v1", "v1b"), None, false).unwrap();
+    let text = leaderboard(&root, &names("v2", "v2b"), None, false).unwrap();
     assert!(text.contains("novel="), "{text}");
     assert!(text.contains("4188 (=)"), "{text}");
-    let err = leaderboard(&root, &names("v1", "v2"), None, false).unwrap_err();
+    let err = leaderboard(&root, &names("v2", "v3"), None, false).unwrap_err();
     assert!(err.contains("scorer.version"), "{err}");
-    let forced = leaderboard(&root, &names("v1", "v2"), None, true).unwrap();
+    let forced = leaderboard(&root, &names("v2", "v3"), None, true).unwrap();
     assert!(forced.contains("!! MIXED"), "{forced}");
 }
 
@@ -60,6 +44,7 @@ fn add_fifth_pair(root: &Path, name: &str) {
         ("2.1.198.json", "2.1.181.json"),
         ("2.1.198-run.json", "2.1.181-run.json"),
         ("2.1.198-run-status.json", "2.1.181-run-status.json"),
+        ("2.1.198.identity.json", "2.1.181.identity.json"),
     ] {
         let text = std::fs::read_to_string(dir.join(from))
             .unwrap()
@@ -93,8 +78,8 @@ fn add_fifth_pair(root: &Path, name: &str) {
 fn a_five_pair_label_against_a_four_pair_baseline_compares_the_common_four_out_loud() {
     let root = std::env::temp_dir().join(format!("dev-leaderboard-5-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    label(&root, "four", Some(2));
-    label(&root, "five", Some(2));
+    label(&root, "four", 2);
+    label(&root, "five", 2);
     add_fifth_pair(&root, "five");
     let names = |a: &str, b: &str| vec![a.to_string(), b.to_string()];
     // Unforced: compared, over the four common pairs, said out loud.
@@ -109,7 +94,7 @@ fn a_five_pair_label_against_a_four_pair_baseline_compares_the_common_four_out_l
     let text = leaderboard(&root, &names("five", "four"), None, false).unwrap();
     assert!(text.contains("4188 (=)"), "{text}");
     // Two five-pair labels: no line, the five-pair totals.
-    label(&root, "five2", Some(2));
+    label(&root, "five2", 2);
     add_fifth_pair(&root, "five2");
     let text = leaderboard(&root, &names("five", "five2"), None, false).unwrap();
     assert!(!text.contains("COMMON PAIRS"), "{text}");
@@ -119,8 +104,8 @@ fn a_five_pair_label_against_a_four_pair_baseline_compares_the_common_four_out_l
 fn bands_measured_over_other_pairs_say_so() {
     let root = std::env::temp_dir().join(format!("dev-leaderboard-bp-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    label(&root, "four", Some(2));
-    label(&root, "five", Some(2));
+    label(&root, "four", 2);
+    label(&root, "five", 2);
     add_fifth_pair(&root, "five");
     let slot = |pairs: &str| {
         format!(
@@ -161,9 +146,9 @@ fn add_llm_diagnostics(root: &Path, name: &str, sent: f64, p90: f64) {
 fn the_llm_diagnostics_print_side_by_side_and_dash_for_a_legacy_label() {
     let root = std::env::temp_dir().join(format!("dev-leaderboard-llm-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    label(&root, "legacy", Some(2));
-    label(&root, "ledgered", Some(2));
-    label(&root, "slower", Some(2));
+    label(&root, "legacy", 2);
+    label(&root, "ledgered", 2);
+    label(&root, "slower", 2);
     add_llm_diagnostics(&root, "ledgered", 100.0, 2000.0);
     add_llm_diagnostics(&root, "slower", 100.0, 6800.0);
     let names: Vec<String> = ["ledgered", "slower", "legacy"]
@@ -195,7 +180,7 @@ fn the_matching_counts_print_side_by_side_and_a_same_commit_move_is_flagged() {
     let root = std::env::temp_dir().join(format!("dev-leaderboard-match-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     for n in ["r1", "r2", "legacy"] {
-        label(&root, n, Some(2));
+        label(&root, n, 2);
     }
     crate::eval::test_support::set_matching(&root.join("r1"), 10.0, 4.0);
     crate::eval::test_support::set_matching(&root.join("r2"), 11.0, 9.0);

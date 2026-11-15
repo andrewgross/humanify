@@ -1,7 +1,6 @@
-//! The 034 eval's KPI scorer, scorer version 2 (harness lane L2a): the
-//! statement identity, the per-pair scorecard and everything that reads
-//! cards (summary, leaderboard, bands). Version 1 was the TS scorer
-//! (`experiments/034-eval-harness/`); its cards read as version 1.
+//! The eval's KPI scorer (version `card::SCORER_VERSION`): the statement
+//! identity, the per-pair scorecard and everything that reads cards
+//! (summary, leaderboard, bands).
 
 pub mod analyze;
 pub mod bands;

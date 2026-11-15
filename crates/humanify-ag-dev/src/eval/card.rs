@@ -5,8 +5,7 @@
 use humanify_ag_model::js::{JsObject, JsValue, to_fixed};
 
 /// The scorer version every card this scorer writes carries
-/// (`scorerVersion`). A card without the field is version 1 (the TS
-/// scorer). Version 2 (exp196) was the KPI statement form over oxc
+/// (`scorerVersion`). Version 2 (exp196) was the KPI statement form over oxc
 /// (`hash::forms::KPI_STATEMENT`, still its form); version 3 (exp222)
 /// counts changed lines with the minimal diff (`difftool::LINE_DIFF_FLAGS`),
 /// so every line column of a long file reads lower than v2's.
@@ -63,10 +62,10 @@ pub fn number_at(v: &JsValue, path: &str) -> Option<f64> {
     }
 }
 
-/// A card's scorer version: its `scorerVersion`, else 1 (the TS scorer's
-/// cards record none).
-pub fn scorer_version(card: &JsValue) -> u64 {
-    number_at(card, "scorerVersion").map_or(1, |n| n as u64)
+/// A card's scorer version (`scorerVersion`); None for a card no scorer
+/// of this harness wrote.
+pub fn scorer_version(card: &JsValue) -> Option<u64> {
+    number_at(card, "scorerVersion").map(|n| n as u64)
 }
 
 /// Whether a parsed JSON file is a scorecard (shape, never file name: a

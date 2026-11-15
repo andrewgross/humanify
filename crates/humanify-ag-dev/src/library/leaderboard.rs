@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use crate::identity::{self, Purpose, backfill};
+use crate::identity::{self, Purpose, derive};
 use crate::json::py::PyValue;
 
 const SETS: &[(&str, &str)] = &[
@@ -170,7 +170,7 @@ pub fn leaderboard(
         } else {
             PyValue::Dict(vec![])
         };
-        let mut id = backfill::library_label(&d)?
+        let mut id = derive::library_label(&d)?
             .into_iter()
             .next()
             .ok_or_else(|| format!("{lab}: no identity"))?;

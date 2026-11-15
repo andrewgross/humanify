@@ -18,7 +18,7 @@ use humanify_ag_model::js::{JsObject, JsValue};
 
 use super::card::{obj, text, texts};
 use super::kpis::{KPIS, SPLIT_KPIS};
-use crate::identity::{Identity, Purpose, backfill::eval_label, guard_labels};
+use crate::identity::{Identity, Purpose, guard_labels, read_eval_label};
 
 /// Per KPI, the largest pairwise |disagreement| of the labels' totals;
 /// None when fewer than two labels carry it.
@@ -318,7 +318,7 @@ pub fn bands(
     let mut commits = Vec::new();
     for l in labels {
         let dir = results.join(l);
-        let cards = eval_label(&dir)?;
+        let cards = read_eval_label(&dir)?;
         if cards.is_empty() {
             return Err(format!("{l}: no cards"));
         }
