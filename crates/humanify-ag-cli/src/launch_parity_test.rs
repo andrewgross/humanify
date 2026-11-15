@@ -48,7 +48,7 @@
 //! exp179 (2026-11-01): every key is a flag again (generated from the
 //! registry, one-to-one), and the split is ON by default. A captured argv
 //! is now translated into today's FLAGS ([`to_today`]: each renamed
-//! spelling becomes its flag, per `RENAMED_FLAGS`), and a launch that did
+//! spelling becomes its flag, per [`COMMANDER_SPELLINGS`]), and a launch that did
 //! not pass `--split` — split OFF, the old default — gets `--no-split`:
 //! the default flipped, the captured configuration did not.
 //!
@@ -63,7 +63,7 @@ use crate::config::{
     API_KEY_VAR, Config, ConfigFile, DEFAULT_CONTEXT_TOKENS, DEFAULT_MODULE_CONCURRENCY,
 };
 use crate::pipeline_config::enum_name;
-use crate::surface::{CommandOptions, PipelineParse, RENAMED_FLAGS, parse_pipeline};
+use crate::surface::{CommandOptions, PipelineParse, parse_pipeline};
 use humanify_ag_core::naming::waves::batch::WaveTunables;
 
 fn repo_file(rel: &str) -> String {
@@ -121,6 +121,43 @@ fn golden_launches(text: &str) -> Vec<Launch> {
     out
 }
 
+/// The commander-era spellings the captured launches use: `(old, today)`.
+/// Test data only: the parser itself refuses every old spelling as unknown.
+const COMMANDER_SPELLINGS: &[(&str, &str)] = &[
+    ("-c", "--llm-concurrency"),
+    ("--concurrency", "--llm-concurrency"),
+    ("--module-concurrency", "--llm-module-concurrency"),
+    ("--max-tokens", "--llm-max-tokens"),
+    ("--context-tokens", "--llm-context-tokens"),
+    ("--retries", "--llm-retries"),
+    ("--timeout", "--llm-timeout-ms"),
+    ("--llm-cache", "--llm-cache-dir"),
+    ("--reasoning-effort", "--llm-reasoning-effort"),
+    ("--disable", "--switches-disable"),
+    ("--probe", "--switches-probe"),
+    ("--log-file", "--diagnostics-log-file"),
+    ("--diagnostics", "--diagnostics-file"),
+    ("--stats-json", "--diagnostics-stats-json"),
+    ("--dump-artifacts", "--diagnostics-dump-artifacts"),
+    ("--dump-asks", "--diagnostics-dump-asks"),
+    ("--rename-ledger", "--diagnostics-rename-ledger"),
+    ("--batch-size", "--naming-batch-size"),
+    ("--max-retries", "--naming-max-retries"),
+    ("--rename-retries", "--naming-rename-retries"),
+    ("--max-free-retries", "--naming-max-free-retries"),
+    ("--lane-threshold", "--naming-lane-threshold"),
+    ("--sequential", "--naming-schedule sequential"),
+    ("--relaxed-levers", "--naming-relaxed-levers"),
+    (
+        "--no-reconcile-prior-diff",
+        "--no-matching-reconcile-prior-diff",
+    ),
+    ("--simulate-llm-latency", "--perf-simulate-llm-latency"),
+    ("--skip-libraries", "--library-unnamed leave"),
+    ("--no-skip-libraries", "--library-unnamed model"),
+    ("--library-discovery-units", "--library-report-units"),
+];
+
 /// A captured (commander-era) argv in today's form: each renamed spelling
 /// becomes today's flag (`-c 472` is `--llm-concurrency 472`), and a launch
 /// without `--split` says `--no-split` — the old default, now explicit.
@@ -131,7 +168,7 @@ fn to_today(argv: &[String]) -> Launch {
             Some((n, v)) if n.starts_with('-') => (n, Some(v)),
             _ => (arg.as_str(), None),
         };
-        match RENAMED_FLAGS.iter().find(|(old, _)| *old == name) {
+        match COMMANDER_SPELLINGS.iter().find(|(old, _)| *old == name) {
             Some((_, new)) => {
                 let mut words: Vec<String> = new.split_whitespace().map(str::to_string).collect();
                 if let Some(v) = attached {

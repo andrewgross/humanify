@@ -142,19 +142,6 @@ fn the_api_key_comes_from_humanify_api_key_only() {
 }
 
 #[test]
-fn the_api_key_flag_is_retired() {
-    let argv: Vec<String> = ["in.js", "--api-key", "k"].map(String::from).to_vec();
-    match parse_pipeline(&argv) {
-        PipelineParse::Exit { code, stderr, .. } => {
-            assert_eq!(code, 1);
-            assert!(stderr.contains("'--api-key'"), "{stderr}");
-            assert!(stderr.contains("HUMANIFY_API_KEY"), "{stderr}");
-        }
-        PipelineParse::Run { .. } => panic!("--api-key must be refused"),
-    }
-}
-
-#[test]
 fn the_record_is_the_whole_config_without_the_secret() {
     let c = with_file(
         &["in.js"],

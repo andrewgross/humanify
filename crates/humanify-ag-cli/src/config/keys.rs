@@ -10,7 +10,7 @@ use humanify_ag_core::naming::waves::batch::WaveTunables;
 use humanify_ag_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 use humanify_ag_model::llm::DEFAULT_LLM_TIMEOUT_MS;
 
-use super::file::{Key, Kind, RETIRED_KEYS, Val};
+use super::file::{Key, Kind, Val};
 use super::{
     DEFAULT_CONCURRENCY, DEFAULT_CONTEXT_TOKENS, DEFAULT_ENDPOINT, DEFAULT_MODEL,
     DEFAULT_MODULE_CONCURRENCY, DEFAULT_OUTPUT_DIR, default_retries,
@@ -223,9 +223,7 @@ pub fn tuning_section(section: &str) -> bool {
 /// generic machinery is `crate::registry`; the harness has its own table).
 pub static PIPELINE: Registry = Registry {
     keys: KEYS,
-    retired_keys: RETIRED_KEYS,
-    // The pipeline's retired and renamed flags are verb-aware
-    // (`crate::surface::RETIRED_FLAGS`, `RENAMED_FLAGS`), checked there.
+    retired_keys: &[],
     retired_flags: &[],
     short_flags: SHORT_FLAGS,
     counted_flag: Some(COUNTED_FLAG),
