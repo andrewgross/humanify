@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use humanify_ag_model::js::{JsValue, stringify};
 
 use crate::modules::vendor_names::BunModulesManifest;
-use crate::place::layout::METADATA_DIR;
+use crate::place::layout::{METADATA_DIR, split_tree_root_of};
 use crate::rename::eligibility::{Eligibility, NeverRename};
 use crate::rename::name_profile::NameProfile;
 use crate::unpack::bun::{BUN_MODULES_MANIFEST, VENDOR_DIR, find_prior_tree_root};
@@ -382,17 +382,6 @@ pub fn finish_stage(
 // The post-split reconcile + bundle carry (`reconcilePostSplit`,
 // `carryIntoBundle`)
 // ---------------------------------------------------------------------------
-
-/// `splitTreeRootOf(priorFile)`: the prior tree's root (the dir holding
-/// `.humanify/`, or the file's own dir).
-pub fn split_tree_root_of(prior_file: &Path) -> PathBuf {
-    let dir = prior_file.parent().unwrap_or(Path::new(""));
-    if dir.file_name().is_some_and(|n| n == METADATA_DIR) {
-        dir.parent().unwrap_or(Path::new("")).to_path_buf()
-    } else {
-        dir.to_path_buf()
-    }
-}
 
 /// What the reconcile stage did, for the gate's report.
 #[derive(Debug, Default)]

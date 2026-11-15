@@ -264,27 +264,6 @@ fn does_not_serialize_the_rerollable_factory_var() {
 }
 
 #[test]
-fn still_reads_a_prior_manifest_that_carries_factory_var() {
-    let t = TempDir::new("legacy");
-    unpack(BUN_BUNDLE, &t.0);
-    let path = t.0.join("vendor/_bun-modules.json");
-    let mut manifest: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-    for (i, f) in manifest["factories"]
-        .as_array_mut()
-        .unwrap()
-        .iter_mut()
-        .enumerate()
-    {
-        f["factoryVar"] = Value::String(format!("legacy_{i}"));
-    }
-    fs::write(&path, serde_json::to_string_pretty(&manifest).unwrap()).unwrap();
-    let names = load_prior_vendor(&t.0.join("humanified.js"))
-        .and_then(|p| p.names)
-        .expect("a legacy manifest must still yield carry-over names");
-    assert!(!names.is_empty());
-}
-
-#[test]
 fn rewrites_the_require_variable_to_require() {
     let t = TempDir::new("require");
     unpack(BUN_BUNDLE, &t.0);
@@ -830,7 +809,9 @@ fn a_carried_library_keeps_a_byte_identical_manifest_entry() {
     assert_eq!(s(&m1[0], "nameSource"), "llm");
 
     let second = TempDir::new("stable2");
-    let prior = load_prior_vendor(&first.0.join("humanified.js")).expect("prior tree");
+    let prior = load_prior_vendor(&first.0.join("humanified.js"))
+        .unwrap()
+        .expect("prior tree");
     let (out2, asked2) = hop(&second.0, Some(prior));
     assert_eq!(asked2, 0, "a carried factory never reaches the LLM");
     assert_eq!(out2.name_counts.as_ref().unwrap().carry_over, 1);
@@ -940,6 +921,7 @@ fn loads_prior_vendor_names_from_a_prior_tree() {
     let prior_file = t.0.join(".humanify/humanified.js");
     fs::write(&prior_file, "// prior").unwrap();
     let names = load_prior_vendor(&prior_file)
+        .unwrap()
         .and_then(|p| p.names)
         .expect("discovered");
     // The entry's file and identifier ride with the name (exp194).
@@ -960,7 +942,11 @@ fn loads_prior_vendor_names_from_a_prior_tree() {
 fn no_prior_names_without_a_vendor_manifest() {
     let t = TempDir::new("bare");
     fs::write(t.0.join("humanified.js"), "// prior").unwrap();
-    assert!(load_prior_vendor(&t.0.join("humanified.js")).is_none());
+    assert!(
+        load_prior_vendor(&t.0.join("humanified.js"))
+            .unwrap()
+            .is_none()
+    );
 }
 
 // ---- the regex floor + require tracing (V8 semantics by hand) ---------------
@@ -1073,7 +1059,7 @@ fn factory_helper_lookback_never_splits_a_char() {
     assert_eq!(outcome.manifest.map(|m| m.factories.len()), Some(1));
 }
 
-// ---- a TS-era prior manifest: carried by CONTENT, never by hash bytes -------
+// ---- the prior manifest's era: by hash when current, by CONTENT otherwise ----
 
 const SHIMS: &str = concat!(
     "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
@@ -1092,16 +1078,13 @@ const SHIMS_REROLLED: &str = concat!(
     "var main=zB();"
 );
 
-/// Unpack SHIMS as the prior release, then make its manifest a TS-era one:
-/// no `hashVersion`, every structural hash replaced by `hash_of` (group for
-/// group), and the names a real run would have carried.
-fn ts_era_prior(tag: &str, hash_of: fn(&str) -> String) -> (TempDir, PathBuf) {
+/// Unpack SHIMS as the prior release, give its entries the names a real
+/// run would have carried, then let `edit` change the manifest.
+fn edited_prior(tag: &str, edit: impl FnOnce(&mut Value)) -> (TempDir, PathBuf) {
     let t = TempDir::new(tag);
     unpack(SHIMS, &t.0);
     let path = t.0.join("vendor/_bun-modules.json");
     let mut manifest = read_manifest(&t.0);
-    assert!(manifest.get("hashVersion").is_some(), "{manifest}");
-    manifest.as_object_mut().unwrap().remove("hashVersion");
     for f in manifest["factories"].as_array_mut().unwrap() {
         let name = match f.get("hashOrdinal").and_then(Value::as_u64) {
             None => "dep-one",
@@ -1110,9 +1093,8 @@ fn ts_era_prior(tag: &str, hash_of: fn(&str) -> String) -> (TempDir, PathBuf) {
         };
         f["name"] = Value::String(name.into());
         f["nameSource"] = Value::String("carry-over".into());
-        let ts = hash_of(f["structuralHash"].as_str().unwrap());
-        f["structuralHash"] = Value::String(ts);
     }
+    edit(&mut manifest);
     fs::write(&path, serde_json::to_string_pretty(&manifest).unwrap()).unwrap();
     fs::create_dir_all(t.0.join(".humanify")).unwrap();
     let prior_file = t.0.join(".humanify/humanified.js");
@@ -1136,141 +1118,53 @@ fn names_in_bundle_order(
 }
 
 #[test]
-fn a_ts_era_prior_carries_its_names_by_content() {
-    // TS bytes: nothing like the Rust's.
-    let (_prior, prior_file) = ts_era_prior("tsera-content", |h| format!("{:0>16}", h.len()));
-    let fresh = TempDir::new("tsera-content-fresh");
-    let prior = load_prior_vendor(&prior_file).expect("a prior tree");
-    assert!(prior.stale_era.is_some(), "no hashVersion = TS era");
-    let outcome = unpack_bun(
-        SHIMS_REROLLED,
-        &fresh.0,
-        BunUnpackOptions {
-            prior: Some(prior),
-            ..Default::default()
-        },
-    )
-    .unwrap();
-    assert_eq!(
-        names_in_bundle_order(&fresh.0, &outcome),
-        vec!["dep-one", "shim-a", "shim-b"]
-    );
-    let rekey = outcome.rekey.expect("re-keyed");
-    assert_eq!((rekey.groups_joined, rekey.factories_joined), (2, 3));
-    // fixed:{was: 3, why: exp094 bumped the MATCH_KEY form's version (the factory hashVersion) — a safe arrow
-    // serializes under the FunctionExpression token now, so the manifest's
-    // ARROW-factory hashes are a new era's bytes (function-expression
-    // factories keep theirs across the era; the gate, not the bytes,
-    // carries the refusal)}.
-    // fixed:{was: 4, why: exp200 bumped it again — a concise arrow body
-    // walks as its braced return and class-private names are slots}.
-    assert_eq!(read_manifest(&fresh.0)["hashVersion"], 5);
-}
-
-/// The next release, where Bun's minifier happened to spell the shared
-/// factory `gc` — a name that is ALSO a known global (Node's `--expose-gc`
-/// hook). The real case: 2.1.85's protobufjs factory is `var gc=B(...)`
-/// and nine factories read it as `gc()`.
-const SHIMS_REROLLED_TO_A_GLOBAL_SPELLING: &str = concat!(
-    "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
-    "var gc=x((exports,module)=>{ module.exports=function one(a){return a+1}; });\n",
-    "var zB=x((exports,module)=>{ module.exports=gc(); });\n",
-    "var kC=x((exports,module)=>{ module.exports=gc(); });\n",
-    "var main=zB();"
-);
-
-#[test]
-fn a_bundle_declared_name_that_spells_a_global_still_keys_by_position() {
-    // `gc` is declared by the bundle, so the factories' `gc()` is a
-    // reference to the rest of the bundle — a slot, exactly like the prior
-    // vendor file's `lib_<hash8>.f()` — not the host's `gc`.
-    let (_prior, prior_file) = ts_era_prior("tsera-gc", |h| format!("{:0>16}", h.len()));
-    let fresh = TempDir::new("tsera-gc-fresh");
-    let outcome = unpack_bun(
-        SHIMS_REROLLED_TO_A_GLOBAL_SPELLING,
-        &fresh.0,
-        BunUnpackOptions {
-            prior: load_prior_vendor(&prior_file),
-            ..Default::default()
-        },
-    )
-    .unwrap();
-    assert_eq!(
-        names_in_bundle_order(&fresh.0, &outcome),
-        vec!["dep-one", "shim-a", "shim-b"]
-    );
-    let rekey = outcome.rekey.expect("re-keyed");
-    assert_eq!((rekey.groups_joined, rekey.factories_joined), (2, 3));
+fn a_prior_manifest_without_a_hash_version_is_refused() {
+    let (_prior, prior_file) = edited_prior("no-hash-version", |m| {
+        m.as_object_mut().unwrap().remove("hashVersion");
+    });
+    let err = load_prior_vendor(&prior_file).expect_err("an unstamped manifest is refused");
+    assert!(err.contains("hashVersion"), "{err}");
+    assert!(err.contains("_bun-modules.json"), "{err}");
 }
 
 #[test]
-fn a_ts_era_prior_never_joins_by_hash_bytes() {
-    // The TS bytes happen to EQUAL the Rust's, but the vendor files are
-    // gone: with no content to read, nothing may carry.
-    let (prior_tree, prior_file) = ts_era_prior("tsera-bytes", |h| h.to_string());
-    for f in factories(&read_manifest(&prior_tree.0)) {
-        fs::remove_file(prior_tree.0.join(s(&f, "fileName"))).unwrap();
-    }
-    let fresh = TempDir::new("tsera-bytes-fresh");
-    let outcome = unpack_bun(
-        SHIMS_REROLLED,
-        &fresh.0,
-        BunUnpackOptions {
-            prior: load_prior_vendor(&prior_file),
-            ..Default::default()
-        },
-    )
-    .unwrap();
-    let names = names_in_bundle_order(&fresh.0, &outcome);
-    assert!(names.iter().all(|n| n.starts_with("lib_")), "{names:?}");
+fn a_prior_manifest_entry_missing_its_name_is_refused() {
+    let (_prior, prior_file) = edited_prior("no-entry-name", |m| {
+        m["factories"][0].as_object_mut().unwrap().remove("name");
+    });
+    let err = load_prior_vendor(&prior_file).expect_err("a nameless entry is refused");
+    assert!(err.contains("`name`"), "{err}");
 }
-
-// ---- an OLDER `hashVersion` prior (exp093): the whole era machinery --------
 
 /// The vendor-manifest `hashVersion` the release BEFORE exp093 stamped (the
 /// number-magnitude-blur era). A manifest stamped with ANY version other
-/// than this run's must take the same never-by-hash path a TS manifest
-/// takes — carried by CONTENT, or not at all. The version gate is the only
-/// protection for the worst case: a number-free factory's hash bytes are
-/// IDENTICAL across the era boundary, so a stale manifest would silently
-/// hash-join its nameless/renamed entries whenever the bytes happen to
-/// collide, while its number-bearing entries (new bytes) silently mint —
-/// a half-carried prior with no warning.
+/// than this run's joins nothing by hash bytes — carried by CONTENT, or
+/// not at all. The version gate is the only protection for the worst case:
+/// a number-free factory's hash bytes are IDENTICAL across the era
+/// boundary, so a stale manifest would silently hash-join its
+/// nameless/renamed entries whenever the bytes happen to collide, while its
+/// number-bearing entries (new bytes) silently mint — a half-carried prior
+/// with no warning.
 const PRIOR_ERA_HASH_VERSION: u64 = 2;
 
-/// A prior manifest stamped [`PRIOR_ERA_HASH_VERSION`]: the names a real run
-/// would have carried, and hashes left exactly as the current run computes
-/// them — the STRONGEST form of the gate test: the stored bytes are
-/// byte-joinable, and the era mismatch must refuse the join anyway.
+/// A prior manifest stamped [`PRIOR_ERA_HASH_VERSION`], with hashes left
+/// exactly as the current run computes them — the STRONGEST form of the
+/// gate test: the stored bytes are byte-joinable, and the era mismatch
+/// still refuses the join.
 fn older_era_prior(tag: &str) -> (TempDir, PathBuf) {
-    let t = TempDir::new(tag);
-    unpack(SHIMS, &t.0);
-    let path = t.0.join("vendor/_bun-modules.json");
-    let mut manifest = read_manifest(&t.0);
-    manifest
-        .as_object_mut()
-        .unwrap()
-        .insert("hashVersion".into(), Value::from(PRIOR_ERA_HASH_VERSION));
-    for f in manifest["factories"].as_array_mut().unwrap() {
-        let name = match f.get("hashOrdinal").and_then(Value::as_u64) {
-            None => "dep-one",
-            Some(0) => "shim-a",
-            Some(_) => "shim-b",
-        };
-        f["name"] = Value::String(name.into());
-        f["nameSource"] = Value::String("carry-over".into());
-    }
-    fs::write(&path, serde_json::to_string_pretty(&manifest).unwrap()).unwrap();
-    fs::create_dir_all(t.0.join(".humanify")).unwrap();
-    let prior_file = t.0.join(".humanify/humanified.js");
-    fs::write(&prior_file, "// prior").unwrap();
-    (t, prior_file)
+    edited_prior(tag, |m| {
+        m.as_object_mut()
+            .unwrap()
+            .insert("hashVersion".into(), Value::from(PRIOR_ERA_HASH_VERSION));
+    })
 }
 
 #[test]
 fn an_older_hashversion_prior_is_rekeyed_by_content_never_by_hash() {
     let (_prior, prior_file) = older_era_prior("older-era-content");
-    let prior = load_prior_vendor(&prior_file).expect("a prior tree");
+    let prior = load_prior_vendor(&prior_file)
+        .unwrap()
+        .expect("a prior tree");
     // THE era gate: a version-mismatched manifest is never read by hash,
     // even when its bytes would join (`names` stays None, the content
     // re-key path takes over).
@@ -1313,13 +1207,49 @@ fn an_older_hashversion_prior_without_content_mints_everything() {
         SHIMS_REROLLED,
         &fresh.0,
         BunUnpackOptions {
-            prior: load_prior_vendor(&prior_file),
+            prior: load_prior_vendor(&prior_file).unwrap(),
             ..Default::default()
         },
     )
     .unwrap();
     let names = names_in_bundle_order(&fresh.0, &outcome);
     assert!(names.iter().all(|n| n.starts_with("lib_")), "{names:?}");
+}
+
+/// The next release, where Bun's minifier happened to spell the shared
+/// factory `gc` — a name that is ALSO a known global (Node's `--expose-gc`
+/// hook). The real case: 2.1.85's protobufjs factory is `var gc=B(...)`
+/// and nine factories read it as `gc()`.
+const SHIMS_REROLLED_TO_A_GLOBAL_SPELLING: &str = concat!(
+    "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
+    "var gc=x((exports,module)=>{ module.exports=function one(a){return a+1}; });\n",
+    "var zB=x((exports,module)=>{ module.exports=gc(); });\n",
+    "var kC=x((exports,module)=>{ module.exports=gc(); });\n",
+    "var main=zB();"
+);
+
+#[test]
+fn a_bundle_declared_name_that_spells_a_global_still_keys_by_position() {
+    // `gc` is declared by the bundle, so the factories' `gc()` is a
+    // reference to the rest of the bundle — a slot, exactly like the prior
+    // vendor file's `lib_<hash8>.f()` — not the host's `gc`.
+    let (_prior, prior_file) = older_era_prior("older-era-gc");
+    let fresh = TempDir::new("older-era-gc-fresh");
+    let outcome = unpack_bun(
+        SHIMS_REROLLED_TO_A_GLOBAL_SPELLING,
+        &fresh.0,
+        BunUnpackOptions {
+            prior: load_prior_vendor(&prior_file).unwrap(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        names_in_bundle_order(&fresh.0, &outcome),
+        vec!["dep-one", "shim-a", "shim-b"]
+    );
+    let rekey = outcome.rekey.expect("re-keyed");
+    assert_eq!((rekey.groups_joined, rekey.factories_joined), (2, 3));
 }
 
 #[test]
@@ -1597,7 +1527,7 @@ fn hop_with(
         dir,
         BunUnpackOptions {
             namer: Some(&mut namer),
-            prior: prior_dir.and_then(|p| load_prior_vendor(&p.join("humanified.js"))),
+            prior: prior_dir.and_then(|p| load_prior_vendor(&p.join("humanified.js")).unwrap()),
             ..Default::default()
         },
     )
@@ -1878,7 +1808,7 @@ fn hop_outcome(
         dir,
         BunUnpackOptions {
             namer: Some(&mut namer),
-            prior: prior_dir.and_then(|p| load_prior_vendor(&p.join("humanified.js"))),
+            prior: prior_dir.and_then(|p| load_prior_vendor(&p.join("humanified.js")).unwrap()),
             ..Default::default()
         },
     )

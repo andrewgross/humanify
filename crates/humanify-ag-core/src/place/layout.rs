@@ -30,20 +30,12 @@ pub const HUMANIFIED_SOURCE_PATH: &str = ".humanify/humanified.js";
 pub const PLACEMENT_STATS_PATH: &str = ".humanify/placement-stats.json";
 /// Stage-boundary content fingerprints beside the ledger.
 pub const STAGE_HASHES_PATH: &str = ".humanify/stage-hashes.json";
-/// Pre-.humanify ledger filename; still discovered next to --prior-version.
-pub const LEGACY_SPLIT_LEDGER_FILENAME: &str = "_split-ledger.json";
-
 /// `findSplitLedgerIn(dir)`: the first existing candidate — `dir` IS the
-/// metadata folder, `dir` is the tree root, or the legacy flat filename.
-/// This candidate order is the ONLY place the ledger lineage is encoded.
+/// metadata folder, or `dir` is the tree root.
 pub fn find_split_ledger_in(dir: &Path) -> Option<PathBuf> {
-    [
-        dir.join(SPLIT_LEDGER_FILENAME),
-        dir.join(SPLIT_LEDGER_PATH),
-        dir.join(LEGACY_SPLIT_LEDGER_FILENAME),
-    ]
-    .into_iter()
-    .find(|candidate| candidate.exists())
+    [dir.join(SPLIT_LEDGER_FILENAME), dir.join(SPLIT_LEDGER_PATH)]
+        .into_iter()
+        .find(|candidate| candidate.exists())
 }
 
 /// `findSplitLedgerPath(priorFile)`: the ledger beside `--prior-version`.
@@ -52,8 +44,7 @@ pub fn find_split_ledger_path(prior_file: &Path) -> Option<PathBuf> {
 }
 
 /// `splitTreeRootOf(priorFile)`: the tree root `--prior-version` belongs
-/// to — one step out of the metadata folder, or the file's own directory
-/// for a flat pre-.humanify layout.
+/// to — one step out of the metadata folder, or the file's own directory.
 pub fn split_tree_root_of(prior_file: &Path) -> PathBuf {
     let dir = prior_file.parent().unwrap_or(Path::new(""));
     if dir.file_name().and_then(|n| n.to_str()) == Some(METADATA_DIR) {

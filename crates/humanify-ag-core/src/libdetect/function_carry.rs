@@ -239,7 +239,7 @@ impl LibraryClassification {
     ) -> Result<Vec<(usize, String)>, String> {
         let keyed: Vec<(Span, Option<&str>, String)> = match self {
             Self::Missing => {
-                return Err("library regions reached the naming stage without a function classification — raw offsets cannot classify beautified functions (#32); a TS dump written before #33 (regions.json without libraryFunctions) cannot be replayed".into());
+                return Err("library regions reached the naming stage without a function classification — raw offsets cannot classify beautified functions (#32)".into());
             }
             Self::Consumed(keys) => keys
                 .iter()

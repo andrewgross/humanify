@@ -1115,7 +1115,7 @@ fn ledger_of(
     modules: Vec<crate::place::ledger::FossilLedgerModule>,
 ) -> crate::place::ledger::StableSplitLedger {
     crate::place::ledger::StableSplitLedger {
-        hash_version: Some(crate::hash::forms::STATEMENT.version),
+        hash_version: crate::hash::forms::STATEMENT.version,
         fossil_modules: Some(modules),
         ..Default::default()
     }
@@ -1171,7 +1171,7 @@ fn content_the_prior_filed_under_two_packages_carries_nothing() {
 #[test]
 fn a_stale_era_ledger_carries_nothing() {
     let mut ledger = ledger_of(vec![ledger_module("vendor/ms/index.js", &["h1"])]);
-    ledger.hash_version = Some(1);
+    ledger.hash_version = 1;
     assert!(
         crate::naming::module_names::prior_library_packages(&ledger).is_empty(),
         "another hash era's statement hashes are not this run's keys"

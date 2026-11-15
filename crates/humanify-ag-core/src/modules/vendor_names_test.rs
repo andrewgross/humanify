@@ -9,8 +9,8 @@ use humanify_ag_model::llm::CacheKeyParams;
 use oxc_span::Span;
 
 use crate::modules::vendor_names::{
-    ManifestEntry, PriorManifestEntry, ProviderVendorNamer, VendorNameRequest, VendorNamer,
-    accept_vendor_name, annotate_hash_ordinals, build_prompt, build_vendor_evidence,
+    ManifestEntry, PriorManifest, PriorManifestEntry, ProviderVendorNamer, VendorNameRequest,
+    VendorNamer, accept_vendor_name, annotate_hash_ordinals, build_prompt, build_vendor_evidence,
     choose_file_names, is_vendor_worthy_binding, load_prior_vendor_names,
     name_fallback_factories_with_llm_sized, order_by_prior_manifest, sanitize_fs_name,
     sanitize_fs_path, strip_js_extension, unique_case_insensitive_name, vendor_batch_call,
@@ -436,25 +436,27 @@ fn no_prior_keeps_bundle_order() {
 /// no longer encodes the tie-break; hashOrdinal recovers it.
 #[test]
 fn prior_names_recover_bundle_order_from_hash_ordinal() {
-    let manifest = r#"{"adapter":"bun","factories":[
+    let manifest = r#"{"adapter":"bun","hashVersion":5,"factories":[
         {"fileName":"vendor/lodash.js","name":"lodash","nameSource":"carry-over","structuralHash":"dup","hashOrdinal":1},
         {"fileName":"vendor/unrelated.js","name":"unrelated","nameSource":"carry-over","structuralHash":"solo"},
         {"fileName":"vendor/retry.js","name":"retry","nameSource":"carry-over","structuralHash":"dup","hashOrdinal":0}
     ]}"#;
-    let names = load_prior_vendor_names(manifest).expect("names");
+    let names =
+        load_prior_vendor_names(&PriorManifest::parse(manifest).unwrap().factories).expect("names");
     assert_eq!(names_of(&names["dup"]), vec!["retry", "lodash"]);
     assert_eq!(names_of(&names["solo"]), vec!["unrelated"]);
 }
 
-/// A legacy manifest (pre-exp047) has no hashOrdinal and array order IS
-/// bundle order.
+/// A manifest written under `--disable manifest-prior-order` has no
+/// hashOrdinal, and its array order IS bundle order.
 #[test]
-fn legacy_prior_manifest_keeps_array_order() {
-    let manifest = r#"{"adapter":"bun","factories":[
+fn an_unannotated_group_keeps_array_order() {
+    let manifest = r#"{"adapter":"bun","hashVersion":5,"factories":[
         {"fileName":"vendor/retry.js","name":"retry","nameSource":"carry-over","structuralHash":"dup"},
         {"fileName":"vendor/lodash.js","name":"lodash","nameSource":"carry-over","structuralHash":"dup"}
     ]}"#;
-    let names = load_prior_vendor_names(manifest).expect("names");
+    let names =
+        load_prior_vendor_names(&PriorManifest::parse(manifest).unwrap().factories).expect("names");
     assert_eq!(names_of(&names["dup"]), vec!["retry", "lodash"]);
 }
 
@@ -462,12 +464,13 @@ fn legacy_prior_manifest_keeps_array_order() {
 /// must not vanish.
 #[test]
 fn partially_annotated_group_keeps_every_member() {
-    let manifest = r#"{"adapter":"bun","factories":[
+    let manifest = r#"{"adapter":"bun","hashVersion":5,"factories":[
         {"fileName":"vendor/b.js","name":"b","nameSource":"carry-over","structuralHash":"dup","hashOrdinal":1},
         {"fileName":"vendor/fresh.js","name":"fresh","nameSource":"fallback","structuralHash":"dup"},
         {"fileName":"vendor/a.js","name":"a","nameSource":"carry-over","structuralHash":"dup","hashOrdinal":0}
     ]}"#;
-    let names = load_prior_vendor_names(manifest).expect("names");
+    let names =
+        load_prior_vendor_names(&PriorManifest::parse(manifest).unwrap().factories).expect("names");
     assert_eq!(names_of(&names["dup"]), vec!["a", "b", "fresh"]);
     // Each carried name keeps the label its prior entry wrote (finding #71).
     assert_eq!(
@@ -984,17 +987,14 @@ fn provider_namer_nulls_echoes_and_counts_outcomes() {
     );
 }
 
-/// `loadPriorVendorNames` SKIPS an entry without a structuralHash or a name
-/// (`if (!entry.structuralHash || !entry.name) continue;`) — it does not
-/// give up on the whole manifest.
+/// An entry without a structuralHash or a name is not one this binary
+/// wrote: the whole manifest is refused, naming the missing field.
 #[test]
-fn prior_names_skip_an_entry_missing_its_fields() {
-    let manifest = r#"{"adapter":"bun","factories":[
+fn a_prior_manifest_entry_missing_its_fields_is_refused() {
+    let manifest = r#"{"adapter":"bun","hashVersion":5,"factories":[
       {"fileName":"vendor/a.js","name":"a","nameSource":"carry-over"},
-      {"fileName":"vendor/b.js","nameSource":"carry-over","structuralHash":"h2"},
       {"fileName":"vendor/c.js","name":"c","nameSource":"carry-over","structuralHash":"h3"}
     ]}"#;
-    let names = load_prior_vendor_names(manifest).expect("the valid entry loads");
-    assert_eq!(names.get("h3").map(|v| names_of(v)), Some(vec!["c"]));
-    assert_eq!(names.len(), 1);
+    let err = PriorManifest::parse(manifest).expect_err("refused");
+    assert!(err.contains("`structuralHash`"), "{err}");
 }

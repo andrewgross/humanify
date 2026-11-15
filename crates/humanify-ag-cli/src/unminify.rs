@@ -92,7 +92,10 @@ pub fn unpack_bundle(
 ) -> Result<Unpacked, String> {
     // unified.ts loads both before unminify runs, whichever adapter is
     // selected — the carry-over line prints for any prior with a manifest.
-    let prior_vendor = prior_version.and_then(bun::load_prior_vendor);
+    let prior_vendor = prior_version
+        .map(bun::load_prior_vendor)
+        .transpose()?
+        .flatten();
     if let Some(p) = &prior_vendor {
         if let Some(names) = &p.names {
             renderer.message(&format!(

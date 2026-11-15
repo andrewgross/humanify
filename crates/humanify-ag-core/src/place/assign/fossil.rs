@@ -691,34 +691,23 @@ fn fresh_signatures(
         .map(|(i, m)| FossilSignature {
             hashes: m.hashes.clone(),
             imports: m.imports.clone(),
-            stem: Some(stems[i].clone()),
-            tokens: Some(tokens[i].clone()),
-            declared: Some(m.declared.clone()),
+            stem: stems[i].clone(),
+            tokens: tokens[i].clone(),
+            declared: m.declared.clone(),
         })
         .collect()
 }
 
-/// A prior ledger path's file stem — `src/a/b/foo.js` → `foo`.
-fn prior_file_stem(file: &str) -> String {
-    let base = &file[file.rfind('/').map_or(0, |c| c + 1)..];
-    base.strip_suffix(".js").unwrap_or(base).to_string()
-}
-
 /// The prior side's signatures. The stem the same-file-name tier compares
 /// is the prior module's RECORDED mechanical stem — its file carries the
-/// module's name, which a fresh mechanical stem never equals — else (a
-/// ledger written before the field) its file stem.
+/// module's name, which a fresh mechanical stem does not equal.
 fn prior_signatures(prior_modules: &[FossilLedgerModule]) -> Vec<FossilSignature> {
     prior_modules
         .iter()
         .map(|m| FossilSignature {
             hashes: m.hashes.clone(),
             imports: m.imports.clone(),
-            stem: Some(
-                m.mechanical_stem
-                    .clone()
-                    .unwrap_or_else(|| prior_file_stem(&m.file)),
-            ),
+            stem: m.mechanical_stem.clone(),
             tokens: m.tokens.clone(),
             declared: m.declared.clone(),
         })
@@ -918,10 +907,10 @@ definitions) — fix detection or run with --disable fossil-split"
                 file: final_file[i].clone(),
                 hashes: m.hashes.clone(),
                 imports: m.imports.clone(),
-                declared: Some(m.declared.clone()),
-                tokens: Some(tokens),
+                declared: m.declared.clone(),
+                tokens,
                 source_path: m.source_path.clone(),
-                mechanical_stem: Some(mechanical_stems[i].clone()),
+                mechanical_stem: mechanical_stems[i].clone(),
             })
             .collect(),
         stats: FossilStats {

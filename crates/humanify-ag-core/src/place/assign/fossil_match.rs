@@ -26,9 +26,10 @@ pub struct FossilSignature {
     pub hashes: Vec<String>,
     /// Module indexes (same side) of import edges.
     pub imports: Vec<usize>,
-    pub stem: Option<String>,
-    pub tokens: Option<Vec<String>>,
-    pub declared: Option<Vec<String>>,
+    /// Empty when the module has none; every tier skips an empty one.
+    pub stem: String,
+    pub tokens: Vec<String>,
+    pub declared: Vec<String>,
 }
 
 /// `FossilMatchResult`.
@@ -71,8 +72,8 @@ fn declared_intersection(a: &[&str], b: &[&str]) -> usize {
 /// `declaredOverlap`: Jaccard over declared-name sets; 0 when either side
 /// has none.
 fn declared_overlap(a: &FossilSignature, b: &FossilSignature) -> f64 {
-    let sa = js_set(a.declared.as_deref().unwrap_or(&[]));
-    let sb = js_set(b.declared.as_deref().unwrap_or(&[]));
+    let sa = js_set(&a.declared);
+    let sb = js_set(&b.declared);
     if sa.is_empty() || sb.is_empty() {
         return 0.0;
     }
@@ -82,8 +83,8 @@ fn declared_overlap(a: &FossilSignature, b: &FossilSignature) -> f64 {
 /// `declaredContainment`: |∩| / |smaller set|, 0 when either side
 /// declares fewer than two names.
 fn declared_containment(a: &FossilSignature, b: &FossilSignature) -> f64 {
-    let sa = js_set(a.declared.as_deref().unwrap_or(&[]));
-    let sb = js_set(b.declared.as_deref().unwrap_or(&[]));
+    let sa = js_set(&a.declared);
+    let sb = js_set(&b.declared);
     if sa.len() < 2 || sb.len() < 2 {
         return 0.0;
     }
@@ -245,8 +246,8 @@ impl MatchState<'_> {
     /// best prior one. A fresh module that is a prior module's code and
     /// names is never handed to a different prior module of similar shape.
     fn export_heir_veto(&self, pi: usize, fi: usize) -> bool {
-        let pd = self.prior[pi].declared.as_deref().unwrap_or(&[]);
-        let fd = self.fresh[fi].declared.as_deref().unwrap_or(&[]);
+        let pd = &self.prior[pi].declared;
+        let fd = &self.fresh[fi].declared;
         if pd.is_empty() || fd.is_empty() {
             return false;
         }
@@ -352,9 +353,10 @@ fn unique_stems(
     let mut counts: Vec<(String, Vec<usize>)> = Vec::new();
     let mut at: HashMap<String, usize> = HashMap::new();
     for (i, m) in mods.iter().enumerate() {
-        let Some(stem) = m.stem.as_ref().filter(|s| !s.is_empty()) else {
+        let stem = &m.stem;
+        if stem.is_empty() {
             continue;
-        };
+        }
         if is_matched(i) {
             continue;
         }
@@ -479,13 +481,7 @@ fn best_graded_candidate(
 
 fn tier_graded_content(state: &mut MatchState) {
     let unmatched_p: Vec<usize> = (0..state.prior.len())
-        .filter(|pi| {
-            !state.prior_to_fresh.contains_key(pi)
-                && state.prior[*pi]
-                    .tokens
-                    .as_ref()
-                    .is_some_and(|t| !t.is_empty())
-        })
+        .filter(|pi| !state.prior_to_fresh.contains_key(pi) && !state.prior[*pi].tokens.is_empty())
         .collect();
     if unmatched_p.is_empty() {
         return;
@@ -494,12 +490,7 @@ fn tier_graded_content(state: &mut MatchState) {
     let prior_tokens: HashMap<usize, HashSet<&str>> = unmatched_p
         .iter()
         .map(|&pi| {
-            let set = prior[pi]
-                .tokens
-                .iter()
-                .flatten()
-                .map(String::as_str)
-                .collect();
+            let set = prior[pi].tokens.iter().map(String::as_str).collect();
             (pi, set)
         })
         .collect();
@@ -508,9 +499,10 @@ fn tier_graded_content(state: &mut MatchState) {
         if state.fresh_to_prior.contains_key(&fi) {
             continue;
         }
-        let Some(tok) = fresh_sig.tokens.as_ref().filter(|t| !t.is_empty()) else {
+        let tok = &fresh_sig.tokens;
+        if tok.is_empty() {
             continue;
-        };
+        }
         let ft: HashSet<&str> = tok.iter().map(String::as_str).collect();
         if let Some(pick) = best_graded_candidate(state, &ft, &unmatched_p, &prior_tokens)
             && !state.export_heir_veto(pick, fi)

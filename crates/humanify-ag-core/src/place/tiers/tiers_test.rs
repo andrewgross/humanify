@@ -15,7 +15,7 @@ use crate::twins::statement_inventory_with_values;
 const CODE: &str = "function alpha(x) { return x + 1; }\nvar beta = alpha(2);\nconsole.log(beta);";
 
 /// (statements placed by the hash tier, each row's `hashMiss`).
-fn run(hash_version: Option<u64>) -> (usize, Vec<Option<String>>) {
+fn run(hash_version: u64) -> (usize, Vec<Option<String>>) {
     let (inv, body) = statement_inventory_with_values(
         CODE,
         "shipped",
@@ -61,7 +61,7 @@ fn run(hash_version: Option<u64>) -> (usize, Vec<Option<String>>) {
 
 #[test]
 fn a_current_version_ledger_joins_by_hash() {
-    let (via_hash, misses) = run(Some(STATEMENT.version));
+    let (via_hash, misses) = run(STATEMENT.version);
     assert_eq!(via_hash, 3);
     assert!(misses.iter().all(Option::is_none));
 }
@@ -69,9 +69,7 @@ fn a_current_version_ledger_joins_by_hash() {
 #[test]
 fn a_ts_era_ledger_is_refused_not_joined() {
     // hashVersion 1 = the TS statement-hash bytes (src/split/statement-hash.ts).
-    let (via_hash, misses) = run(Some(1));
+    let (via_hash, misses) = run(1);
     assert_eq!(via_hash, 0, "a v1 ledger must never feed the hash tier");
     assert_eq!(misses, vec![Some("no-prior-hashes".to_string()); 3]);
-    let (via_hash, _) = run(None);
-    assert_eq!(via_hash, 0);
 }

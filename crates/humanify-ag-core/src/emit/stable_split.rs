@@ -211,17 +211,14 @@ fn fossil_module_js(m: &FossilLedgerModule) -> JsValue {
                 .collect(),
         ),
     );
-    o.insert_opt("declared", m.declared.as_deref().map(str_list));
-    o.insert_opt("tokens", m.tokens.as_deref().map(str_list));
+    o.insert("declared", str_list(&m.declared));
+    o.insert("tokens", str_list(&m.tokens));
     // esbuild's unminified builds carry the module's original source path
     // (exp075) — recorded, never load-bearing.
     o.insert_opt("sourcePath", m.source_path.as_deref().map(JsValue::str));
     // The next hop's same-file-name match reads it (the file carries the
     // module's name, docs/design/module-naming.md).
-    o.insert_opt(
-        "mechanicalStem",
-        m.mechanical_stem.as_deref().map(JsValue::str),
-    );
+    o.insert("mechanicalStem", JsValue::str(m.mechanical_stem.as_str()));
     JsValue::Object(o)
 }
 

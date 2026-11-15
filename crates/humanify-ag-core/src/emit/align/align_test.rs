@@ -60,7 +60,7 @@ fn emission_order_is_identity_without_a_usable_prior() {
         version: 1,
         order: strings(&["f", "f"]),
         emit_hashes: Some(strings(&["b", "a"])),
-        hash_version: Some(99),
+        hash_version: 99,
         ..StableSplitLedger::default()
     };
     let perm = align_emission_order(
@@ -75,7 +75,7 @@ fn emission_order_is_identity_without_a_usable_prior() {
     // A TS-era ledger (hashVersion 1: the TS statement-hash bytes) is not
     // a usable prior for the Rust's own hashes (WP5.6e).
     let ts_era = StableSplitLedger {
-        hash_version: Some(1),
+        hash_version: 1,
         ..prior.clone()
     };
     let perm = align_emission_order(
@@ -88,7 +88,7 @@ fn emission_order_is_identity_without_a_usable_prior() {
     );
     assert_eq!(perm, vec![0, 1], "a v1 ledger must not align the emission");
     let good = StableSplitLedger {
-        hash_version: Some(STATEMENT.version),
+        hash_version: STATEMENT.version,
         ..prior
     };
     let perm = align_emission_order(

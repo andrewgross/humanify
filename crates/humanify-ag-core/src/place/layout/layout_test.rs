@@ -1,8 +1,7 @@
 //! The TS spec (src/split/layout.test.ts), case for case.
 
 use super::{
-    HUMANIFIED_SOURCE_PATH, LEGACY_SPLIT_LEDGER_FILENAME, SPLIT_LEDGER_PATH,
-    find_split_ledger_path, split_tree_root_of,
+    HUMANIFIED_SOURCE_PATH, SPLIT_LEDGER_PATH, find_split_ledger_path, split_tree_root_of,
 };
 use std::path::{Path, PathBuf};
 
@@ -47,11 +46,11 @@ fn finds_the_ledger_under_humanify_when_the_prior_is_at_the_root() {
 }
 
 #[test]
-fn falls_back_to_the_legacy_flat_ledger() {
-    let d = TempDir::new("legacy");
+fn a_flat_underscore_ledger_is_not_a_prior_ledger() {
+    let d = TempDir::new("flat");
     let prior = d.write("output.js");
-    let legacy = d.write(LEGACY_SPLIT_LEDGER_FILENAME);
-    assert_eq!(find_split_ledger_path(&prior), Some(legacy));
+    d.write("_split-ledger.json");
+    assert_eq!(find_split_ledger_path(&prior), None);
 }
 
 #[test]
@@ -59,7 +58,6 @@ fn prefers_the_sibling_ledger() {
     let d = TempDir::new("prefer");
     let prior = d.write(HUMANIFIED_SOURCE_PATH);
     let sibling = d.write(".humanify/split-ledger.json");
-    d.write(LEGACY_SPLIT_LEDGER_FILENAME);
     assert_eq!(find_split_ledger_path(&prior), Some(sibling));
 }
 
