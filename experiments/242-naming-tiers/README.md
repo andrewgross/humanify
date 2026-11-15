@@ -1,8 +1,8 @@
 # exp242 — one naming schedule: the turn driver, the sequential tier, the levers and the ordered mode go
 
 STATUS: BUILT (red/green for the removed flags and keys), GATED
-(`cargo dev check`, all 12 stages), NEUTRAL on two pairs (see
-Neutrality). Branch `exp242-naming-tiers`, not merged. Plan item 1c of the
+(`cargo dev check`, all 12 stages), NEUTRAL on two pairs (warm,
+standing priors, 0 cache writes on both legs). Branch `exp242-naming-tiers`, not merged. Plan item 1c of the
 simplification campaign.
 
 ## Totals
@@ -128,6 +128,35 @@ pass of wave N riding with wave N+1. Nothing switches on a tier any more.
 - `docs/config-consolidation.md` and `docs/dev-harness.md` mention
   `--sequential` as history; not edited.
 
+## Gate
+
+`cargo dev check` on the candidate: ALL 12 STAGES PASSED (shims,
+no-private-addresses, rust:fmt, rust:clippy, census:clones REVIEW (33
+groups, clone share unchanged per crate), census:concurrency, census:slop
+(humanify-ag-cli erosion +0.4pp: simple functions left, the complex
+resolver stayed), census:comments REVIEW (the two new findings, both in
+fast_test's header, were reworded afterwards; fmt + comments re-run
+clean), rust:unit, rust:build, format-golden, e2e (22 pairs, 88 launches
+equal to the golden)).
+
 ## Neutrality
 
-(filled in below)
+`cargo dev eval neutrality 340b37ea7 <pair> --priors /work/neutrality-priors
+--cache /work/neutrality-cache --workdir /work/exp242-neutrality-<v>`,
+candidate `046dd5cab`.
+
+| pair | cache writes candidate / baseline | exits | differing files / lines | verdict |
+| --- | ---: | --- | ---: | --- |
+| 2.1.118 -> 2.1.119 | 0 / **0** | 0 / 0 | **0 / 0** | **NEUTRAL** |
+| 2.1.197 -> 2.1.198 | 0 / **0** | 0 / 0 | **0 / 0** | **NEUTRAL** |
+
+The candidate leg wrote nothing either: every prompt the one-schedule
+binary sent was already in the cache from the old default, so it asked
+exactly the old default's questions.
+
+## Open items
+
+- e2e no longer runs a FRESH leg twice (only the sequential fresh leg was
+  run twice before); fresh-run determinism under the default schedule is
+  covered by the fast_test completion-order tests, not by e2e.
+- `Kind::List(Option<choices>)` (see Kept).
