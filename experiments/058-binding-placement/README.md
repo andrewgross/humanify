@@ -38,13 +38,13 @@
 > matcher's precision, and a git-capped ceiling.** In that order. Task 0a is a
 > veto, not a sizing exercise.
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
+Jargon: [034 vocabulary](../../docs/vocabulary.md).
 
 **Read first, in order:**
 
 1. [`CLAUDE.md`](../../CLAUDE.md) and [`docs/measurement-pitfalls.md`](../../docs/measurement-pitfalls.md) — eleven rules; 5, 6, 11 and 1 all bite here.
 2. [`057/RESULTS.md`](../057-alias-stability/RESULTS.md) — where this came from, and the collision it diagnosed.
-3. [`docs/matching-cascades.md`](../../docs/matching-cascades.md) **sections A and C** — the binding cascade that already exists, and the placement cascade this would change.
+3. `docs/matching-cascades.md` (removed; `git show 6c4b4d13f:docs/matching-cascades.md`) **sections A and C** — the binding cascade that already exists, and the placement cascade this would change.
 4. [`054/RESULTS.md`](../054-post-split-reconcile/RESULTS.md) — the precedent for carrying identity across the rename→split boundary, including why a NAME is not a usable key there.
 5. [`053/README.md`](../053-shingle-audit/README.md) — the measured cascade census this brief's numbers come from.
 

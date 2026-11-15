@@ -1,6 +1,6 @@
 # 041 — Content-anchor file inheritance: results
 
-Brief: [README.md](README.md). Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
+Brief: [README.md](README.md). Jargon: [034 vocabulary](../../docs/vocabulary.md).
 
 **Status: SHIPPED. Gate PASSED on every non-negotiable — relocation down on all
 four hops including the canary, real change untouched, all four trees boot,

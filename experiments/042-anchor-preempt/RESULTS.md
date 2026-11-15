@@ -1,6 +1,6 @@
 # 042 — Anchor-preempt: results
 
-Brief: [README.md](README.md). Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
+Brief: [README.md](README.md). Jargon: [034 vocabulary](../../docs/vocabulary.md).
 
 **Status: SHIPPED. Gate PASSED on every non-negotiable — relocation down on the
 two hops the ceiling targeted and byte-identical on the two it did not, real
@@ -125,7 +125,7 @@ right (the common case — 3,845 agreements against 19 disagreements on 85→86)
 Same host, same warm LLM cache, same `REBASE_PRIOR=1` methodology as the
 `exp041-anchor` control, so the A/B is like-for-like.
 `experiments/041-content-anchor/gate-verdict.sh exp041-anchor exp042-preempt`;
-raw output in [gate-output.txt](gate-output.txt).
+raw output in gate-output.txt (removed; `git show 6c4b4d13f:experiments/042-anchor-preempt/gate-output.txt`).
 
 ### TOTAL — four hops
 

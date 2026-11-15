@@ -21,7 +21,7 @@
 
 **Status: reset point.** This doc consolidates what the 8b / interchangeable-bucket
 work proved, so a fresh session can start from conclusions instead of re-deriving
-them. Read [experiments/034-eval-harness/VOCABULARY.md](../034-eval-harness/VOCABULARY.md)
+them. Read [experiments/034-eval-harness/VOCABULARY.md](../../docs/vocabulary.md)
 for terms (noiseLn, self-hop, interchangeable bucket, etc.).
 
 ---

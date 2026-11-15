@@ -117,7 +117,7 @@ fn every_ts_gate_stage_maps_to_a_successor() {
             );
         }
     }
-    for new in ["no-private-addresses", "census:slop"] {
+    for new in ["no-private-addresses", "census:slop", "census:comments"] {
         assert!(
             STAGES.iter().any(|s| s.name == new),
             "missing new stage {new}"
@@ -128,7 +128,10 @@ fn every_ts_gate_stage_maps_to_a_successor() {
         .filter(|s| s.advisory)
         .map(|s| s.name)
         .collect();
-    assert_eq!(advisory, ["census:clones", "census:slop"]);
+    assert_eq!(
+        advisory,
+        ["census:clones", "census:slop", "census:comments"]
+    );
 }
 
 #[test]

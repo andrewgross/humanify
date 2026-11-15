@@ -267,6 +267,42 @@ pub fn sanitize(src: &str) -> Vec<u8> {
     out
 }
 
+/// Every comment of `src` (line, block and doc comments, none inside a
+/// string or char literal) as (1-based first line, its text), in order.
+/// The census of comments reads them through the same lexer that blanks
+/// them here.
+pub fn comments(src: &str) -> Vec<(usize, String)> {
+    let ascii = ascii_units(src);
+    let chars: Vec<char> = src.chars().collect();
+    // The char index each UTF-16 unit of `ascii` belongs to.
+    let mut char_at = Vec::with_capacity(ascii.len() + 1);
+    for (k, c) in chars.iter().enumerate() {
+        char_at.extend(std::iter::repeat_n(k, c.len_utf16()));
+    }
+    char_at.push(chars.len());
+    let mut out = Vec::new();
+    let mut line = 1;
+    let mut i = 0;
+    while i < ascii.len() {
+        if let Some(end) = comment_end(&ascii, i) {
+            let end = end.min(ascii.len());
+            let text: String = chars[char_at[i]..char_at[end]].iter().collect();
+            let lines = text.matches('\n').count();
+            out.push((line, text.trim_end_matches(['\r', '\n']).to_string()));
+            line += lines;
+            i = end;
+        } else if let Some(end) = literal_end(&ascii, i) {
+            let end = end.min(ascii.len());
+            line += ascii[i..end].iter().filter(|b| **b == b'\n').count();
+            i = end;
+        } else {
+            line += usize::from(ascii[i] == b'\n');
+            i += 1;
+        }
+    }
+    out
+}
+
 /// Index of the brace matching the `{` at `open`.
 fn matching_brace(t: &[u8], open: usize) -> usize {
     let mut depth = 0usize;

@@ -32,7 +32,7 @@
 > **Still open:** the aligner residual (~1,029 capped lines, now the largest
 > reducible bucket) and the ambiguity gate (1,240 lines).
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Read
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Read
 [`docs/measurement-pitfalls.md`](../../docs/measurement-pitfalls.md) first — this
 directory added evidence to rules 2, 4 and 11 in the course of one afternoon.
 

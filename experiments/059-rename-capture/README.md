@@ -50,7 +50,7 @@
 > Whoever finishes this stamps a STATUS block here naming which of the brief's
 > claims did not survive.
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
+Jargon: [034 vocabulary](../../docs/vocabulary.md).
 
 **Read first, in order. Do not skip 1 or 2.**
 

@@ -19,12 +19,21 @@ pub const LAUNCH_GOLDENS: &str = "dev/eval/goldens";
 pub const LIBRARY_DIR: &str = "dev/library";
 /// The library corpora: each corpus manifest and its truth-layer manifests.
 pub const LIBRARY_CORPORA: &str = "dev/library/corpora";
-/// The library scorer's labels.
+/// The bun-dev bundle list (entry id, bundle path) the stub batches run.
+pub const BUNDEV_LIST: &str = "dev/library/bun-dev-list.tsv";
+/// The library scorer's labels (local only, git-ignored).
 pub const LIBRARY_RESULTS: &str = "dev/library/results";
+/// Three library labels (summary and timing only) kept as test fixtures for
+/// the label readers: the leaderboard, the identity backfill and the JSON
+/// spelling round trip.
+#[cfg(test)]
+pub const LIBRARY_LABEL_FIXTURES: &str = "crates/humanify-ag-dev/src/library/fixtures/labels";
 /// The concurrency census's allowlist.
 pub const CONCURRENCY_ALLOWLIST: &str = "dev/census/concurrency-allowlist.json";
 /// The clone census's allowlist (reviewed twin groups, each justified).
 pub const CLONE_ALLOWLIST: &str = "dev/census/clone-allowlist.json";
+/// The Markdown files the comment census allows (glob patterns).
+pub const DOCS_ALLOWLIST: &str = "dev/census/docs-allowlist.json";
 /// The e2e fixtures (one `fixture.config.json` each).
 pub const E2E_FIXTURES: &str = "test/e2e/fixtures";
 /// The git-ignored per-host config (the LLM endpoint).

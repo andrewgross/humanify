@@ -14,7 +14,7 @@
 //! reach, and a run with `--only` is labelled PARTIAL in its last line so
 //! it cannot be pasted into a PR as a green gate.
 //!
-//! An ADVISORY stage (the clone and slop censuses) is an automated mini
+//! An ADVISORY stage (the clone, slop and comment censuses) is an automated mini
 //! code review for Claude/agents to act on, not a correctness verdict: a
 //! nonzero exit prints REVIEW, the gate stays green and later stages run.
 //!
@@ -74,7 +74,7 @@ pub const STAGES: &[Stage] = &[
     },
     Stage {
         name: "rust:fmt",
-        why: "rustfmt defaults across crates/ (docs/rust-port/05-rust-toolchain.md §8); formatting drift never reaches review",
+        why: "rustfmt defaults across crates/; formatting drift never reaches review",
         run: Run::Cargo(&["fmt", "--all", "--check"]),
         advisory: false,
         deadline: Duration::from_secs(5 * 60),
@@ -111,6 +111,13 @@ pub const STAGES: &[Stage] = &[
         name: "census:slop",
         why: "ADVISORY — per-crate complexity mass, erosion and clone share against main's merge-base (docs/dev-harness.md §7): a reviewer's prompt, not a verdict",
         run: Run::Dev(&["census", "slop"]),
+        advisory: true,
+        deadline: Duration::from_secs(10 * 60),
+    },
+    Stage {
+        name: "census:comments",
+        why: "ADVISORY — comments in crates/ that cite an experiment, a date or a file not in the tree, or state a rule (never/must/do not) without naming the check that enforces it; kept docs' links that resolve to nothing; Markdown files outside dev/census/docs-allowlist.json. Only findings the merge-base did not have ask for review: rewrite the line, tag the check, or drop it",
+        run: Run::Dev(&["census", "comments"]),
         advisory: true,
         deadline: Duration::from_secs(10 * 60),
     },

@@ -609,6 +609,13 @@ pub static HARNESS_KEYS: &[Key] = &[
         "The clone census's review sweep: a lower cutoff plus literal-blurred matching; \
          always exits 0.",
     ),
+    switch(
+        "dev",
+        "all",
+        "--all",
+        off,
+        "The comment census lists every finding, not only the new ones.",
+    ),
     path_key(
         "dev",
         "root",
@@ -630,7 +637,7 @@ pub static HARNESS_KEYS: &[Key] = &[
         flag: Some("--base"),
         default: || text("main"),
         unset: "",
-        doc: "The git ref the slop census measures its deltas against (at its merge-base \
+        doc: "The git ref the slop and comment censuses measure against (at its merge-base \
               with HEAD).",
     },
     path_key(

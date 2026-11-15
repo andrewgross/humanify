@@ -1,6 +1,6 @@
 # 035 — Deterministic naming state (kill the classifier, close the census)
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 research-log entries read _Idea → Evidence (table + linked page) →
 Conclusion_; outcomes are **landed** or **failed** with numbers;
 totals-first tables (TOTAL at top, REMAINING at bottom).
@@ -50,7 +50,7 @@ cache + archive bisect; every step verified in code):
 | 3   | After retries exhaust, the deterministic ladder `resolveConflict` allocates, in order: `Val/Var/Ref/Item/Data/Result/Value` suffixes → numeric `2..100` → `_name` → **`name_`** → `local_/inner_` prefixes → numeric `101..999` → `_name_N`.                                                                                                                                                                                                                                                                                | `src/llm/validation.ts:212`             |
 | 4   | Under 276 same-stem claimants every early candidate was already taken: `fsPromisesVal`✗ … `fsPromisesValue`✗, `fsPromises2..100` **all** ✗, `_fsPromises`✗ — `fsPromises_` was literally the first free candidate. Batch-mates prove the ladder ran normally: same batch yielded `mimeTypesVal` (tier 1), `fsModule33` (tier 2), `fsPromises_`/`pathModule_` (tier 4).                                                                                                                                                      | probe bundle greps                      |
 | 5   | `initialize_` took the OTHER route: its function close-matched and the A2 slot snap reused the **prior version's** decorated name verbatim (content-corroborated `priorNameSnaps` overrides the suggestion). The decoration itself was born generations ago — the `fsPromises_` family entered the archive at the 2.1.133→136 hop — and prior reuse has correctly carried it since (zero diff noise).                                                                                                                       | `prior-name-snap.ts` A2; archive bisect |
-| 6   | The [below-floor guard](../034-eval-harness/VOCABULARY.md#below-floor-guard) uses raw `isBunToken`, which flags any trailing `_` — so it REFUSES to transfer these good decorated prior names each hop and sends the binding back to the LLM for a fresh draw. This is the concrete, named root of the guard's draw-dependent self-hop channel (034 sub-exp 8's `initialize_ → noop13`). The A2 snap channel bypasses the guard, which is why `initialize_` survives on close-matched hops but dies on guard-refused paths. | `prior-transfer.ts` `refuseBelowFloor`  |
+| 6   | The [below-floor guard](../../docs/vocabulary.md#below-floor-guard) uses raw `isBunToken`, which flags any trailing `_` — so it REFUSES to transfer these good decorated prior names each hop and sends the binding back to the LLM for a fresh draw. This is the concrete, named root of the guard's draw-dependent self-hop channel (034 sub-exp 8's `initialize_ → noop13`). The A2 snap channel bypasses the guard, which is why `initialize_` survives on close-matched hops but dies on guard-refused paths. | `prior-transfer.ts` `refuseBelowFloor`  |
 
 **Conclusion.** There is no missing retry: the model is re-asked twice
 with taken-name context and keeps returning the correct-but-taken stem,
@@ -87,7 +87,7 @@ choice posed:
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
 | 1   | None of the current passes builds them: `class-id-floor` copies outer names verbatim, the split namer and grammar tiers never touch module vars, and no cached LLM response contains any of the names.                                                                                                                                                                                                                                                                | code + llm-cache greps                          |
 | 2   | All three true fossils exist in the EARLIEST archived version (2.1.69) — the producer predates the archive (an early-walk LLM draw or a since-deleted heuristic). They are inheritance riders, not products of current code.                                                                                                                                                                                                                                          | archive bisect                                  |
-| 3   | This run's [guard](../034-eval-harness/VOCABULARY.md#below-floor-guard) REFUSED them everywhere instrumented: the trail shows exact-match votes carrying `do7Function`/`T7Class`/… and `binding-cascade`/`module-vote`/`module-pin` all abstaining `below-floor-prior-name`. Yet the names are in the output — some pass applied them OFF the record.                                                                                                                 | probe trails                                    |
+| 3   | This run's [guard](../../docs/vocabulary.md#below-floor-guard) REFUSED them everywhere instrumented: the trail shows exact-match votes carrying `do7Function`/`T7Class`/… and `binding-cascade`/`module-vote`/`module-pin` all abstaining `below-floor-prior-name`. Yet the names are in the output — some pass applied them OFF the record.                                                                                                                 | probe trails                                    |
 | 4   | The unguarded door: the **reconcile asymmetric tier**. Its local `isMinifiedName` gate clears any name with a 3-letter lowercase run — `do7Function` ("unction"), `T7Class` ("lass") pass as "deliberate" — so the fossil re-transfers onto the minted fresh binding every hop. Reconcile and the floor passes were the only naming passes NOT recording to the strategy trail, which is exactly why the earlier classification read "never entered any naming path". | `diff-reconcile.ts` `isMinifiedName`; trail gap |
 | 5   | Blocking the restore alone would be strictly WORSE: the fresh minified names here (`iIn`, `ACc`, `nng`, `Val` — no digits) are invisible to `isBunToken`, so the binding would keep a raw mint that neither census nor sweep can even see.                                                                                                                                                                                                                            | classifier probe                                |
 | 6   | `h1Regex` is not a fossil — it is the LLM's name for the `<h1>` regex (`titleRegex, h1Regex` siblings). Census false positive, same class as `w3c`. The real census dump also surfaced `k8sNamespaces`, `b64Flag`, `u2fModule`, `X509CertificateClass`, `it2ExecutablePath` (iTerm2), `v1PluginData`, `x0Coord` as false positives, and `h06Result`, `j3lResult`, `p1tComponent`-shaped fossils the first regex missed.                                               | census dump on reference 216                    |
@@ -99,7 +99,7 @@ passes involved. Build (branch `exp035-c-reconcile-gate`, commits
 e447ad6 + 27bf52b):
 
 - **Sweep the fossils instead of blocking the restore**: `isHalfMintHead`
-  (evidenced stem shapes only) makes them [coverage-sweep](../034-eval-harness/VOCABULARY.md#naming-floor--below-floor)
+  (evidenced stem shapes only) makes them [coverage-sweep](../../docs/vocabulary.md#naming-floor--below-floor)
   targets — the reconcile still restores (zero mid-run noise), then the
   deferred sweep LLM-names them once (cache-pinned); the good name
   transfers normally on later hops. One healing hop, then stable;
@@ -114,7 +114,7 @@ e447ad6 + 27bf52b):
   data feed task D's terminal-state ledger needs.
 
 **Probe numbers** (216, same-session A/B vs main control, shared cache;
-[evidence page](pages/probe-c216b-report.html)). The first probe's trail
+evidence page (removed; `git show 6c4b4d13f:experiments/035-naming-state/pages/probe-c216b-report.html`)). The first probe's trail
 caught two follow-up defects the ground truth demanded fixing (commit
 c4a5c28): reconcile-descriptive was restoring fossils OVER good fresh
 LLM names (all 4: `isValidRef→do7Function`, `InputInstance→T7Class`, …),
@@ -126,7 +126,7 @@ which would re-flag and re-roll every hop. Final leg with both gates:
 | census total (fixed meter) | 33             | **23**                                                  | −30%; every survivor is a named family                                                                                 |
 | half-mints in census       | 16             | **5**                                                   | the 5 = refused stem echoes, honest rows                                                                               |
 | fossil names in output     | all present    | **0** (h1Regex correctly kept)                          | descriptive fresh names survive                                                                                        |
-| noiseLn                    | 8,133          | 10,024                                                  | +1.9k one-time [healing](../034-eval-harness/VOCABULARY.md#healing-hop) (16 renamed bindings' echoes vs archive prior) |
+| noiseLn                    | 8,133          | 10,024                                                  | +1.9k one-time [healing](../../docs/vocabulary.md#healing-hop) (16 renamed bindings' echoes vs archive prior) |
 | novel / realLn             | 986 / 122,066  | **986 / 122,066**                                       | byte-frozen ✓                                                                                                          |
 | gates in funnel            | —              | 4 half-mint-restore skips, 5 still-below-floor refusals | working as designed                                                                                                    |
 | boots                      | —              | `--version` + live `-p` ✓                               |                                                                                                                        |
@@ -158,7 +158,7 @@ the table (text + HTML, totals-first).
 
 **Validation — LANDED (merged after this probe).** 216 probe against
 the new `c-fossil-sweep-rebased` prior
-([evidence page](pages/probe-d216-report.html)): census total 21,
+(evidence page (removed; `git show 6c4b4d13f:experiments/035-naming-state/pages/probe-d216-report.html`)): census total 21,
 `mintedAccounted` **21**, `mintedUnaccounted` **0** — bookkeeping
 complete on the first validation run; the done-condition ("classifier
 redundant as a meter") is met. `namedByTier` spans every pass:

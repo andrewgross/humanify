@@ -169,11 +169,25 @@ pub fn worktree_sources(root: &Path) -> Result<Vec<Source>, String> {
 /// no worktree, no checkout. Sorted like [`worktree_sources`].
 pub fn git_sources(root: &Path, rev: &str) -> Result<Vec<Source>, String> {
     let listing = crate::proc::git(root, &["ls-tree", "-r", "--name-only", rev, "--", "crates"])?;
-    let rels: Vec<&str> = listing
+    let rels: Vec<String> = listing
         .lines()
         .filter(|p| p.ends_with(".rs"))
         .filter(|p| !p.split('/').any(skipped_dir))
+        .map(str::to_string)
         .collect();
+    let texts = git_blobs(root, rev, &rels)?;
+    let mut out: Vec<Source> = rels
+        .into_iter()
+        .zip(texts)
+        .map(|(rel, text)| Source { rel, text })
+        .collect();
+    out.sort_by(|a, b| a.rel.cmp(&b.rel));
+    Ok(out)
+}
+
+/// The text of each of `rels` at git revision `rev`, in order, read with
+/// one `git cat-file --batch`.
+pub fn git_blobs(root: &Path, rev: &str, rels: &[String]) -> Result<Vec<String>, String> {
     if rels.is_empty() {
         return Ok(Vec::new());
     }
@@ -191,17 +205,7 @@ pub fn git_sources(root: &Path, rev: &str) -> Result<Vec<Source>, String> {
             String::from_utf8_lossy(&done.stderr)
         ));
     }
-    let texts = split_batch(&done.stdout)?;
-    let mut out: Vec<Source> = rels
-        .iter()
-        .zip(texts)
-        .map(|(rel, text)| Source {
-            rel: (*rel).to_string(),
-            text,
-        })
-        .collect();
-    out.sort_by(|a, b| a.rel.cmp(&b.rel));
-    Ok(out)
+    split_batch(&done.stdout)
 }
 
 /// `git cat-file --batch` output: per object `<sha> blob <size>\n<bytes>\n`.

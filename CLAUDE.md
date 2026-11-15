@@ -8,15 +8,19 @@
 cargo dev check
 ```
 
-It runs eleven stages, cheapest first — shims, no-private-addresses,
+It runs twelve stages, cheapest first — shims, no-private-addresses,
 rust:fmt, rust:clippy, census:clones (ADVISORY), census:concurrency,
-census:slop (ADVISORY), rust:unit, rust:build, format-golden, e2e — and prints
-a summary saying which ran, which failed and which it never reached
-(fail-fast). The two ADVISORY stages print `REVIEW` (never FAIL): an automated
-mini code-review for Claude/agents to act on — `census:clones` by unifying the
-code or allowlisting the finding with a justification
-(`dev/census/clone-allowlist.json`), `census:slop` by reading why a crate's
-erosion or clone share rose against the merge-base. `census:concurrency` is
+census:slop (ADVISORY), census:comments (ADVISORY), rust:unit, rust:build,
+format-golden, e2e — and prints a summary saying which ran, which failed and
+which it never reached (fail-fast). The three ADVISORY stages print `REVIEW`
+(never FAIL): an automated mini code-review for Claude/agents to act on —
+`census:clones` by unifying the code or allowlisting the finding with a
+justification (`dev/census/clone-allowlist.json`), `census:slop` by reading
+why a crate's erosion or clone share rose against the merge-base,
+`census:comments` by rewriting each NEW comment line it lists (an experiment
+id, date or `finding #`; a file not in the tree; a never/must/do not with no
+`(enforced: <check>)` tag; a dead link in the kept docs; a Markdown file
+outside `dev/census/docs-allowlist.json`). `census:concurrency` is
 pass/fail: an unlisted concurrency site in `crates/` FAILS until it is
 confirmed (see Code style, "Concurrency"). All other stages are pass/fail.
 Nothing is outside it.
@@ -28,7 +32,7 @@ TypeScript / Python / bash harness (`npm run check`, `scripts/check.ts`,
 `experiments/lib/`, the 034 TS scorer, the 096 Python scorer) in harness
 lanes L1-L5 (exp195-exp199, exp203); tag `experiments-code-final` is the last
 tree that has the old harness and the old experiments' code. The old gate's
-13 stages map onto these 11 in `SUCCESSORS` (`gate/check.rs`).
+13 stages map onto these 12 in `SUCCESSORS` (`gate/check.rs`).
 
 **Setup, once per clone:**
 
@@ -45,8 +49,9 @@ runs the tests.
 `target/release/humanify-ag` — the one product command since exp186, with
 the offline index builder as its `index` subcommand: `humanify-ag index
 build --spec …`). The TypeScript pipeline (`src/`) was deleted at the
-cutover, 2026-09-26 — `docs/rust-port/19-cutover.md` is the ledger of what was
-deleted, moved or retired and why; tag `m4` is the last tree that has it. The
+cutover, 2026-09-26 — the ledger of what was deleted, moved or retired and
+why is `git show 6c4b4d13f:docs/rust-port/19-cutover.md`; tag `m4` is the last
+tree that has it. The
 only JavaScript left is `tools/webcrack-shim.ts`, which the binary runs (with
 `npx tsx`) to unpack webpack / browserify bundles, and node itself, which e2e
 uses to import every output. `package.json` holds exactly the shim's runtime.
@@ -106,6 +111,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo dev census clones [--loose]  # cross-function twins in crates/ vs dev/census/clone-allowlist.json
 cargo dev census concurrency       # concurrency sites in crates/ vs dev/census/concurrency-allowlist.json
 cargo dev census slop [--base REF] # per-crate erosion / clone share vs the merge-base
+cargo dev census comments [--all]  # comment and docs rules; --all lists every finding
 cargo test --workspace             # rust:unit
 cargo build --release --locked -p humanify-ag-cli   # rust:build
 cargo dev format-golden            # needs rust:build
@@ -251,7 +257,8 @@ What to do with a NOT NEUTRAL:
 
 The matcher preflight (the TS fingerprint matcher against real npm packages)
 is RETIRED with the TS matcher it tested; the Rust
-matcher's replacement is an open follow-up in `docs/rust-port/19-cutover.md`.
+matcher's replacement is an open follow-up
+(`git show 6c4b4d13f:docs/rust-port/19-cutover.md`).
 `--skip-preflight` is refused, naming why.
 
 There is no heap flag: the binary is not a Node process (`--heap-mb`, which

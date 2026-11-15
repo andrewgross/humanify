@@ -62,7 +62,7 @@
 >   `php3…php8` aliases matches the unmatched-removed list file-for-file).
 >   exp046 reached the right classification by the wrong reasoning.
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.
 

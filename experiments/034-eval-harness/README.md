@@ -25,7 +25,7 @@ self-hop halves, the refusals) still holds; file names in it are the old
 homes. CLAUDE.md "Validating cross-version changes" is the current entry
 point.
 
-Jargon: see [VOCABULARY.md](VOCABULARY.md).
+Jargon: see [VOCABULARY.md](../../docs/vocabulary.md).
 
 A repeatable scorecard for the deobfuscation pipeline on a fixed set of version
 transitions. Run it before merging anything you think moves the needle; compare

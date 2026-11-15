@@ -1,6 +1,6 @@
 # 048 — RESULTS (in progress)
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Totals first, every
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Totals first, every
 hop judged on its own, every number below marked **[cold]** or **[cache-pinned]**.
 
 ---

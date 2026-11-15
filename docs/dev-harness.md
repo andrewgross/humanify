@@ -220,7 +220,7 @@ crates/humanify-ag-testkit/      publish = false: the ONE stub LLM server + the 
 dev/                             committed harness DATA (moved, never edited by the move):
   eval/pairs.json  eval/noise-bands.json  eval/self-hop-reference.json  eval/goldens/*.txt
   eval/results/<label>/          (today experiments/034-eval-harness/results/)
-  library/corpora/*.json  library/bands.json  library/results/<label>/
+  library/corpora/*.json  library/bands.json  library/bun-dev-list.tsv  (library/results/<label>/: local, git-ignored)
   census/concurrency-allowlist.json  census/clone-allowlist.json
 tools/                           the SHIMS only: webcrack-shim.ts, the e2e boot probe, npm/Bun timing shims
 .cargo/config.toml               [alias] dev = "run --profile dev-harness --locked -p humanify-ag-dev --"

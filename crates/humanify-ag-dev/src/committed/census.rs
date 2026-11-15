@@ -1,14 +1,16 @@
 //! `dev/census/concurrency-allowlist.json`: every confirmed concurrency site
 //! with its documented pattern (docs/concurrency.md); and
 //! `dev/census/clone-allowlist.json`: every reviewed twin group of the clone
-//! census (`cargo dev census clones`) with its justification.
+//! census (`cargo dev census clones`) with its justification; and
+//! `dev/census/docs-allowlist.json`: the Markdown files the comment census
+//! allows.
 
 use std::path::Path;
 
 use serde::Deserialize;
 
 use super::{Loaded, load_json};
-use crate::paths::{CLONE_ALLOWLIST, CONCURRENCY_ALLOWLIST};
+use crate::paths::{CLONE_ALLOWLIST, CONCURRENCY_ALLOWLIST, DOCS_ALLOWLIST};
 
 /// The allowlist file.
 #[derive(Clone, Debug, Deserialize)]
@@ -71,4 +73,19 @@ pub struct CloneGroup {
 /// Load the clone allowlist of the tree at `root`.
 pub fn clone_allowlist(root: &Path) -> Result<Loaded<CloneAllowlist>, String> {
     load_json(&root.join(CLONE_ALLOWLIST))
+}
+
+/// The comment census's Markdown allowlist: glob patterns (`*` within a
+/// path segment, `**` across segments) of the `.md` files that may exist.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocsAllowlist {
+    #[serde(rename = "$comment")]
+    pub comment: String,
+    pub allowed: Vec<String>,
+}
+
+/// Load the Markdown allowlist of the tree at `root`.
+pub fn docs_allowlist(root: &Path) -> Result<Loaded<DocsAllowlist>, String> {
+    load_json(&root.join(DOCS_ALLOWLIST))
 }

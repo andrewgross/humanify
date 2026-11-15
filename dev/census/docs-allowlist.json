@@ -1,0 +1,10 @@
+{
+  "$comment": "The Markdown files that may exist in the tree (`cargo dev census comments`, rule C5, crates/humanify-ag-dev/src/census/comments.rs). Glob patterns: `*` matches within one path segment, `**` any number of segments. A new kind of Markdown file needs a pattern here, which a reviewer sees.",
+  "allowed": [
+    "README.md",
+    "CLAUDE.md",
+    "docs/**/*.md",
+    "**/README.md",
+    "test/**/*.md"
+  ]
+}

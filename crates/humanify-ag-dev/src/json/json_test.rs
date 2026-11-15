@@ -133,8 +133,8 @@ fn prettier_reflow_matches_recorded_prettier_output() {
     );
 }
 
-/// Every committed card, summary and JSON record under the two results
-/// trees round-trips byte for byte through one of the two spellings — the
+/// Every committed card, summary and JSON record under the eval results
+/// tree and the library label fixtures round-trips byte for byte through one of the two spellings — the
 /// harness can read every legacy label and write a file the TS / Python
 /// instruments would have written.
 #[test]
@@ -146,7 +146,7 @@ fn every_committed_results_json_round_trips_byte_for_byte() {
             "ls-files",
             "--",
             crate::paths::EVAL_RESULTS,
-            crate::paths::LIBRARY_RESULTS,
+            crate::paths::LIBRARY_LABEL_FIXTURES,
         ],
     )
     .expect("git ls-files");
@@ -186,5 +186,5 @@ fn every_committed_results_json_round_trips_byte_for_byte() {
             .collect::<Vec<_>>()
             .join("\n  ")
     );
-    assert!(total > 28_000, "the walk found only {total} files");
+    assert!(total > 400, "the walk found only {total} files");
 }

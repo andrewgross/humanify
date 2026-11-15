@@ -24,11 +24,11 @@
 >
 > **Do not write a line of pipeline code until Task 0 produces a number.**
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
+Jargon: [034 vocabulary](../../docs/vocabulary.md).
 **Read first, in order:** [`docs/measurement-pitfalls.md`](../../docs/measurement-pitfalls.md)
 (eleven rules), [`055/README.md`](../055-residual-recount/README.md) and the
 tables below, [`054/RESULTS.md`](../054-post-split-reconcile/RESULTS.md) for how
-the split emits aliases and exports, [`docs/matching-cascades.md`](../../docs/matching-cascades.md)
+the split emits aliases and exports, `docs/matching-cascades.md` (removed; `git show 6c4b4d13f:docs/matching-cascades.md`)
 section D for `buildNsVars`.
 
 ---

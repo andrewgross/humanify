@@ -1,6 +1,6 @@
 # 044 — Task A: import-alias churn, sized correctly the second time
 
-Brief: [README.md](README.md). Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
+Brief: [README.md](README.md). Jargon: [034 vocabulary](../../docs/vocabulary.md).
 
 **Status: Task A COMPLETE, damage measured. No `src/` change yet. The naive
 reservation would rename ~85 stable bindings per hop (including `logger`, 517+

@@ -1,4 +1,4 @@
-# Virtual workspace manifest — docs/rust-port/05-rust-toolchain.md §1.
+# Virtual workspace manifest.
 # Four pipeline crates since the TS-parity retirement (2026-09-28): the dump
 # differ (humanify-parity) compared TS-side artifact dumps and then,
 # post-cutover, nothing — its only caller was the deleted rust:parity stage.
@@ -103,8 +103,7 @@ await_holding_lock = "deny"
 await_holding_refcell_ref = "deny"
 await_holding_invalid_type = "deny"
 
-# Release ships without symbols; `profiling` carries them (05 §6 wins over
-# 08 §1 — decided 2026-09-19, see docs/rust-port/00-control.md).
+# Release ships without symbols; `profiling` carries them.
 [profile.release]
 debug = false
 lto = "thin"

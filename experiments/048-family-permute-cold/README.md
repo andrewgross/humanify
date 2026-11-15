@@ -30,7 +30,7 @@
 > band is likewise ~4× wider than recorded (+804). `novel` and `realLn` held
 > EXACTLY on every hop, so those guards remain trustworthy.
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.
 
@@ -67,7 +67,7 @@ and stop.
 
 ### What a family bucket is, and what rotates
 
-Several top-level statements share one [statement hash](../034-eval-harness/VOCABULARY.md#family-bucket)
+Several top-level statements share one [statement hash](../../docs/vocabulary.md#family-bucket)
 — 16 identical identity functions, 536 `var a, b, c;` lists. The hash proves
 there are N members on each side of a release; it says **nothing about which
 corresponds to which**. The matcher picks a pairing; next release it picks a

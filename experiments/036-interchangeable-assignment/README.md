@@ -44,7 +44,7 @@
 >
 > </details>
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 research-log entries read _Idea → Evidence (table + linked page) →
 Conclusion_; outcomes are **landed** or **failed** with numbers;
 totals-first tables; ceilings measured before builds.
@@ -64,7 +64,7 @@ Of ~1,180 diff-visible noise lines:
 
 The same phenomenon is the LAST structural self-hop channel: the duo
 re-judgment (exp035 task E follow-up) showed ~26 ln/hop of LLM re-draws
-for [family](../034-eval-harness/VOCABULARY.md#family-bucket) members
+for [family](../../docs/vocabulary.md#family-bucket) members
 whose prompts depend on mutable context (`callbackRef` ×5 bindings, the
 noop family) — main's byte-identical self-hop currently rests on CACHE
 PINS for exactly this class, not on determinism.
@@ -81,7 +81,7 @@ Concrete faces from the 215→216 diff (top flips):
 **The key reframe.** For PROVABLY-interchangeable members, any
 consistent assignment is equally correct — the members are semantically
 indistinguishable, so "wrong pairing" is unobservable. The goal is
-**stability, not identification**. [Precision over recall](../034-eval-harness/VOCABULARY.md#ceiling)
+**stability, not identification**. [Precision over recall](../../docs/vocabulary.md#ceiling)
 still gates WHO enters the pool (only proven-interchangeable members;
 distinguishable members must keep going through evidence tiers), but
 INSIDE a certified pool the assignment just has to be deterministic and
@@ -121,7 +121,7 @@ gate.
 ### 2. Content-unchanged family members skip the LLM (self-hop closer)
 
 The 26 ln/hop channel: a family member whose OWN statement is a
-[twin](../034-eval-harness/VOCABULARY.md#twin) and whose slot has a
+[twin](../../docs/vocabulary.md#twin) and whose slot has a
 prior name should settle deterministically with that name instead of
 re-reaching the LLM with a context-dependent prompt. This is fork
 option (b) resurrected, but scoped to content-unchanged members —
@@ -293,7 +293,7 @@ re-parse / pure-rename-validate / re-generate harness):
 
 1. Re-parse the shipped output + the prior (reconcile already does
    this).
-2. Group top-level statements by [statement hash](../034-eval-harness/VOCABULARY.md#statement-hash).
+2. Group top-level statements by [statement hash](../../docs/vocabulary.md#statement-hash).
    Same hash = identical structure INCLUDING literals (the hash masks
    only identifiers/properties, keeps literals) — so same-hash members
    differ ONLY in bound names and are provably interchangeable. This is
@@ -365,7 +365,7 @@ recoverability.
 **(Superseded) earlier over-conclusion — the residual as a floor.** An
 optimal assignment _exists_ but distinguishing structurally-identical
 members needs caller-context evidence
-([isomorphic on the residual](../034-eval-harness/VOCABULARY.md#ceiling):
+([isomorphic on the residual](../../docs/vocabulary.md#ceiling):
 identity-recovery 10/1,420; 8a adjacency shuffled). Task C (pre-render
 anchors, MERGED) captured what the caller graph _could_ distinguish.
 The post-render diff DOES carry usage-context evidence v1 threw away
@@ -409,7 +409,7 @@ self-hop).
 half of the failed leftover-ordinal tier — pool extraction (ambiguous
 priors grouped by exact candidate set) plus the gates (equal counts,
 every candidate unmatched, ONE non-null
-[evidence key](../034-eval-harness/VOCABULARY.md#evidence-key) across
+[evidence key](../../docs/vocabulary.md#evidence-key) across
 BOTH sides) — as a READ-ONLY certificate; it assigns nothing. Sized by
 the original tier's probe: **207 pools / 1,025 of 1,420 ambiguous
 priors on 216 (72%)**. Tests include the reparse-stability proof the
