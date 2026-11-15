@@ -649,3 +649,14 @@ fn two_rows_naming_one_binding_differently_settle_on_the_first() {
         assert!(text.contains("var alpha = 1;"), "first wins: {text}");
     });
 }
+
+#[test]
+fn a_skip_serializes_as_its_diagnostic_spelling() {
+    use crate::naming::restore::SiteSkip;
+    for skip in [SiteSkip::Renamed, SiteSkip::Conflict, SiteSkip::Failed] {
+        assert_eq!(
+            serde_json::to_string(&skip).unwrap(),
+            format!("\"{}\"", skip.as_str())
+        );
+    }
+}

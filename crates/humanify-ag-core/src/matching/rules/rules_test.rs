@@ -75,7 +75,6 @@ fn the_cascade_executes_the_listed_resolve_rungs_in_the_listed_order() {
             "identity",
             "memberKey",
             "enclosingStatement",
-            "depthGate",
             "calleeShapes",
             "callerShapes",
             "calleeHashes",

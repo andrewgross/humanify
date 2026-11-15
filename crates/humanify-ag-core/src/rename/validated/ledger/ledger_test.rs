@@ -391,3 +391,20 @@ fn the_replay_reproduces_every_rendered_form() {
         assert_eq!(replayed, rendered, "{source}");
     }
 }
+
+#[test]
+fn an_occurrence_is_two_or_three_elements_and_reads_back() {
+    use crate::rename::validated::ledger::Occurrence;
+    let plain: Occurrence = [3, 5].into();
+    let printed = Occurrence {
+        start: 3,
+        end: 5,
+        text: Some("x".into()),
+    };
+    assert_eq!(serde_json::to_string(&plain).unwrap(), "[3,5]");
+    assert_eq!(serde_json::to_string(&printed).unwrap(), "[3,5,\"x\"]");
+    for o in [plain, printed] {
+        let back: Occurrence = serde_json::from_str(&serde_json::to_string(&o).unwrap()).unwrap();
+        assert_eq!(back, o);
+    }
+}

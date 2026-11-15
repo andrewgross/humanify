@@ -15,7 +15,7 @@
 //!   edges: the index cannot know who calls a library in any given app.
 //!   A `/4` index answers INSIDE and OUT-OF from its edge table (a
 //!   callee is its owner and its print: the index's callee need not be a
-//!   row of its own); a `/3` index records none.
+//!   row of its own); an index built without edges records none.
 //!
 //! Which side a profile enumerates is the profile's choice, not the
 //! store's: the cross-version cascade walks the PRIOR's entries in entry
@@ -210,7 +210,7 @@ impl ReferenceStore for LibraryIndex {
     /// INTO (and every edge) is refused: an index never holds how an app
     /// calls a library. INSIDE (callees of the piece's own package) and
     /// OUT-OF (callees of another package) come from a `/4` index's edge
-    /// table; a `/3` index has none, so a rule reading them gets
+    /// table; an index without edges has none, so a rule reading them gets
     /// [`StoreEdges::NotRecorded`] — absence, never evidence against.
     fn edges(&self, piece: UnitHit, read: EdgeRead) -> Result<StoreEdges<EdgeCallee>, Refused> {
         match read {

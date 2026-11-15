@@ -42,7 +42,8 @@ pub const RENAME_LEDGER_VERSION: u32 = 2;
 /// One written occurrence of a binding: `[start, end)` and, when the
 /// render prints something other than the entry's final name there, that
 /// text. Serialized `[start, end]` or `[start, end, text]`.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(into = "OccurrenceRepr", from = "OccurrenceRepr")]
 pub struct Occurrence {
     pub start: u32,
     pub end: u32,
@@ -66,29 +67,25 @@ enum OccurrenceRepr {
     Printed(u32, u32, String),
 }
 
-impl serde::Serialize for Occurrence {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        match &self.text {
-            None => OccurrenceRepr::Plain([self.start, self.end]).serialize(s),
-            Some(t) => OccurrenceRepr::Printed(self.start, self.end, t.clone()).serialize(s),
+impl From<Occurrence> for OccurrenceRepr {
+    fn from(o: Occurrence) -> Self {
+        match o.text {
+            None => OccurrenceRepr::Plain([o.start, o.end]),
+            Some(t) => OccurrenceRepr::Printed(o.start, o.end, t),
         }
     }
 }
 
-impl<'de> serde::Deserialize<'de> for Occurrence {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        Ok(match OccurrenceRepr::deserialize(d)? {
-            OccurrenceRepr::Plain([start, end]) => Occurrence {
-                start,
-                end,
-                text: None,
-            },
+impl From<OccurrenceRepr> for Occurrence {
+    fn from(r: OccurrenceRepr) -> Self {
+        match r {
+            OccurrenceRepr::Plain(span) => span.into(),
             OccurrenceRepr::Printed(start, end, text) => Occurrence {
                 start,
                 end,
                 text: Some(text),
             },
-        })
+        }
     }
 }
 

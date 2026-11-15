@@ -306,7 +306,6 @@ pub mod cross {
         Stage::Resolve,
         &[StatementContext, Position, Claims],
     );
-    pub const DEPTH_GATE: RuleSpec = RuleSpec::new("depthGate", Stage::Resolve, &[]);
     pub const CALLEE_SHAPES: RuleSpec =
         RuleSpec::new("calleeShapes", Stage::Resolve, &[GraphAll, Features]);
     pub const CALLER_SHAPES: RuleSpec =
@@ -356,11 +355,10 @@ pub mod cross {
 /// The resolve rungs' specs, in execution order (`matching::cascade`'s
 /// `RESOLVE_RUNGS` pairs each with its code, and a test holds the two in
 /// step).
-pub const RESOLVE: [RuleSpec; 8] = [
+pub const RESOLVE: [RuleSpec; 7] = [
     cross::IDENTITY,
     cross::MEMBER_KEY,
     cross::ENCLOSING_STATEMENT,
-    cross::DEPTH_GATE,
     cross::CALLEE_SHAPES,
     cross::CALLER_SHAPES,
     cross::CALLEE_HASHES,
@@ -380,7 +378,6 @@ pub fn cross_version() -> RuleList {
             cross::IDENTITY,
             cross::MEMBER_KEY,
             cross::ENCLOSING_STATEMENT,
-            cross::DEPTH_GATE,
             cross::CALLEE_SHAPES,
             cross::CALLER_SHAPES,
             cross::CALLEE_HASHES,

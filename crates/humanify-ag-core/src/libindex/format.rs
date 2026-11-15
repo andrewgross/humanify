@@ -20,10 +20,6 @@ use crate::hash::forms::{LIBRARY_LITERALS_VERSION, LIBRARY_UNITS, VENDOR_CONTENT
 /// `callee-prints.<slice>.bin` — exp151 + exp155).
 pub const INDEX_FORMAT: &str = "humanify-library-index/4";
 
-/// The one older format this binary still reads: the same tables without
-/// edges, so its store answers every edge read `NotRecorded`.
-pub const INDEX_FORMAT_NO_EDGES: &str = "humanify-library-index/3";
-
 /// The edge ROWS' version (exp151, unchanged in exp155): per unit row, the
 /// WHOLE prints of the statement units its statement references in the
 /// bundle's reference graph (`graph::references`, factory bodies cut),
@@ -311,8 +307,7 @@ pub struct FingerprintVersions {
     pub module: String,
     pub literals: String,
     pub units: String,
-    /// The edge rows ([`LIBRARY_EDGES_VERSION`]); absent in a
-    /// [`INDEX_FORMAT_NO_EDGES`] index, which has none.
+    /// The edge rows ([`LIBRARY_EDGES_VERSION`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edges: Option<String>,
     /// The unit names table (exp159, [`NAMES_VERSION`]); absent in an
@@ -347,14 +342,8 @@ fn readable_stamps(format: &str) -> Option<BTreeMap<&'static str, String>> {
     .into_iter()
     .collect();
     out.insert("names", f.names.expect("this build stamps names"));
-    match format {
-        INDEX_FORMAT => {
-            out.insert("edges", f.edges.expect("this build stamps edges"));
-            Some(out)
-        }
-        INDEX_FORMAT_NO_EDGES => Some(out),
-        _ => None,
-    }
+    out.insert("edges", f.edges.expect("this build stamps edges"));
+    (format == INDEX_FORMAT).then_some(out)
 }
 
 /// The stamps an index may leave out (this build's format version only):
@@ -368,7 +357,7 @@ fn stamp_mismatches(format: &str, theirs: &BTreeMap<String, String>) -> Vec<Stri
     let mut wrong = Vec::new();
     let ours = readable_stamps(format).unwrap_or_else(|| {
         wrong.push(format!(
-            "format {format} (this binary reads {INDEX_FORMAT} and {INDEX_FORMAT_NO_EDGES})"
+            "format {format} (this binary reads {INDEX_FORMAT})"
         ));
         readable_stamps(INDEX_FORMAT).expect("this build's format")
     });
@@ -528,11 +517,6 @@ impl Manifest {
         } else {
             Err(format!("built with {}; {REBUILD}", wrong.join(", ")))
         }
-    }
-
-    /// Does the index hold edge tables (format [`INDEX_FORMAT`])?
-    pub fn has_edges(&self) -> bool {
-        self.format == INDEX_FORMAT
     }
 
     /// The index's recipes in manifest order, each with its

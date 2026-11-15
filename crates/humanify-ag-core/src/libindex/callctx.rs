@@ -228,7 +228,7 @@ impl LibraryIndex {
     /// The callees the index records for `hits` (rows holding one print)
     /// whose owner `accept` takes: the union of their INSIDE and OUT-OF
     /// edges, as sorted print keys. None when the index records no edges
-    /// (`/3`) or `accept` takes no hit.
+    /// or `accept` takes no hit.
     pub fn hit_callees(&self, hits: &[UnitHit], accept: &dyn Fn(u32) -> bool) -> Option<Vec<u64>> {
         let mut keys: BTreeSet<u64> = BTreeSet::new();
         let mut any = false;

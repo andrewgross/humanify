@@ -306,23 +306,15 @@ fn an_older_manifest_is_refused_by_its_stamps_not_a_parse_error() {
 }
 
 #[test]
-fn a_format_3_manifest_is_read_without_edges_and_only_without() {
-    use super::format::INDEX_FORMAT_NO_EDGES;
+fn a_format_3_manifest_is_refused() {
     let mut old = manifest_for(&[BUN]);
-    old.format = INDEX_FORMAT_NO_EDGES.into();
+    old.format = "humanify-library-index/3".into();
     old.fingerprints.edges = None;
-    assert_eq!(old.check_compatible(), Ok(()));
-    assert!(!old.has_edges());
-    let text = serde_json::to_string(&old).unwrap();
+    let err = old.check_compatible().expect_err("a /3 index is refused");
     assert!(
-        !text.contains("edges"),
-        "a /3 manifest spells no edges stamp"
+        err.contains("this binary reads humanify-library-index/4"),
+        "{err}"
     );
-    assert_eq!(super::format::check_manifest_stamps(&text), Ok(()));
-    old.fingerprints.edges = fingerprint_versions().edges;
-    let err = old
-        .check_compatible()
-        .expect_err("a /3 index has no edge rows");
-    assert!(err.contains("edges"), "{err}");
-    assert!(manifest_for(&[BUN]).has_edges());
+    let text = serde_json::to_string(&old).unwrap();
+    assert!(super::format::check_manifest_stamps(&text).is_err());
 }

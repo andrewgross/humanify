@@ -369,12 +369,6 @@ pub struct StatementTwinStats {
 #[derive(Debug, Default)]
 pub struct TwinGateOutput {
     pub stats: StatementTwinStats,
-    /// The stats bag AS FLUSHED — the TS flushes the gates' dump BEFORE
-    /// `stats.cascadeConflicts` is assigned (statement-twin.ts :1336 flush,
-    /// :1338 assign), so the dump's bag carries the pre-assignment
-    /// `cascadeConflicts` while `stats` (and the debug log) carry the real
-    /// count. The dump reads this snapshot, byte-for-byte.
-    pub dump_stats: StatementTwinStats,
     /// Every proposal pair's gated row, in emission order (unique tier,
     /// then module tier, then bucket tier).
     pub gated: Vec<GatedTwin>,
@@ -1650,7 +1644,6 @@ pub fn compute_gated_statement_twins(
     };
     if stats.fresh_statements == 0 || stats.prior_statements == 0 {
         return Ok(TwinGateOutput {
-            dump_stats: stats.clone(),
             stats,
             ..TwinGateOutput::default()
         });
@@ -1742,12 +1735,7 @@ pub fn compute_gated_statement_twins(
 
     let OwnerContext { conflicts, .. } = owner_ctx;
     stats.cascade_conflicts = conflicts.len();
-    // FIXED (2026-09-20, alongside the TS): the TS's flush used to precede
-    // the assignment — the dump carried a pre-assignment 0 — and the port
-    // reproduced it; Andrew's call is fix-not-reproduce, so both sides now
-    // dump the TRUE count and the snapshot is gone.
     Ok(TwinGateOutput {
-        dump_stats: stats.clone(),
         stats,
         conflicts,
         ..output
@@ -1765,9 +1753,8 @@ pub fn compute_gated_statement_twins(
 /// fresh span (the writer's `spanKeyOrder`; the emission order breaks ties —
 /// stable sort), and NO `conflicts` key ON THE ROWS (the TS writer never
 /// writes one there — the conflicts array is a section-level field the
-/// parity engine compares by length). The stats bag is the FLUSH-TIME
-/// snapshot ([`TwinGateOutput::dump_stats`] — the TS assigns
-/// `stats.cascadeConflicts` only after the flush). Spans are raw
+/// parity engine compares by length). The stats bag is
+/// [`TwinGateOutput::stats`]. Spans are raw
 /// UTF-8 byte offsets (oxc; the TS dump converts its UTF-16 spans at write
 /// time).
 pub fn gate_dump(
@@ -1806,7 +1793,7 @@ pub fn gate_dump(
             row["fresh"]["end"].as_u64().unwrap_or(u64::MAX),
         )
     });
-    let stats = &output.dump_stats;
+    let stats = &output.stats;
     let values = [
         stats.fresh_statements,
         stats.prior_statements,

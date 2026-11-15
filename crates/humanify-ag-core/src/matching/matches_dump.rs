@@ -135,14 +135,14 @@ pub fn match_sections(
             );
             pairs.extend(b_pairs);
             rejections.extend(b_rejections);
-            binding_result.resolution_stats.to_ts_value()
+            json!(binding_result.resolution_stats)
         }
         None => Value::Null,
     };
     let pair_count = pairs.len();
     let matches = json!({
         "schemaVersion": 1,
-        "resolutionStats": function_result.resolution_stats.to_ts_value(),
+        "resolutionStats": function_result.resolution_stats,
         "bindingResolutionStats": binding_stats,
         "pairs": pairs,
         "rejections": rejections,

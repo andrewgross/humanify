@@ -57,13 +57,13 @@ pub struct LibraryIndex {
     terser_verdict: std::sync::OnceLock<(bool, f64)>,
     literals: LiteralTable,
     /// The edge tables (format `/4`), parallel to the unit tables (chosen
-    /// slice first, then the terser-built ones); None for a `/3` index,
-    /// which records no edges.
+    /// slice first, then the terser-built ones); None for an index built
+    /// from rows without edges (a tests' constructor).
     edges: Option<Vec<EdgeTable>>,
     /// The flat callee-print tables (exp155, `edges/2`), parallel to
     /// `edges`: every callee print any edge row records — INSIDE entries
     /// under the row's owner, OUT-OF under the callee's own — including
-    /// prints with no unit row of their own. None for a `/3` index.
+    /// prints with no unit row of their own. None when `edges` is.
     callee_prints: Option<Vec<CalleePrintTable>>,
     /// The names tables (exp159, `names/1`), parallel to the unit tables
     /// (chosen slice first, then the terser-built ones), each Some when
@@ -315,14 +315,8 @@ impl LibraryIndex {
             let file = table::callee_prints_file(slice);
             CalleePrintTable::open(open(&file)?).map_err(|e| format!("{file}: {e}"))
         };
-        let mut edges = manifest
-            .has_edges()
-            .then(|| open_edges(&slice).map(|t| vec![t]))
-            .transpose()?;
-        let mut callee_prints = manifest
-            .has_edges()
-            .then(|| open_callee_prints(&slice).map(|t| vec![t]))
-            .transpose()?;
+        let mut edges = Some(vec![open_edges(&slice)?]);
+        let mut callee_prints = Some(vec![open_callee_prints(&slice)?]);
         // exp159: the names tables, parallel to the unit tables — a slice's
         // is read when the manifest lists its `names.<slice>.bin` (the
         // presence signal; the manifest's names STAMP is the format
@@ -445,9 +439,9 @@ impl LibraryIndex {
     }
 
     /// Does the index hold the flat callee-print table (`edges/2`, exp155)
-    /// to answer [`LibraryIndex::callee_recorders`] with? False for a `/3`
-    /// index — whose silence is no evidence, so a caller gating on this
-    /// must stay silent in turn.
+    /// to answer [`LibraryIndex::callee_recorders`] with? False for an
+    /// index without edges — whose silence is no evidence, so a caller
+    /// gating on this must stay silent in turn.
     pub fn has_callee_prints(&self) -> bool {
         self.callee_prints.is_some()
     }
@@ -484,7 +478,7 @@ impl LibraryIndex {
     }
 
     /// The callees a unit hit's row records, sorted by (owner, print key);
-    /// None when the index records no edges (`/3`).
+    /// None when the index records no edges.
     pub fn row_callees(&self, hit: UnitHit) -> Option<Vec<EdgeCallee>> {
         let tables = self.edges.as_ref()?;
         Some(
