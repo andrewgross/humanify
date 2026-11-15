@@ -163,6 +163,11 @@ pub struct ConfigFileRecord {
 pub struct Io {
     pub input: String,
     pub output_dir: String,
+    /// The process's working directory (`crate::env::working_dir`), read
+    /// by [`Config::from_process`]; None in a config built without a
+    /// process. Not part of the run's recorded settings.
+    #[serde(skip)]
+    pub working_dir: Option<std::path::PathBuf>,
 }
 
 /// The model endpoint and the request budget.
@@ -820,9 +825,13 @@ impl Config {
             Some(path) => Some(ConfigFile::read(path)?),
             None => None,
         };
-        Config::build(input, opts, file.as_ref(), |name| {
+        let mut config = Config::build(input, opts, file.as_ref(), |name| {
             crate::env::get(name, None)
-        })
+        })?;
+        let dir = crate::env::working_dir()
+            .map_err(|e| vec![format!("cannot read the working directory: {e}")])?;
+        config.io.working_dir = Some(dir);
+        Ok(config)
     }
 
     /// Resolve and validate everything — the flags, the checked file, the
@@ -852,6 +861,7 @@ impl Config {
             io: Io {
                 input: input.to_string(),
                 output_dir: r.text("io.output_dir").expect("defaulted"),
+                working_dir: None,
             },
             llm: Config::llm(&r, ApiKey(api_key.expect("checked above"))),
             matching: Matching::of(

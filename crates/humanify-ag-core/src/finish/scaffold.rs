@@ -259,11 +259,12 @@ pub fn detect_external_packages(dir: &Path) -> Result<Vec<String>, String> {
 }
 
 /// The `version` of `pkg` installed nearest `from_dir` (Node's walk up the
-/// `node_modules` directories), or None.
+/// `node_modules` directories from `path.resolve(from_dir)` in
+/// `working_dir`), or None.
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
-fn installed_version(pkg: &str, from_dir: &Path) -> Option<String> {
-    let mut dir = node_path_resolve(from_dir);
+fn installed_version(pkg: &str, from_dir: &Path, working_dir: &Path) -> Option<String> {
+    let mut dir = node_path_resolve(working_dir, from_dir);
     loop {
         let manifest = dir.join("node_modules").join(pkg).join("package.json");
         if let Ok(text) = fs::read_to_string(&manifest)
@@ -280,15 +281,16 @@ fn installed_version(pkg: &str, from_dir: &Path) -> Option<String> {
 }
 
 /// `resolveExternalVersions(externals, fromDir)`: package → range, in the
-/// externals' order.
+/// externals' order. A relative `from_dir` resolves against `working_dir`.
 pub fn resolve_external_versions(
     externals: &[String],
     from_dir: Option<&Path>,
+    working_dir: &Path,
 ) -> Vec<(String, String)> {
     externals
         .iter()
         .map(|name| {
-            let version = from_dir.and_then(|d| installed_version(name, d));
+            let version = from_dir.and_then(|d| installed_version(name, d, working_dir));
             (name.clone(), version.unwrap_or_else(|| "*".into()))
         })
         .collect()
@@ -384,7 +386,8 @@ bun {r} [arguments]
     )
 }
 
-/// `writeRunnableScaffold(outputDir, entryFile, externals, resolveFromDir)`.
+/// `writeRunnableScaffold(outputDir, entryFile, externals, resolveFromDir)`;
+/// a relative `resolve_from_dir` resolves against `working_dir`.
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
 pub fn write_runnable_scaffold(
@@ -392,8 +395,9 @@ pub fn write_runnable_scaffold(
     entry_file: &str,
     externals: &[String],
     resolve_from_dir: Option<&Path>,
+    working_dir: &Path,
 ) -> Result<(), String> {
-    let dependencies = resolve_external_versions(externals, resolve_from_dir);
+    let dependencies = resolve_external_versions(externals, resolve_from_dir, working_dir);
     let write = |name: &str, text: String| {
         let p = output_dir.join(name);
         fs::write(&p, text).map_err(|e| format!("write {}: {e}", p.display()))

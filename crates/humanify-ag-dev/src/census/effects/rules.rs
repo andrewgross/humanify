@@ -44,6 +44,11 @@ pub const PURE_CRATES: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// The pure crates whose migration is finished: an effect site or a
+/// `Result<_, String>` in one has no role it may be listed under, so it
+/// fails until it moves to the shell (or becomes a typed error).
+pub const STRICT_CRATES: &[&str] = &["crates/humanify-ag-model/"];
+
 /// The files whose effect sites may be `observation`s: the profiling
 /// clock, its sampler thread and its global recorder, which only feed the
 /// `--perf-trace` report.

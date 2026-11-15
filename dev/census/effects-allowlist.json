@@ -98,6 +98,12 @@
       "role": "shell"
     },
     {
+      "file": "crates/humanify-ag-cli/src/env.rs",
+      "scope": "working_dir",
+      "construct": "env",
+      "role": "shell"
+    },
+    {
       "file": "crates/humanify-ag-cli/src/failed_output.rs",
       "scope": "preserve_failed_output",
       "construct": "fs",
@@ -131,6 +137,12 @@
       "file": "crates/humanify-ag-cli/src/log.rs",
       "scope": "stdout_writer",
       "construct": "stdio",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-cli/src/log.rs",
+      "scope": "timestamp",
+      "construct": "clock",
       "role": "shell"
     },
     {
@@ -407,6 +419,12 @@
       "file": "crates/humanify-ag-cli/src/unified.rs",
       "scope": "run",
       "construct": "stdio",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-cli/src/unified.rs",
+      "scope": "RunReports::write_diagnostics",
+      "construct": "clock",
       "role": "shell"
     },
     {
@@ -2484,18 +2502,6 @@
       "scope": "RateLimited::take_window_place",
       "construct": "clock",
       "role": "shell"
-    },
-    {
-      "file": "crates/humanify-ag-model/src/js.rs",
-      "scope": "node_path_resolve",
-      "construct": "env",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-model/src/time.rs",
-      "scope": "iso_now",
-      "construct": "clock",
-      "role": "legacy"
     }
   ]
 }

@@ -129,7 +129,7 @@ fn truncate(text: &str, max_len: usize) -> String {
 /// (`toISOString().replace("T", " ").replace(/\..+/, "")`).
 fn timestamp() -> String {
     // Wall clock: log prose only — never a decision input (07 §11).
-    let iso = humanify_ag_model::time::iso_now();
+    let iso = humanify_ag_model::time::iso_from_system_time(std::time::SystemTime::now());
     format!("{} {}", &iso[..10], &iso[11..19])
 }
 

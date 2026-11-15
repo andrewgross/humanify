@@ -822,9 +822,5 @@ fn first_line(e: &str) -> String {
 
 /// `YYYY-MM-DDTHH:MM:SS.mmmZ` now (the sidecar's `completed`).
 pub fn now_iso() -> String {
-    let ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    humanify_ag_model::time::iso_from_unix_ms(ms)
+    humanify_ag_model::time::iso_from_system_time(std::time::SystemTime::now())
 }

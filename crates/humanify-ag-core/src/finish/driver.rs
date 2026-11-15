@@ -48,6 +48,9 @@ pub struct FinishInput<'a> {
     pub prior_version: Option<&'a Path>,
     /// The input bundle (its directory resolves installed versions).
     pub input_file: &'a Path,
+    /// The working directory the shell read: a relative `input_file`
+    /// resolves against it.
+    pub working_dir: &'a Path,
     pub switches: FinishSwitches,
     /// The run's resolved vendor bridges (finding #60): the vendor bodies'
     /// app-scope reads as (raw name → owner file + live accessor), which
@@ -321,7 +324,13 @@ pub fn finish_split_output(
         let externals = {
             let _ph = crate::profiling::phase("split:finish:scaffold");
             let externals = detect_external_packages(output_dir)?;
-            write_runnable_scaffold(output_dir, &entry, &externals, input.input_file.parent())?;
+            write_runnable_scaffold(
+                output_dir,
+                &entry,
+                &externals,
+                input.input_file.parent(),
+                input.working_dir,
+            )?;
             externals
         };
         if !input.embedded_files.is_empty() {

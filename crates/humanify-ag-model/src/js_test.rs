@@ -204,3 +204,40 @@ fn utf16_offsets_convert_byte_offsets_to_js_string_indexes() {
     let ascii = Utf16Offsets::new("abc");
     assert_eq!([ascii.at(0), ascii.at(3)], [0, 3]);
 }
+
+#[test]
+fn node_path_resolve_joins_the_given_working_directory() {
+    use crate::js::node_path_resolve as resolve;
+    use std::path::{Path, PathBuf};
+    let cwd = Path::new("/w/run");
+    assert_eq!(resolve(cwd, Path::new("a/b")), PathBuf::from("/w/run/a/b"));
+    assert_eq!(
+        resolve(cwd, Path::new("x/../a/./b/")),
+        PathBuf::from("/w/run/a/b")
+    );
+    assert_eq!(resolve(cwd, Path::new("../../..")), PathBuf::from("/"));
+    // An absolute path ignores the working directory.
+    assert_eq!(resolve(cwd, Path::new("/abs/../p")), PathBuf::from("/p"));
+    // `path.resolve("")` is the working directory (a bare file's dirname).
+    assert_eq!(resolve(cwd, Path::new("")), PathBuf::from("/w/run"));
+}
+
+#[test]
+fn array_index_keys_are_canonical_decimals_below_u32_max() {
+    use crate::js::array_index;
+    assert_eq!(array_index("0"), Some(0));
+    assert_eq!(array_index("42"), Some(42));
+    assert_eq!(array_index("4294967294"), Some(4_294_967_294));
+    for key in [
+        "",
+        "01",
+        "-1",
+        "1.0",
+        "a",
+        "4294967295",
+        "9999999999",
+        "12345678901",
+    ] {
+        assert_eq!(array_index(key), None, "{key:?}");
+    }
+}
