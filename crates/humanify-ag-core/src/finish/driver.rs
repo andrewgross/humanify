@@ -11,8 +11,6 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use humanify_ag_model::js::{JsValue, stringify};
-
 use crate::modules::vendor_names::BunModulesManifest;
 use crate::place::layout::{METADATA_DIR, split_tree_root_of};
 use crate::rename::eligibility::{Eligibility, NeverRename};
@@ -416,7 +414,8 @@ pub fn reconcile_post_split(
     let (mut ledger, eligible) = {
         let _ph = crate::profiling::phase("split:finish:reconcile-ledger");
         (
-            JsValue::parse(&read_utf8(&ledger_path)?)?,
+            serde_json::from_str::<crate::place::ledger::SplitLedger>(&read_utf8(&ledger_path)?)
+                .map_err(|e| format!("{}: {e}", ledger_path.display()))?,
             Eligibility::new(never_rename),
         )
     };
@@ -453,7 +452,7 @@ pub fn reconcile_post_split(
         for (file, text) in &result.changed {
             write_file(&output_dir.join(file), text)?;
         }
-        write_file(&ledger_path, &stringify(&ledger))?;
+        write_file(&ledger_path, &ledger.to_json())?;
     }
     let carry = {
         let _ph = crate::profiling::phase("split:finish:carry");
@@ -483,7 +482,7 @@ pub fn reconcile_post_split(
 /// shipped; abstentions are counted by reason.
 fn carry_into_bundle(
     output_dir: &Path,
-    ledger: &JsValue,
+    ledger: &crate::place::ledger::SplitLedger,
     renames: &[super::reconcile::PostSplitRename],
     layout: crate::toolchain::BundleLayout,
     report: &mut FinishReport,

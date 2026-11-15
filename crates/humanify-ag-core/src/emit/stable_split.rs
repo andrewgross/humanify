@@ -8,7 +8,6 @@
 //! `hashVersion` = the [`STATEMENT`] form's version); the TS-byte injection that
 //! bridged the migration ended at WP5.6e (00-control §3).
 
-use humanify_ag_model::js::{JsObject, JsValue};
 use oxc_allocator::Allocator;
 
 use crate::hash::forms::STATEMENT;
@@ -16,7 +15,7 @@ use crate::ingest::Ingest;
 use crate::place::assign::namer::{SplitNamer, TreeReviser};
 use crate::place::declared::declared_names;
 use crate::place::input::{SplitInput, split_input_with_original_bundle};
-use crate::place::ledger::{FossilLedgerModule, StableSplitLedger};
+use crate::place::ledger::{SplitLedger, StableSplitLedger};
 use crate::place::method::{MarkerOffer, SplitChoice, bundle_marker_coverage, choose_split_method};
 use crate::place::placement_dump::{Placed, PlacementGate, Regime, assign_regime};
 use crate::place::tiers::{PlacementSwitches, PriorCarry, TierStats};
@@ -164,9 +163,8 @@ pub struct SplitOutcome {
     pub runnable: Option<Vec<String>>,
     /// The runnable emit's decline reason.
     pub declined: Option<String>,
-    /// The persisted ledger, in the TS's key order (`buildLedger`, then
-    /// `fossilModules`, then the runnable emit's `aliases` / layout).
-    pub ledger: JsValue,
+    /// The persisted ledger.
+    pub ledger: SplitLedger,
     pub stats: SplitStats,
     /// The placement regime's summary line.
     pub summary: String,
@@ -185,43 +183,6 @@ pub struct SplitOutcome {
     pub vendor_bridges: Vec<VendorBridge>,
 }
 
-fn str_list(items: &[String]) -> JsValue {
-    JsValue::Array(items.iter().map(|s| JsValue::str(s.as_str())).collect())
-}
-
-fn opt_str_list(items: &[Option<String>]) -> JsValue {
-    JsValue::Array(
-        items
-            .iter()
-            .map(|s| s.as_deref().map_or(JsValue::Null, JsValue::str))
-            .collect(),
-    )
-}
-
-fn fossil_module_js(m: &FossilLedgerModule) -> JsValue {
-    let mut o = JsObject::new();
-    o.insert("file", JsValue::str(m.file.as_str()));
-    o.insert("hashes", str_list(&m.hashes));
-    o.insert(
-        "imports",
-        JsValue::Array(
-            m.imports
-                .iter()
-                .map(|&i| JsValue::Number(i as f64))
-                .collect(),
-        ),
-    );
-    o.insert("declared", str_list(&m.declared));
-    o.insert("tokens", str_list(&m.tokens));
-    // esbuild's unminified builds carry the module's original source path
-    // (exp075) — recorded, never load-bearing.
-    o.insert_opt("sourcePath", m.source_path.as_deref().map(JsValue::str));
-    // The next hop's same-file-name match reads it (the file carries the
-    // module's name, docs/design/module-naming.md).
-    o.insert("mechanicalStem", JsValue::str(m.mechanical_stem.as_str()));
-    JsValue::Object(o)
-}
-
 /// `buildLedger(body, assignment, files, hashes, emitHashes, emitNames)`:
 /// identity (`nameToFiles`) from the BUNDLE-ordered body, layout from the
 /// emitted hashes.
@@ -231,38 +192,32 @@ fn build_ledger(
     files: &[String],
     emit_hashes: &[String],
     emit_names: &[Option<String>],
-) -> JsObject {
-    let mut order: Vec<String> = Vec::new();
-    let mut homes: std::collections::HashMap<String, Vec<JsValue>> =
-        std::collections::HashMap::new();
+) -> SplitLedger {
+    let mut name_to_files: Vec<(String, Vec<String>)> = Vec::new();
+    let mut slot_of: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for (i, stmt) in input.body.iter().enumerate() {
         for n in declared_names(stmt) {
-            let list = homes.entry(n.clone()).or_insert_with(|| {
-                order.push(n);
-                Vec::new()
+            let slot = *slot_of.entry(n.clone()).or_insert_with(|| {
+                name_to_files.push((n, Vec::new()));
+                name_to_files.len() - 1
             });
-            list.push(JsValue::str(assignment[i].as_str()));
+            name_to_files[slot].1.push(assignment[i].clone());
         }
     }
-    let name_to_files = JsObject::from_entries(
-        order
-            .into_iter()
-            .map(|n| {
-                let list = homes.remove(&n).unwrap_or_default();
-                (n, JsValue::Array(list))
-            })
-            .collect(),
-    );
-    let mut ledger = JsObject::new();
-    ledger.insert("version", JsValue::Number(1.0));
-    ledger.insert("files", str_list(files));
-    ledger.insert("nameToFiles", JsValue::Object(name_to_files));
-    ledger.insert("order", str_list(assignment));
-    ledger.insert("hashes", str_list(&input.hashes));
-    ledger.insert("emitHashes", str_list(emit_hashes));
-    ledger.insert("emitNames", opt_str_list(emit_names));
-    ledger.insert("hashVersion", JsValue::Number(STATEMENT.version as f64));
-    ledger
+    SplitLedger {
+        version: 1,
+        files: files.to_vec(),
+        // Declared names are identifiers, never array-index keys, so the
+        // record keeps declaration order.
+        name_to_files: name_to_files.into_iter().collect(),
+        order: assignment.to_vec(),
+        hashes: input.hashes.clone(),
+        emit_hashes: emit_hashes.to_vec(),
+        emit_names: emit_names.to_vec(),
+        hash_version: STATEMENT.version,
+        fossil_modules: None,
+        emit_indexes: None,
+    }
 }
 
 /// `stableSplitFromCode` + `tryEmitRunnableCjs` over the shipped text.
@@ -388,12 +343,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         &review.emit_hashes,
         &review.emit_names,
     );
-    if let Some(modules) = &fossil_modules {
-        ledger.insert(
-            "fossilModules",
-            JsValue::Array(modules.iter().map(fossil_module_js).collect()),
-        );
-    }
+    ledger.fossil_modules = fossil_modules;
     // `assertConcatEquivalence` (finding #41): the review tree must
     // reconstruct the bundle's statements — a pre-commit failure.
     super::review::assert_concat_equivalence(&review.contents, &assignment, &input.spans, shipped)?;
@@ -475,7 +425,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         files: Vec::new(),
         runnable: None,
         declined: None,
-        ledger: JsValue::Null,
+        ledger: SplitLedger::default(),
         stats,
         summary,
         layout: Vec::new(),
@@ -489,17 +439,9 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             // `recordEmittedLayout` returns early under `--disable
             // emit-align`: the review layout stays, no emitIndexes.
             if !options.align.emit_align_disabled {
-                ledger.insert("emitHashes", str_list(&tree.emit_hashes));
-                ledger.insert("emitNames", opt_str_list(&tree.emit_names));
-                ledger.insert(
-                    "emitIndexes",
-                    JsValue::Array(
-                        tree.emit_indexes
-                            .iter()
-                            .map(|&i| JsValue::Number(i as f64))
-                            .collect(),
-                    ),
-                );
+                ledger.emit_hashes = tree.emit_hashes.clone();
+                ledger.emit_names = tree.emit_names.clone();
+                ledger.emit_indexes = Some(tree.emit_indexes.clone());
             }
             outcome.runnable = Some(tree.files.iter().map(|(p, _)| p.clone()).collect());
             outcome.files = tree.files;
@@ -525,18 +467,9 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             {
                 // `captureRunnableEmitLayout` ran: the dump's emit.json is
                 // the runnable layout.
-                ledger.insert("emitHashes", str_list(&layout.emit_hashes));
-                ledger.insert("emitNames", opt_str_list(&layout.emit_names));
-                ledger.insert(
-                    "emitIndexes",
-                    JsValue::Array(
-                        layout
-                            .emit_indexes
-                            .iter()
-                            .map(|&i| JsValue::Number(i as f64))
-                            .collect(),
-                    ),
-                );
+                ledger.emit_hashes = layout.emit_hashes.clone();
+                ledger.emit_names = layout.emit_names.clone();
+                ledger.emit_indexes = Some(layout.emit_indexes.clone());
                 outcome.layout = layout.by_file.clone();
             }
             outcome.declined = Some(decline.reason);
@@ -547,7 +480,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             outcome.layout = review.layout;
         }
     }
-    outcome.ledger = JsValue::Object(ledger);
+    outcome.ledger = ledger;
     outcome.facts = facts;
     Ok(outcome)
 }

@@ -467,10 +467,21 @@ fn metadata_writers_match_the_ts_bytes() {
         std::fs::read_to_string(dir.join(".humanify/placement-stats.json")).unwrap(),
         w["placementStats"]["text"].as_str().unwrap()
     );
-    crate::writers::write_split_ledger(&dir, &writer_input("splitLedger")).unwrap();
+    // The TS vector's ledger is partial (no hashVersion); the writer is
+    // compact JSON, no trailing newline, in the ledger's key order.
+    let ledger = humanify_ag_core::place::ledger::SplitLedger {
+        version: 1,
+        files: vec!["src/a.js".into()],
+        name_to_files: [("a".to_string(), vec!["src/a.js".to_string()])]
+            .into_iter()
+            .collect(),
+        hash_version: 3,
+        ..Default::default()
+    };
+    crate::writers::write_split_ledger(&dir, &ledger).unwrap();
     assert_eq!(
         std::fs::read_to_string(dir.join(".humanify/split-ledger.json")).unwrap(),
-        w["splitLedger"]["text"].as_str().unwrap()
+        "{\"version\":1,\"files\":[\"src/a.js\"],\"nameToFiles\":{\"a\":[\"src/a.js\"]},\"order\":[],\"hashes\":[],\"emitHashes\":[],\"emitNames\":[],\"hashVersion\":3}"
     );
     for case in w["evalStats"].as_array().unwrap() {
         let text = case["text"].as_str().unwrap();

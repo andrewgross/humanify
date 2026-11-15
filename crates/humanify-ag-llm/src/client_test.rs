@@ -285,7 +285,7 @@ fn content_parsing_matches_the_ts_probe() {
         let renames = renames_from_content(content);
         match case.get("ok") {
             Some(expected) => {
-                let got = humanify_ag_model::js::stringify(&renames.to_js());
+                let got = serde_json::to_string(&renames).unwrap();
                 assert_eq!(got, expected.as_str().unwrap(), "content {content}");
             }
             // Object.entries(null) threw: the fallback regex finds nothing.
@@ -301,10 +301,7 @@ fn regex_fallback_scans_like_the_global_regex() {
     let r = parse_renames_from_content(
         "x \"\": \"no\" \"a\"\u{feff}:\u{a0}\"b\" \"c\" : \"\" \"d\":\"e\"",
     );
-    assert_eq!(
-        humanify_ag_model::js::stringify(&r.to_js()),
-        r#"{"a":"b","d":"e"}"#
-    );
+    assert_eq!(serde_json::to_string(&r).unwrap(), r#"{"a":"b","d":"e"}"#);
 }
 
 /// The SDK's error-message shapes.
@@ -357,4 +354,61 @@ fn a_body_that_stalls_after_the_headers_times_out() {
     let err = result.expect_err("a stalled body is an error");
     assert_eq!(err.kind, LlmErrorKind::Timeout);
     assert_eq!(err.message, "Request timed out.");
+}
+
+/// The wire body, byte for byte: key order model, messages,
+/// response_format, temperature, max_tokens[, reasoning_effort];
+/// temperature printed as a JS number (0 is `0`).
+#[test]
+fn request_body_bytes_are_pinned() {
+    let mut config = LlmConfig::new("http://x", "k", "m");
+    config.temperature = 0.0;
+    config.max_tokens = 6000;
+    config.reasoning_effort = None;
+    let client = OpenAiClient::new(config.clone(), None);
+    assert_eq!(
+        client.request_body("sys \"q\"\n", "é\u{1}\u{2028}"),
+        "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"sys \\\"q\\\"\\n\"},\
+         {\"role\":\"user\",\"content\":\"é\\u0001\u{2028}\"}],\
+         \"response_format\":{\"type\":\"json_object\"},\"temperature\":0,\"max_tokens\":6000}"
+    );
+    config.temperature = 0.7;
+    config.reasoning_effort = Some("low".to_string());
+    let client = OpenAiClient::new(config, None);
+    assert_eq!(
+        client.request_body("s", "u"),
+        "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"s\"},\
+         {\"role\":\"user\",\"content\":\"u\"}],\
+         \"response_format\":{\"type\":\"json_object\"},\"temperature\":0.7,\"max_tokens\":6000,\
+         \"reasoning_effort\":\"low\"}"
+    );
+}
+
+/// The answer's entries in JS record order (`Object.entries(JSON.parse)`):
+/// array-index keys first ascending, then insertion order; a repeated key
+/// keeps its first slot and its last value (dropped when that value is
+/// not a string); arrays key by index; a bare string yields its units.
+#[test]
+fn json_answers_keep_js_record_order() {
+    let keys = |content: &str| -> Vec<(String, Option<String>)> {
+        renames_from_content(content).entries().to_vec()
+    };
+    let pair = |k: &str, v: &str| (k.to_string(), Some(v.to_string()));
+    assert_eq!(
+        keys(r#"{"b":"x","10":"ten","a":1,"2":"two","b":"w","c":"y","c":null}"#),
+        vec![pair("2", "two"), pair("10", "ten"), pair("b", "w")]
+    );
+    assert_eq!(keys(r#"["p",1,"q"]"#), vec![pair("0", "p"), pair("2", "q")]);
+    assert_eq!(keys(r#""ab""#), vec![pair("0", "a"), pair("1", "b")]);
+    assert_eq!(keys("7"), vec![]);
+    assert_eq!(
+        keys(r#"null "a": "b""#),
+        vec![pair("a", "b")],
+        "not JSON: the regex fallback"
+    );
+    assert_eq!(
+        keys("null"),
+        vec![],
+        "null throws into the fallback, no pairs"
+    );
 }

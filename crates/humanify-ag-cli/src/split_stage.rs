@@ -224,20 +224,7 @@ pub struct PostSplitRecords {
 }
 
 fn split_dump(code: &str, outcome: &SplitOutcome, trail: &PlacementTrail) -> SplitSections {
-    let hashes: Vec<String> = outcome
-        .ledger
-        .as_object()
-        .and_then(|o| o.get("hashes"))
-        .and_then(|h| match h {
-            JsValue::Array(items) => Some(
-                items
-                    .iter()
-                    .map(|v| v.as_str().unwrap_or_default().to_string())
-                    .collect(),
-            ),
-            _ => None,
-        })
-        .unwrap_or_default();
+    let hashes: Vec<String> = outcome.ledger.hashes.clone();
     let mut imports: std::collections::HashMap<&str, std::collections::BTreeMap<String, String>> =
         std::collections::HashMap::new();
     for (importer, module, alias) in &outcome.aliases {
@@ -502,7 +489,7 @@ fn commit_and_finish(
         out,
         &StageHashes {
             after_naming: stage_fingerprint(code),
-            after_placement: stage_fingerprint(&stringify(&outcome.ledger)),
+            after_placement: stage_fingerprint(&outcome.ledger.to_json()),
         },
     )
     .map_err(|e| before(e.to_string()))?;

@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use humanify_ag_model::js::{JsValue, stringify, stringify_pretty};
+use humanify_ag_model::js::stringify_pretty;
 use humanify_ag_model::js_record;
 use humanify_ag_model::jsshape::{CountMap, JsType};
 use humanify_ag_model::stats::EvalStats;
@@ -85,10 +85,12 @@ pub fn write_placement_stats(output_dir: &Path, stats: &PlacementStats) -> std::
     )
 }
 
-/// `writeSplitLedger`: compact `JSON.stringify(ledger)`. The ledger's typed
-/// model arrives with the split (WP5.1); the writer's format is fixed here.
-pub fn write_split_ledger(output_dir: &Path, ledger: &JsValue) -> std::io::Result<()> {
-    write_creating_parent(&output_dir.join(SPLIT_LEDGER_PATH), &stringify(ledger))
+/// `writeSplitLedger`: the ledger's compact JSON, no trailing newline.
+pub fn write_split_ledger(
+    output_dir: &Path,
+    ledger: &humanify_ag_core::place::ledger::SplitLedger,
+) -> std::io::Result<()> {
+    write_creating_parent(&output_dir.join(SPLIT_LEDGER_PATH), &ledger.to_json())
 }
 
 /// `RENAME_LEDGER_APPLIER`: the self-contained replay script written next

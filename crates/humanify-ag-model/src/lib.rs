@@ -24,6 +24,8 @@ mod call_ledger_test;
 #[cfg(test)]
 mod js_test;
 #[cfg(test)]
+mod llm_test;
+#[cfg(test)]
 mod numfmt_test;
 #[cfg(test)]
 mod stats_test;

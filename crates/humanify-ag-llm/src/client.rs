@@ -4,7 +4,7 @@
 //! Request: `POST {endpoint}/chat/completions`, body
 //! `{model, messages: [system, user], response_format: {type:
 //! "json_object"}, temperature, max_tokens[, reasoning_effort]}` in that key
-//! order, serialized as `JSON.stringify` would (temperature 0 is `0`).
+//! order, temperature written as a JS number (0 is `0`).
 //!
 //! The SDK layer (core.js `makeRequest`/`retryRequest`), reproduced because
 //! it is part of the retry/timeout envelope 02 §7 carries over:
@@ -27,10 +27,10 @@
 
 use std::time::{Duration, Instant};
 
-use humanify_ag_model::js::{JsObject, JsValue, stringify};
 use humanify_ag_model::llm::{
     BatchRenameResponse, LlmCall, LlmConfig, LlmError, LlmErrorKind, Renames, Usage,
 };
+use serde_json::Value;
 
 use humanify_ag_model::call_ledger::{Attempt, AttemptRecord};
 
@@ -75,25 +75,32 @@ impl OpenAiClient {
 
     /// `buildRequestBody` → the wire bytes.
     pub fn request_body(&self, system_prompt: &str, user_prompt: &str) -> String {
-        let mut format = JsObject::new();
-        format.insert(
-            "type",
-            JsValue::str(humanify_ag_model::llm::RESPONSE_FORMAT_TYPE),
-        );
-        let mut body = JsObject::new();
-        body.insert("model", JsValue::str(&self.config.model));
-        body.insert(
-            "messages",
-            humanify_ag_model::llm::wire_messages(system_prompt, user_prompt),
-        );
-        body.insert("response_format", JsValue::Object(format));
-        body.insert("temperature", JsValue::Number(self.config.temperature));
-        body.insert("max_tokens", JsValue::Number(self.config.max_tokens as f64));
-        body.insert_opt(
-            "reasoning_effort",
-            self.config.reasoning_effort.as_deref().map(JsValue::str),
-        );
-        stringify(&JsValue::Object(body))
+        #[derive(serde::Serialize)]
+        struct Format {
+            r#type: &'static str,
+        }
+        #[derive(serde::Serialize)]
+        struct Body<'a> {
+            model: &'a str,
+            messages: [humanify_ag_model::llm::WireMessage<'a>; 2],
+            response_format: Format,
+            #[serde(serialize_with = "humanify_ag_model::llm::serialize_js_number")]
+            temperature: f64,
+            max_tokens: u64,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            reasoning_effort: Option<&'a str>,
+        }
+        serde_json::to_string(&Body {
+            model: &self.config.model,
+            messages: humanify_ag_model::llm::wire_messages(system_prompt, user_prompt),
+            response_format: Format {
+                r#type: humanify_ag_model::llm::RESPONSE_FORMAT_TYPE,
+            },
+            temperature: self.config.temperature,
+            max_tokens: self.config.max_tokens,
+            reasoning_effort: self.config.reasoning_effort.as_deref(),
+        })
+        .expect("a request body serializes")
     }
 
     /// One HTTP attempt: the response's status, headers and body text, the
@@ -262,7 +269,7 @@ fn jitter_fraction() -> f64 {
 /// body is the message verbatim.
 pub fn status_error(status: u16, body: &str) -> LlmError {
     // safeJSON: the parsed body, or undefined when it does not parse.
-    let json = JsValue::parse(body).ok();
+    let json: Option<Value> = serde_json::from_str(body).ok();
     // `errJSON ? undefined : errText` — a falsy parse keeps the raw text.
     let raw_message = match &json {
         Some(j) if js_truthy(j) => None,
@@ -271,7 +278,7 @@ pub fn status_error(status: u16, body: &str) -> LlmError {
     // `errJSON?.['error']` — only an object has an `error` property.
     let error = json
         .as_ref()
-        .and_then(JsValue::as_object)
+        .and_then(Value::as_object)
         .and_then(|o| o.get("error"))
         .filter(|e| js_truthy(e));
     let message = match error {
@@ -281,9 +288,9 @@ pub fn status_error(status: u16, body: &str) -> LlmError {
                 .and_then(|o| o.get("message"))
                 .filter(|m| js_truthy(m));
             Some(match inner {
-                Some(JsValue::String(m)) => m.clone(),
-                Some(m) => stringify(m),
-                None => stringify(error),
+                Some(Value::String(m)) => m.clone(),
+                Some(m) => m.to_string(),
+                None => error.to_string(),
             })
         }
         None => raw_message.filter(|m| !m.is_empty()).map(str::to_string),
@@ -300,13 +307,13 @@ pub fn status_error(status: u16, body: &str) -> LlmError {
 }
 
 /// JS truthiness of a JSON value.
-fn js_truthy(value: &JsValue) -> bool {
+fn js_truthy(value: &Value) -> bool {
     match value {
-        JsValue::Null => false,
-        JsValue::Bool(b) => *b,
-        JsValue::Number(n) => *n != 0.0 && !n.is_nan(),
-        JsValue::String(s) => !s.is_empty(),
-        JsValue::Array(_) | JsValue::Object(_) => true,
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(n) => n.as_f64().is_some_and(|n| n != 0.0),
+        Value::String(s) => !s.is_empty(),
+        Value::Array(_) | Value::Object(_) => true,
     }
 }
 
@@ -362,31 +369,89 @@ pub fn parse_renames_from_content(content: &str) -> Renames {
 /// `Object.entries(JSON.parse(content))` keeping string values; None when
 /// the content is not JSON or is `null` (Object.entries throws → fallback).
 fn json_renames(content: &str) -> Option<Renames> {
-    let entries: Vec<(String, Option<String>)> = match JsValue::parse(content).ok()? {
-        JsValue::Null => return None,
-        JsValue::Object(obj) => obj
-            .entries()
-            .iter()
-            .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), Some(s.to_string()))))
-            .collect(),
-        JsValue::Array(items) => items
-            .iter()
-            .enumerate()
-            .filter_map(|(i, v)| v.as_str().map(|s| (i.to_string(), Some(s.to_string()))))
-            .collect(),
-        // A string's entries are its UTF-16 code units; an astral
-        // character's halves cannot be Rust strings and become U+FFFD.
-        JsValue::String(s) => s
-            .encode_utf16()
-            .enumerate()
-            .map(|(i, unit)| {
-                let c = char::from_u32(u32::from(unit)).unwrap_or('\u{FFFD}');
-                (i.to_string(), Some(c.to_string()))
-            })
-            .collect(),
-        JsValue::Number(_) | JsValue::Bool(_) => Vec::new(),
-    };
-    Some(Renames::from_entries(entries))
+    serde_json::from_str::<AnswerEntries>(content).ok()?.0
+}
+
+/// A parsed answer's string-valued entries in `Object.entries` order (an
+/// object in JS record order, an array by index, a string by its UTF-16
+/// units); None for `null`.
+struct AnswerEntries(Option<Renames>);
+
+impl<'de> serde::Deserialize<'de> for AnswerEntries {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        fn some(entries: Vec<(String, Option<String>)>) -> AnswerEntries {
+            AnswerEntries(Some(Renames::from_entries(entries)))
+        }
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = AnswerEntries;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("JSON")
+            }
+            fn visit_unit<E>(self) -> Result<AnswerEntries, E> {
+                Ok(AnswerEntries(None))
+            }
+            fn visit_bool<E>(self, _: bool) -> Result<AnswerEntries, E> {
+                Ok(some(Vec::new()))
+            }
+            fn visit_i64<E>(self, _: i64) -> Result<AnswerEntries, E> {
+                Ok(some(Vec::new()))
+            }
+            fn visit_u64<E>(self, _: u64) -> Result<AnswerEntries, E> {
+                Ok(some(Vec::new()))
+            }
+            fn visit_f64<E>(self, _: f64) -> Result<AnswerEntries, E> {
+                Ok(some(Vec::new()))
+            }
+            // A string's entries are its UTF-16 code units; an astral
+            // character's halves cannot be Rust strings and become U+FFFD.
+            fn visit_str<E>(self, s: &str) -> Result<AnswerEntries, E> {
+                Ok(some(
+                    s.encode_utf16()
+                        .enumerate()
+                        .map(|(i, unit)| {
+                            let c = char::from_u32(u32::from(unit)).unwrap_or('\u{FFFD}');
+                            (i.to_string(), Some(c.to_string()))
+                        })
+                        .collect(),
+                ))
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<AnswerEntries, A::Error> {
+                let mut entries = Vec::new();
+                let mut i = 0usize;
+                while let Some(v) = seq.next_element::<Value>()? {
+                    if let Value::String(s) = v {
+                        entries.push((i.to_string(), Some(s)));
+                    }
+                    i += 1;
+                }
+                Ok(some(entries))
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                map: A,
+            ) -> Result<AnswerEntries, A::Error> {
+                let record =
+                    <humanify_ag_model::llm::JsRecord<Value> as serde::Deserialize>::deserialize(
+                        serde::de::value::MapAccessDeserializer::new(map),
+                    )?;
+                Ok(some(
+                    record
+                        .0
+                        .into_iter()
+                        .filter_map(|(k, v)| match v {
+                            Value::String(s) => Some((k, Some(s))),
+                            _ => None,
+                        })
+                        .collect(),
+                ))
+            }
+        }
+        deserializer.deserialize_any(Visitor)
+    }
 }
 
 /// The renames a completion's content carries.
@@ -395,31 +460,25 @@ pub fn renames_from_content(content: &str) -> Renames {
 }
 
 /// `extractUsage` → `usageToResult`: prompt → input, completion → output.
-fn usage_of(completion: &JsObject) -> Option<Usage> {
-    let usage = completion.get("usage")?.as_object()?;
-    let num = |key: &str| match usage.get(key) {
-        Some(JsValue::Number(n)) => Some(*n as u64),
-        _ => None,
-    };
-    Some(Usage {
-        total_tokens: num("total_tokens"),
-        input_tokens: num("prompt_tokens"),
-        output_tokens: num("completion_tokens"),
-    })
+fn usage_of(completion: &serde_json::Map<String, Value>) -> Option<Usage> {
+    Usage::from_value(
+        completion.get("usage")?,
+        ["total_tokens", "prompt_tokens", "completion_tokens"],
+    )
 }
 
 /// A completion body → the response (content, finish reason, usage).
 pub fn response_from_completion(
     body: &str,
 ) -> Result<(BatchRenameResponse, Option<String>), LlmError> {
-    let json = JsValue::parse(body)
+    let json: Value = serde_json::from_str(body)
         .map_err(|e| LlmError::new(LlmErrorKind::Other, format!("invalid completion body: {e}")))?;
     let completion = json
         .as_object()
         .ok_or_else(|| LlmError::new(LlmErrorKind::Other, "completion body is not an object"))?;
     // `response.choices[0]?.…` — a missing `choices` throws in the TS.
     let first = match completion.get("choices") {
-        Some(JsValue::Array(choices)) => choices.first().and_then(JsValue::as_object),
+        Some(Value::Array(choices)) => choices.first().and_then(Value::as_object),
         _ => {
             return Err(LlmError::new(
                 LlmErrorKind::Other,
@@ -429,13 +488,13 @@ pub fn response_from_completion(
     };
     let finish_reason = first
         .and_then(|c| c.get("finish_reason"))
-        .and_then(JsValue::as_str)
+        .and_then(Value::as_str)
         .map(str::to_string);
     let content = first
         .and_then(|c| c.get("message"))
-        .and_then(JsValue::as_object)
+        .and_then(Value::as_object)
         .and_then(|m| m.get("content"))
-        .and_then(JsValue::as_str)
+        .and_then(Value::as_str)
         .filter(|c| !c.is_empty())
         .map(str::to_string);
     let renames = content

@@ -43,7 +43,7 @@ use humanify_ag_model::dump::{
     PartitionFamily, PartitionMember, PartitionsFile, SpanKey, TransfersFile, VotesFile,
 };
 use humanify_ag_model::js::{JsObject, JsValue, cmp_utf16, stringify};
-use humanify_ag_model::llm::{BatchRenameRequest, CacheKeyParams, LlmCall, StrMap};
+use humanify_ag_model::llm::{BatchRenameRequest, CacheKeyParams, LlmCall};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -1386,19 +1386,10 @@ fn request_material(r: &BatchRenameRequest) -> JsValue {
         "priorVersionNames",
         r.prior_version_names.as_deref().map(JsValue::str_array),
     );
-    o.insert_opt(
-        "priorNameHints",
-        r.prior_name_hints.as_ref().map(StrMap::to_js),
-    );
-    o.insert_opt(
-        "alreadyRenamed",
-        r.already_renamed.as_ref().map(StrMap::to_js),
-    );
+    o.insert_opt("priorNameHints", r.prior_name_hints.as_ref().map(as_js));
+    o.insert_opt("alreadyRenamed", r.already_renamed.as_ref().map(as_js));
     o.insert_opt("isRetry", r.is_retry.map(JsValue::Bool));
-    o.insert_opt(
-        "previousAttempt",
-        r.previous_attempt.as_ref().map(StrMap::to_js),
-    );
+    o.insert_opt("previousAttempt", r.previous_attempt.as_ref().map(as_js));
     o.insert_opt(
         "failures",
         r.failures.as_ref().map(|f| {
@@ -1410,16 +1401,17 @@ fn request_material(r: &BatchRenameRequest) -> JsValue {
             JsValue::Object(x)
         }),
     );
-    o.insert_opt(
-        "priorRejects",
-        r.prior_rejects
-            .as_ref()
-            .map(humanify_ag_model::llm::PriorRejects::to_js),
-    );
+    o.insert_opt("priorRejects", r.prior_rejects.as_ref().map(as_js));
     o.insert_opt("promptBody", r.prompt_body.as_deref().map(JsValue::str));
     o.insert_opt("userPrompt", r.user_prompt.as_deref().map(JsValue::str));
     o.insert_opt("systemPrompt", r.system_prompt.as_deref().map(JsValue::str));
     JsValue::Object(o)
+}
+
+/// A record in its serde spelling, as a [`JsValue`] (insertion order kept).
+fn as_js<T: serde::Serialize>(value: &T) -> JsValue {
+    JsValue::parse(&serde_json::to_string(value).expect("a record serializes"))
+        .expect("serde writes JSON")
 }
 
 /// `{ ...params }` (CacheKeyParams: model, temperature, maxTokens,

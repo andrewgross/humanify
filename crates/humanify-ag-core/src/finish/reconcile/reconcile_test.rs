@@ -9,17 +9,82 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use humanify_ag_model::js::{JsValue, stringify};
 use serde_json::Value;
 
 use super::{PostSplitInput, post_split_reconcile};
 use crate::finish::carry::carry_renames_into_bundle;
+use crate::place::ledger::SplitLedger;
 use crate::rename::eligibility::Eligibility;
 
 fn fixture() -> Value {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test/parity/wp54-postsplit.json");
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+}
+
+/// The ledger the run writes, from its text.
+fn ledger(text: &str) -> SplitLedger {
+    serde_json::from_str(text).unwrap()
+}
+
+/// The ledger's written bytes.
+fn written(ledger: &SplitLedger) -> String {
+    ledger.to_json()
+}
+
+/// A ledger with every always-written field, naming `files` and no
+/// statements.
+fn bare_ledger(files: &[&str]) -> SplitLedger {
+    let quoted: Vec<String> = files.iter().map(|f| format!("\"{f}\"")).collect();
+    ledger(&format!(
+        "{{\"version\":1,\"files\":[{}],\"nameToFiles\":{{}},\"order\":[],\"hashes\":[],\"emitHashes\":[],\"emitNames\":[],\"hashVersion\":3}}",
+        quoted.join(",")
+    ))
+}
+
+/// The probe file's `ledgerIn`: the ledger the TS wrote, which carries no
+/// `hashVersion` (this binary always writes one).
+fn probe_ledger_in(raw: &str) -> SplitLedger {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct TsLedger {
+        version: u64,
+        files: Vec<String>,
+        name_to_files: humanify_ag_model::llm::JsRecord<Vec<String>>,
+        order: Vec<String>,
+        hashes: Vec<String>,
+        emit_hashes: Vec<String>,
+        emit_names: Vec<Option<String>>,
+        emit_indexes: Option<Vec<usize>>,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Probe {
+        ledger_in: TsLedger,
+    }
+    let ts = serde_json::from_str::<Probe>(raw).unwrap().ledger_in;
+    SplitLedger {
+        version: ts.version,
+        files: ts.files,
+        name_to_files: ts.name_to_files,
+        order: ts.order,
+        hashes: ts.hashes,
+        emit_hashes: ts.emit_hashes,
+        emit_names: ts.emit_names,
+        hash_version: 3,
+        fossil_modules: None,
+        emit_indexes: ts.emit_indexes,
+    }
+}
+
+/// The TS probe's ledgers carry no `hashVersion`; this binary always
+/// writes one, after `emitNames`.
+fn with_hash_version(ts_ledger: &str) -> String {
+    ts_ledger.replacen(
+        ",\"emitIndexes\":",
+        ",\"hashVersion\":3,\"emitIndexes\":",
+        1,
+    )
 }
 
 fn files(v: &Value) -> HashMap<String, String> {
@@ -35,16 +100,11 @@ fn reconcile_and_carry_match_the_ts() {
     let fx = fixture();
     let fresh = files(&fx["fresh"]);
     let prior = files(&fx["prior"]);
-    // serde_json alphabetizes keys; the ledger's key order is the output's,
-    // so it comes through the order-preserving JS value.
     let raw = fs::read_to_string(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test/parity/wp54-postsplit.json"),
     )
     .unwrap();
-    let mut ledger = match JsValue::parse(&raw).unwrap() {
-        JsValue::Object(o) => o.get("ledgerIn").unwrap().clone(),
-        _ => unreachable!(),
-    };
+    let mut ledger = probe_ledger_in(&raw);
     let read_fresh = |f: &str| fresh.get(f).cloned();
     let read_prior = |f: &str| prior.get(f).cloned();
     let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
@@ -73,7 +133,10 @@ fn reconcile_and_carry_match_the_ts() {
         })
         .collect();
     assert_eq!(Value::Array(renames), fx["renames"]);
-    assert_eq!(stringify(&ledger), fx["ledgerOut"].as_str().unwrap());
+    assert_eq!(
+        written(&ledger),
+        with_hash_version(fx["ledgerOut"].as_str().unwrap())
+    );
     assert_eq!(
         result.stats.considered as u64,
         fx["stats"]["considered"].as_u64().unwrap()
@@ -102,7 +165,7 @@ fn reconcile_and_carry_match_the_ts() {
 
 #[test]
 fn the_kill_switch_does_nothing() {
-    let mut ledger = JsValue::parse("{\"files\":[\"a.js\"],\"order\":[]}").unwrap();
+    let mut ledger = bare_ledger(&["a.js"]);
     let read = |_: &str| Some("var a = 1;\n".to_string());
     let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let result = post_split_reconcile(PostSplitInput {
@@ -127,10 +190,9 @@ fn a_non_ascii_identifier_is_left_intact() {
         "function f(a) {\n  const Xq = a + 1;\n  return Xq;\n}\nvar café = 1;\nuse(café);\n";
     let prior =
         "function f(a) {\n  const total = a + 1;\n  return total;\n}\nvar café = 1;\nuse(café);\n";
-    let mut ledger = JsValue::parse(
-        "{\"version\":1,\"files\":[\"a.js\"],\"nameToFiles\":{},\"order\":[\"a.js\",\"a.js\",\"a.js\"],\"hashes\":[],\"emitHashes\":[],\"emitNames\":[null,null,null]}",
-    )
-    .unwrap();
+    let mut ledger = ledger(
+        "{\"version\":1,\"files\":[\"a.js\"],\"nameToFiles\":{},\"order\":[\"a.js\",\"a.js\",\"a.js\"],\"hashes\":[],\"emitHashes\":[],\"emitNames\":[null,null,null],\"hashVersion\":3}",
+    );
     let read_fresh = |_: &str| Some(fresh.to_string());
     let read_prior = |_: &str| Some(prior.to_string());
     let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
@@ -247,7 +309,7 @@ fn scramble_scenario() -> (HashMap<String, String>, HashMap<String, String>, Str
         .collect();
     let emit_indexes: Vec<String> = (0..sorted.len()).map(|i| i.to_string()).collect();
     let ledger_text = format!(
-        "{{\"version\":1,\"files\":[{}],\"nameToFiles\":{{\"Rb\":[\"src/a0.js\",\"src/a1.js\",\"src/a2.js\",\"src/a3.js\",\"src/a4.js\",\"src/a5.js\"],\"Xq\":[\"src/b0.js\",\"src/b1.js\",\"src/b2.js\"]}},\"order\":[{}],\"hashes\":[],\"emitHashes\":[],\"emitNames\":[{}],\"emitIndexes\":[{}]}}",
+        "{{\"version\":1,\"files\":[{}],\"nameToFiles\":{{\"Rb\":[\"src/a0.js\",\"src/a1.js\",\"src/a2.js\",\"src/a3.js\",\"src/a4.js\",\"src/a5.js\"],\"Xq\":[\"src/b0.js\",\"src/b1.js\",\"src/b2.js\"]}},\"order\":[{}],\"hashes\":[],\"emitHashes\":[],\"emitNames\":[{}],\"hashVersion\":3,\"emitIndexes\":[{}]}}",
         quoted.join(","),
         quoted.join(","),
         emit_names.join(","),
@@ -285,7 +347,7 @@ fn scramble_run(
         std::thread::sleep(std::time::Duration::from_millis(sleep_for(f)));
         prior.get(f).cloned()
     };
-    let mut ledger = JsValue::parse(ledger_text).unwrap();
+    let mut ledger = ledger(ledger_text);
     let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let result = post_split_reconcile(PostSplitInput {
         name_profile: crate::rename::name_profile::NameProfile::Bun,
@@ -295,7 +357,7 @@ fn scramble_run(
         eligible: &eligible,
         disabled: false,
     });
-    (result, stringify(&ledger))
+    (result, written(&ledger))
 }
 
 #[test]
@@ -337,6 +399,17 @@ fn results_are_byte_identical_under_scrambled_completion_order() {
 
     // The pin must not pass vacuously: the scenario really reconciled.
     let (result, ledger_bytes) = canonical;
+    assert_eq!(
+        sha2::Digest::finalize(sha2::Digest::chain_update(
+            <sha2::Sha256 as sha2::Digest>::new(),
+            ledger_bytes.as_bytes()
+        ))
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>(),
+        "2aed7c5501302f66fddae4c7a1a7d19c49e6a7d6926acd03b0fc49f2612b3958",
+        "the patched ledger's bytes"
+    );
     assert_eq!(result.stats.considered, 11, "one per file with both texts");
     assert!(
         result.changed.len() >= 9,
@@ -385,10 +458,9 @@ fn results_are_byte_identical_under_scrambled_completion_order() {
 fn a_rename_chain_carries_the_binding_the_tree_renamed() {
     let fresh = "function f(p) {\n  {\n    let Rb = p + 1;\n    g(Rb);\n  }\n  {\n    let value = p + 2;\n    h(value);\n  }\n  {\n    let value = p + 3;\n    k(value);\n  }\n}\n";
     let prior = "function f(p) {\n  {\n    let value = p + 1;\n    g(value);\n  }\n  {\n    let total = p + 2;\n    h(total);\n  }\n  {\n    let value = p + 3;\n    k(value);\n  }\n}\n";
-    let mut ledger = JsValue::parse(
-        "{\"version\":1,\"files\":[\"a.js\"],\"nameToFiles\":{},\"order\":[\"a.js\"],\"hashes\":[\"h0\"],\"emitHashes\":[\"h0\"],\"emitNames\":[\"f\"],\"emitIndexes\":[0]}",
-    )
-    .unwrap();
+    let mut ledger = ledger(
+        "{\"version\":1,\"files\":[\"a.js\"],\"nameToFiles\":{},\"order\":[\"a.js\"],\"hashes\":[\"h0\"],\"emitHashes\":[\"h0\"],\"emitNames\":[\"f\"],\"hashVersion\":3,\"emitIndexes\":[0]}",
+    );
     let read_fresh = |_: &str| Some(fresh.to_string());
     let read_prior = |_: &str| Some(prior.to_string());
     let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
@@ -435,7 +507,7 @@ fn a_rename_chain_carries_the_binding_the_tree_renamed() {
 /// error kept, and the run prints a WARNING naming it.
 #[test]
 fn a_failed_diff_is_counted_apart_from_discards_and_warned() {
-    let mut ledger = JsValue::parse("{\"files\":[\"a.js\",\"b.js\"],\"order\":[]}").unwrap();
+    let mut ledger = bare_ledger(&["a.js", "b.js"]);
     let fresh = |_: &str| Some("var a = 1;\n".to_string());
     let prior = |_: &str| Some("var b = 1;\n".to_string());
     let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
@@ -469,7 +541,7 @@ fn a_failed_diff_is_counted_apart_from_discards_and_warned() {
 
 #[test]
 fn a_clean_reconcile_has_no_diff_warning() {
-    let mut ledger = JsValue::parse("{\"files\":[\"a.js\"],\"order\":[]}").unwrap();
+    let mut ledger = bare_ledger(&["a.js"]);
     let read = |_: &str| Some("var a = 1;\n".to_string());
     let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let result = post_split_reconcile(PostSplitInput {

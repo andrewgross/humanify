@@ -36,7 +36,9 @@ use oxc_ast::ast::{BindingPattern, ForStatementLeft, Program, Statement};
 use oxc_span::GetSpan;
 use oxc_syntax::identifier::{is_identifier_part, is_identifier_start};
 
-use humanify_ag_model::js::{JsObject, JsValue, cmp_utf16};
+use humanify_ag_model::js::cmp_utf16;
+
+use crate::place::ledger::SplitLedger;
 
 use crate::babel_view::DiffLines;
 use crate::emit::substitutions::{Substitution, apply_substitutions};
@@ -113,39 +115,20 @@ names (first: {file}: {error}) — this tree differs from a run where diff worke
     ))
 }
 
+// The ledger patches
 // ---------------------------------------------------------------------------
-// The ledger (`StableSplitLedger`, as the JSON object the TS mutates)
-// ---------------------------------------------------------------------------
-
-fn strings(v: Option<&JsValue>) -> Vec<String> {
-    match v {
-        Some(JsValue::Array(items)) => items
-            .iter()
-            .filter_map(|i| i.as_str().map(str::to_string))
-            .collect(),
-        _ => Vec::new(),
-    }
-}
-
-fn ledger_obj(ledger: &mut JsValue) -> &mut JsObject {
-    match ledger {
-        JsValue::Object(o) => o,
-        _ => panic!("a split ledger is a JSON object"),
-    }
-}
 
 /// `patchEmitNames`: re-point this file's slots at the shipped names; a
 /// slot's key is every declared name, sorted and comma-joined.
-fn patch_emit_names(ledger: &mut JsObject, file: &str, by_from: &HashMap<String, String>) {
-    let order = strings(ledger.get("order"));
-    let Some(JsValue::Array(emit_names)) = ledger.get_mut("emitNames") else {
-        return;
-    };
+fn patch_emit_names(ledger: &mut SplitLedger, file: &str, by_from: &HashMap<String, String>) {
+    let SplitLedger {
+        order, emit_names, ..
+    } = ledger;
     for (slot, entry) in emit_names.iter_mut().enumerate() {
         if order.get(slot).map(String::as_str) != Some(file) {
             continue;
         }
-        let JsValue::String(current) = entry else {
+        let Some(current) = entry else {
             continue;
         };
         let mut changed = false;
@@ -168,28 +151,25 @@ fn patch_emit_names(ledger: &mut JsObject, file: &str, by_from: &HashMap<String,
 
 /// `patchNameHomes`: move each renamed name's home entries, all removals
 /// first, counts preserved.
-fn patch_name_homes(ledger: &mut JsObject, file: &str, applicable: &[&PostSplitRename]) {
-    let Some(JsValue::Object(homes)) = ledger.get_mut("nameToFiles") else {
-        return;
-    };
+fn patch_name_homes(ledger: &mut SplitLedger, file: &str, applicable: &[&PostSplitRename]) {
+    let homes = &mut ledger.name_to_files.0;
+    let position =
+        |homes: &[(String, Vec<String>)], name: &str| homes.iter().position(|(k, _)| k == name);
     let mut to_add: Vec<(String, usize)> = Vec::new();
     for rename in applicable {
-        let list = strings(homes.get(&rename.from_name));
-        if homes.get(&rename.from_name).is_none() {
+        let Some(at) = position(homes, &rename.from_name) else {
             continue;
-        }
-        let kept: Vec<String> = list.iter().filter(|f| *f != file).cloned().collect();
-        let removed = list.len() - kept.len();
+        };
+        let before = homes[at].1.len();
+        homes[at].1.retain(|f| f != file);
+        let removed = before - homes[at].1.len();
         if removed == 0 {
             continue;
         }
-        if kept.is_empty() {
-            homes.remove(&rename.from_name);
-        } else {
-            homes.insert(
-                rename.from_name.clone(),
-                JsValue::Array(kept.into_iter().map(JsValue::String).collect()),
-            );
+        // An emptied name leaves the record; a later assignment of it
+        // appends (JS `delete` then `obj[k] = v`).
+        if homes[at].1.is_empty() {
+            homes.remove(at);
         }
         match to_add.iter_mut().find(|(n, _)| *n == rename.to_name) {
             Some((_, c)) => *c += removed,
@@ -197,17 +177,16 @@ fn patch_name_homes(ledger: &mut JsObject, file: &str, applicable: &[&PostSplitR
         }
     }
     for (to_name, count) in to_add {
-        let mut list = strings(homes.get(&to_name));
-        list.extend(std::iter::repeat_n(file.to_string(), count));
-        homes.insert(
-            to_name,
-            JsValue::Array(list.into_iter().map(JsValue::String).collect()),
-        );
+        let extra = std::iter::repeat_n(file.to_string(), count);
+        match position(homes, &to_name) {
+            Some(at) => homes[at].1.extend(extra),
+            None => humanify_ag_model::llm::js_assign(homes, to_name, extra.collect()),
+        }
     }
 }
 
 /// `patchLedger`: only TOP-LEVEL renames describe declared statements.
-fn patch_ledger(ledger: &mut JsObject, file: &str, renames: &[PostSplitRename]) {
+fn patch_ledger(ledger: &mut SplitLedger, file: &str, renames: &[PostSplitRename]) {
     let applicable: Vec<&PostSplitRename> = renames.iter().filter(|r| r.top_level).collect();
     if applicable.is_empty() {
         return;
@@ -221,29 +200,21 @@ fn patch_ledger(ledger: &mut JsObject, file: &str, renames: &[PostSplitRename]) 
 }
 
 /// `countStaleLedgerEntries` (a stat: must be 0).
-fn count_stale(ledger: &JsObject, file: &str, renames: &[PostSplitRename]) -> usize {
+fn count_stale(ledger: &SplitLedger, file: &str, renames: &[PostSplitRename]) -> usize {
     let top: Vec<&PostSplitRename> = renames.iter().filter(|r| r.top_level).collect();
     let targets: HashSet<&str> = top.iter().map(|r| r.to_name.as_str()).collect();
-    let order = strings(ledger.get("order"));
-    let emit_names: Vec<Option<String>> = match ledger.get("emitNames") {
-        Some(JsValue::Array(items)) => items
-            .iter()
-            .map(|i| i.as_str().map(str::to_string))
-            .collect(),
-        _ => Vec::new(),
-    };
-    let homes = match ledger.get("nameToFiles") {
-        Some(JsValue::Object(o)) => Some(o),
-        _ => None,
-    };
+    let order = &ledger.order;
+    let emit_names = &ledger.emit_names;
+    let homes = &ledger.name_to_files.0;
     let mut stale = 0;
     for r in top
         .iter()
         .filter(|r| !targets.contains(r.from_name.as_str()))
     {
         if homes
-            .and_then(|h| h.get(&r.from_name))
-            .is_some_and(|v| strings(Some(v)).iter().any(|f| f == file))
+            .iter()
+            .find(|(k, _)| *k == r.from_name)
+            .is_some_and(|(_, v)| v.iter().any(|f| f == file))
         {
             stale += 1;
         }
@@ -784,7 +755,7 @@ fn reconcile_one_file(
 /// `Sync` — they are shared, immutable-side reads of the two trees.
 pub struct PostSplitInput<'i> {
     /// The split ledger (patched in place).
-    pub ledger: &'i mut JsValue,
+    pub ledger: &'i mut SplitLedger,
     pub read_fresh: &'i (dyn Fn(&str) -> Option<String> + Sync),
     pub read_prior: &'i (dyn Fn(&str) -> Option<String> + Sync),
     pub eligible: &'i Eligibility,
@@ -823,12 +794,11 @@ fn post_split_reconcile_with(input: PostSplitInput<'_>, differ: &Differ) -> Post
         name_profile,
         disabled: _,
     } = input;
-    let ledger = ledger_obj(ledger);
     let mut ledger_statements: HashMap<String, usize> = HashMap::new();
-    for f in strings(ledger.get("order")) {
-        *ledger_statements.entry(f).or_insert(0) += 1;
+    for f in &ledger.order {
+        *ledger_statements.entry(f.clone()).or_insert(0) += 1;
     }
-    let files = strings(ledger.get("files"));
+    let files = ledger.files.clone();
     let works: Vec<Option<FileWork>> = crate::par::map_ordered(&files, |file| {
         // The reads run on the worker: both trees are immutable here and
         // a file's texts are its per-item input.
