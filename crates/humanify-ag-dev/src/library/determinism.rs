@@ -18,10 +18,7 @@ const SAME: &[&str] = &[
     "corpusSha256",
 ];
 
-fn read(path: &Path) -> Result<Value, String> {
-    let t = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    serde_json::from_str::<Value>(&t).map_err(|e| format!("{}: {e}", path.display()))
-}
+use crate::json::read;
 
 fn strip_label(path: &Path) -> Result<String, String> {
     let v = match read(path)? {

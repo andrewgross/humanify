@@ -10,10 +10,8 @@
 //! (`registry::flags`). This module owns what does not depend on WHICH
 //! table it reads: typed values, range checks, "did you mean", resolving
 //! flag / file / default with the conflict rule and the rendered example.
-//! Extracted 2026-11-07 from
-//! `config/file.rs` and `surface.rs` without changing a byte of the
-//! pipeline's help, example file or resolution (the goldens and
-//! config_file_test.rs hold that).
+//! The pipeline's help, example file and resolution are held by the goldens
+//! and config_file_test.rs.
 
 use std::collections::BTreeMap;
 

@@ -20,6 +20,12 @@ pub fn text(value: &impl Serialize) -> String {
     out
 }
 
+/// A JSON file's value; an error names the file.
+pub fn read(path: &std::path::Path) -> Result<serde_json::Value, String> {
+    let t = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    serde_json::from_str(&t).map_err(|e| format!("{}: {e}", path.display()))
+}
+
 /// The bytes `value` is written as in the JS spelling.
 pub fn js_text(value: &JsValue, trailing_newline: bool) -> String {
     let mut out = stringify_pretty(value, 2);

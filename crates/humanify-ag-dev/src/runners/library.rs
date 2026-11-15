@@ -205,7 +205,7 @@ pub struct LibraryScore {
     pub registry: PathBuf,
 }
 
-/// The label's run record (run.py `config`).
+/// The label's run record.
 fn label_config(
     c: &LibraryScore,
     bin: &bin_build::BinRecord,

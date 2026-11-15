@@ -139,10 +139,7 @@ fn scorer15_line(r: &Value) -> Option<String> {
     ))
 }
 
-fn read(path: &Path) -> Result<Value, String> {
-    let t = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    serde_json::from_str::<Value>(&t).map_err(|e| format!("{}: {e}", path.display()))
-}
+use crate::json::read;
 
 /// The leaderboard text for `labels` (under `results`), or the refusal.
 pub fn leaderboard(
