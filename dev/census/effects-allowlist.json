@@ -1,5 +1,5 @@
 {
-  "$comment": "Every effect site (disk, process, environment, clock, thread, terminal, network, global mutable static) in the non-test sources of the product crates, and every non-private fn returning Result<_, String>, with its role: legacy (a pure crate's effect or a string error, removed by a migration step; the list only shrinks: a stale entry fails), observation (the profiling clock and recorder), shell (an effect in cli, index or llm: inventory). Checked by `cargo dev census effects` (gate stage census:effects, and pre-commit on staged .rs). Key = file + scope (enclosing fn or item) + construct; no line numbers. Rules: crates/humanify-ag-dev/src/census/effects/rules.rs.",
+  "$comment": "Every effect site (disk, process, environment, clock, thread, terminal, network, global mutable static) in the non-test sources of the product crates, and every non-private fn returning Result<_, String>, with its role: legacy (a pure crate's effect or a string error, removed by a migration step; the list only shrinks: a stale entry fails), observation (the profiling clock and recorder), shell (an effect in cli, index, io or llm: inventory). Checked by `cargo dev census effects` (gate stage census:effects, and pre-commit on staged .rs). Key = file + scope (enclosing fn or item) + construct; no line numbers. Rules: crates/humanify-ag-dev/src/census/effects/rules.rs.",
   "entries": [
     {
       "file": "crates/humanify-ag-cli/src/config.rs",
@@ -497,6 +497,18 @@
       "file": "crates/humanify-ag-cli/src/util.rs",
       "scope": "err_with_code",
       "construct": "stdio",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-cli/src/webcrack.rs",
+      "scope": "WebcrackShim::run",
+      "construct": "process",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-cli/src/webcrack.rs",
+      "scope": "shim_out_dir",
+      "construct": "fs",
       "role": "shell"
     },
     {
@@ -1106,24 +1118,6 @@
       "role": "legacy"
     },
     {
-      "file": "crates/humanify-ag-core/src/naming/reconcile/hunks.rs",
-      "scope": "compute_normal_diff",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/naming/reconcile/hunks.rs",
-      "scope": "compute_normal_diff",
-      "construct": "process",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/naming/reconcile/hunks.rs",
-      "scope": "compute_normal_diff",
-      "construct": "result-string",
-      "role": "legacy"
-    },
-    {
       "file": "crates/humanify-ag-core/src/naming/vendor_bodies.rs",
       "scope": "bodies_of_bridge",
       "construct": "fs",
@@ -1352,66 +1346,6 @@
       "role": "legacy"
     },
     {
-      "file": "crates/humanify-ag-core/src/scratch.rs",
-      "scope": "temp_dir",
-      "construct": "clock",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/scratch.rs",
-      "scope": "temp_dir",
-      "construct": "env",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/scratch.rs",
-      "scope": "temp_dir",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/scratch.rs",
-      "scope": "temp_dir",
-      "construct": "process",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/scratch.rs",
-      "scope": "temp_dir",
-      "construct": "result-string",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/scratch.rs",
-      "scope": "temp_dir",
-      "construct": "static-state",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
-      "scope": "run",
-      "construct": "clock",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
-      "scope": "kill_group",
-      "construct": "process",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
-      "scope": "run",
-      "construct": "thread",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/subprocess.rs",
-      "scope": "run_inherited",
-      "construct": "thread",
-      "role": "legacy"
-    },
-    {
       "file": "crates/humanify-ag-core/src/toolchain.rs",
       "scope": "BundleLayout::original_bundle_binding_count",
       "construct": "result-string",
@@ -1625,18 +1559,6 @@
       "file": "crates/humanify-ag-core/src/unpack/input.rs",
       "scope": "read_input",
       "construct": "result-string",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/unpack/webcrack.rs",
-      "scope": "shim_out_dir",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/unpack/webcrack.rs",
-      "scope": "unpack_webcrack",
-      "construct": "process",
       "role": "legacy"
     },
     {
@@ -2352,6 +2274,72 @@
       "scope": "tool_at",
       "construct": "result-string",
       "role": "legacy"
+    },
+    {
+      "file": "crates/humanify-ag-io/src/diff.rs",
+      "scope": "compute_normal_diff",
+      "construct": "fs",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-io/src/diff.rs",
+      "scope": "compute_normal_diff",
+      "construct": "process",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-io/src/scratch.rs",
+      "scope": "temp_dir",
+      "construct": "static-state",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-io/src/scratch.rs",
+      "scope": "temp_dir",
+      "construct": "env",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-io/src/scratch.rs",
+      "scope": "temp_dir",
+      "construct": "clock",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-io/src/scratch.rs",
+      "scope": "temp_dir",
+      "construct": "process",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-io/src/scratch.rs",
+      "scope": "temp_dir",
+      "construct": "fs",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
+      "scope": "run",
+      "construct": "clock",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
+      "scope": "run",
+      "construct": "thread",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
+      "scope": "run_inherited",
+      "construct": "thread",
+      "role": "shell"
+    },
+    {
+      "file": "crates/humanify-ag-io/src/subprocess.rs",
+      "scope": "kill_group",
+      "construct": "process",
+      "role": "shell"
     },
     {
       "file": "crates/humanify-ag-llm/src/cache.rs",

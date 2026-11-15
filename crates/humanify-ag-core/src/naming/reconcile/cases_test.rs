@@ -13,12 +13,12 @@ use std::path::PathBuf;
 use oxc_allocator::Allocator;
 use serde_json::Value;
 
-use super::hunks::compute_normal_diff;
 use super::{ReconcileOptions, collect_word_tokens, reconcile_diff_noise};
 use crate::ingest::Ingest;
 use crate::rename::eligibility::Eligibility;
 use crate::rename::validated::RenameState;
 use crate::trail::Anchor;
+use humanify_ag_io::diff::compute_normal_diff;
 
 fn fixture() -> Vec<Value> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

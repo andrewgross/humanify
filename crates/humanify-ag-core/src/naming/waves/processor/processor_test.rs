@@ -6,6 +6,7 @@
 //! The ask-trace pins (the `--dump-asks` record): every re-ask records its
 //! reask class, and the record is bounded — exactly one retry per scope.
 
+use humanify_ag_io::diff::compute_normal_diff as gnu_diff;
 use humanify_ag_testkit::strings;
 use std::cell::Cell;
 
@@ -134,6 +135,7 @@ fn a_later_waves_prompt_lists_the_names_earlier_waves_applied() {
         },
         &plain_config(),
         &map_provider(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -184,6 +186,7 @@ fn a_module_collision_retry_discloses_and_lists_the_names_the_run_applied() {
         },
         &plain_config(),
         &map_provider(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -284,6 +287,7 @@ fn a_cross_lane_collision_gets_exactly_one_disclosed_reask() {
         },
         &config,
         &provider,
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -341,6 +345,7 @@ fn the_collision_reask_records_its_cause_and_is_bounded_in_the_ask_log() {
         },
         &plain_config(),
         &map_provider(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -400,6 +405,7 @@ fn the_late_contexts_share_one_taken_snapshot() {
         },
         &plain_config(),
         &map_provider(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -444,6 +450,7 @@ fn the_strategy_split_pins_the_taken_sets_on_a_same_wave_pair() {
         },
         &plain_config(),
         &map_provider(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -656,6 +663,7 @@ fn a_late_rejected_suggestions_round2_records_the_rejections_cause_and_code() {
         },
         &plain_config(),
         &provider,
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -735,6 +743,7 @@ fn the_second_reask_discloses_every_prior_suggestion_and_is_bounded() {
         },
         &plain_config(),
         &provider,
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -810,6 +819,7 @@ fn a_single_reask_budget_restores_the_old_bounded_behavior() {
         },
         &config,
         &map_provider(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -848,6 +858,7 @@ fn a_zero_reask_budget_gives_up_on_the_ladder_and_stays_counted() {
         },
         &config,
         &map_provider(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -912,6 +923,7 @@ fn run_scripted(
         },
         &plain_config(),
         &fake,
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs")
@@ -1037,6 +1049,7 @@ fn a_stubborn_echo_exhausts_and_stays_a_sweep_target() {
                 other => format!("{other}Named"),
             },
         ),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1195,6 +1208,7 @@ console.log(r({ type: "plugin" }, true));
         },
         &plain_config(),
         &map_provider(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1414,6 +1428,7 @@ fn a_zero_reask_budget_ladders_a_lone_collision_as_before() {
                 other => plain_name(other),
             },
         ),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1516,6 +1531,7 @@ fn a_zero_reask_budget_still_ladders_the_lane_end_collision() {
         },
         &config,
         &scripted(lane_end_answer),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");

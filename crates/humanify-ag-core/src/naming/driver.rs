@@ -43,7 +43,7 @@ use crate::naming::passes::family_permute::{
 };
 use crate::naming::passes::sweep::{DecidedNames, SweepResult, run_deferred_sweep};
 use crate::naming::reconcile::ReconcileResult;
-use crate::naming::reconcile::step::{PriorDiffOutcome, run_prior_diff_reconciliation};
+use crate::naming::reconcile::step::{PriorDiffOutcome, StepRules, run_prior_diff_reconciliation};
 use crate::naming::report::coverage::{
     CoverageInputs, binding_provenance_record, build_coverage_summary, census_record,
     format_coverage_summary, survivor_provenance_split,
@@ -256,6 +256,7 @@ pub fn run_naming<P: NameProvider>(
     input: &NamingInput<'_>,
     config: &NamingConfig,
     provider: &P,
+    differ: &dyn crate::naming::reconcile::hunks::Differ,
     log: &mut crate::artifact_dump::DispatchLog,
 ) -> Result<NamingOutcome, String> {
     let has_prior = input.prior.is_some();
@@ -421,8 +422,11 @@ pub fn run_naming<P: NameProvider>(
         reconcile_pass(
             &generated,
             prior,
-            &eligible,
-            config.name_profile,
+            StepRules {
+                eligible: &eligible,
+                profile: config.name_profile,
+                differ,
+            },
             trail,
             ledger_walk,
             &library_generated_spans,
@@ -665,21 +669,13 @@ type ReconcileRun = (
 fn reconcile_pass(
     generated: &str,
     prior: &str,
-    eligible: &Eligibility,
-    profile: NameProfile,
+    rules: StepRules<'_>,
     trail: StrategyTrail,
     ledger_walk: Option<crate::naming::reconcile::step::LedgerWalk>,
     library_spans: &[(u32, u32)],
 ) -> (StrategyTrail, Result<ReconcileRun, String>) {
-    match run_prior_diff_reconciliation(
-        generated,
-        prior,
-        eligible,
-        profile,
-        trail,
-        ledger_walk,
-        library_spans,
-    ) {
+    match run_prior_diff_reconciliation(generated, prior, rules, trail, ledger_walk, library_spans)
+    {
         Ok(PriorDiffOutcome {
             result,
             code,

@@ -19,6 +19,7 @@ path = "src/main.rs"
 humanify-ag-cli = { path = "../humanify-ag-cli" }
 # The one subprocess owner (drained pipes, one deadline, group kill).
 humanify-ag-core = { path = "../humanify-ag-core" }
+humanify-ag-io = { path = "../humanify-ag-io" }
 # JSON the way JavaScript writes it (the JS spelling of a card).
 humanify-ag-model = { path = "../humanify-ag-model" }
 # The ONE stub LLM (e2e, ask-trace, `stub-llm serve`) — the harness is

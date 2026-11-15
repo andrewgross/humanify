@@ -6,6 +6,7 @@
 // io: test code reads fixtures and writes scratch trees; it is not the pipeline
 #![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
+use humanify_ag_io::diff::compute_normal_diff as gnu_diff;
 use std::cell::Cell;
 
 use humanify_ag_model::llm::{
@@ -129,6 +130,7 @@ fn run_cfg(fresh: &str, cfg: &NamingConfig, provider: &dyn NameProvider) -> Nami
         },
         cfg,
         &provider,
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs")
@@ -255,6 +257,7 @@ fn with_a_prior_any_completion_order_ships_the_same_bytes() {
             },
             &config(),
             &provider,
+            &gnu_diff,
             &mut log,
         )
         .expect("the stage runs")
@@ -333,6 +336,7 @@ fn the_log_streams_the_bulk_builders_bytes() {
         },
         &config(),
         &LifoProvider::default(),
+        &gnu_diff,
         &mut log,
     )
     .expect("the stage runs");
@@ -389,6 +393,7 @@ fn the_off_log_retains_nothing_and_the_asks_log_keeps_rows_only() {
         },
         &config(),
         &LifoProvider::default(),
+        &gnu_diff,
         &mut off,
     )
     .expect("the stage runs");
@@ -413,6 +418,7 @@ fn the_off_log_retains_nothing_and_the_asks_log_keeps_rows_only() {
         },
         &config(),
         &LifoProvider::default(),
+        &gnu_diff,
         &mut asks,
     )
     .expect("the stage runs");
@@ -477,6 +483,7 @@ fn a_dump_streaming_run_replays_the_prepared_records_bytes() {
         },
         &config(),
         &LifoProvider::default(),
+        &gnu_diff,
         &mut log,
     )
     .expect("the stage runs");

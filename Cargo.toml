@@ -9,6 +9,7 @@ resolver = "3"
 members = [
   "crates/humanify-ag-model",
   "crates/humanify-ag-core",
+  "crates/humanify-ag-io",
   "crates/humanify-ag-llm",
   "crates/humanify-ag-cli",
   "crates/humanify-ag-index",

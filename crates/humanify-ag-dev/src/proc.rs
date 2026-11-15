@@ -1,6 +1,6 @@
 //! Every child process the harness starts goes through [`run`]: ONE
 //! `Command::new` in the crate, on top of the workspace's one subprocess
-//! owner (`humanify_ag_core::subprocess::run`: every pipe drained at once,
+//! owner (`humanify_ag_io::subprocess::run`: every pipe drained at once,
 //! one deadline over the whole operation, the process group killed when it
 //! expires, every failure returned). docs/concurrency.md rules 3 and 4;
 //! the harness's many subprocesses are allowlisted ONCE, here (dev-harness
@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-pub use humanify_ag_core::subprocess::Finished;
+pub use humanify_ag_io::subprocess::Finished;
 
 /// One child to run: program, arguments, and how.
 #[derive(Clone, Debug)]
@@ -73,7 +73,7 @@ fn command(spawn: &Spawn) -> Command {
 /// back for the caller to judge. Err when it could not start, timed out
 /// (and was killed), or a pipe failed.
 pub fn run(spawn: &Spawn) -> Result<Finished, String> {
-    humanify_ag_core::subprocess::run(&mut command(spawn), spawn.stdin.clone(), spawn.deadline)
+    humanify_ag_io::subprocess::run(&mut command(spawn), spawn.stdin.clone(), spawn.deadline)
         .map_err(|e| format!("{}: {e}", spawn.describe()))
 }
 
@@ -87,7 +87,7 @@ pub fn run_streamed(spawn: &Spawn) -> Result<std::process::ExitStatus, String> {
             spawn.describe()
         ));
     }
-    humanify_ag_core::subprocess::run_inherited(&mut command(spawn), spawn.deadline)
+    humanify_ag_io::subprocess::run_inherited(&mut command(spawn), spawn.deadline)
         .map_err(|e| format!("{}: {e}", spawn.describe()))
 }
 
@@ -191,7 +191,7 @@ pub fn run_to_file(
 /// Kill a child's whole process group (`kill -KILL -- -<pgid>`; the
 /// harness forbids no unsafe, but the one owner of this already shells out).
 fn kill_group(pid: u32) {
-    let _ = humanify_ag_core::subprocess::run(
+    let _ = humanify_ag_io::subprocess::run(
         Command::new("kill")
             .arg("-KILL")
             .arg("--")

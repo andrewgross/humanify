@@ -42,7 +42,7 @@ use crate::place::ledger::SplitLedger;
 
 use crate::babel_view::DiffLines;
 use crate::emit::substitutions::{Substitution, apply_substitutions};
-use crate::naming::reconcile::hunks::compute_normal_diff;
+use crate::naming::reconcile::hunks::Differ;
 use crate::naming::reconcile::resolve::{IdentSite, identifier_sites, shorthand_key};
 use crate::naming::reconcile::{ReconcileOptions, collect_word_tokens, reconcile_diff_noise};
 use crate::rename::eligibility::Eligibility;
@@ -640,11 +640,11 @@ fn reconcile_one_file(
     eligible: &Eligibility,
     profile: NameProfile,
     ledger_statements: usize,
-    differ: &Differ,
+    differ: &dyn Differ,
 ) -> FileWork {
-    let diff_text = match differ(prior, fresh) {
+    let diff_text = match differ.normal_diff(prior, fresh) {
         Ok(text) => text,
-        Err(error) => return FileWork::diff_failed(error),
+        Err(error) => return FileWork::diff_failed(error.0),
     };
     if diff_text.is_empty() {
         return FileWork::default();
@@ -764,6 +764,9 @@ pub struct PostSplitInput<'i> {
     pub name_profile: NameProfile,
     /// `--disable post-split-reconcile`.
     pub disabled: bool,
+    /// How a file pair is diffed: the system `diff` the shell hands in
+    /// (`humanify_ag_io::diff`); a test may hand in a failing one.
+    pub differ: &'i dyn Differ,
 }
 
 /// `postSplitReconcile(input)`: the per-file read+compute is a PURE
@@ -774,14 +777,6 @@ pub struct PostSplitInput<'i> {
 /// list, the renames) is re-joined serially below in that same order,
 /// the exact order the TS iterated.
 pub fn post_split_reconcile(input: PostSplitInput<'_>) -> PostSplitResult {
-    post_split_reconcile_with(input, &compute_normal_diff)
-}
-
-/// How a file pair is diffed: the system `diff` in production
-/// ([`compute_normal_diff`]); a test hands in a failing one.
-type Differ = dyn Fn(&str, &str) -> Result<String, String> + Sync;
-
-fn post_split_reconcile_with(input: PostSplitInput<'_>, differ: &Differ) -> PostSplitResult {
     let mut result = PostSplitResult::default();
     if input.disabled {
         return result;
@@ -793,6 +788,7 @@ fn post_split_reconcile_with(input: PostSplitInput<'_>, differ: &Differ) -> Post
         eligible,
         name_profile,
         disabled: _,
+        differ,
     } = input;
     let mut ledger_statements: HashMap<String, usize> = HashMap::new();
     for f in &ledger.order {

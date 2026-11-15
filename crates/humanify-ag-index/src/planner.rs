@@ -806,7 +806,7 @@ pub fn fetch_high_impact_list(
     }
     std::fs::create_dir_all(&dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
     const DEADLINE: std::time::Duration = std::time::Duration::from_secs(5 * 60);
-    let packed = humanify_ag_core::subprocess::run(
+    let packed = humanify_ag_io::subprocess::run(
         Command::new("npm")
             .arg("pack")
             .arg(format!("npm-high-impact@{version}"))
@@ -830,7 +830,7 @@ pub fn fetch_high_impact_list(
         .trim()
         .to_string();
     let extracted = dir.join("package").join(file);
-    let untar = humanify_ag_core::subprocess::run(
+    let untar = humanify_ag_io::subprocess::run(
         Command::new("tar")
             .arg("-xzf")
             .arg(dir.join(&tgz))

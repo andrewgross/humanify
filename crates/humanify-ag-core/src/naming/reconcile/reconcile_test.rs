@@ -122,3 +122,32 @@ fn shorthand_specifiers_keep_the_module_name() {
         "import { a as alpha } from \"m\";\nvar beta = alpha;\nexport { beta as b };"
     );
 }
+
+/// The pre-split step diffs through the `Differ` the shell hands it (core
+/// spawns no process): a failing one is the step's error, word for word,
+/// which the caller prints as a WARNING.
+#[test]
+fn the_pre_split_step_diffs_through_the_injected_differ() {
+    let failing = |_: &str, _: &str| -> Result<String, String> {
+        Err("diff timed out (planted)".to_string())
+    };
+    let eligible = crate::rename::eligibility::Eligibility::new(
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
+    );
+    let result = super::step::run_prior_diff_reconciliation(
+        "var a = 1;\n",
+        "var b = 1;\n",
+        super::step::StepRules {
+            eligible: &eligible,
+            profile: crate::rename::name_profile::NameProfile::Bun,
+            differ: &failing,
+        },
+        crate::trail::StrategyTrail::default(),
+        None,
+        &[],
+    );
+    match result {
+        Err((error, _)) => assert_eq!(error, "diff timed out (planted)"),
+        Ok(_) => panic!("a failing differ must fail the step"),
+    }
+}

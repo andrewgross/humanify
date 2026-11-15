@@ -161,7 +161,9 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
         &code,
         Path::new(&work_dir),
         humanify_ag_core::unpack::AdapterRun {
-            webcrack_shim: shim.as_ref(),
+            webcrack_shim: shim
+                .as_ref()
+                .map(|s| s as &dyn humanify_ag_core::unpack::webcrack::ExternalUnpacker),
             ..humanify_ag_core::unpack::AdapterRun::new(
                 toolchain.interop.piece,
                 toolchain.module_wrappers.piece,

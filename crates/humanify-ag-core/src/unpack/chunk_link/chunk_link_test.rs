@@ -12,7 +12,7 @@ use crate::unpack::input::read_input;
 
 /// Write a layout into a fresh directory; the first file is the entry.
 fn layout(files: &[(&str, &str)]) -> PathBuf {
-    let dir = crate::scratch::temp_dir("chunk-link").unwrap();
+    let dir = humanify_ag_io::scratch::temp_dir("chunk-link").unwrap();
     for (name, text) in files {
         std::fs::write(dir.join(name), text).unwrap();
     }
@@ -23,7 +23,7 @@ fn layout(files: &[(&str, &str)]) -> PathBuf {
 /// pragma line, evaluate the wrapper, call it with the CommonJS bindings.
 /// Returns stdout; a failing run fails the test with its stderr.
 fn run(text: &str) -> String {
-    let dir = crate::scratch::temp_dir("chunk-link-run").unwrap();
+    let dir = humanify_ag_io::scratch::temp_dir("chunk-link-run").unwrap();
     let file = dir.join("linked.js");
     std::fs::write(&file, text).unwrap();
     let loader = "const p=process.argv[1];\

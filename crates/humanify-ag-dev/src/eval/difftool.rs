@@ -25,7 +25,7 @@ const DIFF_DEADLINE: Duration = Duration::from_secs(600);
 pub const LINE_DIFF_FLAGS: &[&str] = &["--minimal"];
 
 /// The counter. CRLF-normalised copies (only when an input has CRLF
-/// line ends) go to a private scratch dir (`humanify_ag_core::scratch`).
+/// line ends) go to a private scratch dir (`humanify_ag_io::scratch`).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Differ;
 
@@ -87,7 +87,7 @@ fn normalised(
     let dir = match scratch.get() {
         Some(d) => d.clone(),
         None => {
-            let d = humanify_ag_core::scratch::temp_dir("humanify-eval-diff")?;
+            let d = humanify_ag_io::scratch::temp_dir("humanify-eval-diff")?;
             let _ = scratch.set(d.clone());
             d
         }

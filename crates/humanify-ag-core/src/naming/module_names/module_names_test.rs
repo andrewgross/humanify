@@ -5,6 +5,7 @@
 //! retry with the taken name listed; a wrapper the prior carried is never
 //! asked again.
 
+use humanify_ag_io::diff::compute_normal_diff as gnu_diff;
 use std::rc::Rc;
 use std::sync::Mutex;
 
@@ -167,6 +168,7 @@ fn run(fresh: &str, prior: Option<&str>, provider: &ModuleProvider) -> NamingOut
         },
         &config(),
         &provider.fake,
+        &gnu_diff,
         &mut log,
     )
     .expect("the stage runs")
@@ -489,6 +491,7 @@ fn run_with_regions(
         },
         &config(),
         &provider.fake,
+        &gnu_diff,
         &mut log,
     )
     .expect("the stage runs")
@@ -516,6 +519,7 @@ fn run_with_restorations(
         },
         &config(),
         &provider.fake,
+        &gnu_diff,
         &mut log,
     )
     .expect("the stage runs")
@@ -718,6 +722,7 @@ fn run_bridged(
         },
         &config(),
         &provider.fake,
+        &gnu_diff,
         &mut log,
     )
     .expect("the stage runs")
@@ -1262,6 +1267,7 @@ fn run_with_prior_modules(
         },
         &config(),
         &provider.fake,
+        &gnu_diff,
         &mut log,
     )
     .expect("the stage runs")

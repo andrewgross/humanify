@@ -1,0 +1,17 @@
+[package]
+name = "humanify-ag-io"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# The shell's small I/O library: the one child-process runner, the one
+# scratch-directory maker and the GNU `diff` the reconcile aligns with.
+# The pure core never depends on it (rules::PURE_CRATES); cli, index and
+# the harness do, and core takes it as a DEV-dependency for its tests.
+
+[dependencies]
+
+[lints]
+workspace = true

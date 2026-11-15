@@ -1,3 +1,4 @@
+use humanify_ag_io::diff::compute_normal_diff as gnu_diff;
 use humanify_ag_testkit::fake::{ShuffledFake, names};
 use std::collections::BTreeSet;
 
@@ -87,6 +88,7 @@ fn an_unrestored_factory_bodys_identifiers_are_asked_of_the_model() {
         None,
         &config(),
         &namer,
+        &gnu_diff,
         &mut log(),
     )
     .expect("runs")
@@ -113,6 +115,7 @@ fn a_restored_name_is_held_not_asked() {
         None,
         &config(),
         &namer,
+        &gnu_diff,
         &mut log(),
     )
     .expect("runs")
@@ -130,6 +133,7 @@ fn an_unchanged_body_carries_its_names_from_the_prior() {
         None,
         &config(),
         &namer("prior"),
+        &gnu_diff,
         &mut log(),
     )
     .expect("runs")
@@ -148,6 +152,7 @@ fn an_unchanged_body_carries_its_names_from_the_prior() {
         Some(&first.joined),
         &config(),
         &namer,
+        &gnu_diff,
         &mut log(),
     )
     .expect("runs")
@@ -167,6 +172,7 @@ fn bodies_are_joined_in_path_order_and_returned_in_input_order() {
         None,
         &config(),
         &namer("asked"),
+        &gnu_diff,
         &mut log(),
     )
     .expect("runs")
@@ -189,6 +195,7 @@ fn a_body_with_a_lone_surrogate_ships_as_extracted_and_the_rest_still_carry() {
         None,
         &config(),
         &namer("prior"),
+        &gnu_diff,
         &mut log(),
     )
     .expect("runs")
@@ -210,6 +217,7 @@ fn a_body_with_a_lone_surrogate_ships_as_extracted_and_the_rest_still_carry() {
         Some(&first.joined),
         &config(),
         &namer,
+        &gnu_diff,
         &mut log(),
     )
     .expect("runs")
@@ -234,6 +242,7 @@ fn a_body_with_a_line_too_long_for_a_prompt_ships_as_extracted() {
         None,
         &config(),
         &namer,
+        &gnu_diff,
         &mut log(),
     )
     .expect("runs")

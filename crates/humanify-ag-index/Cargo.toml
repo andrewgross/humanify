@@ -9,6 +9,7 @@ description = "The offline library fingerprint index builder (docs/design/librar
 
 [dependencies]
 humanify-ag-core = { path = "../humanify-ag-core" }
+humanify-ag-io = { path = "../humanify-ag-io" }
 humanify-ag-model = { path = "../humanify-ag-model" }
 oxc_allocator.workspace = true
 oxc_semantic.workspace = true

@@ -294,7 +294,7 @@ pub fn fetch_tool_at(root: &Path, bundler: RecipeBundler, version: &str) -> Resu
     };
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| fail(e.to_string()))?;
-    let out = humanify_ag_core::subprocess::run(
+    let out = humanify_ag_io::subprocess::run(
         Command::new("npm")
             .arg("install")
             .args(fetch_specs_at(bundler, version))

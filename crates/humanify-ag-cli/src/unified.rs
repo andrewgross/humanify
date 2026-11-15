@@ -1250,9 +1250,15 @@ fn name_vendor_bodies_stage(
     let mut config = config.clone();
     config.module_naming = None;
     let mut log = humanify_ag_core::artifact_dump::DispatchLog::off(config.params.clone());
-    let Some(named) =
-        vb::name_vendor_bodies(&bodies, prior.as_deref(), &config, &provider, &mut log)
-            .map_err(Crash)?
+    let Some(named) = vb::name_vendor_bodies(
+        &bodies,
+        prior.as_deref(),
+        &config,
+        &provider,
+        &humanify_ag_io::diff::compute_normal_diff,
+        &mut log,
+    )
+    .map_err(Crash)?
     else {
         return Ok(0);
     };
@@ -1445,6 +1451,7 @@ impl NamingRun<'_> {
             },
             &self.config,
             &self.provider,
+            &humanify_ag_io::diff::compute_normal_diff,
             self.log,
         )?;
         // buildRenameLedgerBundle's self-check (non-fatal: the ledger is a

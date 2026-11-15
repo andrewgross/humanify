@@ -101,7 +101,7 @@ pub fn bundler_version_of(
     deadline: std::time::Duration,
 ) -> Result<String, String> {
     let out =
-        humanify_ag_core::subprocess::run(&mut version_command_of(bundler, bin), None, deadline)
+        humanify_ag_io::subprocess::run(&mut version_command_of(bundler, bin), None, deadline)
             .map_err(|e| format!("{}: {e}", bin.display()))?;
     let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if !out.status.success() || v.is_empty() {
@@ -212,7 +212,7 @@ impl RecipeBuild {
         let _ = std::fs::remove_dir_all(out_dir);
         std::fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
         let mut cmd = self.command(cwd, entry, out_dir, externals, esm);
-        let out = humanify_ag_core::subprocess::run(&mut cmd, None, BUILD_DEADLINE)
+        let out = humanify_ag_io::subprocess::run(&mut cmd, None, BUILD_DEADLINE)
             .map_err(|e| e.to_string())?;
         if !out.status.success() {
             return Err(format!(

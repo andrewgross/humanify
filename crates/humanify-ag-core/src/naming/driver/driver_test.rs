@@ -3,6 +3,7 @@
 // io: test code reads fixtures and writes scratch trees; it is not the pipeline
 #![allow(clippy::let_underscore_must_use)]
 
+use humanify_ag_io::diff::compute_normal_diff as gnu_diff;
 use oxc_allocator::Allocator;
 
 use crate::naming::waves::generate::TextView;
@@ -323,6 +324,7 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
             },
             &ledger_config(),
             &suffix(),
+            &gnu_diff,
             &mut retain_log(),
         )
         .expect("the stage runs");
@@ -357,6 +359,7 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
         },
         &ledger_config(),
         &suffix(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -387,6 +390,7 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
         },
         &config,
         &suffix(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -415,6 +419,7 @@ fn the_llm_ref_count_counts_each_reference_once() {
             },
             &ledger_config(),
             &suffix(),
+            &gnu_diff,
             &mut retain_log(),
         )
         .expect("the stage runs");
@@ -512,6 +517,7 @@ fn a_cold_run_holds_the_module_names_once_not_once_per_function() {
         },
         &config,
         &suffix(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -566,6 +572,7 @@ fn the_wave_gauges_read_every_retained_owner_on_a_cold_run() {
             },
             &config,
             &suffix(),
+            &gnu_diff,
             log,
         )
         .expect("the stage runs")
@@ -631,6 +638,7 @@ fn the_profile_names_the_wave_setup_and_render_constituents() {
         },
         &ledger_config(),
         &suffix(),
+        &gnu_diff,
         &mut retain_log(),
     );
     let report = profiler.finalize(None);
@@ -684,6 +692,7 @@ fn a_prior_that_binds_nothing_warns() {
         },
         &ledger_config(),
         &suffix(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -730,6 +739,7 @@ fn a_bound_prior_does_not_warn() {
             },
             &ledger_config(),
             &suffix(),
+            &gnu_diff,
             &mut retain_log(),
         )
         .expect("the stage runs");
@@ -814,6 +824,7 @@ fn the_census_splits_single_letter_survivors_by_provenance() {
         },
         &config,
         &meter,
+        &gnu_diff,
         &mut log,
     )
     .expect("the stage runs");
@@ -987,6 +998,7 @@ console.log(require_dep().label(appCounter));
         },
         &config,
         &suffix(),
+        &gnu_diff,
         &mut log,
     )
     .expect("the stage runs");
@@ -1056,6 +1068,7 @@ fn prompts_of(fresh: &str, group: usize) -> Vec<String> {
         },
         &config,
         &provider,
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1165,6 +1178,7 @@ fn the_lazy_init_helper_is_named_by_the_pipeline_not_the_model() {
         },
         &ledger_config(),
         &provider,
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1202,6 +1216,7 @@ fn the_plumbing_name_overrides_a_model_name_carried_from_the_prior() {
         },
         &ledger_config(),
         &recording(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1236,6 +1251,7 @@ fn a_repeated_library_import_is_named_from_its_specifier_not_asked() {
         },
         &ledger_config(),
         &provider,
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1285,6 +1301,7 @@ fn a_library_import_carried_from_the_prior_keeps_its_name() {
         },
         &ledger_config(),
         &recording(),
+        &gnu_diff,
         &mut retain_log(),
     )
     .expect("the stage runs");
@@ -1336,8 +1353,11 @@ fn a_reconcile_that_could_not_run_keeps_its_error_for_a_warning() {
     let (_trail, done) = super::reconcile_pass(
         "var = ;",
         "var a = 1;\n",
-        &eligible,
-        crate::rename::name_profile::NameProfile::Bun,
+        crate::naming::reconcile::step::StepRules {
+            eligible: &eligible,
+            profile: crate::rename::name_profile::NameProfile::Bun,
+            differ: &gnu_diff,
+        },
         crate::trail::StrategyTrail::enabled(),
         None,
         &[],

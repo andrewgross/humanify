@@ -7,6 +7,7 @@
 // io: test code reads fixtures and writes scratch trees; it is not the pipeline
 #![allow(clippy::disallowed_methods)]
 
+use humanify_ag_io::diff::compute_normal_diff as gnu_diff;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -117,6 +118,7 @@ fn reconcile_and_carry_match_the_ts() {
         read_prior: &read_prior,
         eligible: &eligible,
         disabled: false,
+        differ: &gnu_diff,
     });
     let changed: HashMap<String, String> = result.changed.iter().cloned().collect();
     assert_eq!(changed, files(&fx["changed"]));
@@ -177,6 +179,7 @@ fn the_kill_switch_does_nothing() {
         read_prior: &read,
         eligible: &eligible,
         disabled: true,
+        differ: &gnu_diff,
     });
     assert_eq!(result.stats.considered, 0);
     assert!(result.changed.is_empty());
@@ -205,6 +208,7 @@ fn a_non_ascii_identifier_is_left_intact() {
         read_prior: &read_prior,
         eligible: &eligible,
         disabled: false,
+        differ: &gnu_diff,
     });
     assert_eq!(
         result.changed,
@@ -358,6 +362,7 @@ fn scramble_run(
         read_prior: &read_prior,
         eligible: &eligible,
         disabled: false,
+        differ: &gnu_diff,
     });
     (result, written(&ledger))
 }
@@ -473,6 +478,7 @@ fn a_rename_chain_carries_the_binding_the_tree_renamed() {
         read_prior: &read_prior,
         eligible: &eligible,
         disabled: false,
+        differ: &gnu_diff,
     });
     // The tree took the chain: the file now reads exactly as the prior.
     assert_eq!(
@@ -517,17 +523,15 @@ fn a_failed_diff_is_counted_apart_from_discards_and_warned() {
         let _ = (p, n);
         Err("diff timed out after 600s (killed)".to_string())
     };
-    let result = super::post_split_reconcile_with(
-        PostSplitInput {
-            name_profile: crate::rename::name_profile::NameProfile::Bun,
-            ledger: &mut ledger,
-            read_fresh: &fresh,
-            read_prior: &prior,
-            eligible: &eligible,
-            disabled: false,
-        },
-        &differ,
-    );
+    let result = post_split_reconcile(PostSplitInput {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
+        ledger: &mut ledger,
+        read_fresh: &fresh,
+        read_prior: &prior,
+        eligible: &eligible,
+        disabled: false,
+        differ: &differ,
+    });
     assert_eq!(result.stats.considered, 2);
     assert_eq!(result.stats.diff_failed, 2);
     assert_eq!(
@@ -553,6 +557,7 @@ fn a_clean_reconcile_has_no_diff_warning() {
         read_prior: &read,
         eligible: &eligible,
         disabled: false,
+        differ: &gnu_diff,
     });
     assert_eq!(result.stats.diff_failed, 0);
     assert_eq!(super::diff_failure_warning(&result), None);

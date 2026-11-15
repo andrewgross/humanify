@@ -30,7 +30,7 @@ const CHUNK: (&str, &[u8]) = ("c.js", b"// @bun\n");
 /// Write a layout (any bytes) into a fresh directory; the first file is
 /// the entry.
 fn layout(files: &[(&str, &[u8])]) -> PathBuf {
-    let dir = crate::scratch::temp_dir("chunk-embedded").unwrap();
+    let dir = humanify_ag_io::scratch::temp_dir("chunk-embedded").unwrap();
     for (name, bytes) in files {
         let path = dir.join(name);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -49,7 +49,7 @@ fn linked(entry: &Path) -> (String, LinkReport) {
 /// that holds the embedded files the way the output tree does
 /// (`<dir>/embedded/<name>`). Returns stdout.
 fn run_with(text: &str, embedded: &[EmbeddedFile]) -> String {
-    let dir = crate::scratch::temp_dir("chunk-embedded-run").unwrap();
+    let dir = humanify_ag_io::scratch::temp_dir("chunk-embedded-run").unwrap();
     for f in embedded {
         let to = dir.join(EMBEDDED_DIR).join(&f.rel);
         std::fs::create_dir_all(to.parent().unwrap()).unwrap();

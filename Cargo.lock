@@ -501,6 +501,7 @@ dependencies = [
  "clap",
  "humanify-ag-core",
  "humanify-ag-index",
+ "humanify-ag-io",
  "humanify-ag-llm",
  "humanify-ag-model",
  "humanify-ag-testkit",
@@ -520,6 +521,7 @@ dependencies = [
 name = "humanify-ag-core"
 version = "0.0.0"
 dependencies = [
+ "humanify-ag-io",
  "humanify-ag-llm",
  "humanify-ag-model",
  "humanify-ag-testkit",
@@ -546,6 +548,7 @@ dependencies = [
  "flate2",
  "humanify-ag-cli",
  "humanify-ag-core",
+ "humanify-ag-io",
  "humanify-ag-model",
  "humanify-ag-testkit",
  "memchr",
@@ -569,6 +572,7 @@ version = "0.0.0"
 dependencies = [
  "clap",
  "humanify-ag-core",
+ "humanify-ag-io",
  "humanify-ag-model",
  "oxc_allocator",
  "oxc_semantic",
@@ -579,6 +583,10 @@ dependencies = [
  "sha2",
  "toml",
 ]
+
+[[package]]
+name = "humanify-ag-io"
+version = "0.0.0"
 
 [[package]]
 name = "humanify-ag-llm"

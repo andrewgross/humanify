@@ -11,8 +11,8 @@ use crate::unpack::chunk_link::{EMBEDDED_DIR, EmbeddedFile};
 
 #[test]
 fn every_embedded_file_is_copied_byte_for_byte() {
-    let input = crate::scratch::temp_dir("embedded-in").unwrap();
-    let out = crate::scratch::temp_dir("embedded-out").unwrap();
+    let input = humanify_ag_io::scratch::temp_dir("embedded-in").unwrap();
+    let out = humanify_ag_io::scratch::temp_dir("embedded-out").unwrap();
     fs::create_dir_all(input.join("src/w")).unwrap();
     fs::write(input.join("a.bin"), b"\x00\xffzstd").unwrap();
     fs::write(input.join("src/w/b.node"), b"\x7fELF").unwrap();
@@ -40,7 +40,7 @@ fn every_embedded_file_is_copied_byte_for_byte() {
 
 #[test]
 fn a_missing_embedded_file_fails_the_write() {
-    let out = crate::scratch::temp_dir("embedded-out").unwrap();
+    let out = humanify_ag_io::scratch::temp_dir("embedded-out").unwrap();
     let files = [EmbeddedFile {
         rel: "gone.bin".into(),
         source: out.join("nowhere/gone.bin"),
@@ -54,7 +54,7 @@ fn the_tree_walk_skips_the_embedded_folder_at_the_root_only() {
     // An embedded `.js` (a compressed blob Bun's `file` loader kept) is
     // not program code; a source folder that happens to be called
     // `embedded` is.
-    let out = crate::scratch::temp_dir("embedded-walk").unwrap();
+    let out = humanify_ag_io::scratch::temp_dir("embedded-walk").unwrap();
     for f in ["embedded/mermaid.min.js", "src/embedded/x.js", "index.js"] {
         fs::create_dir_all(out.join(f).parent().unwrap()).unwrap();
         fs::write(out.join(f), "x").unwrap();
