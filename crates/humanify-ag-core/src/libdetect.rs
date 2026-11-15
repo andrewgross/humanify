@@ -157,6 +157,8 @@ pub fn detect_libraries(
 }
 
 /// `fs.readFile(path, "utf-8")`: invalid bytes become U+FFFD.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn read_utf8(path: &Path) -> Result<String, String> {
     fs::read(path)
         .map(|b| String::from_utf8_lossy(&b).into_owned())
@@ -474,6 +476,8 @@ struct Manifest {
 /// Parse a manifest; None when it is not JSON (the TS `JSON.parse` throw,
 /// caught by the walk). A manifest without a `factories` array is an error:
 /// the TS `manifest.factories.map` throws out of `detectLibraries`.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn parse_manifest(raw: &str) -> Option<Result<Manifest, String>> {
     let value: serde_json::Value = serde_json::from_str(raw).ok()?;
     let Some(entries) = value.get("factories").and_then(|f| f.as_array()) else {
@@ -505,6 +509,8 @@ fn parse_manifest(raw: &str) -> Option<Result<Manifest, String>> {
 /// every factory then went to the formatter as app code. Every unpacked
 /// file sits under the output root, so the first manifest up the chain is
 /// the run's own.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn load_manifest(files: &[UnpackedFile]) -> Option<Result<(Manifest, PathBuf), String>> {
     let start = files.first()?.path.parent()?;
     start.ancestors().find_map(|dir| {

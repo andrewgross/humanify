@@ -20,6 +20,12 @@
 //! A digest change is never "update the constant": it means a form stopped
 //! answering the way it did — a deliberate change needs a new form VERSION
 //! (and an eval), not a new pin.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::let_underscore_must_use
+)]
 
 use std::collections::HashSet;
 

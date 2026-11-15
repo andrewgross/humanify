@@ -407,7 +407,9 @@ The census refuses `test-support` for a file in any other crate.
 with a `// concurrency: <reason>` comment on the same line or within the
 three lines above. The census fails an allow that has no such comment.
 `// env: <reason>` is accepted for the environment-reader ban, which shares
-the lint.
+the lint; in the pure crates `// io: <reason>` (an effect ban) and
+`// default: <reason>` (a Result's error turned into a value) are accepted
+for the effect bans of their own `clippy.toml` (`census:effects`).
 
 Today there are 18 allows: 3 in production code and 15 in tests. The
 production three:

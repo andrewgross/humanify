@@ -1,4 +1,6 @@
 //! The artifact dump writer's red tests.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use humanify_ag_model::llm::CacheKeyParams;
 use serde_json::{Value, json};

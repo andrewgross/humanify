@@ -1,5 +1,7 @@
 //! `dev/census/concurrency-allowlist.json`: every confirmed concurrency site
 //! with its documented pattern (docs/concurrency.md); and
+//! `dev/census/effects-allowlist.json`: every effect site of the product
+//! crates and every `Result<_, String>` signature, with its role; and
 //! `dev/census/clone-allowlist.json`: every reviewed twin group of the clone
 //! census (`cargo dev census clones`) with its justification; and
 //! `dev/census/docs-allowlist.json`: the Markdown files the comment census
@@ -43,6 +45,36 @@ pub struct ConcurrencySite {
 
 /// Load a concurrency allowlist from an explicit path (`--allowlist`).
 pub fn concurrency_allowlist_at(file: &Path) -> Result<Loaded<ConcurrencyAllowlist>, String> {
+    load_json(file)
+}
+
+/// The effects census's allowlist file.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EffectsAllowlist {
+    #[serde(rename = "$comment", default)]
+    pub _comment: String,
+    pub entries: Vec<EffectSite>,
+}
+
+/// One listed site: file + scope + construct and its role (`legacy`,
+/// `observation`, `shell`). A missing field reads as empty, so the census
+/// names the malformed entry instead of failing the load.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct EffectSite {
+    #[serde(default)]
+    pub file: String,
+    #[serde(default)]
+    pub scope: String,
+    #[serde(default)]
+    pub construct: String,
+    #[serde(default)]
+    pub role: String,
+}
+
+/// Load an effects allowlist from an explicit path (`--allowlist`).
+pub fn effects_allowlist_at(file: &Path) -> Result<Loaded<EffectsAllowlist>, String> {
     load_json(file)
 }
 

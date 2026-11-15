@@ -1,6 +1,8 @@
 //! The lookup tables (`humanify-library-index/3`): what the encoder writes
 //! the reader answers, from disk and from memory alike, without loading a
 //! table whole.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::BTreeMap;
 

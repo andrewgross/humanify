@@ -83,7 +83,12 @@ fn an_unknown_stage_in_only_is_refused_naming_the_known_ones() {
 /// advisory ones are exactly the reviews.
 #[test]
 fn the_added_stages_are_present_and_the_reviews_are_advisory() {
-    for new in ["no-private-addresses", "census:slop", "census:comments"] {
+    for new in [
+        "no-private-addresses",
+        "census:slop",
+        "census:comments",
+        "census:effects",
+    ] {
         assert!(
             STAGES.iter().any(|s| s.name == new),
             "missing new stage {new}"

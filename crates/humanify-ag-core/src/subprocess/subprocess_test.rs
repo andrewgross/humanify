@@ -1,6 +1,8 @@
 //! The subprocess owner (docs/concurrency.md rule 4): pipes drained
 //! together, ONE deadline over the whole run, the child's whole process
 //! group killed on expiry, every failure an error.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
 use std::process::Command;
 use std::time::{Duration, Instant};

@@ -4,6 +4,8 @@
 //! fixture's single top-level function the way the TS `fnOf` helper does —
 //! the function row whose parent is the Program — and builds the pair's
 //! [`AlignSide`]s from the real graph rows.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::HashMap;
 

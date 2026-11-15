@@ -119,6 +119,8 @@ fn this_runs_manifest(record: Option<&BunModulesManifest>) -> Option<Manifest> {
 /// tree. They can only be left from an earlier run into the same folder.
 /// The finish never re-links, rewrites or deletes them (they may be the
 /// user's); it names them so nobody mistakes them for this run's output.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn leftover_vendor_files(
     output_dir: &Path,
     record: Option<&BunModulesManifest>,
@@ -179,6 +181,8 @@ pub fn runnable_entry_file(keys: &[String]) -> String {
         .unwrap_or_else(|| "index.js".into())
 }
 
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn write_file(path: &Path, text: &str) -> Result<(), String> {
     fs::write(path, text).map_err(|e| format!("write {}: {e}", path.display()))
 }
@@ -192,6 +196,9 @@ pub struct FinishReport {
 }
 
 /// `relinkBunModules(outputDir, manifest, splitFiles, { priorRoot })`.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 fn relink_bun_modules(
     output_dir: &Path,
     manifest: &Manifest,
@@ -256,6 +263,9 @@ fn relink_bun_modules(
 
 /// `finishSplitOutput`: re-link, then (runnable only) the `using`
 /// desugar and the scaffold. Returns whether a Bun re-link ran.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 pub fn finish_split_output(
     input: &FinishInput<'_>,
     report: &mut FinishReport,
@@ -388,6 +398,9 @@ pub struct ReconcileReport {
     pub carry: Option<CarryResult>,
 }
 
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn read_opt(root: &Path, file: &str) -> Option<String> {
     std::fs::read(root.join(file))
         .ok()
@@ -480,6 +493,8 @@ pub fn reconcile_post_split(
 
 /// `carryIntoBundle`: give `.humanify/humanified.js` the names the tree
 /// shipped; abstentions are counted by reason.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn carry_into_bundle(
     output_dir: &Path,
     ledger: &crate::place::ledger::SplitLedger,

@@ -5,6 +5,8 @@
 //! can run on its own — runs the original and the formatted text under
 //! node and compares what they print (the formatter must never change a
 //! program's meaning).
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::process::Command;
 

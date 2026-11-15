@@ -1,4 +1,6 @@
 //! The TS spec (src/split/layout.test.ts), case for case.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
 use super::{
     HUMANIFIED_SOURCE_PATH, SPLIT_LEDGER_PATH, find_split_ledger_path, split_tree_root_of,

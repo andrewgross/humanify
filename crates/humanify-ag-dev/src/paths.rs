@@ -30,6 +30,9 @@ pub const LIBRARY_RESULTS: &str = "dev/library/results";
 pub const LIBRARY_LABEL_FIXTURES: &str = "crates/humanify-ag-dev/src/library/fixtures/labels";
 /// The concurrency census's allowlist.
 pub const CONCURRENCY_ALLOWLIST: &str = "dev/census/concurrency-allowlist.json";
+/// The effects census's allowlist (every effect site of the product
+/// crates and every `Result<_, String>` signature, each with its role).
+pub const EFFECTS_ALLOWLIST: &str = "dev/census/effects-allowlist.json";
 /// The clone census's allowlist (reviewed twin groups, each justified).
 pub const CLONE_ALLOWLIST: &str = "dev/census/clone-allowlist.json";
 /// The Markdown files the comment census allows (glob patterns).

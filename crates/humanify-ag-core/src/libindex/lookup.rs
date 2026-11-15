@@ -193,6 +193,8 @@ impl LibraryIndex {
     /// bundle reads the union from here on, else the chosen slice alone.
     /// Made once (a second call returns the first share); 0 when the
     /// index reads no terser-built slice. Any other mode: the share only.
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::let_underscore_must_use)]
     pub fn decide_terser_slices(
         &self,
         prints: &[Option<StatementPrints>],
@@ -276,6 +278,8 @@ impl LibraryIndex {
     /// slice for the recipe is [`LoadError::NoSlice`]. Only the tables'
     /// headers and fences are read here. `terser` names the slices read
     /// beside the chosen one ([`super::recipe::terser_slices`]).
+    // io: legacy effect site, listed in dev/census/effects-allowlist.json
+    #[allow(clippy::disallowed_methods)]
     pub fn load(
         dir: &Path,
         recipe: &super::recipe::DetectedRecipe,

@@ -361,6 +361,8 @@ fn preempting(preempt: Option<&String>, name_vote: Option<&String>) -> Option<St
 }
 
 /// One tier's `decide`.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn decide(tier: Tier, c: &Ctx) -> Option<String> {
     match tier {
         Tier::Hash => c.tiers.via_hash[c.i].as_ref().ok().cloned(),

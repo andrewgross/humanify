@@ -517,6 +517,8 @@ pub struct FactoryNameCounts {
 /// [`MATCH_KEY`] (the manifest's `structuralHash`, stamped with its
 /// version) and the content re-key ([`vendor_content`]) under
 /// `hash::forms::VENDOR_CONTENT`.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn factory_structural_hash(
     function: &oxc_ast::ast::Expression<'_>,
     tables: &SymbolTables,

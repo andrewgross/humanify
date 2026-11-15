@@ -280,6 +280,8 @@ pub fn rederive_stale_era_hashes(
 }
 
 /// Read a ledger file (`loadPriorSplitLedger`'s parse).
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn read_ledger(path: &Path) -> Result<StableSplitLedger, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let ledger: StableSplitLedger =

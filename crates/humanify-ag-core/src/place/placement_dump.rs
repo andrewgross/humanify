@@ -72,6 +72,8 @@ pub struct PlacementGate<'a, 'n> {
     pub app_factories: std::collections::HashSet<usize>,
 }
 
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
@@ -95,6 +97,8 @@ pub struct Placed {
 /// Run one `stableSplitFromCode` placement regime over the split input:
 /// the per-statement file assignment and the regime's summary line. With
 /// `out_dir`, the fossil regime also writes its `fossil-modules.json`.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn assign_regime(
     input: &SplitInput,
     shipped: &str,
@@ -216,6 +220,8 @@ pub fn assign_regime(
 
 /// The tiers' `PriorCarry` from the prior text + the match-map JSON (a
 /// JSON object of final name → prior name); absent when neither is given.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn read_carry(
     prior_text: Option<&Path>,
     match_map: Option<&Path>,

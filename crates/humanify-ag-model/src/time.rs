@@ -30,6 +30,9 @@ pub fn iso_from_unix_ms(ms: u128) -> String {
 }
 
 /// Now, as [`iso_from_unix_ms`] (JS `new Date().toISOString()`).
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn iso_now() -> String {
     let since = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

@@ -375,6 +375,8 @@ pub fn code_literals(code: &str, mode: LiteralMode) -> Option<BTreeSet<String>> 
 
 /// The literal set of a JSON file (an npm package's `.json` files are
 /// bundled as objects): keys are properties, values strings and numbers.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn json_literals(text: &str) -> Option<BTreeSet<String>> {
     let value: serde_json::Value = serde_json::from_str(text).ok()?;
     let mut lits = LitSet::default();

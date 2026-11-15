@@ -14,7 +14,9 @@
 //! 4. a config-file reader (`toml`) outside `config/file.rs`, the
 //!    `--config` file's one reader (config sweep step 5) — and outside
 //!    `humanify-ag-index/src/spec.rs`, whose spec file is the builder's
-//!    build INPUT, a different schema from the pipeline's configuration;
+//!    build INPUT, a different schema from the pipeline's configuration —
+//!    and outside the effects census (`humanify-ag-dev/src/census/effects.rs`),
+//!    which checks the pure crates' `clippy.toml` and `Cargo.toml`;
 //! 5. a JSON lookup of a setting name (`v["skipLibraries"]`,
 //!    `.get("model")`, `.bool(…)`) outside the config owner (`config.rs`
 //!    and its `config/` modules): a setting is read from the typed
@@ -76,6 +78,11 @@ const INDEX_CLI: (&str, &str) = (
     "the library-index builder's `index` subcommand: its own clap declaration (exp186: \
      it was a separate binary)",
 );
+const EFFECTS_CENSUS: (&str, &str) = (
+    "humanify-ag-dev/src/census/effects.rs",
+    "the effects census reads the pure crates' clippy.toml and Cargo.toml: \
+     build files it checks, not the pipeline's configuration",
+);
 const INDEX_SPEC: (&str, &str) = (
     "humanify-ag-index/src/spec.rs",
     "the index spec's reader: the BUILDER'S build INPUT (a committed \
@@ -120,7 +127,7 @@ fn rules() -> Vec<Rule> {
         Rule {
             name: "config-file reader outside the config owner",
             hit: |l| l.contains("toml::") || l.contains("use toml"),
-            owners: &[CONFIG_FILE, INDEX_SPEC],
+            owners: &[CONFIG_FILE, INDEX_SPEC, EFFECTS_CENSUS],
         },
     ]
 }

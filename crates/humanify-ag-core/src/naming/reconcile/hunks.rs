@@ -38,6 +38,9 @@ pub const DIFF_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10
 /// failure (exit >= 2, spawn failure, the deadline) — each caller reports
 /// it: the pre-split step as a WARNING, the post-split pass as a counted,
 /// warned `diff_failed` (audit R3).
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 pub fn compute_normal_diff(prior_text: &str, new_text: &str) -> Result<String, String> {
     let dir = tempdir()?;
     let prior_path = dir.join("prior.js");
@@ -64,12 +67,16 @@ pub fn compute_normal_diff(prior_text: &str, new_text: &str) -> Result<String, S
 }
 
 /// A private temp directory (`fs.mkdtempSync(os.tmpdir()/humanify-reconcile-)`).
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::map_err_ignore)]
 fn tempdir() -> Result<std::path::PathBuf, String> {
     crate::scratch::temp_dir("humanify-reconcile")
         .map_err(|_| "cannot create a reconcile temp dir".to_string())
 }
 
 /// `HUNK_HEADER`: `^(\d+)(?:,\d+)?([acd])(\d+)(?:,\d+)?$`.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn parse_hunk_header(line: &str) -> Option<DiffHunk> {
     let b = line.as_bytes();
     let mut i = 0;

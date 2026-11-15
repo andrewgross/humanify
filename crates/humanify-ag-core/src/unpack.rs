@@ -347,6 +347,8 @@ pub fn run_adapter(
 
 /// The passthrough adapter (`PassthroughAdapter.unpack`), also the Bun
 /// adapter's no-factory floor: the whole input as `<out>/index.js`.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn write_passthrough(code: &str, out_dir: &Path) -> Result<UnpackResult, String> {
     fs::create_dir_all(out_dir).map_err(|e| format!("mkdir {}: {e}", out_dir.display()))?;
     let path = out_dir.join("index.js");

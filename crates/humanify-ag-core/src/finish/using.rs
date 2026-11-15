@@ -170,6 +170,8 @@ pub fn desugar_using(code: &str) -> Result<Option<String>, String> {
 }
 
 /// `desugarUsingInTree(outputDir)`: the number of files rewritten.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn desugar_using_in_tree(output_dir: &Path) -> Result<usize, String> {
     let mut transformed = 0;
     for file in js_files_under(output_dir)? {

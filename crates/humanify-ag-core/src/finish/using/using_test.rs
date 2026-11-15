@@ -3,6 +3,8 @@
 //! test/parity/wp54-desugar-probe.ts) — every branch of the plugin and the
 //! retainLines generator the port reproduces — plus the pass-through
 //! cases of src/split/using-desugar.test.ts.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::fs;
 use std::path::PathBuf;

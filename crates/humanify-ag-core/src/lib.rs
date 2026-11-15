@@ -2,6 +2,10 @@
 //! (docs/rust-port/02-rust-target-architecture.md §2). Receives switches as
 //! config and never reads the process environment.
 #![forbid(unsafe_code)]
+// Effects and swallowed errors (see clippy.toml beside this crate): an
+// error mapped away with `map_err(|_| ..)` or discarded with `let _ =`
+// needs an allow tagged `// default: <reason>` (enforced: census:effects).
+#![deny(clippy::map_err_ignore, clippy::let_underscore_must_use)]
 
 pub mod artifact_dump;
 pub mod babel_view;

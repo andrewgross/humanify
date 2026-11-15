@@ -14,6 +14,8 @@
 //!    (unique hashes match, same-hash groups park in ambiguous with the
 //!    bucket in graph-row order — the TS cascade's candidate order), so
 //!    every expectation is about the PROPAGATION, not the cascade.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;

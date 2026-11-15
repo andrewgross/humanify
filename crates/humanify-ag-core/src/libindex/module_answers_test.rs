@@ -2,6 +2,8 @@
 //! step 4, exp156): the `modules.<slice>.jsonl` rows the index writes,
 //! keyed by whole-module vendor content key, become the planner's
 //! per-module answers.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;

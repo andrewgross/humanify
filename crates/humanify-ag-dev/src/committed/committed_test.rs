@@ -273,6 +273,11 @@ fn every_committed_dev_file_is_read_by_its_loader() {
             .unwrap()
             .path,
     );
+    note(
+        &census::effects_allowlist_at(&repo.join(crate::paths::EFFECTS_ALLOWLIST))
+            .unwrap()
+            .path,
+    );
     note(&census::clone_allowlist(&repo).unwrap().path);
     note(&census::docs_allowlist(&repo).unwrap().path);
 

@@ -4,6 +4,8 @@
 //! trail with top-level flags and locators, the patched ledger's exact
 //! bytes, and the carried bundle. The real-scale regimes are the gate
 //! (/work/wp54/regimes.sh); this pins the mechanics at unit scale.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::HashMap;
 use std::fs;

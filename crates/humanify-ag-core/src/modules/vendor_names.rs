@@ -938,6 +938,8 @@ fn evidence_strings(tokens: &[String]) -> Vec<String> {
 
 /// JSON.stringify of one string, for the evidence line (serde_json's
 /// string serializer matches the JS escaping for valid UTF-8 input).
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn json_escape(s: &str) -> String {
     serde_json::to_string(s).unwrap_or_else(|_| format!("\"{s}\""))
 }

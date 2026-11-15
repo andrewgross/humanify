@@ -23,6 +23,8 @@ fn is_ident(s: &str) -> bool {
         && ch.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
 }
 
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn key(name: &str) -> String {
     if is_ident(name) {
         name.to_string()
@@ -367,6 +369,8 @@ fn assignment(d: &Declarator, out: &Out<'_>) -> Option<String> {
 /// (an empty binding: a bare `require(m)` for a side-effect import). An
 /// eager chunk declares them at its top; a lazy one hoists the names and
 /// loads them in its init.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn externals(plan: &Plan<'_>, c: usize) -> (Vec<String>, Vec<String>) {
     let (mut declared, mut loads) = (Vec::new(), Vec::new());
     if let Some(init) = to_esm_init(plan, c) {

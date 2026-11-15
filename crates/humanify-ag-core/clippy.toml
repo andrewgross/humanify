@@ -1,0 +1,98 @@
+# humanify-ag-core's clippy config: the root clippy.toml plus the effect bans of a
+# pure crate. Clippy uses the NEAREST clippy.toml and does not merge it with
+# the root one (verified with clippy 0.1.98), so every root entry is repeated
+# here verbatim (enforced: census:effects).
+#
+# The house complexity ceiling; the thresholds mirror biome's.
+cognitive-complexity-threshold = 15
+disallowed-methods = [
+  { path = "std::env::var", reason = "env is read once in humanify-ag-cli::env; core receives switches as config (WP1.1)" },
+  { path = "std::env::var_os", reason = "env is read once in humanify-ag-cli::env; core receives switches as config (WP1.1)" },
+  # Concurrency (docs/concurrency.md). Each allowed site carries
+  # `#[allow(clippy::disallowed_methods)]` AND a `// concurrency: <reason>`
+  # comment; the concurrency census (scripts/concurrency-census.ts) fails
+  # an allow without one.
+  { path = "std::thread::sleep", reason = "blocking sleep: on the runtime thread it stalls every in-flight call (audit R6). Async code uses tokio::time::sleep; a deadline uses a timeout, not a poll (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::runtime::Builder::new_current_thread", reason = "ONE runtime, owned by the LLM provider (humanify-ag-llm provider.rs). Never a second runtime, never a nested block_on (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::runtime::Builder::new_multi_thread", reason = "ONE current_thread runtime, owned by the LLM provider (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::runtime::Runtime::new", reason = "ONE current_thread runtime, owned by the LLM provider (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::spawn", reason = "no detached tasks: every future is driven to completion by run_wave/run_pipelined so nothing outlives the wave or escapes its deadline (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::task::spawn_blocking", reason = "CPU or blocking work belongs on the main thread or the par seam, not on tokio's blocking pool (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::task::block_in_place", reason = "the runtime is current_thread; block_in_place panics there (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "reqwest::Client::new", reason = "an HTTP client needs a deadline covering the WHOLE exchange (send + body); confirm the caller sets one (audit W2, docs/concurrency.md#deadlines)", allow-invalid = true },
+  { path = "std::process::Child::wait_with_output", reason = "with a piped stdin this deadlocks unless stdin is written concurrently (audit W1, docs/concurrency.md#subprocesses)", allow-invalid = true },
+  # ── Effects (functional core, imperative shell; docs/responsibility.md,
+  # "May this code do I/O?"). Clippy reads THIS file instead of the root
+  # clippy.toml for this crate (they are not merged), so the root's entries
+  # above are repeated verbatim (enforced: census:effects). Each allowed
+  # site carries `#[allow(clippy::disallowed_methods)]` and an
+  # `// io: <reason>` (an effect) or `// default: <reason>` (a Result's
+  # error replaced by a value) comment; every current site is also listed
+  # in dev/census/effects-allowlist.json (enforced: census:effects).
+  { path = "std::fs::read", reason = "disk I/O belongs to the shell: core decides over values the shell read" },
+  { path = "std::fs::read_to_string", reason = "disk I/O belongs to the shell: core decides over values the shell read" },
+  { path = "std::fs::write", reason = "disk I/O belongs to the shell: core returns what to write" },
+  { path = "std::fs::read_dir", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::create_dir", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::create_dir_all", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::remove_file", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::remove_dir", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::remove_dir_all", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::copy", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::rename", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::hard_link", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::canonicalize", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::metadata", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::symlink_metadata", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::read_link", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::set_permissions", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::File::open", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::File::create", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::File::create_new", reason = "disk I/O belongs to the shell" },
+  { path = "std::fs::OpenOptions::open", reason = "disk I/O belongs to the shell" },
+  { path = "std::path::Path::exists", reason = "a disk probe belongs to the shell" },
+  { path = "std::path::Path::try_exists", reason = "a disk probe belongs to the shell" },
+  { path = "std::path::Path::is_file", reason = "a disk probe belongs to the shell" },
+  { path = "std::path::Path::is_dir", reason = "a disk probe belongs to the shell" },
+  { path = "std::path::Path::is_symlink", reason = "a disk probe belongs to the shell" },
+  { path = "std::path::Path::metadata", reason = "a disk probe belongs to the shell" },
+  { path = "std::path::Path::symlink_metadata", reason = "a disk probe belongs to the shell" },
+  { path = "std::path::Path::read_dir", reason = "disk I/O belongs to the shell" },
+  { path = "std::path::Path::read_link", reason = "disk I/O belongs to the shell" },
+  { path = "std::path::Path::canonicalize", reason = "a disk probe belongs to the shell" },
+  { path = "std::process::Command::new", reason = "a process belongs to the shell: core takes an injected trait" },
+  { path = "std::process::exit", reason = "the exit code is the shell's (cli::Crash)" },
+  { path = "std::process::abort", reason = "the exit code is the shell's (cli::Crash)" },
+  { path = "std::process::id", reason = "process identity is the shell's" },
+  { path = "std::env::temp_dir", reason = "the environment is read by the shell" },
+  { path = "std::env::current_dir", reason = "the environment is read by the shell" },
+  { path = "std::env::set_current_dir", reason = "the environment is the shell's" },
+  { path = "std::env::current_exe", reason = "the environment is read by the shell" },
+  { path = "std::env::args", reason = "argv is parsed by the shell" },
+  { path = "std::env::args_os", reason = "argv is parsed by the shell" },
+  { path = "std::env::vars", reason = "the environment is read by the shell" },
+  { path = "std::env::vars_os", reason = "the environment is read by the shell" },
+  { path = "std::path::absolute", reason = "reads the working directory: the environment is read by the shell" },
+  { path = "std::time::Instant::now", reason = "a clock read: only the profiling module observes time (tag `// io:`)" },
+  { path = "std::time::SystemTime::now", reason = "a clock read: only the profiling module observes time (tag `// io:`)" },
+  { path = "std::thread::spawn", reason = "a detached thread: CPU work goes through crate::par; only observers run beside the pipeline" },
+  { path = "std::thread::Builder::spawn", reason = "a detached thread: CPU work goes through crate::par; only observers run beside the pipeline" },
+  { path = "std::io::stdout", reason = "output is the shell's: core returns values and warnings" },
+  { path = "std::io::stderr", reason = "output is the shell's: core returns values and warnings" },
+  { path = "std::io::stdin", reason = "input is the shell's" },
+  # A Result's error replaced by a value: say why the absence is data
+  # (`// default: <reason>`) or propagate the error. Option's unwrap_or*
+  # stay allowed (an empty aggregate, a missing key).
+  { path = "core::result::Result::ok", reason = "drops the error: propagate it, or tag `// default: <why absence is data>`" },
+  { path = "core::result::Result::unwrap_or", reason = "drops the error: propagate it, or tag `// default: <why absence is data>`" },
+  { path = "core::result::Result::unwrap_or_default", reason = "drops the error: propagate it, or tag `// default: <why absence is data>`" },
+  { path = "core::result::Result::unwrap_or_else", reason = "drops the error: propagate it, or tag `// default: <why absence is data>`" },
+]
+
+disallowed-macros = [
+  { path = "std::println", reason = "output is the shell's: core returns values and warnings" },
+  { path = "std::print", reason = "output is the shell's: core returns values and warnings" },
+  { path = "std::eprintln", reason = "output is the shell's: core returns values and warnings" },
+  { path = "std::eprint", reason = "output is the shell's: core returns values and warnings" },
+  { path = "std::dbg", reason = "a debugging leftover" },
+]

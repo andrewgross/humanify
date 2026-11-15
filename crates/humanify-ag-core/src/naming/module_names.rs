@@ -651,6 +651,8 @@ pub struct ModuleSource<'j> {
     pub grammar: crate::toolchain::ModuleWrapperGrammar,
 }
 
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub(crate) fn span_of(v: &Value) -> Option<(u32, u32)> {
     Some((
         u32::try_from(v.get("start")?.as_u64()?).ok()?,
@@ -1097,6 +1099,8 @@ impl<'p, 'a, 's> Step<'p, 'a, 's> {
     /// `init<FirstLoaded>Index`, else `init<FirstLoaded>Exports`; else the
     /// suffix ladder on the last. Never minified, never filler; a module
     /// with no usable word is left to the floor/sweep.
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods)]
     fn fallback(&mut self, m: usize, state: &mut RenameState) {
         let Some(binding) = self.plan.wrappers[m] else {
             return;

@@ -86,6 +86,8 @@ enum PreId {
 
 impl Semver {
     /// `MAJOR.MINOR.PATCH[-pre][+build]`; None for anything else.
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods)]
     pub fn parse(v: &str) -> Option<Semver> {
         let v = v.split_once('+').map_or(v, |(core, _)| core);
         let (core, pre) = match v.split_once('-') {

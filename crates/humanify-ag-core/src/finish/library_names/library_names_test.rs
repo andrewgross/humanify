@@ -1,5 +1,7 @@
 //! The per-file library-import names (finding #91): each split file names
 //! its own library imports the way people write them, no numbers.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
 use super::{FileLibraryNames, name_library_imports_in_file, name_library_imports_in_tree};
 use crate::naming::plumbing::conventional_import_name;

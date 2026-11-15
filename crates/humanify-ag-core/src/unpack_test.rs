@@ -2,6 +2,8 @@
 //! `src/unpack/adapters/bun.test.ts` and `src/unpack/select-adapter.test.ts`,
 //! plus the regex-floor and require-tracing cases the TS gets from V8 (the
 //! patterns are emulated by hand here — `unpack::bun`'s docs say which).
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::HashMap;
 use std::fs;

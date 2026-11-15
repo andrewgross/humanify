@@ -20,6 +20,12 @@
 //!
 //! A digest change is never "update the constant": a consumer stopped
 //! seeing the pieces or the edges it saw.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::let_underscore_must_use
+)]
 
 use std::fmt::Write as _;
 

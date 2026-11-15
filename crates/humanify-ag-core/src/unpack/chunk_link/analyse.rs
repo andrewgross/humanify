@@ -186,6 +186,8 @@ impl Loader {
     /// A `/$bunfs/root/<rest>` specifier → its sibling file, queued;
     /// anything else is external. A bunfs specifier whose file is
     /// missing fails: the layout would be linked with a hole.
+    // io: legacy effect site, listed in dev/census/effects-allowlist.json
+    #[allow(clippy::disallowed_methods)]
     pub fn spec(&mut self, s: &str) -> Result<Spec, String> {
         let Some(rest) = s.strip_prefix(ROOT) else {
             return Ok(Spec::External(s.to_string()));
@@ -207,6 +209,8 @@ impl Loader {
 }
 
 /// Read and analyse one chunk.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub(super) fn analyse(path: &Path, loader: &mut Loader) -> Result<Chunk, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     let text = String::from_utf8_lossy(&bytes).into_owned();

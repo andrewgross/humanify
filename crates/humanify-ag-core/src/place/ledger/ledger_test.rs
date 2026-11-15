@@ -1,6 +1,8 @@
 //! `rederive_stale_era_hashes`: a stale-era ledger (the TS's, or an older
 //! Rust hash era's) re-keyed onto this run's own statement hashes through a
 //! PROVEN bijection, or left untouched.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::HashMap;
 

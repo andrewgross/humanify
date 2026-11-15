@@ -1,6 +1,8 @@
 //! The output tree's copies of a Bun app's embedded files (exp217): the
 //! files the linked program reads by path, under `embedded/` at the tree
 //! root, byte for byte.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::fs;
 

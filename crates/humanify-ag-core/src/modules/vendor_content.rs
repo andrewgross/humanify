@@ -147,6 +147,8 @@ pub fn vendor_content_key(
 /// given when the formatter refuses it. Formatting an already formatted
 /// body prints it again unchanged, so both sides of the carry agree
 /// whichever was formatted before.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn formatted_factory(text: &str) -> String {
     use crate::naming::vendor_bodies::{join_bodies, split_bodies};
     crate::format::format_file(&join_bodies([text]), &Default::default(), &[])

@@ -1104,6 +1104,8 @@ fn revise_top_names(
 }
 
 /// `nameSegments`: every app segment's `[<folder>[/<sub>]/]<file>.js`.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn name_segments(
     segments: &[Segment],
     app: &App,

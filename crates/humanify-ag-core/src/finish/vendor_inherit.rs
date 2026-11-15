@@ -107,6 +107,8 @@ impl VendorBodyInheritor {
 
     /// `bytesFor(relPath, fresh)`: the prior bytes when the prior tree holds
     /// the same program at the same path, else `fresh`.
+    // io: legacy effect site, listed in dev/census/effects-allowlist.json
+    #[allow(clippy::disallowed_methods)]
     pub fn bytes_for(&mut self, rel_path: &str, fresh: String) -> String {
         let Ok(bytes) = std::fs::read(self.prior_root.join(rel_path)) else {
             return fresh;

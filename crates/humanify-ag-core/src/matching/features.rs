@@ -332,6 +332,8 @@ fn collect_member_callee(callee: &Value, walk: &mut FeatureWalk<'_>) {
 /// Whether an identifier occurrence resolves to a binding — the TS's
 /// `isBoundIdentifier` (the bindingByIdentifier cache, :126-128), answered
 /// by the symbol tables.
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn is_bound(walk: &FeatureWalk<'_>, identifier: &Value) -> bool {
     let Some(start) = identifier.get("start").and_then(Value::as_u64) else {
         return false;

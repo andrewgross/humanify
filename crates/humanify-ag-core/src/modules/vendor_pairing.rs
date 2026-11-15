@@ -159,6 +159,8 @@ const BLIND_BINDING: &str = "_";
 /// the code's real edits. The pipeline names bindings only, so nothing it
 /// assigns survives here. Text the formatter refuses is masked unformatted;
 /// text that does not parse is returned as given (its old reading).
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn blind_text(text: &str) -> String {
     let statement = crate::naming::vendor_bodies::join_bodies([text]);
     let formatted = crate::format::format_file(&statement, &Default::default(), &[])

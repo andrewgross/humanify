@@ -10,6 +10,8 @@
 //! `Function::Binding` with `features() == None`. That is the exact
 //! production condition the TS test documents (a caller passing binding ids),
 //! exercised through the real builder.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::HashMap;
 

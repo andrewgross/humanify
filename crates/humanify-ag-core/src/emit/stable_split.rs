@@ -221,6 +221,9 @@ fn build_ledger(
 }
 
 /// `stableSplitFromCode` + `tryEmitRunnableCjs` over the shipped text.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<SplitOutcome, String> {
     use crate::profiling::phase;
     let ph = phase("split:input");

@@ -82,6 +82,8 @@ pub struct InputBundle {
 
 /// Read a run's input file (invalid UTF-8 becomes U+FFFD) through the
 /// layout registry.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn read_input(path: &Path) -> Result<InputBundle, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     input_from_text(path, String::from_utf8_lossy(&bytes).into_owned())

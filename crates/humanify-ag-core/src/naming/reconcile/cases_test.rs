@@ -4,6 +4,8 @@
 //! declLine/applied, skips with their reasons in order, the hunk stats —
 //! under the option presets its two callers use (the pipeline step, the
 //! post-split TEXT form) plus the TS defaults and a dry run.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::fs;
 use std::path::PathBuf;

@@ -4,6 +4,8 @@
 //! the child fills a pipe buffer (64 KiB on Linux) before it has read all
 //! of its input — the parent blocks writing, the child blocks writing, and
 //! neither ever returns (concurrency audit 2026-10, finding W1).
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
 use humanify_ag_testkit::ScratchDir;
 use std::sync::mpsc;

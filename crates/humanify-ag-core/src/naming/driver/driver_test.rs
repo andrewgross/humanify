@@ -1,5 +1,7 @@
 //! The driver's red tests: each pins a regime the four oracle pairs never
 //! fire (lesson 17) and a fixture regime of the WP4.6 gate exposed.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::let_underscore_must_use)]
 
 use oxc_allocator::Allocator;
 

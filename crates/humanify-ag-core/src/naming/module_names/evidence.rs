@@ -78,6 +78,8 @@ pub struct EvidenceSource<'a, 's> {
     wrapper_of: HashMap<BindingId, usize>,
 }
 
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn span_of(v: &Value) -> Option<Span> {
     Some(Span::new(
         u32::try_from(v.get("start")?.as_u64()?).ok()?,
@@ -326,6 +328,8 @@ impl<'a, 's> EvidenceSource<'a, 's> {
         self.wrapper_of.get(&binding).copied()
     }
 
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods)]
     fn mask_of(&self, m: usize, node: &Value) -> Option<Replacement> {
         let span = span_of(node)?;
         let replace = |text: String| Some(Replacement { span, text });
@@ -576,6 +580,8 @@ impl<'a, 's> EvidenceSource<'a, 's> {
     }
 
     /// One module's evidence lines (everything after its `### key`).
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::disallowed_methods)]
     pub fn entry(&self, m: usize) -> String {
         let module = &self.modules[m];
         let mut lines: Vec<String> = Vec::new();

@@ -468,6 +468,8 @@ impl<'t> Engine<'t> {
 
     /// `crawl()`: traverse the scope node's subtree with the collector
     /// visitor (which only reads).
+    // default: legacy, untriaged: a Result error becomes a value here
+    #[allow(clippy::let_underscore_must_use)]
     fn crawl(&mut self, p: PathId) {
         let Some(node) = self.node(p) else {
             return;

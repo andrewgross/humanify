@@ -124,6 +124,8 @@ impl LinkReport {
 /// (`// @bun`, not the CommonJS `@bun-cjs`) that imports at least one
 /// `/$bunfs/root/` sibling present beside it? The pragma and specifier
 /// checks are text scans, so a single-file bundle is never parsed here.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn is_chunked_entry(path: &Path, text: &str) -> bool {
     let first = text.lines().next().unwrap_or("");
     if !first.starts_with("// @bun") || first.contains("@bun-cjs") || !text.contains(ROOT) {
@@ -209,6 +211,9 @@ fn namespaces_needed(chunks: &[Chunk]) -> Vec<bool> {
     out
 }
 
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn unreached_js(loader: &Loader) -> usize {
     std::fs::read_dir(&loader.dir)
         .map(|entries| {

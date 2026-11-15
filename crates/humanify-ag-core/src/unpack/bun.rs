@@ -83,6 +83,8 @@ pub fn bun_manifest_path(output_dir: &Path) -> PathBuf {
 /// resolved from whatever `--prior-version` points at
 /// (`findPriorTreeRoot`): normally a prior tree's `.humanify/humanified.js`,
 /// so try that file's own directory first, then its parent.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn find_prior_tree_root(prior_file: &Path) -> Option<PathBuf> {
     let dir = prior_file.parent().unwrap_or(Path::new(""));
     let parent = dir.parent().unwrap_or(Path::new(""));
@@ -143,6 +145,9 @@ impl PriorVendor {
 /// tree holding a manifest; Err for a manifest this binary does not read
 /// (unparseable, no `hashVersion`, an entry missing a field it always
 /// writes) — refused here, at the edge, not half-read.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 pub fn load_prior_vendor(prior_file: &Path) -> Result<Option<PriorVendor>, String> {
     let Some(root) = find_prior_tree_root(prior_file) else {
         return Ok(None);
@@ -397,6 +402,8 @@ pub struct UnpackPlan {
 /// pipeline, differing only in the wrapper shapes the classification
 /// accepts ([`crate::modules::factory_arg_function`]) and the manifest's
 /// `adapter` stamp.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 pub fn unpack_bun(
     code: &str,
     out_dir: &Path,
@@ -1376,6 +1383,9 @@ fn mark_text_assets(
 /// carried into (`taken`: the prior files a declared pair already took).
 /// Reads the prior tree's files only when there is something on both
 /// sides. None without a prior tree.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+// default: legacy, untriaged: a Result error becomes a value here
+#[allow(clippy::disallowed_methods)]
 fn carry_by_content(
     factories: &mut [FactoryRecord],
     prior: &PriorVendor,
@@ -1514,6 +1524,8 @@ fn naming_lookup(factories: &[FactoryRecord]) -> HashMap<&str, usize> {
 
 /// Write one vendored body, creating a nested package folder
 /// (vendor/@scope/name/…) when the grouped name has one.
+// io: legacy effect site, listed in dev/census/effects-allowlist.json
+#[allow(clippy::disallowed_methods)]
 fn write_vendor_file(out_dir: &Path, rel_path: &str, body: &str) -> Result<PathBuf, String> {
     let path = out_dir.join(rel_path);
     if let Some(parent) = path.parent() {

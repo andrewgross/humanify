@@ -5,8 +5,10 @@
 //!
 //! - `*.rs`: rustfmt in place and re-staged (a file that also has
 //!   unstaged changes is refused instead: formatting it would stage
-//!   them), then the concurrency census over just those files;
-//! - `dev/census/concurrency-allowlist.json` staged: the whole census;
+//!   them), then the concurrency and effects censuses over just those
+//!   files;
+//! - a census allowlist (`dev/census/concurrency-allowlist.json`,
+//!   `dev/census/effects-allowlist.json`) staged: both whole censuses;
 //! - every staged file's STAGED content: no private network address.
 //!
 //! The hook is not the gate: it never runs the test suites.
@@ -22,7 +24,13 @@ use crate::HostEnv;
 use crate::proc::{self, Spawn};
 use crate::settings::Parsed;
 
-const ALLOWLIST: &str = crate::paths::CONCURRENCY_ALLOWLIST;
+const ALLOWLISTS: &[&str] = &[
+    crate::paths::CONCURRENCY_ALLOWLIST,
+    crate::paths::EFFECTS_ALLOWLIST,
+];
+
+/// The censuses the hook runs over staged `.rs` files, in order.
+pub const CENSUSES: &[&str] = &["concurrency", "effects"];
 const DEADLINE: Duration = Duration::from_secs(10 * 60);
 
 /// What the hook does for a set of staged paths.
@@ -41,7 +49,7 @@ pub fn plan(staged: &[String]) -> Plan {
         .filter(|p| p.ends_with(".rs"))
         .cloned()
         .collect();
-    let census = if staged.iter().any(|p| p == ALLOWLIST) {
+    let census = if staged.iter().any(|p| ALLOWLISTS.contains(&p.as_str())) {
         Some(Vec::new())
     } else if rust.is_empty() {
         None
@@ -55,9 +63,9 @@ pub fn plan(staged: &[String]) -> Plan {
     }
 }
 
-/// This binary's arguments for the census over `files` (empty: all).
-pub fn census_args(files: &[String]) -> Vec<String> {
-    let mut args = vec!["census".to_string(), "concurrency".to_string()];
+/// This binary's arguments for census `which` over `files` (empty: all).
+pub fn census_args(which: &str, files: &[String]) -> Vec<String> {
+    let mut args = vec!["census".to_string(), which.to_string()];
     if !files.is_empty() {
         args.push("--files".into());
         args.push(files.join(","));
@@ -97,7 +105,7 @@ fn format_staged(repo: &Path, files: &[String], host: &HostEnv) -> Result<(), St
     proc::git(repo, &add).map(|_| ())
 }
 
-fn census(repo: &Path, files: &[String], host: &HostEnv) -> Result<(), String> {
+fn census(repo: &Path, which: &str, files: &[String], host: &HostEnv) -> Result<(), String> {
     let exe = host
         .current_exe
         .as_ref()
@@ -105,7 +113,7 @@ fn census(repo: &Path, files: &[String], host: &HostEnv) -> Result<(), String> {
     let mut spawn = Spawn::new(&exe.display().to_string(), &[], DEADLINE)
         .cwd(repo)
         .env("PATH", &host.child_path());
-    spawn.args = census_args(files);
+    spawn.args = census_args(which, files);
     let done = proc::run(&spawn)?;
     if done.status.success() {
         return Ok(());
@@ -163,14 +171,16 @@ pub fn run(_p: &Parsed, host: &HostEnv) -> (u8, String, String) {
     if let Err(e) = format_staged(&repo, &plan.rustfmt, host) {
         return (1, String::new(), format!("precommit (rustfmt): {e}\n"));
     }
-    if let Some(files) = &plan.census
-        && let Err(e) = census(&repo, files, host)
-    {
-        return (
-            1,
-            String::new(),
-            format!("precommit (concurrency census):\n{e}"),
-        );
+    for which in CENSUSES {
+        if let Some(files) = &plan.census
+            && let Err(e) = census(&repo, which, files, host)
+        {
+            return (
+                1,
+                String::new(),
+                format!("precommit ({which} census):\n{e}"),
+            );
+        }
     }
     match scan_staged(&repo, &plan.address_scan) {
         Ok(hits) if hits.is_empty() => (

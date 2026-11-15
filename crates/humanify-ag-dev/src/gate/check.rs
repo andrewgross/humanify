@@ -107,6 +107,13 @@ pub const STAGES: &[Stage] = &[
         deadline: Duration::from_secs(10 * 60),
     },
     Stage {
+        name: "census:effects",
+        why: "functional core, imperative shell: every effect site (disk, process, env, clock, thread, terminal, network, global mutable static) and every non-private Result<_, String> in the product crates is on dev/census/effects-allowlist.json with its role; an unlisted or stale site fails, so the pure crates' legacy list only shrinks. Also: humanify-ag-core and humanify-ag-model keep their own clippy.toml with the root's bans plus the effect bans, their swallowed-error deny line, and dependencies on the allowed list",
+        run: Run::Dev(&["census", "effects"]),
+        advisory: false,
+        deadline: Duration::from_secs(10 * 60),
+    },
+    Stage {
         name: "census:slop",
         why: "ADVISORY — per-crate complexity mass, erosion and clone share against main's merge-base (docs/dev-harness.md §7): a reviewer's prompt, not a verdict",
         run: Run::Dev(&["census", "slop"]),

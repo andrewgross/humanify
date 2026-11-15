@@ -2,6 +2,8 @@
 //! `bun build --compile --splitting --format esm` writes (an entry that
 //! imports `/$bunfs/root/<chunk>.js` siblings), linked back into one
 //! program and RUN by Node where behaviour is the question.
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::path::{Path, PathBuf};
 

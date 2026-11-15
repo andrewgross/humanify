@@ -10,6 +10,8 @@
 //!    bucket partition, hash presence, callee-hash lengths).
 //! 2. UNIT tests for the shared helpers, with the TS behaviors probed
 //!    directly (each expectation's probe noted in the test).
+// io: test code reads fixtures and writes scratch trees; it is not the pipeline
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
