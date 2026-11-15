@@ -160,10 +160,10 @@ fn corpus_and_layer_ids_equal_the_recorded_summary_shas() {
             .join("apps-exp127-off/summary.json"),
     )
     .unwrap();
-    let v = crate::json::py::PyValue::parse(&summary).unwrap();
+    let v = serde_json::from_str::<serde_json::Value>(&summary).unwrap();
     let config = v.get("config").unwrap();
     let recorded = |k: &str| match config.get(k) {
-        Some(crate::json::py::PyValue::Str(s)) => s.clone(),
+        Some(serde_json::Value::String(s)) => s.clone(),
         other => panic!("{k}: {other:?}"),
     };
     assert_eq!(c.manifest_id, recorded("corpusSha256"));

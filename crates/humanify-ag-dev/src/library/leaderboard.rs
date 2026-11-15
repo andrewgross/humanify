@@ -10,7 +10,7 @@
 use std::path::Path;
 
 use crate::identity::{self, Purpose, derive};
-use crate::json::py::PyValue;
+use serde_json::Value;
 
 const SETS: &[(&str, &str)] = &[
     (
@@ -71,21 +71,17 @@ const SETS: &[(&str, &str)] = &[
 
 struct Row {
     label: String,
-    summary: PyValue,
-    timing: PyValue,
+    summary: Value,
+    timing: Value,
 }
 
-fn num(v: Option<&PyValue>) -> f64 {
-    match v {
-        Some(PyValue::Int(d)) => d.parse().unwrap_or(0.0),
-        Some(PyValue::Float(x)) => *x,
-        _ => 0.0,
-    }
+fn num(v: Option<&Value>) -> f64 {
+    v.and_then(Value::as_f64).unwrap_or(0.0)
 }
 
-fn text(v: Option<&PyValue>) -> &str {
+fn text(v: Option<&Value>) -> &str {
     match v {
-        Some(PyValue::Str(s)) => s,
+        Some(Value::String(s)) => s,
         _ => "",
     }
 }
@@ -94,21 +90,21 @@ fn pct(x: f64) -> String {
     format!("{:5.1}%", 100.0 * x)
 }
 
-fn delta(r: &PyValue, b: &PyValue, key: &str) -> String {
+fn delta(r: &Value, b: &Value, key: &str) -> String {
     format!("{:+5.1}", 100.0 * (num(r.get(key)) - num(b.get(key))))
 }
 
-fn p_bar(bars: &PyValue) -> String {
+fn p_bar(bars: &Value) -> String {
     match bars.get("precisionBarPassed") {
-        Some(PyValue::Dict(es)) => {
-            let passed = es.iter().filter(|(_, v)| *v == PyValue::Bool(true)).count();
+        Some(Value::Object(es)) => {
+            let passed = es.values().filter(|v| **v == Value::Bool(true)).count();
             format!("{passed}/{} sets pass", es.len())
         }
         _ => "0/0 sets pass".into(),
     }
 }
 
-fn scopes_line(scopes: &PyValue) -> String {
+fn scopes_line(scopes: &Value) -> String {
     let st = scopes.get("statement").expect("statement scope");
     let fa = scopes.get("factory").expect("factory scope");
     let lib = num(st.get("libraryBytes")) + num(fa.get("libraryBytes"));
@@ -131,7 +127,7 @@ fn scopes_line(scopes: &PyValue) -> String {
 
 /// Scorer 15's columns (exp214), on a label that has them: the credited
 /// copies inside the precision, the map-defect bytes out of both sides.
-fn scorer15_line(r: &PyValue) -> Option<String> {
+fn scorer15_line(r: &Value) -> Option<String> {
     let credit = num(Some(r.get("namedAsCopyCreditBytes")?));
     Some(format!(
         "scorer 15: P {:.6} (without copy credit {:.6})  copy credit {:.1} KB  defect excluded {:.1} KB (claimed {:.1} KB)",
@@ -143,9 +139,9 @@ fn scorer15_line(r: &PyValue) -> Option<String> {
     ))
 }
 
-fn read(path: &Path) -> Result<PyValue, String> {
+fn read(path: &Path) -> Result<Value, String> {
     let t = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    PyValue::parse(&t).map_err(|e| format!("{}: {e}", path.display()))
+    serde_json::from_str::<Value>(&t).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// The leaderboard text for `labels` (under `results`), or the refusal.
@@ -168,7 +164,7 @@ pub fn leaderboard(
         let timing = if tp.exists() {
             read(&tp)?
         } else {
-            PyValue::Dict(vec![])
+            Value::Object(serde_json::Map::new())
         };
         let mut id = derive::library_label(&d)?
             .into_iter()
@@ -219,7 +215,7 @@ pub fn leaderboard(
             head("indexId"),
             num(c.get("indexBytes")) / 1e6,
             text(c.get("rule")),
-            if bars.get("appBarPassed") == Some(&PyValue::Bool(true)) {
+            if bars.get("appBarPassed") == Some(&Value::Bool(true)) {
                 "PASS"
             } else {
                 "FAIL"
@@ -258,7 +254,7 @@ pub fn leaderboard(
             let m = r.get("missShares").expect("missShares");
             let ms = |k: &str| num(m.get(k));
             let sum_prefix = |p: &str| match m {
-                PyValue::Dict(es) => es
+                Value::Object(es) => es
                     .iter()
                     .filter(|(k, _)| k.starts_with(p))
                     .map(|(_, v)| num(Some(v)))

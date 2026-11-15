@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use serde_json::Value;
+use serde_json::{Map, Value, json};
 
 use super::freeze::{BUN_APPS, KIND_DATA, PLAN_SPLIT};
 use super::pypath;
@@ -68,80 +68,12 @@ fn tail(log: &str, n: usize) -> String {
     log.chars().skip(count.saturating_sub(n)).collect()
 }
 
-// ---------------------------------------------------------------- JSON as json.dump writes it
-
-/// A Python value for `json.dump` without `sort_keys` (insertion order).
-#[derive(Clone, Debug)]
-pub enum J {
-    Bool(bool),
-    Str(String),
-    List(Vec<J>),
-    Obj(Vec<(String, J)>),
-}
-
-fn write_j(out: &mut String, v: &J, indent: Option<usize>, depth: usize) {
-    let nl = |out: &mut String, d: usize| {
-        if let Some(n) = indent {
-            out.push('\n');
-            out.extend(std::iter::repeat_n(' ', n * d));
-        }
-    };
-    let (item_sep, key_sep) = if indent.is_some() {
-        (",", ": ")
-    } else {
-        (", ", ": ")
-    };
-    match v {
-        J::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-        J::Str(s) => crate::json::py::write_str(out, s),
-        J::List(xs) if xs.is_empty() => out.push_str("[]"),
-        J::List(xs) => {
-            out.push('[');
-            for (i, x) in xs.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(item_sep);
-                }
-                nl(out, depth + 1);
-                write_j(out, x, indent, depth + 1);
-            }
-            nl(out, depth);
-            out.push(']');
-        }
-        J::Obj(m) if m.is_empty() => out.push_str("{}"),
-        J::Obj(m) => {
-            out.push('{');
-            for (i, (k, x)) in m.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(item_sep);
-                }
-                nl(out, depth + 1);
-                crate::json::py::write_str(out, k);
-                out.push_str(key_sep);
-                write_j(out, x, indent, depth + 1);
-            }
-            nl(out, depth);
-            out.push('}');
-        }
-    }
-}
-
-/// `json.dumps(v)` / `json.dumps(v, indent=n)`.
-pub fn dumps(v: &J, indent: Option<usize>) -> String {
-    let mut out = String::new();
-    write_j(&mut out, v, indent, 0);
-    out
-}
-
-fn strs(xs: &[String]) -> J {
-    J::List(xs.iter().cloned().map(J::Str).collect())
-}
-
 // ---------------------------------------------------------------- builders
 
 /// One build's record (build.json).
 pub struct Built {
     pub ok: bool,
-    pub record: J,
+    pub record: Value,
 }
 
 /// build.py `done`.
@@ -203,10 +135,7 @@ fn build_esbuild(d: &Path, o: &Path, cl: &Closure) -> Built {
     let (rc, log) = run(&cmd, d, 1200);
     Built {
         ok: rc == 0,
-        record: J::Obj(vec![
-            ("ok".into(), J::Bool(rc == 0)),
-            ("log".into(), J::Str(tail(&log, 1500))),
-        ]),
+        record: json!({ "ok": rc == 0, "log": tail(&log, 1500) }),
     }
 }
 
@@ -245,19 +174,13 @@ fn recipe_script(script: &str, d: &Path, o: &Path, cl: &Closure) -> Built {
         } else {
             return Built {
                 ok: true,
-                record: J::Obj(vec![
-                    ("ok".into(), J::Bool(true)),
-                    ("log".into(), J::Str(String::new())),
-                ]),
+                record: json!({ "ok": true, "log": "" }),
             };
         }
     }
     Built {
         ok: false,
-        record: J::Obj(vec![
-            ("ok".into(), J::Bool(false)),
-            ("log".into(), J::Str(tail(&log, 1500))),
-        ]),
+        record: json!({ "ok": false, "log": tail(&log, 1500) }),
     }
 }
 
@@ -446,13 +369,13 @@ fn build_bun(d: &Path, o: &Path, target: &str) -> Built {
     let ok = ok && o.join("entry.js").exists();
     Built {
         ok,
-        record: J::Obj(vec![
-            ("ok".into(), J::Bool(ok)),
-            ("externals".into(), strs(&ext)),
-            ("loaders".into(), strs(&ld)),
-            ("esm".into(), J::Bool(esm)),
-            ("log".into(), J::Str(log)),
-        ]),
+        record: json!({
+            "ok": ok,
+            "externals": ext,
+            "loaders": ld,
+            "esm": esm,
+            "log": log,
+        }),
     }
 }
 
@@ -464,7 +387,7 @@ fn build_once(o: &Path, build: impl FnOnce() -> Built) -> Result<bool, String> {
     let _ = std::fs::remove_dir_all(o);
     std::fs::create_dir_all(o).map_err(|e| format!("{}: {e}", o.display()))?;
     let b = build();
-    std::fs::write(o.join("build.json"), dumps(&b.record, None)).map_err(|e| e.to_string())?;
+    std::fs::write(o.join("build.json"), b.record.to_string()).map_err(|e| e.to_string())?;
     Ok(b.ok)
 }
 
@@ -485,15 +408,12 @@ fn ensure_installed(a: &Value, d: &Path) -> Result<(), String> {
     std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     let name = a["name"].as_str().ok_or("a CLI app without a name")?;
     let version = a["version"].as_str().ok_or("a CLI app without a version")?;
-    let pj = J::Obj(vec![
-        ("private".into(), J::Bool(true)),
-        ("name".into(), J::Str("sel-app".into())),
-        (
-            "dependencies".into(),
-            J::Obj(vec![(name.to_string(), J::Str(version.to_string()))]),
-        ),
-    ]);
-    std::fs::write(d.join("package.json"), dumps(&pj, Some(1))).map_err(|e| e.to_string())?;
+    let pj = json!({
+        "private": true,
+        "name": "sel-app",
+        "dependencies": { name: version },
+    });
+    std::fs::write(d.join("package.json"), crate::json::text(&pj)).map_err(|e| e.to_string())?;
     let mut cmd: Vec<String> = std::iter::once("npm".to_string())
         .chain(NPM_FLAGS.iter().map(|x| x.to_string()))
         .chain([format!("--before={NPM_BEFORE}")])
@@ -532,9 +452,7 @@ fn ensure_installed(a: &Value, d: &Path) -> Result<(), String> {
     for p in bins {
         let f = pypath::normpath(&pypath::join(&root.to_string_lossy(), &p));
         if Path::new(&f).exists() {
-            let mut q = String::new();
-            crate::json::py::write_str(&mut q, &f);
-            lines.push(format!("require({q});"));
+            lines.push(format!("require({});", Value::from(f)));
         }
     }
     if lines.is_empty() {
@@ -670,42 +588,34 @@ pub fn build(
 /// writes every kind of an app in one row; a row keeps its other kinds).
 fn merge_built(root: &Path, kind: &str, results: &[(String, String, bool)]) -> Result<(), String> {
     let p = root.join("built.json");
-    let mut rows: Vec<Vec<(String, J)>> = Vec::new();
+    let mut rows: Vec<Map<String, Value>> = Vec::new();
     if let Ok(text) = std::fs::read_to_string(&p) {
         let v: Value = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", p.display()))?;
-        for r in v.as_array().into_iter().flatten() {
-            let mut row = Vec::new();
-            for (k, x) in r.as_object().into_iter().flatten() {
-                let j = match x {
-                    Value::Bool(b) => J::Bool(*b),
-                    Value::String(s) => J::Str(s.clone()),
-                    other => J::Str(other.to_string()),
-                };
-                row.push((k.clone(), j));
-            }
-            rows.push(row);
-        }
+        rows.extend(
+            v.as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|r| r.as_object().cloned()),
+        );
     }
     for (id, slug, ok) in results {
-        let at = rows.iter().position(|r| {
-            r.iter()
-                .any(|(k, v)| k == "id" && matches!(v, J::Str(x) if x == id))
-        });
+        let at = rows
+            .iter()
+            .position(|r| r.get("id").and_then(Value::as_str) == Some(id));
         let row = match at {
             Some(i) => &mut rows[i],
             None => {
-                rows.push(vec![
-                    ("id".into(), J::Str(id.clone())),
-                    ("slug".into(), J::Str(slug.clone())),
-                ]);
+                let mut row = Map::new();
+                row.insert("id".into(), Value::from(id.as_str()));
+                row.insert("slug".into(), Value::from(slug.as_str()));
+                rows.push(row);
                 rows.last_mut().expect("just pushed")
             }
         };
-        row.retain(|(k, _)| k != kind && *k != format!("{kind}Log"));
-        row.push((kind.to_string(), J::Bool(*ok)));
+        row.remove(&format!("{kind}Log"));
+        row.insert(kind.to_string(), Value::Bool(*ok));
     }
-    let v = J::List(rows.into_iter().map(J::Obj).collect());
-    std::fs::write(&p, dumps(&v, Some(1))).map_err(|e| format!("{}: {e}", p.display()))
+    std::fs::write(&p, crate::json::text(&rows)).map_err(|e| format!("{}: {e}", p.display()))
 }
 
 #[cfg(test)]

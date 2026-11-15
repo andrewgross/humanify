@@ -15,12 +15,11 @@ use super::corpus::{Corpus, Role};
 use super::counter::Counter;
 use super::families::Families;
 use super::index::Unit;
-use super::py::{dict, flt, int, kv, list_s, opt_s, round_int, s};
 use super::pypath;
 use super::tokens14;
 use super::truth::{self, Audit, AuditLayers, Label, NOT_LIBRARY, Truth};
+use super::value::{dict, flt, int, kv, list_s, opt_s, round_int, s};
 use crate::committed::library::CorpusEntry;
-use crate::json::py::PyValue;
 
 pub const SCHEMA: &str = "exp137-mapdefect14/1";
 const MIN_EVIDENCE: usize = 8;
@@ -44,7 +43,7 @@ string number object function boolean undefined symbol bigint message stack erro
 start end size from emit listeners parent node props state self window document process env";
 
 /// The manifest's `rules` block.
-pub fn rules() -> PyValue {
+pub fn rules() -> Value {
     dict(vec![
         kv("minEvidence", int(MIN_EVIDENCE as i64)),
         kv("dfMax", int(DF_MAX as i64)),
@@ -269,13 +268,15 @@ fn closure(root: &str, stop: &str) -> HashSet<String> {
     done
 }
 
-fn version_of(root: &str) -> PyValue {
+fn version_of(root: &str) -> Value {
     match read_json(&Path::new(root).join("package.json")).get("version") {
-        None | Some(Value::Null) => PyValue::Null,
+        None | Some(Value::Null) => Value::Null,
         Some(Value::String(v)) => s(v),
         Some(Value::Bool(b)) => s(if *b { "True" } else { "False" }),
         Some(Value::Number(n)) if n.is_i64() || n.is_u64() => s(&n.to_string()),
-        Some(Value::Number(n)) => s(&crate::json::py::float_repr(n.as_f64().unwrap_or(f64::NAN))),
+        Some(Value::Number(n)) => s(&crate::json::frozen::float_text(
+            n.as_f64().unwrap_or(f64::NAN),
+        )),
         Some(other) => s(&other.to_string()),
     }
 }
@@ -531,7 +532,7 @@ struct Tree {
 /// holder share).
 struct Relabel {
     pkg: String,
-    version: PyValue,
+    version: Value,
     file: String,
     tokens: usize,
     closure_share: f64,
@@ -755,7 +756,7 @@ fn entry_layer(
     entry: &CorpusEntry,
     labels: &[String],
     fams: &Families,
-) -> Result<(PyValue, Counter<String>), String> {
+) -> Result<(Value, Counter<String>), String> {
     let common: HashSet<&str> = COMMON.split_whitespace().collect();
     let mut truth = truth::load_truth(corpus, entry)?;
     let o = truth::load_origins(corpus, entry)?;
@@ -770,7 +771,7 @@ fn entry_layer(
     };
     let paths = source_paths(entry, &corpus.corpus_path(entry, role)?, role)?;
     let tops = install_tops(&paths);
-    let mut rows: Vec<(i64, i64, Vec<PyValue>)> = Vec::new();
+    let mut rows: Vec<(i64, i64, Vec<Value>)> = Vec::new();
     let mut why: HashMap<(i64, i64), &'static str> = HashMap::new();
     if !cands.is_empty() && !tops.is_empty() {
         let bundle = std::fs::read(corpus.corpus_path(entry, Role::Bundle)?)
@@ -829,14 +830,14 @@ fn entry_layer(
         kv("schema", s(SCHEMA)),
         kv(
             "rows",
-            PyValue::List(rows.into_iter().map(|r| PyValue::List(r.2)).collect()),
+            Value::Array(rows.into_iter().map(|r| Value::Array(r.2)).collect()),
         ),
         kv(
             "evaluated",
-            PyValue::List(
+            Value::Array(
                 evaluated
                     .into_iter()
-                    .map(|(a, b, w)| PyValue::List(vec![int(a), int(b), s(w)]))
+                    .map(|(a, b, w)| Value::Array(vec![int(a), int(b), s(w)]))
                     .collect(),
             ),
         ),
@@ -898,7 +899,7 @@ pub fn build(
         let p: PathBuf = out
             .join("truth")
             .join(format!("{}.mapdefect14.json.gz", e.id));
-        super::gz::write_gz(&p, crate::json::py_text(&doc, true).as_bytes())?;
+        super::gz::write_gz(&p, crate::json::frozen::identity_text(&doc).as_bytes())?;
         shas.insert(e.id.clone(), super::corpus::sha256_file(&p)?);
     }
     let bytes = dict(
@@ -924,7 +925,7 @@ pub fn build(
         kv("bytes", bytes),
         kv("about", s(ABOUT)),
     ]);
-    Ok((shas, crate::json::py_text(&man, true)))
+    Ok((shas, crate::json::frozen::identity_text(&man)))
 }
 
 #[cfg(test)]

@@ -69,7 +69,7 @@ fn run_case(name: &str, rule: &str, cpus: &str, sets: &[&str], which: &[&str]) {
     assert_eq!(recorded, want, "{}", ctx.transcript());
     for id in which {
         let rj = std::fs::read_to_string(reports.join(format!("{id}.run.json"))).unwrap();
-        assert!(rj.starts_with("{\n \"peakRssMb\": "), "{rj}");
+        assert!(rj.starts_with("{\n  \"peakRssMb\": "), "{rj}");
     }
 }
 

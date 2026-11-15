@@ -20,17 +20,6 @@ fn bun_s_errors_name_what_to_retry() {
 }
 
 #[test]
-fn json_dump_spellings() {
-    let r = J::Obj(vec![
-        ("ok".into(), J::Bool(true)),
-        ("log".into(), J::Str(String::new())),
-    ]);
-    assert_eq!(dumps(&r, None), "{\"ok\": true, \"log\": \"\"}");
-    let l = J::List(vec![J::Obj(vec![("id".into(), J::Str("a".into()))])]);
-    assert_eq!(dumps(&l, Some(1)), "[\n {\n  \"id\": \"a\"\n }\n]");
-}
-
-#[test]
 fn tail_counts_characters() {
     assert_eq!(tail("abcdé", 2), "dé");
     assert_eq!(tail("ab", 5), "ab");

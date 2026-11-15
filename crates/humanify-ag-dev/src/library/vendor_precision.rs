@@ -15,8 +15,7 @@ use serde_json::Value;
 use super::corpus::Corpus;
 use super::counter::Counter;
 use super::families::Families;
-use super::py::{dict, from_json, int, kv};
-use crate::json::py::PyValue;
+use super::value::{dict, int, kv};
 
 /// The Claude Code 2.1.216 labelled sample (never committed).
 pub const CC_TRUTH: &str = "/work/cc-library-truth/2.1.216/labels.jsonl";
@@ -166,13 +165,13 @@ impl Out {
             .or_default()
             .insert(path.to_string());
     }
-    fn jsonable(&self) -> PyValue {
-        let mut e: Vec<(String, PyValue)> =
+    fn jsonable(&self) -> Value {
+        let mut e: Vec<(String, Value)> =
             self.n.iter().map(|(k, v)| (k.clone(), int(*v))).collect();
         for (k, v) in &self.sets {
             e.push((
                 k.clone(),
-                PyValue::List(v.iter().map(|p| PyValue::Str(p.clone())).collect()),
+                Value::Array(v.iter().map(|p| Value::String(p.clone())).collect()),
             ));
         }
         dict(e)
@@ -257,7 +256,7 @@ impl Check<'_> {
         out
     }
 
-    fn world(&self, regions: &Value, moved_files: &Value) -> PyValue {
+    fn world(&self, regions: &Value, moved_files: &Value) -> Value {
         let mut out = Out::default();
         for s in ["files", "appFiles", "wrongFiles"] {
             out.sets.insert(format!("era:{s}"), BTreeSet::new());
@@ -339,7 +338,7 @@ impl Check<'_> {
         out.jsonable()
     }
 
-    fn factory(&self) -> PyValue {
+    fn factory(&self) -> Value {
         let mut out = Out::default();
         for s in ["files", "appFiles", "wrongFiles"] {
             out.sets.insert(format!("factory:{s}"), BTreeSet::new());
@@ -356,7 +355,7 @@ pub fn check(
     diag: &Value,
     truth: Option<&TruthAt>,
     fam: Option<&Families>,
-) -> Result<PyValue, String> {
+) -> Result<Value, String> {
     let empty = Value::Object(Default::default());
     let er = diag
         .get("eraRestoration")
@@ -429,14 +428,14 @@ pub fn check(
         kv("factory", c.factory()),
         kv(
             "conversion",
-            er.get("conversion").map_or(Ok(PyValue::Null), from_json)?,
+            er.get("conversion").cloned().unwrap_or(Value::Null),
         ),
     ]))
 }
 
 /// The card's text as vendor_precision.py prints it.
-pub fn card_text(card: &PyValue) -> String {
-    crate::json::py_text(card, true)
+pub fn card_text(card: &Value) -> String {
+    crate::json::text(card)
 }
 
 /// aggregate_precision.py: sum one label's cards per world.
@@ -448,7 +447,7 @@ pub fn aggregate(dir: &Path) -> Result<String, String> {
         .collect();
     paths.sort();
     let (mut bundles, mut no_bridge, mut no_card) = (0i64, Vec::new(), Vec::new());
-    let mut lists: BTreeMap<String, Vec<(String, PyValue)>> = BTreeMap::new();
+    let mut lists: BTreeMap<String, Vec<(String, Value)>> = BTreeMap::new();
     let worlds = ["exact", "ordinal", "factory"];
     let mut sums: Vec<BTreeMap<String, i64>> = vec![BTreeMap::new(); 3];
     for path in paths {
@@ -488,7 +487,7 @@ pub fn aggregate(dir: &Path) -> Result<String, String> {
                             lists
                                 .entry(format!("{w}:{key}"))
                                 .or_default()
-                                .push((bid.clone(), from_json(value)?));
+                                .push((bid.clone(), value.clone()));
                         }
                     }
                     other => {
@@ -499,7 +498,7 @@ pub fn aggregate(dir: &Path) -> Result<String, String> {
             }
         }
     }
-    let ids = |v: Vec<String>| PyValue::List(v.into_iter().map(PyValue::Str).collect());
+    let ids = |v: Vec<String>| Value::Array(v.into_iter().map(Value::String).collect());
     let mut e = vec![
         kv("bundles", int(bundles)),
         kv("noBridge", ids(no_bridge)),
@@ -515,7 +514,7 @@ pub fn aggregate(dir: &Path) -> Result<String, String> {
             dict(counts.into_iter().map(|(k, v)| (k, int(v))).collect()),
         ));
     }
-    Ok(crate::json::py_text(&dict(e), true))
+    Ok(crate::json::text(&dict(e)))
 }
 
 #[cfg(test)]

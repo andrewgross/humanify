@@ -17,12 +17,11 @@ use serde_json::Value;
 use super::corpus::{Corpus, Role, read_map};
 use super::counter::Counter;
 use super::index::Unit;
-use super::py::{dict, int, kv, opt_s, s as pys};
 use super::pypath;
 use super::pyre;
 use super::truth::{self, Truth};
+use super::value::{dict, int, kv, opt_s, s as pys};
 use crate::committed::library::CorpusEntry;
-use crate::json::py::PyValue;
 
 pub const SCHEMA: &str = "exp132-misattr13/4";
 const MIN_TOKENS: usize = 5;
@@ -38,8 +37,8 @@ const SIZE_SLACK: i64 = 8192;
 pub const ABOUT: &str = "scorer 13 rule `misattributed` (experiments/132-factory-precision/scorer13/misattr13.py): per entry, the sha256 of <DATA>/truth/<id>.misattr13.json.gz (rows: factory start, end, old package, new package, version, file, evidence, old file)";
 
 /// The manifest's `rules` block.
-pub fn rules() -> PyValue {
-    use super::py::flt;
+pub fn rules() -> Value {
+    use super::value::flt;
     dict(vec![
         kv("minTokens", int(MIN_TOKENS as i64)),
         kv("minStrings", int(MIN_STRINGS as i64)),
@@ -181,18 +180,18 @@ fn module_sized(file_bytes: usize, module_bytes: i64) -> bool {
 }
 
 /// `version_of`: package.json's `version`, as JSON (None when unreadable).
-fn version_of(root: &str) -> PyValue {
+fn version_of(root: &str) -> Value {
     let p = Path::new(root).join("package.json");
     let Ok(text) = std::fs::read_to_string(&p) else {
-        return PyValue::Null;
+        return Value::Null;
     };
-    match PyValue::parse(&text) {
-        Ok(PyValue::Dict(d)) => d
+    match serde_json::from_str::<Value>(&text) {
+        Ok(Value::Object(d)) => d
             .into_iter()
             .rev()
             .find(|(k, _)| k == "version")
-            .map_or(PyValue::Null, |(_, v)| v),
-        _ => PyValue::Null,
+            .map_or(Value::Null, |(_, v)| v),
+        _ => Value::Null,
     }
 }
 
@@ -300,7 +299,7 @@ impl Evidence<'_> {
 
     /// The token evidence's relabel: the smallest map source of another
     /// package holding the factory's rare tokens.
-    fn by_tokens(&mut self, t: &BTreeSet<String>, pkg: &str, size: i64) -> Option<Vec<PyValue>> {
+    fn by_tokens(&mut self, t: &BTreeSet<String>, pkg: &str, size: i64) -> Option<Vec<Value>> {
         if t.len() < MIN_TOKENS {
             return None;
         }
@@ -333,7 +332,7 @@ impl Evidence<'_> {
 
     /// The data-module evidence's relabel: the smallest installed file of
     /// another package holding the factory's long strings.
-    fn by_strings(&mut self, strs: &[Vec<u8>], pkg: &str, size: i64) -> Option<Vec<PyValue>> {
+    fn by_strings(&mut self, strs: &[Vec<u8>], pkg: &str, size: i64) -> Option<Vec<Value>> {
         if strs.len() < MIN_STRINGS {
             return None;
         }
@@ -425,7 +424,7 @@ fn entry_rows(
     entry: &CorpusEntry,
     truth: &Truth,
     units: &[Unit],
-) -> Result<Vec<PyValue>, String> {
+) -> Result<Vec<Value>, String> {
     let mut ev = evidence(corpus, entry, truth)?;
     let major = majorities(units, &truth.segments);
     let mut credited: HashMap<i64, usize> = HashMap::new();
@@ -477,7 +476,7 @@ fn entry_rows(
         let mut row = vec![int(s), int(e), pys(&pkg)];
         row.extend(new);
         row.push(opt_s(truth.sources[siu].file.as_deref()));
-        rows.push(PyValue::List(row));
+        rows.push(Value::Array(row));
     }
     Ok(rows)
 }
@@ -501,12 +500,12 @@ pub fn build(
         let rows = entry_rows(corpus, entry, &truth, &units)?;
         let doc = dict(vec![
             kv("schema", pys(SCHEMA)),
-            kv("rows", PyValue::List(rows)),
+            kv("rows", Value::Array(rows)),
         ]);
         let p = out
             .join("truth")
             .join(format!("{}.misattr13.json.gz", entry.id));
-        super::gz::write_gz(&p, crate::json::py_text(&doc, true).as_bytes())?;
+        super::gz::write_gz(&p, crate::json::frozen::identity_text(&doc).as_bytes())?;
         shas.insert(entry.id.clone(), super::corpus::sha256_file(&p)?);
     }
     let man = dict(vec![
@@ -520,7 +519,7 @@ pub fn build(
         kv("rules", rules()),
         kv("about", pys(ABOUT)),
     ]);
-    Ok((shas, crate::json::py_text(&man, true)))
+    Ok((shas, crate::json::frozen::identity_text(&man)))
 }
 
 #[cfg(test)]

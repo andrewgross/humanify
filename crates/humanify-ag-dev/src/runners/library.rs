@@ -17,7 +17,8 @@ use std::time::{Duration, Instant};
 
 use super::{Ctx, text, write};
 use crate::bin_build;
-use crate::json::py::PyValue;
+use crate::library::value::{dict, list_s, s};
+use serde_json::Value;
 
 /// One discover run on the biggest corpus bundle (seconds; the deadline
 /// covers a loaded box).
@@ -153,19 +154,13 @@ fn run_one(ctx: &Ctx, run: &DiscoverRun, e: &Entry) -> Result<f64, String> {
     let _ = std::fs::remove_file(&log);
     // Python's round(x, 2) and round(kb / 1024) (banker's rounding on an
     // exact half, which a wall time in seconds never is).
-    let record = PyValue::Dict(vec![
-        (
-            "wallSeconds".into(),
-            PyValue::Float((wall * 100.0).round() / 100.0),
-        ),
-        (
-            "peakRssMb".into(),
-            PyValue::Int(peak.unwrap_or(0).to_string()),
-        ),
-    ]);
+    let record = serde_json::json!({
+        "wallSeconds": (wall * 100.0).round() / 100.0,
+        "peakRssMb": peak.unwrap_or(0),
+    });
     write(
         &run.reports.join(format!("{}.run.json", e.id)),
-        &crate::json::py_text(&record, true),
+        &crate::json::text(&record),
     )?;
     Ok(wall)
 }
@@ -210,28 +205,24 @@ pub struct LibraryScore {
     pub registry: PathBuf,
 }
 
-fn py_str(s: &str) -> PyValue {
-    PyValue::Str(s.to_string())
-}
-
-/// The label's run record (run.py `config`), Python spelling.
+/// The label's run record (run.py `config`).
 fn label_config(
     c: &LibraryScore,
     bin: &bin_build::BinRecord,
     index: &(String, u64),
     corpus_id: &str,
-) -> Vec<(String, PyValue)> {
+) -> Vec<(String, Value)> {
     let mut cfg = vec![
-        ("buildCommit".to_string(), py_str(&bin.commit)),
-        ("binarySha256".into(), py_str(&bin.sha256)),
-        ("indexDir".into(), py_str(&text(&c.index))),
-        ("indexId".into(), py_str(&index.0)),
-        ("indexBytes".into(), PyValue::Int(index.1.to_string())),
-        ("rule".into(), py_str(&c.rule)),
-        ("corpusSha256".into(), py_str(corpus_id)),
+        ("buildCommit".to_string(), s(&bin.commit)),
+        ("binarySha256".into(), s(&bin.sha256)),
+        ("indexDir".into(), s(&text(&c.index))),
+        ("indexId".into(), s(&index.0)),
+        ("indexBytes".into(), Value::from(index.1)),
+        ("rule".into(), s(&c.rule)),
+        ("corpusSha256".into(), s(corpus_id)),
         (
             "instrument".into(),
-            py_str(
+            s(
                 "humanify discover --unit-prints --bundler <builtWith, else the corpus bundler> --config discover.toml",
             ),
         ),
@@ -239,20 +230,21 @@ fn label_config(
     if !c.settings.is_empty() {
         cfg.push((
             "settings".into(),
-            PyValue::List(c.settings.iter().map(|s| py_str(s)).collect()),
+            list_s(c.settings.iter().map(String::as_str)),
         ));
     }
     if c.corpus != "dev" {
-        cfg.push(("corpus".into(), py_str(&c.corpus)));
+        cfg.push(("corpus".into(), s(&c.corpus)));
     }
     if let Some(sets) = &c.sets {
-        let mut s: Vec<String> = sets.iter().filter(|x| !x.is_empty()).cloned().collect();
-        s.sort();
-        s.dedup();
-        cfg.push((
-            "sets".into(),
-            PyValue::List(s.iter().map(|x| py_str(x)).collect()),
-        ));
+        let mut sorted: Vec<&str> = sets
+            .iter()
+            .filter(|x| !x.is_empty())
+            .map(String::as_str)
+            .collect();
+        sorted.sort_unstable();
+        sorted.dedup();
+        cfg.push(("sets".into(), list_s(sorted)));
     }
     cfg
 }
@@ -273,7 +265,7 @@ fn index_facts(dir: &Path) -> Result<(String, u64), String> {
 
 /// A label is ONE configuration: re-running it with another binary, index,
 /// rule or corpus is refused (`--force-mixed` overrides, loudly).
-fn guard(ctx: &Ctx, run_dir: &Path, cfg: &[(String, PyValue)], force: bool) -> Result<(), String> {
+fn guard(ctx: &Ctx, run_dir: &Path, cfg: &[(String, Value)], force: bool) -> Result<(), String> {
     let Ok(text) = std::fs::read_to_string(run_dir.join("pipeline.json")) else {
         return Ok(());
     };
@@ -281,11 +273,7 @@ fn guard(ctx: &Ctx, run_dir: &Path, cfg: &[(String, PyValue)], force: bool) -> R
         serde_json::from_str(&text).map_err(|e| format!("pipeline.json: {e}"))?;
     let diff: Vec<&str> = cfg
         .iter()
-        .filter(|(k, v)| {
-            let now: serde_json::Value =
-                serde_json::from_str(&crate::json::py_text(v, false)).unwrap_or_default();
-            old.get(k) != Some(&now)
-        })
+        .filter(|(k, v)| old.get(k) != Some(v))
         .map(|(k, _)| k.as_str())
         .collect();
     if diff.is_empty() {
@@ -324,7 +312,7 @@ pub fn score_label(ctx: &Ctx, c: &LibraryScore) -> Result<String, String> {
     guard(ctx, &run_dir, &cfg, c.force_mixed)?;
     write(
         &run_dir.join("pipeline.json"),
-        &crate::json::py_text(&PyValue::Dict(cfg.clone()), true),
+        &crate::json::text(&dict(cfg.clone())),
     )?;
     let config = write_rule_config(&run_dir, &c.rule, &c.settings)?;
     let all = corpus.entries();
@@ -361,12 +349,12 @@ pub fn score_label(ctx: &Ctx, c: &LibraryScore) -> Result<String, String> {
         cwd: None,
     };
     run_discover(ctx, &run, &entries)?;
-    let committed: Vec<(String, PyValue)> =
+    let committed: Vec<(String, Value)> =
         cfg.into_iter().filter(|(k, _)| k != "indexDir").collect();
     let out = ctx.repo.join(crate::paths::LIBRARY_RESULTS).join(&c.label);
     write(
         &out.join("pipeline.json"),
-        &crate::json::py_text(&PyValue::Dict(committed), true),
+        &crate::json::text(&dict(committed)),
     )?;
     crate::library::score::rescore(
         &ctx.repo,

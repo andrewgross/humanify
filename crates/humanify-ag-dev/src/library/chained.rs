@@ -11,10 +11,9 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use super::corpus::{Corpus, read_map};
-use super::py::{dict, from_json, kv, s};
 use super::pypath::{basename, dirname, join, normpath, relpath, walk_files};
+use super::value::{dict, kv, s};
 use crate::committed::library::{CorpusEntry, LayerKind};
-use crate::json::py::PyValue;
 
 /// The npm "does `name@latest` exist" cache scorer 9 reads (fetch_metadata.py
 /// fills it; this host's copy).
@@ -163,13 +162,13 @@ fn package_root(source: &str) -> Option<(String, String, String)> {
 
 /// chained.py `holder_row`: [package, version, path relative to its
 /// node_modules] of the first holder map's package.
-fn holder_row(maps: Option<&Vec<String>>, p: &str) -> Option<Vec<PyValue>> {
+fn holder_row(maps: Option<&Vec<String>>, p: &str) -> Option<Vec<Value>> {
     let (pkg, root, _) = package_root(maps?.first()?)?;
     let ver = std::fs::read_to_string(join(&root, "package.json"))
         .ok()
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
         .and_then(|v| v.get("version").cloned())
-        .map_or(PyValue::Null, |v| from_json(&v).unwrap_or(PyValue::Null));
+        .unwrap_or(Value::Null);
     Some(vec![s(&pkg), ver, s(&relpath(p, &dirname(&root)))])
 }
 
@@ -264,7 +263,7 @@ fn by_index(missing: &BTreeMap<String, Vec<usize>>) -> Vec<(&String, &Vec<usize>
 }
 
 /// chained.py `entry_layer`.
-fn layer5(e: &EntryInput) -> Vec<(String, PyValue)> {
+fn layer5(e: &EntryInput) -> Vec<(String, Value)> {
     let mut missing: BTreeMap<String, Vec<usize>> = BTreeMap::new();
     for (i, (src, label)) in e.srcs.iter().zip(&e.labels).enumerate() {
         let Some(src) = src.as_str() else { continue };
@@ -283,14 +282,14 @@ fn layer5(e: &EntryInput) -> Vec<(String, PyValue)> {
             continue;
         };
         for i in idx {
-            out.push((i.to_string(), PyValue::List(row.clone())));
+            out.push((i.to_string(), Value::Array(row.clone())));
         }
     }
     out
 }
 
 /// chained9.py `entry_layer`.
-fn layer9(e: &EntryInput, npm: &mut Npm) -> Result<Vec<(String, PyValue)>, String> {
+fn layer9(e: &EntryInput, npm: &mut Npm) -> Result<Vec<(String, Value)>, String> {
     let mut missing: BTreeMap<String, Vec<usize>> = BTreeMap::new();
     for (i, (src, label)) in e.srcs.iter().zip(&e.labels).enumerate() {
         let Some(src) = src.as_str() else { continue };
@@ -312,7 +311,7 @@ fn layer9(e: &EntryInput, npm: &mut Npm) -> Result<Vec<(String, PyValue)>, Strin
             continue;
         };
         let holder = match &row[0] {
-            PyValue::Str(h) => h.clone(),
+            Value::String(h) => h.clone(),
             _ => unreachable!(),
         };
         for &i in idx {
@@ -322,14 +321,14 @@ fn layer9(e: &EntryInput, npm: &mut Npm) -> Result<Vec<(String, PyValue)>, Strin
             }
             let mut r = row.clone();
             r.push(s(label));
-            out.push((i.to_string(), PyValue::List(r)));
+            out.push((i.to_string(), Value::Array(r)));
         }
     }
     Ok(out)
 }
 
 /// chained11.py `entry_layer`.
-fn layer11(e: &EntryInput, npm: &mut Npm) -> Result<Vec<(String, PyValue)>, String> {
+fn layer11(e: &EntryInput, npm: &mut Npm) -> Result<Vec<(String, Value)>, String> {
     let dirs = install_dirs(&e.base, &e.srcs);
     let installed = |pkg: &str| {
         dirs.iter()
@@ -366,7 +365,7 @@ fn layer11(e: &EntryInput, npm: &mut Npm) -> Result<Vec<(String, PyValue)>, Stri
             row[2] = s(p);
         }
         let holder = match &row[0] {
-            PyValue::Str(h) => h.clone(),
+            Value::String(h) => h.clone(),
             _ => unreachable!(),
         };
         for &i in idx {
@@ -376,7 +375,7 @@ fn layer11(e: &EntryInput, npm: &mut Npm) -> Result<Vec<(String, PyValue)>, Stri
             }
             let mut r = row.clone();
             r.push(s(label));
-            out.push((i.to_string(), PyValue::List(r)));
+            out.push((i.to_string(), Value::Array(r)));
         }
     }
     Ok(out)
@@ -418,14 +417,11 @@ pub fn refreeze(
             LayerKind::Chained9 => layer9(&input, &mut npm)?,
             _ => layer11(&input, &mut npm)?,
         };
-        let doc = dict(vec![
-            kv("schema", s(schema)),
-            kv("sources", PyValue::Dict(rows)),
-        ]);
+        let doc = dict(vec![kv("schema", s(schema)), kv("sources", dict(rows))]);
         let p = out
             .join("truth")
             .join(format!("{}.{}.json.gz", entry.id, kind.prefix()));
-        super::gz::write_gz(&p, crate::json::py_text(&doc, true).as_bytes())?;
+        super::gz::write_gz(&p, crate::json::frozen::identity_text(&doc).as_bytes())?;
         shas.insert(entry.id.clone(), super::corpus::sha256_file(&p)?);
     }
     let mut man = vec![
@@ -441,16 +437,17 @@ pub fn refreeze(
         let verdicts = dict(
             npm.verdicts
                 .iter()
-                .map(|(k, v)| (k.clone(), PyValue::Bool(*v)))
+                .map(|(k, v)| (k.clone(), Value::Bool(*v)))
                 .collect(),
         );
         if corpus.is_private() {
-            let sha =
-                crate::committed::sha256_hex(crate::json::py_text(&verdicts, true).as_bytes());
+            let sha = crate::committed::sha256_hex(
+                crate::json::frozen::identity_text(&verdicts).as_bytes(),
+            );
             man.push(kv(
                 "npmVerdicts",
                 dict(vec![
-                    kv("count", super::py::int(npm.verdicts.len() as i64)),
+                    kv("count", super::value::int(npm.verdicts.len() as i64)),
                     kv("sha256", s(&sha)),
                 ]),
             ));
@@ -458,5 +455,5 @@ pub fn refreeze(
             man.push(kv("npmVerdicts", verdicts));
         }
     }
-    Ok((shas, crate::json::py_text(&dict(man), true)))
+    Ok((shas, crate::json::frozen::identity_text(&dict(man))))
 }

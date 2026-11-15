@@ -155,8 +155,8 @@ impl Families {
 
 /// `families_lib.derived_sha()`: the derived links' canonical identity.
 pub fn derived_sha() -> String {
-    let v = crate::json::py::PyValue::parse(DERIVED_JSON).expect("derived links parse");
-    crate::committed::sha256_hex(crate::json::py_text(&v, true).as_bytes())
+    let v = serde_json::from_str::<serde_json::Value>(DERIVED_JSON).expect("derived links parse");
+    crate::committed::sha256_hex(crate::json::frozen::identity_text(&v).as_bytes())
 }
 
 #[cfg(test)]
