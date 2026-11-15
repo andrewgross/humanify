@@ -2193,21 +2193,23 @@ fn names_request<'x>(
     }
 }
 
-/// The answers directory with `rows` written to its `modules.cjs.jsonl`.
-fn answers_dir(tag: &str, rows: &[String]) -> TempDir {
-    let answers = TempDir::new(tag);
-    fs::write(
-        answers.0.join("modules.cjs.jsonl"),
-        rows.iter().map(|r| format!("{r}\n")).collect::<String>(),
-    )
-    .unwrap();
-    answers
+/// Index files holding only `rows`, as `modules.cjs.jsonl`.
+fn answers_files(rows: &[String]) -> crate::libindex::files::MemoryIndexFiles {
+    crate::libindex::files::MemoryIndexFiles(std::collections::BTreeMap::from([(
+        "modules.cjs.jsonl".to_string(),
+        rows.iter()
+            .map(|r| format!("{r}\n"))
+            .collect::<String>()
+            .into_bytes(),
+    )]))
 }
 
-/// The answers source of an answers directory the caller keeps alive.
-fn answers_of(dir: &TempDir) -> crate::libdetect::discovery::ModuleAnswersSource<'_> {
+/// The answers source of index files the caller keeps alive.
+fn answers_of(
+    files: &crate::libindex::files::MemoryIndexFiles,
+) -> crate::libdetect::discovery::ModuleAnswersSource<'_> {
     crate::libdetect::discovery::ModuleAnswersSource {
-        dir: dir.0.as_path(),
+        files,
         slice: "cjs",
     }
 }
@@ -2230,14 +2232,11 @@ fn names_mode_places_a_whole_claimed_factory_at_the_index_path() {
     let bundle = NAMES_BUNDLE;
     let keys = content_keys(bundle);
     assert_eq!(keys.len(), 2, "both factories keyed: {keys:?}");
-    let answers_dir = answers_dir(
-        "names-path-answers",
-        &[format!(
-            "{{\"key\":\"{}\",\"owner\":\"ms\",\"files\":[\"index.js\"],\"versions\":[]}}",
-            keys[1]
-        )],
-    );
-    let answers = answers_of(&answers_dir);
+    let answers_files = answers_files(&[format!(
+        "{{\"key\":\"{}\",\"owner\":\"ms\",\"files\":[\"index.js\"],\"versions\":[]}}",
+        keys[1]
+    )]);
+    let answers = answers_of(&answers_files);
     let first = TempDir::new("names-path-a");
     let out = unpack_bun(
         bundle,
@@ -2285,8 +2284,8 @@ fn names_mode_gives_an_unanswered_claimed_factory_a_stable_synthetic_path() {
     let bundle = NAMES_BUNDLE;
     // The answers file exists but holds no row for the claimed module: a
     // synthetic-but-stable name, never a refusal and never app code.
-    let answers_dir = answers_dir("names-synth-answers", &[]);
-    let answers = answers_of(&answers_dir);
+    let answers_files = answers_files(&[]);
+    let answers = answers_of(&answers_files);
     let t = TempDir::new("names-synth");
     unpack_bun(
         bundle,
@@ -2315,11 +2314,8 @@ fn names_mode_gives_an_unanswered_claimed_factory_a_stable_synthetic_path() {
 fn names_mode_refuses_when_the_modules_file_is_missing() {
     // A names run names a directory that is not an index's answer source:
     // the loud refusal names the file it wanted, never a silent fallback.
-    let answers_dir = TempDir::new("names-no-modules-file");
-    let answers = crate::libdetect::discovery::ModuleAnswersSource {
-        dir: answers_dir.0.as_path(),
-        slice: "cjs",
-    };
+    let no_files = crate::libindex::files::MemoryIndexFiles::default();
+    let answers = answers_of(&no_files);
     let t = TempDir::new("names-refused");
     let err = refuse(unpack_bun(
         NAMES_BUNDLE,
@@ -2340,12 +2336,8 @@ fn names_mode_needs_the_claim_rows() {
     // `module_answers` set without `list_units`: the placement fold has
     // nothing to read, which would silently un-place every module — fail
     // loud instead.
-    let answers_dir = TempDir::new("names-no-rows");
-    fs::write(answers_dir.0.join("modules.cjs.jsonl"), "\n").unwrap();
-    let answers = crate::libdetect::discovery::ModuleAnswersSource {
-        dir: answers_dir.0.as_path(),
-        slice: "cjs",
-    };
+    let answers_files = answers_files(&[]);
+    let answers = answers_of(&answers_files);
     let request = crate::libdetect::discovery::DiscoveryRequest {
         options: crate::libdetect::discovery::DiscoveryOptions {
             factory_bodies: true,
@@ -2389,9 +2381,8 @@ fn names_mode_claims_the_lazy_module_regions_by_raw_span() {
         "});\n",
         "var app = () => Gq() && mod_z().two;\n"
     );
-    let answers_dir = TempDir::new("names-lazy-answers");
-    fs::write(answers_dir.0.join("modules.cjs.jsonl"), "\n").unwrap();
-    let answers = answers_of(&answers_dir);
+    let answers_files = answers_files(&[]);
+    let answers = answers_of(&answers_files);
     let request = crate::libdetect::discovery::DiscoveryRequest {
         list_units: true,
         placement_groups: true,
@@ -2446,9 +2437,8 @@ fn a_names_regions_raw_statements_map_to_their_runtime_text_through_the_bridge()
         "});\n",
         "var app = () => Gq() && mod_a().one;\n"
     );
-    let answers_dir = TempDir::new("names-shift-answers");
-    fs::write(answers_dir.0.join("modules.cjs.jsonl"), "\n").unwrap();
-    let answers = answers_of(&answers_dir);
+    let answers_files = answers_files(&[]);
+    let answers = answers_of(&answers_files);
     let request = crate::libdetect::discovery::DiscoveryRequest {
         list_units: true,
         placement_groups: true,

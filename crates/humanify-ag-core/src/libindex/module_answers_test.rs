@@ -2,24 +2,18 @@
 //! step 4, exp156): the `modules.<slice>.jsonl` rows the index writes,
 //! keyed by whole-module vendor content key, become the planner's
 //! per-module answers.
-// io: test code reads fixtures and writes scratch trees; it is not the pipeline
-#![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
 
+use super::files::MemoryIndexFiles;
 use super::module_answers::read_module_answers;
 
-fn dir(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("humanify-module-answers-{name}"));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
-}
-
-fn write_rows(dir: &Path, slice: &str, rows: &[String]) {
-    let file = dir.join(format!("modules.{slice}.jsonl"));
-    std::fs::write(file, rows.join("\n") + "\n").unwrap();
+/// An index holding only `slice`'s module rows.
+fn index_with_rows(slice: &str, rows: &[String]) -> MemoryIndexFiles {
+    MemoryIndexFiles(BTreeMap::from([(
+        format!("modules.{slice}.jsonl"),
+        (rows.join("\n") + "\n").into_bytes(),
+    )]))
 }
 
 fn row(key: &str, owner: &str, files: &[&str]) -> String {
@@ -35,9 +29,7 @@ fn keys(k: &[&str]) -> BTreeSet<String> {
 
 #[test]
 fn a_single_owner_row_answers_its_files() {
-    let d = dir("single");
-    write_rows(
-        &d,
+    let d = index_with_rows(
         "bun-node-cjs-min",
         &[
             row("k1", "ms", &["index.js"]),
@@ -59,9 +51,7 @@ fn a_single_owner_row_answers_its_files() {
 
 #[test]
 fn a_key_two_packages_hold_answers_every_owner_with_its_own_files() {
-    let d = dir("collide");
-    write_rows(
-        &d,
+    let d = index_with_rows(
         "s",
         &[
             row("k1", "aa", &["lib/a.js"]),
@@ -82,8 +72,7 @@ fn a_key_two_packages_hold_answers_every_owner_with_its_own_files() {
 
 #[test]
 fn a_multi_file_row_answers_all_its_files_sorted() {
-    let d = dir("multifile");
-    write_rows(&d, "s", &[row("k1", "ms", &["b.js", "a.js"])]);
+    let d = index_with_rows("s", &[row("k1", "ms", &["b.js", "a.js"])]);
     let out = read_module_answers(&d, "s", &keys(&["k1"])).unwrap();
     assert_eq!(
         out["k1"].owners["ms"],
@@ -93,8 +82,7 @@ fn a_multi_file_row_answers_all_its_files_sorted() {
 
 #[test]
 fn a_key_the_index_does_not_hold_is_simply_absent() {
-    let d = dir("absent");
-    write_rows(&d, "s", &[row("k1", "ms", &["index.js"])]);
+    let d = index_with_rows("s", &[row("k1", "ms", &["index.js"])]);
     let out = read_module_answers(&d, "s", &keys(&["k1", "nope"])).unwrap();
     assert!(out.contains_key("k1"));
     assert!(!out.contains_key("nope"));
@@ -102,8 +90,7 @@ fn a_key_the_index_does_not_hold_is_simply_absent() {
 
 #[test]
 fn a_missing_modules_file_refuses_loudly() {
-    let d = dir("missing");
-    std::fs::create_dir_all(&d).unwrap();
+    let d = MemoryIndexFiles::default();
     let err = read_module_answers(&d, "s", &keys(&["k1"])).unwrap_err();
     assert!(
         err.contains("modules.s.jsonl"),

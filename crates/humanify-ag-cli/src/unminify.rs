@@ -320,7 +320,7 @@ pub fn filter_libraries(
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Filtered, String> {
     let span = profiler.pipeline_span("library-detection");
-    let detection = detect_libraries(detector, &files)?;
+    let detection = detect_libraries(detector, &files, &crate::index_files::read_utf8)?;
     span.end(Some(
         Fields::new()
             .with("libraryCount", detection.library_files.len())

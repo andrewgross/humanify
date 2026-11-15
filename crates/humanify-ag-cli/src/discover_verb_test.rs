@@ -408,7 +408,7 @@ fn a_names_request_carries_the_index_module_answers() {
         )
     };
     let index = humanify_ag_core::libindex::lookup::LibraryIndex::load(
-        &ix_dir,
+        crate::index_files::IndexDir::boxed(&ix_dir),
         &recipe,
         humanify_ag_core::libindex::recipe::TerserSlices::Off,
     )
@@ -419,7 +419,10 @@ fn a_names_request_carries_the_index_module_answers() {
     let source = request
         .module_answers
         .expect("names reads the index's whole-module answers");
-    assert_eq!(Path::new(source.dir), ix_dir);
+    assert!(
+        std::ptr::addr_eq(source.files, index.files.as_ref()),
+        "the answers are read from the files the index was loaded from"
+    );
     assert_eq!(source.slice, index.slice);
     // Every other mode asks for claims, never for answers.
     for report in [

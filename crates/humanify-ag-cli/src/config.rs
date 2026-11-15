@@ -425,16 +425,16 @@ impl Library {
             // them.
             restoration: self.matching == LibraryMatching::Names,
             // A names run reads the index's whole-module answers out of the
-            // same directory the index was loaded from (plan step 4,
+            // same files the index was loaded from (plan step 4,
             // exp156): ONE builder decides this for the pipeline and the
             // discover verb alike, so the verb's instrument sees the same
             // placement a run performs. A rows-built index (tests) has no
-            // directory; the answers read then fails loud, as it must.
+            // files; the answers read then fails loud.
             module_answers: index
                 .filter(|_| self.matching == LibraryMatching::Names)
                 .map(
                     |index| humanify_ag_core::libdetect::discovery::ModuleAnswersSource {
-                        dir: index.dir.as_path(),
+                        files: index.files.as_ref(),
                         slice: index.slice.as_str(),
                     },
                 ),

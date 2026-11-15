@@ -337,7 +337,7 @@ fn the_loader_reads_the_recipes_slice_and_refuses_another_fingerprint() {
     write_manifest("units/0");
     assert!(matches!(
         LibraryIndex::load(
-            &dir,
+            crate::libindex::files_test::dir_files(&dir),
             &target_bun,
             crate::libindex::recipe::TerserSlices::Off
         ),
@@ -345,7 +345,7 @@ fn the_loader_reads_the_recipes_slice_and_refuses_another_fingerprint() {
     ));
     write_manifest(&fingerprint_versions().units);
     let ix = LibraryIndex::load(
-        &dir,
+        crate::libindex::files_test::dir_files(&dir),
         &target_bun,
         crate::libindex::recipe::TerserSlices::Off,
     )
@@ -356,7 +356,7 @@ fn the_loader_reads_the_recipes_slice_and_refuses_another_fingerprint() {
         vec![(0, "zod".into())]
     );
     match LibraryIndex::load(
-        &dir,
+        crate::libindex::files_test::dir_files(&dir),
         &target_node,
         crate::libindex::recipe::TerserSlices::Off,
     ) {
@@ -366,7 +366,7 @@ fn the_loader_reads_the_recipes_slice_and_refuses_another_fingerprint() {
     // the lookup tables are the index: one missing is an unusable index
     std::fs::remove_file(dir.join(crate::libindex::table::LITERALS_FILE)).unwrap();
     match LibraryIndex::load(
-        &dir,
+        crate::libindex::files_test::dir_files(&dir),
         &target_bun,
         crate::libindex::recipe::TerserSlices::Off,
     ) {
@@ -563,7 +563,8 @@ fn the_loader_reads_the_terser_built_slices_beside_the_chosen_one() {
     );
     let esb = detect_recipe("var a;", BundlerType::Esbuild, MinifierType::Esbuild);
     let hits = |mode| {
-        let ix = LibraryIndex::load(&dir, &esb, mode).expect("loads");
+        let ix = LibraryIndex::load(crate::libindex::files_test::dir_files(&dir), &esb, mode)
+            .expect("loads");
         assert_eq!(
             ix.slice, "esbuild-node-cjs-min",
             "the chosen slice is recorded"
@@ -599,7 +600,12 @@ fn the_loader_reads_the_terser_built_slices_beside_the_chosen_one() {
         ],
         "fallback: the terser slices only where the chosen slice holds nothing"
     );
-    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Union).unwrap();
+    let ix = LibraryIndex::load(
+        crate::libindex::files_test::dir_files(&dir),
+        &esb,
+        TerserSlices::Union,
+    )
+    .unwrap();
     assert!(
         ix.slice_reason().contains("rollup-node-cjs-min")
             && ix.slice_reason().contains("webpack-node-cjs-min"),
@@ -640,7 +646,12 @@ fn auto_reads_the_terser_slices_only_for_a_bundle_they_hold_a_share_of() {
     let bundle = |hashes: &[(&str, u32)]| -> Vec<Option<StatementPrints>> {
         hashes.iter().map(|&(h, n)| Some(whole(h, n))).collect()
     };
-    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Auto { share: 0.5 }).unwrap();
+    let ix = LibraryIndex::load(
+        crate::libindex::files_test::dir_files(&dir),
+        &esb,
+        TerserSlices::Auto { share: 0.5 },
+    )
+    .unwrap();
     assert!(
         ix.occurrences(&hx("b")).is_empty(),
         "no verdict yet: the chosen slice alone"
@@ -657,7 +668,12 @@ fn auto_reads_the_terser_slices_only_for_a_bundle_they_hold_a_share_of() {
         "over the share: union"
     );
     assert!(ix.slice_reason().contains("union"), "{}", ix.slice_reason());
-    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Auto { share: 0.5 }).unwrap();
+    let ix = LibraryIndex::load(
+        crate::libindex::files_test::dir_files(&dir),
+        &esb,
+        TerserSlices::Auto { share: 0.5 },
+    )
+    .unwrap();
     let share = ix.decide_terser_slices(&bundle(&[("a", 300), ("b", 150)]), &rules);
     assert!((share - 1.0 / 3.0).abs() < 1e-9, "{share}");
     assert!(
@@ -686,7 +702,12 @@ fn the_loader_reads_the_helper_table_when_the_index_has_one() {
     };
     write_index(&dir, slices());
     let esb = detect_recipe("var a;", BundlerType::Esbuild, MinifierType::Esbuild);
-    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Off).expect("loads");
+    let ix = LibraryIndex::load(
+        crate::libindex::files_test::dir_files(&dir),
+        &esb,
+        TerserSlices::Off,
+    )
+    .expect("loads");
     assert!(ix.helper_owners(&hx("h")).is_empty(), "no helper table");
     let line = serde_json::to_string(&HelperRow {
         hash: hx("h"),
@@ -694,7 +715,12 @@ fn the_loader_reads_the_helper_table_when_the_index_has_one() {
     })
     .unwrap();
     std::fs::write(dir.join(crate::libindex::table::HELPERS_FILE), line + "\n").unwrap();
-    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Off).expect("loads");
+    let ix = LibraryIndex::load(
+        crate::libindex::files_test::dir_files(&dir),
+        &esb,
+        TerserSlices::Off,
+    )
+    .expect("loads");
     assert!(
         ix.helper_owners(&hx("h")).is_empty(),
         "a table the manifest does not list is not the index's"
@@ -703,7 +729,12 @@ fn the_loader_reads_the_helper_table_when_the_index_has_one() {
         serde_json::from_slice(&std::fs::read(dir.join("manifest.json")).unwrap()).unwrap();
     m["tables"][crate::libindex::table::HELPERS_FILE] = serde_json::json!("sha");
     std::fs::write(dir.join("manifest.json"), m.to_string()).unwrap();
-    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Off).expect("loads");
+    let ix = LibraryIndex::load(
+        crate::libindex::files_test::dir_files(&dir),
+        &esb,
+        TerserSlices::Off,
+    )
+    .expect("loads");
     assert_eq!(ix.helper_owners(&hx("h")), ["tslib".to_string()]);
     assert!(ix.helper_owners(&hx("a")).is_empty());
     assert!(
@@ -910,7 +941,12 @@ fn a_rowless_callee_print_resolves_to_its_recorders_in_memory_and_on_disk() {
         vec![("bun-node-cjs-min", vec![edge("w", "zod", &["h"])])],
     );
     let bun = detect_recipe("var a;", BundlerType::Bun, MinifierType::Bun);
-    let loaded = LibraryIndex::load(&dir, &bun, TerserSlices::Off).expect("loads");
+    let loaded = LibraryIndex::load(
+        crate::libindex::files_test::dir_files(&dir),
+        &bun,
+        TerserSlices::Off,
+    )
+    .expect("loads");
     assert!(loaded.has_callee_prints());
     assert!(
         loaded.unit_hits(&hx("h")).is_empty(),

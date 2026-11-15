@@ -45,7 +45,6 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::Range;
-use std::path::Path;
 
 pub use super::format::NameRow;
 use super::format::{EdgeRow, LiteralRow, UnitRow};
@@ -199,9 +198,9 @@ fn owner_id(packages: &[String], owner: &str) -> u32 {
 
 // ------------------------------------------------------------------ bytes
 
-/// Where a table's bytes are: a file read by position through a page
-/// cache of the pages this run touched (a run), or memory (an index built
-/// from rows, the tests'). One reader for both.
+/// Where a table's bytes are: a reader the shell opened, read by position
+/// through a page cache of the pages this run touched (a run), or memory
+/// (an index built from rows, the tests'). One reader for both.
 pub enum Source {
     File(PagedFile),
     Memory(Vec<u8>),
@@ -212,12 +211,12 @@ pub enum Source {
 /// most of them are answered without a system call.
 const PAGE: u64 = 4096;
 
-/// A table file and the pages of it this run has read. The cache holds
+/// A table's reader and the pages of it this run has read. The cache holds
 /// only what a lookup touched — bounded by the file, in practice by the
 /// bundle's own vocabulary — never the table. Single-threaded: the lookup
 /// runs on one thread (a `RefCell`, not a lock).
 pub struct PagedFile {
-    file: std::fs::File,
+    reader: Box<dyn super::files::ReadAt>,
     len: u64,
     pages: std::cell::RefCell<HashMap<u64, Box<[u8]>>>,
 }
@@ -230,7 +229,8 @@ impl PagedFile {
         let bytes = pages.entry(p).or_insert_with(|| {
             let start = p * PAGE;
             let mut buf = vec![0; PAGE.min(self.len - start) as usize];
-            read_at(&self.file, start, &mut buf)
+            self.reader
+                .read_exact_at(start, &mut buf)
                 .unwrap_or_else(|e| panic!("library index table read at {start}: {e}"));
             buf.into_boxed_slice()
         });
@@ -239,19 +239,13 @@ impl PagedFile {
 }
 
 impl Source {
-    // io: legacy effect site, listed in dev/census/effects-allowlist.json
-    #[allow(clippy::disallowed_methods)]
-    pub fn open(path: &Path) -> Result<Source, String> {
-        let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let len = file
-            .metadata()
-            .map_err(|e| format!("{}: {e}", path.display()))?
-            .len();
-        Ok(Source::File(PagedFile {
-            file,
-            len,
+    /// A table read through `reader`, page by page, as a lookup asks.
+    pub fn paged(reader: Box<dyn super::files::ReadAt>) -> Source {
+        Source::File(PagedFile {
+            len: reader.size(),
+            reader,
             pages: Default::default(),
-        }))
+        })
     }
 
     fn len(&self) -> u64 {
@@ -302,23 +296,6 @@ impl Source {
             .map(|c| u32::from_le_bytes(*c))
             .collect()
     }
-}
-#[cfg(unix)]
-fn read_at(file: &std::fs::File, at: u64, buf: &mut [u8]) -> std::io::Result<()> {
-    std::os::unix::fs::FileExt::read_exact_at(file, buf, at)
-}
-
-#[cfg(windows)]
-fn read_at(file: &std::fs::File, mut at: u64, mut buf: &mut [u8]) -> std::io::Result<()> {
-    while !buf.is_empty() {
-        let n = std::os::windows::fs::FileExt::seek_read(file, buf, at)?;
-        if n == 0 {
-            return Err(std::io::ErrorKind::UnexpectedEof.into());
-        }
-        at += n as u64;
-        buf = &mut buf[n..];
-    }
-    Ok(())
 }
 
 /// A little-endian writer.

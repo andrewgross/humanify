@@ -319,7 +319,12 @@ fn on_disk_named(
         BundlerType::Bun,
         MinifierType::Bun,
     );
-    let ix = LibraryIndex::load(&dir, &recipe, TerserSlices::Off).map_err(|e| e.to_string());
+    let ix = LibraryIndex::load(
+        crate::libindex::files_test::dir_files(&dir),
+        &recipe,
+        TerserSlices::Off,
+    )
+    .map_err(|e| e.to_string());
     std::fs::remove_dir_all(&dir).ok();
     ix
 }
