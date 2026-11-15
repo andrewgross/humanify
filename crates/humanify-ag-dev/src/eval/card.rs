@@ -20,11 +20,6 @@ pub fn obj(entries: Vec<(&str, JsValue)>) -> JsValue {
     JsValue::Object(o)
 }
 
-/// A number.
-pub fn num<T: Into<f64>>(x: T) -> JsValue {
-    JsValue::Number(x.into())
-}
-
 /// A count.
 pub fn count(x: usize) -> JsValue {
     JsValue::Number(x as f64)

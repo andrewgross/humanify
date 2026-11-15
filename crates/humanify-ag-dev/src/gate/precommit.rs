@@ -22,8 +22,6 @@ use crate::HostEnv;
 use crate::proc::{self, Spawn};
 use crate::settings::Parsed;
 
-/// The committed hook script.
-pub const HOOK: &str = ".githooks/pre-commit";
 const ALLOWLIST: &str = crate::paths::CONCURRENCY_ALLOWLIST;
 const DEADLINE: Duration = Duration::from_secs(10 * 60);
 

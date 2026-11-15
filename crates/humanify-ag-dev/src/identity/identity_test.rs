@@ -126,19 +126,6 @@ fn unknown_never_equals_anything_not_even_unknown() {
 }
 
 #[test]
-fn neutrality_legs_compare_settings_not_the_binary() {
-    let a = card("p");
-    let mut b = card("p");
-    b.binary.sha256 = known("candidate".into());
-    assert_eq!(comparable(Purpose::NeutralityLegs, &a, &b), Ok(()));
-    b.pipeline_settings.sets = known(vec!["library.matching=off".into()]);
-    assert_eq!(
-        fields(comparable(Purpose::NeutralityLegs, &a, &b)),
-        ["pipelineSettings.sets"]
-    );
-}
-
-#[test]
 fn force_mixed_turns_the_refusal_into_loud_lines_naming_each_field() {
     let a = card("p");
     let mut b = card("p");

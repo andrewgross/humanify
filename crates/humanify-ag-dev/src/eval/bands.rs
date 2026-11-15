@@ -26,7 +26,7 @@ pub fn compute_bands(totals: &[JsValue]) -> Vec<(String, Option<f64>)> {
     KPIS.iter()
         .chain(SPLIT_KPIS.iter())
         .map(|k| {
-            let values: Vec<f64> = totals.iter().filter_map(|t| k.from_totals(t)).collect();
+            let values: Vec<f64> = totals.iter().filter_map(|t| k.of_totals(t)).collect();
             if values.len() < 2 {
                 return (k.key.clone(), None);
             }

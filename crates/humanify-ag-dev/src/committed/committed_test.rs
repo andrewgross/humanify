@@ -1,13 +1,20 @@
 //! Every committed config file loads through its typed loader, and a
 //! field the loader does not declare fails the load.
 
+use std::collections::BTreeMap;
+
 use super::*;
 use crate::paths::repo_root;
 
 #[test]
 fn pairs_json_loads_typed() {
     let p = eval::pairs(&repo_root()).expect("pairs.json");
-    let names: Vec<String> = p.value.pairs.iter().map(eval::Pair::name).collect();
+    let names: Vec<String> = p
+        .value
+        .pairs
+        .iter()
+        .map(|p| format!("{}->{}", p.from, p.to))
+        .collect();
     assert_eq!(
         names,
         [
@@ -24,17 +31,14 @@ fn pairs_json_loads_typed() {
         p.value.llm.concurrency, 472,
         "the string count is typed once"
     );
-    assert_eq!(p.sha256.len(), 64);
 }
 
 #[test]
 fn bands_and_self_hop_reference_load_per_mode() {
     let b = eval::noise_bands(&repo_root()).expect("noise-bands.json");
-    assert_eq!(
-        b.value.for_mode("off").and_then(|m| m.get("novel")),
-        Some(&0.0)
-    );
-    assert!(b.value.for_mode("names").is_some());
+    let bands = |mode: &str| b.value.provenance_and_bands(1, mode).map(|(_, b)| b);
+    assert_eq!(bands("off").and_then(|m| m.get("novel")), Some(&0.0));
+    assert!(bands("names").is_some());
     let s = eval::self_hop_reference(&repo_root()).expect("self-hop-reference.json");
     assert_eq!(s.value.range("off"), Some((2, 182)));
     assert_eq!(
@@ -46,7 +50,7 @@ fn bands_and_self_hop_reference_load_per_mode() {
 
 #[test]
 fn every_launch_golden_loads() {
-    let g = eval::launch_goldens(&repo_root()).expect("goldens");
+    let g = launch_goldens(&repo_root()).expect("goldens");
     assert!(g.contains_key("run-launch.golden.txt"));
     assert!(g.contains_key("neutrality-names.golden.txt"));
     assert!(g.len() >= 10, "{:?}", g.keys().collect::<Vec<_>>());
@@ -66,18 +70,19 @@ fn every_library_corpus_and_layer_loads() {
             loaded.layers.len()
         );
         if c.name != "dev" {
-            assert_eq!(loaded.manifest.value.corpus.as_deref(), Some(c.name));
+            assert_eq!(loaded.manifest.value._corpus.as_deref(), Some(c.name));
         }
     }
     // 16 corpora x 10 layers + 7 corpora with the scorer-4 `copies` layer.
     assert_eq!(layers, 167);
-    library::bands(&repo_root()).expect("bands.json");
     assert!(library::corpus_named("nope").is_err());
 }
 
 #[test]
 fn the_concurrency_allowlist_and_fixture_configs_load() {
-    let a = census::concurrency_allowlist(&repo_root()).expect("allowlist");
+    let a =
+        census::concurrency_allowlist_at(&repo_root().join(crate::paths::CONCURRENCY_ALLOWLIST))
+            .expect("allowlist");
     assert!(a.value.entries.len() > 80);
     let f = e2e::fixture_configs(&repo_root()).expect("fixtures");
     assert!(f.len() >= 19, "{}", f.len());
@@ -206,8 +211,8 @@ fn bands_are_keyed_by_scorer_version() {
         "byMode":{"names":{"provenance":{"provisional":false,"sources":[],"commit":"c","labels":[]},"bands":{"noise":300}}}}}}"#;
     let b: eval::NoiseBands = serde_json::from_str(text).unwrap();
     let get = |scorer: u64, mode: &str| {
-        b.for_scorer_mode(scorer, mode)
-            .and_then(|m| m.get("noise"))
+        b.provenance_and_bands(scorer, mode)
+            .and_then(|(_, m)| m.get("noise"))
             .copied()
     };
     assert_eq!(get(1, "off"), Some(17.0));
@@ -222,8 +227,8 @@ fn the_committed_bands_carry_scorer_2_for_both_modes() {
     let b = eval::noise_bands(&repo_root()).expect("noise-bands.json");
     let get = |mode: &str, k: &str| {
         b.value
-            .for_scorer_mode(2, mode)
-            .and_then(|m| m.get(k))
+            .provenance_and_bands(2, mode)
+            .and_then(|(_, m)| m.get(k))
             .copied()
     };
     assert_eq!(get("off", "novel"), Some(0.0));
@@ -245,11 +250,16 @@ fn every_committed_dev_file_is_read_by_its_loader() {
     note(&eval::pairs(&repo).unwrap().path);
     note(&eval::noise_bands(&repo).unwrap().path);
     note(&eval::self_hop_reference(&repo).unwrap().path);
-    for g in eval::launch_goldens(&repo).unwrap().values() {
+    for g in launch_goldens(&repo).unwrap().values() {
         note(&g.path);
     }
     note(&library::data_roots(&repo).unwrap().path);
-    note(&library::bands(&repo).unwrap().path);
+    // read by path (`library leaderboard` / `determinism` check it is there)
+    note(
+        &load_json::<serde_json::Value>(&repo.join("dev/library/bands.json"))
+            .unwrap()
+            .path,
+    );
     note(&library::bundev_list(&repo).unwrap().path);
     for c in library::CORPORA {
         let loaded = library::load_corpus(&repo, c.name).unwrap();
@@ -258,7 +268,11 @@ fn every_committed_dev_file_is_read_by_its_loader() {
             note(&l.path);
         }
     }
-    note(&census::concurrency_allowlist(&repo).unwrap().path);
+    note(
+        &census::concurrency_allowlist_at(&repo.join(crate::paths::CONCURRENCY_ALLOWLIST))
+            .unwrap()
+            .path,
+    );
     note(&census::clone_allowlist(&repo).unwrap().path);
     note(&census::docs_allowlist(&repo).unwrap().path);
 
@@ -283,4 +297,24 @@ fn every_committed_dev_file_is_read_by_its_loader() {
         "files under dev/ no loader reads: {unread:?}"
     );
     assert!(read.len() > 150, "only {} files read", read.len());
+}
+
+/// Every launch golden (`dev/eval/goldens/`), by file name.
+fn launch_goldens(repo: &Path) -> Result<BTreeMap<String, Loaded<String>>, String> {
+    let mut out = BTreeMap::new();
+    for dir in [repo.join(crate::paths::LAUNCH_GOLDENS)] {
+        let entries = std::fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        for entry in entries {
+            let path = entry.map_err(|e| e.to_string())?.path();
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+                .to_string();
+            if name.ends_with(".golden.txt") {
+                out.insert(name, load_text(&path)?);
+            }
+        }
+    }
+    Ok(out)
 }

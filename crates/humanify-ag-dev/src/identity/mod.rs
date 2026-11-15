@@ -261,8 +261,6 @@ pub enum Purpose {
     LibraryLeaderboard,
     /// Noise bands from same-commit repeats.
     Bands,
-    /// The two legs of a neutrality run.
-    NeutralityLegs,
 }
 
 /// Fields that differ card to card within one label by construction.
@@ -308,16 +306,6 @@ impl Purpose {
                 f.extend_from_slice(LEADERBOARD);
                 Some(f)
             }
-            Purpose::NeutralityLegs => Some(vec![
-                "llm.model",
-                "llm.reasoningEffort",
-                "llm.concurrency",
-                "llm.endpointId",
-                "llm.cache.dir",
-                "pipelineSettings.sets",
-                "libraryIndex.id",
-                "namingMode",
-            ]),
         }
     }
 }

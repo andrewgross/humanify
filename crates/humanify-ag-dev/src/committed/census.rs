@@ -10,14 +10,14 @@ use std::path::Path;
 use serde::Deserialize;
 
 use super::{Loaded, load_json};
-use crate::paths::{CLONE_ALLOWLIST, CONCURRENCY_ALLOWLIST, DOCS_ALLOWLIST};
+use crate::paths::{CLONE_ALLOWLIST, DOCS_ALLOWLIST};
 
 /// The allowlist file.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConcurrencyAllowlist {
     #[serde(rename = "$comment", default)]
-    pub comment: String,
+    pub _comment: String,
     pub entries: Vec<ConcurrencySite>,
 }
 
@@ -41,11 +41,6 @@ pub struct ConcurrencySite {
     pub exception: Option<String>,
 }
 
-/// Load the concurrency allowlist.
-pub fn concurrency_allowlist(repo: &Path) -> Result<Loaded<ConcurrencyAllowlist>, String> {
-    concurrency_allowlist_at(&repo.join(CONCURRENCY_ALLOWLIST))
-}
-
 /// Load a concurrency allowlist from an explicit path (`--allowlist`).
 pub fn concurrency_allowlist_at(file: &Path) -> Result<Loaded<ConcurrencyAllowlist>, String> {
     load_json(file)
@@ -56,7 +51,7 @@ pub fn concurrency_allowlist_at(file: &Path) -> Result<Loaded<ConcurrencyAllowli
 #[serde(deny_unknown_fields)]
 pub struct CloneAllowlist {
     #[serde(rename = "$comment")]
-    pub comment: String,
+    pub _comment: String,
     pub entries: Vec<CloneGroup>,
 }
 
@@ -81,7 +76,7 @@ pub fn clone_allowlist(root: &Path) -> Result<Loaded<CloneAllowlist>, String> {
 #[serde(deny_unknown_fields)]
 pub struct DocsAllowlist {
     #[serde(rename = "$comment")]
-    pub comment: String,
+    pub _comment: String,
     pub allowed: Vec<String>,
 }
 

@@ -43,7 +43,8 @@ fn the_census_launch_names_the_files_or_none() {
 
 #[test]
 fn the_committed_hook_runs_this_verb() {
-    let hook = std::fs::read_to_string(crate::paths::repo_root().join(HOOK)).unwrap();
+    let hook =
+        std::fs::read_to_string(crate::paths::repo_root().join(".githooks/pre-commit")).unwrap();
     assert!(hook.starts_with("#!/bin/sh\n"), "{hook}");
     assert!(hook.contains("cargo dev precommit"), "{hook}");
 }

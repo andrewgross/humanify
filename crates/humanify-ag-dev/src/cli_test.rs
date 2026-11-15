@@ -62,7 +62,7 @@ fn the_table_holds_the_whole_subcommand_map() {
 fn every_declared_setting_is_a_harness_key_or_section() {
     for v in VERBS {
         for s in v.settings {
-            let known = settings::HARNESS_KEYS
+            let known = settings::keys::HARNESS_KEYS
                 .iter()
                 .any(|k| k.dotted() == *s || k.section == *s);
             assert!(known, "{}: {s} is not a harness key or section", name(v));

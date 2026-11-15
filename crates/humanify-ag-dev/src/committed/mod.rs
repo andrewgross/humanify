@@ -17,12 +17,11 @@ use std::path::{Path, PathBuf};
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 
-/// A loaded committed file: its typed value, where it came from, its sha.
+/// A loaded committed file: its typed value and where it came from.
 #[derive(Clone, Debug)]
 pub struct Loaded<T> {
     pub value: T,
     pub path: PathBuf,
-    pub sha256: String,
 }
 
 /// sha256 of some bytes, lowercase hex.
@@ -38,19 +37,16 @@ pub fn load_json<T: DeserializeOwned>(path: &Path) -> Result<Loaded<T>, String> 
     Ok(Loaded {
         value,
         path: path.to_path_buf(),
-        sha256: sha256_hex(&bytes),
     })
 }
 
-/// Read one text file (a launch golden).
+/// Read one text file.
 pub fn load_text(path: &Path) -> Result<Loaded<String>, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let sha256 = sha256_hex(&bytes);
     let value = String::from_utf8(bytes).map_err(|_| format!("{}: not UTF-8", path.display()))?;
     Ok(Loaded {
         value,
         path: path.to_path_buf(),
-        sha256,
     })
 }
 

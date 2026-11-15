@@ -1,6 +1,5 @@
 use super::*;
 use crate::paths::repo_root;
-use crate::proc::Spawn;
 
 #[test]
 fn the_pipeline_crate_is_read_from_its_manifest() {
@@ -42,32 +41,6 @@ fn the_pipeline_crate_follows_the_commit_across_the_rename() {
     assert_eq!(after.binary, "humanify-ag");
     let err = pipeline_crate_at_commit(&repo, "m4^{commit}~400").unwrap_err();
     assert!(err.contains("before the cutover"), "{err}");
-}
-
-#[test]
-fn a_binary_without_config_in_its_help_is_a_legacy_leg() {
-    let dir = std::env::temp_dir().join(format!("dev-legacy-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    // The scripts are written by a CHILD process: a file this process
-    // writes can still be open for writing in a sibling test's fork when
-    // it is executed (ETXTBSY, "Text file busy").
-    let write = |name: &str, help: &str| {
-        let p = dir.join(name);
-        let script = format!(
-            "printf '#!/bin/sh\\necho %s\\n' '{help}' > '{0}' && chmod 755 '{0}'",
-            p.display()
-        );
-        crate::proc::run_ok(&Spawn::new(
-            "sh",
-            &["-c", &script],
-            crate::proc::GIT_DEADLINE,
-        ))
-        .unwrap();
-        p
-    };
-    assert!(is_legacy_leg(&write("old", "--split --llm-cache")).unwrap());
-    assert!(!is_legacy_leg(&write("new", "--config FILE")).unwrap());
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]

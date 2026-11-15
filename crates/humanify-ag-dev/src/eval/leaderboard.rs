@@ -249,7 +249,7 @@ fn table(
         for k in shown {
             row.push(format!(
                 "{:>w$}",
-                cell(k.from_totals(t), k.from_totals(base), i == 0, band(&k.key))
+                cell(k.of_totals(t), k.of_totals(base), i == 0, band(&k.key))
             ));
         }
         out.push(row.join(" "));

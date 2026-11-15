@@ -809,7 +809,7 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
         out.push(churn_row(
             str_at(c, "pair").unwrap_or(""),
             &shown,
-            |k| k.from_card(c),
+            |k| k.of_card(c),
             number_at(c, "churn.statements.total").unwrap_or(0.0),
             number_at(c, "churn.relocations.freshNames").unwrap_or(0.0),
             &d("determinism.functions.pctDeterministic"),
@@ -821,7 +821,7 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
     out.push(churn_row(
         "TOTAL",
         &shown,
-        |k| k.from_totals(&totals),
+        |k| k.of_totals(&totals),
         tot("stmts"),
         tot("freshNames"),
         "",

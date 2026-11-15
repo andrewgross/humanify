@@ -19,7 +19,6 @@ use super::families::Libix;
 pub struct Row {
     pub owner: u32,
     pub file: u32,
-    pub nodes: i64,
     pub module_bytes: i64,
     /// Version ranges `[lo, hi]` (interned version strings).
     pub versions: Vec<(u32, u32)>,
@@ -46,7 +45,6 @@ struct UnitLine<'a> {
     owner: std::borrow::Cow<'a, str>,
     #[serde(borrow)]
     file: std::borrow::Cow<'a, str>,
-    nodes: i64,
     #[serde(rename = "moduleBytes")]
     module_bytes: i64,
     #[serde(borrow)]
@@ -103,7 +101,6 @@ impl Index {
             ix.rows.push(Row {
                 owner,
                 file,
-                nodes: r.nodes,
                 module_bytes: r.module_bytes,
                 versions,
             });

@@ -12,10 +12,14 @@ use crate::paths::E2E_FIXTURES;
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct FixtureConfig {
-    pub package: String,
-    pub repo: String,
-    pub source_strategy: SourceStrategy,
-    pub entry_points: Vec<String>,
+    #[serde(rename = "package")]
+    pub _package: String,
+    #[serde(rename = "repo")]
+    pub _repo: String,
+    #[serde(rename = "sourceStrategy")]
+    pub _source_strategy: SourceStrategy,
+    #[serde(rename = "entryPoints")]
+    pub _entry_points: Vec<String>,
     /// A bundled build (absent: the plain fixtures).
     pub bundle: Option<bool>,
     /// The input's behaviour is the compiled executable's, recorded beside
@@ -31,7 +35,7 @@ pub struct FixtureConfig {
 #[serde(deny_unknown_fields)]
 pub struct SourceStrategy {
     #[serde(rename = "type")]
-    pub kind: String,
+    pub _kind: String,
 }
 
 /// What the run must detect and produce.
@@ -57,7 +61,8 @@ pub struct Expect {
 pub struct VersionPair {
     pub v1: String,
     pub v2: String,
-    pub description: String,
+    #[serde(rename = "description")]
+    pub _description: String,
 }
 
 /// Every fixture's config, by fixture directory name (fixtures without a

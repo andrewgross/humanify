@@ -117,7 +117,7 @@ fn the_repeats_cold_self_hops_become_their_modes_reference_range() {
     let names_slot = &r.by_mode["names"];
     assert_eq!(names_slot.version, "2.1.216");
     assert_eq!(names_slot.cold_diff_lines.len(), 3);
-    assert_eq!(names_slot.commits[names[0]], "0357696e");
+    assert_eq!(names_slot._commits[names[0]], "0357696e");
     // The off range is kept.
     assert_eq!(r.range("off"), Some((2, 182)));
 }

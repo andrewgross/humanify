@@ -139,7 +139,7 @@ fn jobs(cards: &Path, out: &Path) -> Result<Vec<Job>, String> {
 fn kpi_delta(old: &JsValue, new: &JsValue) -> Vec<String> {
     KPIS.iter()
         .filter_map(|k| {
-            let (a, b) = (k.from_card(old)?, k.from_card(new)?);
+            let (a, b) = (k.of_card(old)?, k.of_card(new)?);
             Some(format!(
                 "{}={}->{}{}",
                 k.key,

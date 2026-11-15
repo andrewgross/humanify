@@ -43,18 +43,6 @@ impl<K: Eq + Hash + Clone, V: Copy + Default + std::ops::AddAssign + PartialOrd>
         }
     }
 
-    /// `c[k] = v` (inserts k at the end when new).
-    pub fn set(&mut self, k: K, v: V) {
-        match self.at.get(&k) {
-            Some(&i) => self.vals[i] = v,
-            None => {
-                self.at.insert(k.clone(), self.keys.len());
-                self.keys.push(k);
-                self.vals.push(v);
-            }
-        }
-    }
-
     /// `c[k]`: 0 when absent.
     pub fn get<Q>(&self, k: &Q) -> V
     where
@@ -62,18 +50,6 @@ impl<K: Eq + Hash + Clone, V: Copy + Default + std::ops::AddAssign + PartialOrd>
         Q: Hash + Eq + ?Sized,
     {
         self.at.get(k).map_or_else(V::default, |&i| self.vals[i])
-    }
-
-    pub fn contains<Q>(&self, k: &Q) -> bool
-    where
-        K: std::borrow::Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
-    {
-        self.at.contains_key(k)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.keys.is_empty()
     }
 
     /// (key, count) in insertion order.

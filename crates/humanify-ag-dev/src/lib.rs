@@ -1,26 +1,29 @@
 //! `humanify-ag-dev`: the measurement harness as one Rust crate
-//! (docs/dev-harness.md). Lane L1 is the skeleton every later lane plugs
-//! into: the verb table (main.rs), the settings registry (`settings`), the
-//! committed-file loaders (`committed`), the run identity and its one
-//! comparison guard (`identity`), the one environment read (`env`), the
-//! one subprocess helper (`proc`), the pipeline-binary builder
-//! (`bin_build`) and the two JSON spellings of the legacy records (`json`).
+//! (docs/dev-harness.md): the verb table (`cli`), the settings registry
+//! (`settings`), the committed-file loaders (`committed`), the run identity
+//! and its one comparison guard (`identity`), the one environment read
+//! (`env`), the one subprocess helper (`proc`), the pipeline-binary builder
+//! (`bin_build`) and the JSON spellings of the records (`json`).
+//!
+//! Only `cli` is public: every other module is crate-private, so rustc's
+//! dead-code lint sees every item nothing reaches.
 
-pub mod bin_build;
-pub mod census;
-pub mod committed;
-pub mod e2e;
-pub mod env;
-pub mod eval;
-pub mod gate;
-pub mod identity;
-pub mod json;
-pub mod launch;
-pub mod library;
-pub mod paths;
-pub mod proc;
-pub mod runners;
-pub mod settings;
+pub(crate) mod bin_build;
+pub(crate) mod census;
+pub mod cli;
+pub(crate) mod committed;
+pub(crate) mod e2e;
+pub(crate) mod env;
+pub(crate) mod eval;
+pub(crate) mod gate;
+pub(crate) mod identity;
+pub(crate) mod json;
+pub(crate) mod launch;
+pub(crate) mod library;
+pub(crate) mod paths;
+pub(crate) mod proc;
+pub(crate) mod runners;
+pub(crate) mod settings;
 
-/// The host environment a verb receives from main (read once, in `env`).
-pub use env::HostEnv;
+/// The host environment a verb receives (read once, in `env`).
+pub(crate) use env::HostEnv;

@@ -21,7 +21,7 @@ fn refusals(accepted: &[&str], a: &[&str]) -> Vec<String> {
 #[test]
 fn every_key_is_a_flag_and_flags_are_unique() {
     let mut seen = std::collections::BTreeSet::new();
-    for k in HARNESS_KEYS {
+    for k in keys::HARNESS_KEYS {
         assert!(
             seen.insert(k.flag_name()),
             "two keys share {}",

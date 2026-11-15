@@ -1,25 +1,26 @@
-//! The eval's committed files: `pairs.json`, `noise-bands.json`,
-//! `self-hop-reference.json` and the launch goldens.
+//! The eval's committed files: `pairs.json`, `noise-bands.json` and
+//! `self-hop-reference.json` (the launch goldens are read by the tests
+//! that hold launches to them).
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Deserializer};
 
-use super::{Loaded, load_json, load_text};
-use crate::paths::{EVAL_DIR, LAUNCH_GOLDENS};
+use super::{Loaded, load_json};
+use crate::paths::EVAL_DIR;
 
 /// `pairs.json`.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Pairs {
     #[serde(rename = "_comment")]
-    pub comment: String,
+    pub _comment: String,
     #[serde(rename = "_paths")]
-    pub paths_note: String,
+    pub _paths_note: String,
     pub inputs_base: String,
     #[serde(rename = "_libraryIndex")]
-    pub library_index_note: String,
+    pub _library_index_note: String,
     pub library_index: String,
     pub llm: PairsLlm,
     pub pairs: Vec<Pair>,
@@ -44,13 +45,6 @@ pub struct Pair {
     pub from: String,
     pub to: String,
     pub kind: String,
-}
-
-impl Pair {
-    /// `from->to`, as cards and manifests spell a pair.
-    pub fn name(&self) -> String {
-        format!("{}->{}", self.from, self.to)
-    }
 }
 
 fn u32_from_string<'de, D: Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
@@ -118,9 +112,11 @@ pub struct ModeBands {
 #[serde(deny_unknown_fields)]
 pub struct BandProvenance {
     pub provisional: bool,
-    pub sources: Vec<String>,
+    #[serde(rename = "sources")]
+    pub _sources: Vec<String>,
     pub commit: String,
-    pub labels: Vec<String>,
+    #[serde(rename = "labels")]
+    pub _labels: Vec<String>,
     /// The pairs the repeats scored (`eval bands` records them since
     /// exp201); None for a slot measured before, over the four original
     /// pairs.
@@ -136,17 +132,6 @@ type SlotRef<'a> = (
 );
 
 impl NoiseBands {
-    /// Scorer 1's bands of a naming mode: `off` is the top level.
-    pub fn for_mode(&self, mode: &str) -> Option<&BTreeMap<String, f64>> {
-        self.for_scorer_mode(1, mode)
-    }
-
-    /// The bands one scorer version measured in a naming mode; None when
-    /// that version has none for it (never another version's or mode's).
-    pub fn for_scorer_mode(&self, scorer: u64, mode: &str) -> Option<&BTreeMap<String, f64>> {
-        self.provenance_and_bands(scorer, mode).map(|(_, b)| b)
-    }
-
     /// The provenance and bands of one scorer version's naming mode.
     pub fn provenance_and_bands(
         &self,
@@ -194,10 +179,11 @@ pub fn noise_bands(repo: &Path) -> Result<Loaded<NoiseBands>, String> {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct SelfHopReference {
     #[serde(rename = "_comment")]
-    pub comment: String,
+    pub _comment: String,
     pub version: String,
     pub cold_diff_lines: BTreeMap<String, u64>,
-    pub commits: BTreeMap<String, String>,
+    #[serde(rename = "commits")]
+    pub _commits: BTreeMap<String, String>,
     pub by_mode: BTreeMap<String, SelfHopMode>,
 }
 
@@ -206,14 +192,16 @@ pub struct SelfHopReference {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct SelfHopMode {
     #[serde(rename = "_comment")]
-    pub comment: String,
+    pub _comment: String,
     pub version: String,
     pub cold_diff_lines: BTreeMap<String, u64>,
-    pub commits: BTreeMap<String, String>,
+    #[serde(rename = "commits")]
+    pub _commits: BTreeMap<String, String>,
 }
 
 impl SelfHopReference {
     /// The (min, max) cold diff-line range for a naming mode.
+    #[cfg(test)]
     pub fn range(&self, mode: &str) -> Option<(u64, u64)> {
         let lines = match mode {
             "off" => &self.cold_diff_lines,
@@ -226,24 +214,4 @@ impl SelfHopReference {
 /// Load `self-hop-reference.json`.
 pub fn self_hop_reference(repo: &Path) -> Result<Loaded<SelfHopReference>, String> {
     load_json(&repo.join(EVAL_DIR).join("self-hop-reference.json"))
-}
-
-/// Every launch golden (`dev/eval/goldens/`), by file name.
-pub fn launch_goldens(repo: &Path) -> Result<BTreeMap<String, Loaded<String>>, String> {
-    let mut out = BTreeMap::new();
-    for dir in [repo.join(LAUNCH_GOLDENS)] {
-        let entries = std::fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        for entry in entries {
-            let path = entry.map_err(|e| e.to_string())?.path();
-            let name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or_default()
-                .to_string();
-            if name.ends_with(".golden.txt") {
-                out.insert(name, load_text(&path)?);
-            }
-        }
-    }
-    Ok(out)
 }
