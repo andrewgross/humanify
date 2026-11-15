@@ -46,7 +46,6 @@
 //! file's own imports or declarations change.
 
 use std::collections::HashSet;
-use std::path::Path;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{Argument, Expression};
@@ -54,9 +53,10 @@ use oxc_semantic::{Semantic, SymbolId};
 use oxc_span::GetSpan;
 
 use crate::babel_view::{DiffLines, unparen};
-use crate::error::{FileError, FileOp};
+use crate::error::FileError;
 use crate::naming::plumbing::{conventional_import_name, require_specifier, sole_write};
 use crate::naming::report::diagnostics::ExtraText;
+use crate::output_tree::OutputTree;
 use crate::place::layout::METADATA_DIR;
 use crate::rename::eligibility::{Eligibility, NeverRename};
 use crate::rename::name_profile::NameProfile;
@@ -67,7 +67,6 @@ use crate::trail::{Anchor, Attempt, Outcome, StrategyTrail, Tier};
 
 use super::reconcile::rewrite_renamed_text;
 use super::relink::parse_or_err;
-use super::scaffold::read_utf8;
 use super::vendor_inherit::file_signature;
 
 #[cfg(test)]
@@ -334,12 +333,10 @@ pub fn name_library_imports_in_file(
     out
 }
 
-/// Name the library imports of every split file under `output_dir`
+/// Name the library imports of every split file in the output tree
 /// (`files` are the paths the split wrote; `.humanify/` is skipped).
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
 pub fn name_library_imports_in_tree(
-    output_dir: &Path,
+    tree: &mut OutputTree,
     files: &[&str],
     never_rename: NeverRename,
     profile: NameProfile,
@@ -351,8 +348,9 @@ pub fn name_library_imports_in_tree(
         .copied()
         .filter(|f| f.ends_with(".js") && !f.starts_with(&metadata))
         .collect();
+    let reading: &OutputTree = tree;
     let works = crate::par::map_ordered(&files, |file| {
-        let text = read_utf8(&output_dir.join(file))?;
+        let text = reading.read_lossy(&reading.root().join(file))?;
         Ok::<_, FileError>(name_library_imports_in_file(
             file, &text, &eligible, profile,
         ))
@@ -368,8 +366,7 @@ pub fn name_library_imports_in_tree(
         }
         report.trail.extend(work.trail);
         if let Some(text) = work.text {
-            let path = output_dir.join(file);
-            std::fs::write(&path, text).map_err(FileError::at(FileOp::Write, &path))?;
+            tree.put_rel(file, text);
             report.named += work.named.len();
             report.files += 1;
         }

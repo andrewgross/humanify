@@ -429,8 +429,6 @@ fn unified_test_enum_flag_values() {
 
 #[test]
 fn the_split_ledger_writer_is_compact_in_key_order() {
-    let dir = std::env::temp_dir().join(format!("wpb4-writers-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
     // The writer is compact JSON, no trailing newline, in the ledger's key order.
     let ledger = humanify_ag_core::place::ledger::SplitLedger {
         version: 1,
@@ -441,12 +439,14 @@ fn the_split_ledger_writer_is_compact_in_key_order() {
         hash_version: 3,
         ..Default::default()
     };
-    crate::writers::write_split_ledger(&dir, &ledger).unwrap();
     assert_eq!(
-        std::fs::read_to_string(dir.join(".humanify/split-ledger.json")).unwrap(),
+        crate::writers::SPLIT_LEDGER_PATH,
+        ".humanify/split-ledger.json"
+    );
+    assert_eq!(
+        ledger.to_json(),
         "{\"version\":1,\"files\":[\"src/a.js\"],\"nameToFiles\":{\"a\":[\"src/a.js\"]},\"order\":[],\"hashes\":[],\"emitHashes\":[],\"emitNames\":[],\"hashVersion\":3}"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 fn metrics_of(v: &Value) -> humanify_ag_llm::metrics::ProcessingMetrics {
@@ -550,7 +550,7 @@ fn preserved_failed_output_matches() {
             validated_code: f["validatedCode"].as_str().map(str::to_string),
         })
         .collect();
-    crate::failed_output::preserve_failed_output(&dir, &failures);
+    crate::failed_output::preserve_failed_output(&crate::output_tree::tree_for(&dir), &failures);
     let mut files = std::collections::BTreeMap::new();
     fn walk(
         root: &std::path::Path,
@@ -579,7 +579,7 @@ fn preserved_failed_output_matches() {
     assert_eq!(files, ts);
     // failed-output.test.ts: an empty list writes nothing.
     let empty = dir.join("empty");
-    crate::failed_output::preserve_failed_output(&empty, &[]);
+    crate::failed_output::preserve_failed_output(&crate::output_tree::tree_for(&empty), &[]);
     assert!(!empty.exists());
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -26,7 +26,9 @@ fn every_embedded_file_is_copied_byte_for_byte() {
             source: input.join("src/w/b.node"),
         },
     ];
-    assert_eq!(write_embedded_files(&out, &files).unwrap(), 2);
+    let mut tree = crate::output_tree::disk_test::tree_on_disk(&out);
+    assert_eq!(write_embedded_files(&mut tree, &files), 2);
+    crate::output_tree::disk_test::write(&tree);
     assert_eq!(
         fs::read(out.join("embedded/a.bin")).unwrap(),
         b"\x00\xffzstd"
@@ -39,14 +41,26 @@ fn every_embedded_file_is_copied_byte_for_byte() {
 }
 
 #[test]
-fn a_missing_embedded_file_fails_the_write() {
-    let out = humanify_ag_io::scratch::temp_dir("embedded-out").unwrap();
+fn an_embedded_file_is_a_copy_the_tree_never_holds() {
+    // The shell copies it when it writes the tree (a missing source fails
+    // that write: cli `output_tree`).
+    let mut tree = crate::output_tree::OutputTree::new(
+        std::path::Path::new("out"),
+        Box::new(crate::output_tree::NothingOnDisk),
+    );
     let files = [EmbeddedFile {
-        rel: "gone.bin".into(),
-        source: out.join("nowhere/gone.bin"),
+        rel: "w/gone.bin".into(),
+        source: "in/gone.bin".into(),
     }];
-    let err = write_embedded_files(&out, &files).unwrap_err();
-    assert!(err.to_string().contains("gone.bin"), "{err}");
+    assert_eq!(write_embedded_files(&mut tree, &files), 1);
+    let placed: Vec<_> = tree.files().collect();
+    assert_eq!(
+        placed,
+        vec![(
+            std::path::Path::new("out/embedded/w/gone.bin"),
+            &crate::output_tree::TreeFile::CopyOf("in/gone.bin".into())
+        )]
+    );
 }
 
 #[test]
@@ -59,7 +73,7 @@ fn the_tree_walk_skips_the_embedded_folder_at_the_root_only() {
         fs::create_dir_all(out.join(f).parent().unwrap()).unwrap();
         fs::write(out.join(f), "x").unwrap();
     }
-    let mut got: Vec<String> = js_files_under(&out)
+    let mut got: Vec<String> = js_files_under(&crate::output_tree::disk_test::tree_on_disk(&out))
         .unwrap()
         .iter()
         .map(|p| p.strip_prefix(&out).unwrap().to_string_lossy().into_owned())

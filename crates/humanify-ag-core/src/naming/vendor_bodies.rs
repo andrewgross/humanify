@@ -20,8 +20,9 @@ use std::collections::BTreeSet;
 use humanify_ag_model::llm::NameProvider;
 
 use crate::artifact_dump::DispatchLog;
-use crate::error::{FileError, FileOp};
+use crate::error::FileError;
 use crate::naming::driver::{NamingConfig, NamingError, NamingInput, NamingOutcome, run_naming};
+use crate::output_tree::OutputTree;
 
 /// The joined, named bodies of one run: the next release's prior for this
 /// pass, beside `.humanify/humanified.js` (the era's).
@@ -286,11 +287,9 @@ fn has_lone_surrogate_escape(text: &str) -> bool {
 /// The vendored factory bodies the unpack wrote under `vendor/` (the
 /// bridge's factory files; an app text asset under `src/` is not library
 /// code and is left alone), each with the names Site B restored inside
-/// its declaration — read back from `out_dir` as written.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
+/// its declaration — read back from the output tree as written.
 pub fn bodies_of_bridge(
-    out_dir: &std::path::Path,
+    tree: &OutputTree,
     bridge: &crate::naming::module_names::EraBridge,
 ) -> Result<Vec<VendorBody>, FileError> {
     let mut out = Vec::new();
@@ -298,11 +297,9 @@ pub fn bodies_of_bridge(
         if !path.starts_with("vendor/") {
             continue;
         }
-        let file = out_dir.join(path);
-        let text = std::fs::read_to_string(&file).map_err(FileError::at(FileOp::Read, &file))?;
         out.push(VendorBody {
             path: path.clone(),
-            text,
+            text: tree.read_text(&tree.root().join(path))?,
             restored: bridge
                 .restored_in((*start, *end))
                 .map(str::to_string)
@@ -312,29 +309,23 @@ pub fn bodies_of_bridge(
     Ok(out)
 }
 
-/// Write the pass's result: every body whose text changed, and the joined
-/// text the next release reads as its prior. Returns the files rewritten.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
+/// Put the pass's result into the tree: every body whose text changed,
+/// and the joined text the next release reads as its prior. Returns the
+/// files rewritten.
 pub fn write_vendor_naming(
-    out_dir: &std::path::Path,
+    tree: &mut OutputTree,
     bodies: &[VendorBody],
     named: &VendorNaming,
-) -> Result<usize, FileError> {
+) -> usize {
     let mut written = 0;
     for (body, text) in bodies.iter().zip(&named.texts) {
         if *text != body.text {
-            let file = out_dir.join(&body.path);
-            std::fs::write(&file, text).map_err(FileError::at(FileOp::Write, &file))?;
+            tree.put_rel(&body.path, text.as_str());
             written += 1;
         }
     }
-    let joined = out_dir.join(VENDOR_NAMING_SOURCE);
-    if let Some(parent) = joined.parent() {
-        std::fs::create_dir_all(parent).map_err(FileError::at(FileOp::Mkdir, parent))?;
-    }
-    std::fs::write(&joined, &named.joined).map_err(FileError::at(FileOp::Write, &joined))?;
-    Ok(written)
+    tree.put_rel(VENDOR_NAMING_SOURCE, named.joined.as_str());
+    written
 }
 
 #[cfg(test)]

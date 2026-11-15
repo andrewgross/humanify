@@ -142,13 +142,16 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
     // webcrack's subprocess has nothing to add to discovery).
     let mut bundle_order: Vec<humanify_ag_core::unpack::bun::BundleOrderRow> = Vec::new();
     let report = if adapter.vendor_record_stamp().is_some() {
+        let mut tree = crate::output_tree::tree_for(Path::new(&work_dir));
         let outcome = humanify_ag_core::unpack::run_adapter(
             adapter,
             toolchain.layout.piece,
             code,
-            Path::new(&work_dir),
+            &mut tree,
             run,
         );
+        // The work folder holds the unpacked tree, as the verb always left it.
+        crate::output_tree::write_tree(&tree).map_err(|e| e.to_string())?;
         outcome.map(|o| {
             bundle_order = match &o {
                 humanify_ag_core::unpack::AdapterOutcome::VendorRecord(vendor) => {

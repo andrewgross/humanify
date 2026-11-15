@@ -67,13 +67,11 @@ fn three_files_each_name_their_path_import_path() {
         std::fs::create_dir_all(root.as_path().join("src")).unwrap();
         std::fs::write(root.as_path().join(f), split_file(&binding, "path", "")).unwrap();
     }
-    let report = name_library_imports_in_tree(
-        root.as_path(),
-        &files,
-        NeverRename::default(),
-        NameProfile::Bun,
-    )
-    .unwrap();
+    let mut tree = crate::output_tree::disk_test::tree_on_disk(&root);
+    let report =
+        name_library_imports_in_tree(&mut tree, &files, NeverRename::default(), NameProfile::Bun)
+            .unwrap();
+    crate::output_tree::disk_test::write(&tree);
     assert_eq!(report.named, 3);
     for f in files {
         let text = std::fs::read_to_string(root.as_path().join(f)).unwrap();

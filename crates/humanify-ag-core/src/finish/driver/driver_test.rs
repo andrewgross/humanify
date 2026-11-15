@@ -86,8 +86,9 @@ fn the_finish_reconcile_records_its_constituent_spans() {
     let profiler = crate::profiling::Profiler::new(true);
     profiler.install_global();
     let mut report = FinishReport::default();
+    let mut tree = crate::output_tree::disk_test::tree_on_disk(&s.0);
     let result = reconcile_post_split(
-        &s.0,
+        &mut tree,
         Some(&prior),
         FinishSwitches::default(),
         super::PostSplitRules {
@@ -99,6 +100,7 @@ fn the_finish_reconcile_records_its_constituent_spans() {
         &mut report,
     )
     .expect("the reconcile runs");
+    crate::output_tree::disk_test::write(&tree);
     let profile = profiler.finalize(None);
     crate::profiling::Profiler::uninstall_global();
     // The fixture's regime: one file considered, one changed, renames to
@@ -222,8 +224,9 @@ fn an_earlier_runs_record_on_disk_is_never_this_runs() {
     )
     .unwrap();
     assert!(this_runs_manifest(None).is_none());
+    let on_disk = crate::output_tree::disk_test::tree_on_disk(&dir.0);
     assert_eq!(
-        leftover_vendor_files(&dir.0, None, &[]),
+        leftover_vendor_files(&on_disk, None, &[]),
         vec!["vendor/_bun-modules.json", "vendor/lib_aaaaaaaa.js"]
     );
     // The same files are THIS run's when its own record lists them, and a
@@ -231,5 +234,5 @@ fn an_earlier_runs_record_on_disk_is_never_this_runs() {
     fs::create_dir_all(dir.0.join("vendor/pkg")).unwrap();
     fs::write(dir.0.join("vendor/pkg/placed.js"), "1;\n").unwrap();
     let own = record("bun");
-    assert!(leftover_vendor_files(&dir.0, Some(&own), &["vendor/pkg/placed.js"]).is_empty());
+    assert!(leftover_vendor_files(&on_disk, Some(&own), &["vendor/pkg/placed.js"]).is_empty());
 }

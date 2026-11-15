@@ -17,7 +17,7 @@ use crate::modules::vendor_names::{VendorNameRequest, VendorNamer};
 use crate::toolchain::Reason;
 use crate::unpack::bun::{
     BunUnpackOptions, ExtractedModule, PriorVendor, extract_factory_bodies, identify_bun_require,
-    rewrite_require_calls, unpack_bun,
+    rewrite_require_calls,
 };
 use crate::unpack::webcrack::parse_shim_output;
 use crate::unpack::{UnpackAdapter, choose_adapter};
@@ -72,6 +72,19 @@ impl Drop for TempDir {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.0).ok();
     }
+}
+
+/// The adapter into a tree, written to `dir` (the tests read the files
+/// back as the shell would have written them).
+fn unpack_bun(
+    code: &str,
+    dir: &Path,
+    options: BunUnpackOptions<'_>,
+) -> Result<crate::unpack::bun::BunUnpackOutcome, crate::unpack::bun::BunError> {
+    let mut tree = crate::output_tree::disk_test::tree_on_disk(dir);
+    let outcome = crate::unpack::bun::unpack_bun(code, &mut tree, options);
+    crate::output_tree::disk_test::write(&tree);
+    outcome
 }
 
 fn unpack(code: &str, dir: &Path) {

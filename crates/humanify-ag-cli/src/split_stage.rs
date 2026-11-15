@@ -1,8 +1,9 @@
 //! Stages 10-12 as the pipeline runs them — TS unified.ts `runSplit` /
 //! `tryStableSplit`: load the prior ledger, the split
-//! ([`humanify_ag_core::emit::stable_split`]), then the COMMIT (drop the
-//! consumed source, write the tree, the ledger, the `-vv` match map, the
-//! humanified bundle, the stage hashes), then the finishing stage
+//! ([`humanify_ag_core::emit::stable_split`]), then the COMMIT into the
+//! output tree (drop the consumed source, put the tree, the ledger, the
+//! `-vv` match map, the humanified bundle, the stage hashes), then the
+//! finishing stage
 //! ([`humanify_ag_core::finish::driver`]: re-link, `using` desugar, scaffold,
 //! post-split reconcile + bundle carry) and the placement stats.
 //!
@@ -33,13 +34,13 @@ use crate::kill_switches::{Switch, SwitchState};
 use crate::log::debug_enabled;
 use crate::progress::ProgressRenderer;
 use crate::writers::{
-    PlacementStats, StageHashes, stage_fingerprint, write_placement_stats, write_split_ledger,
-    write_stage_hashes,
+    PLACEMENT_STATS_PATH, PlacementStats, SPLIT_LEDGER_PATH, STAGE_HASHES_PATH, StageHashes,
+    placement_stats_text, stage_fingerprint, stage_hashes_text,
 };
+use humanify_ag_core::output_tree::OutputTree;
 
 /// What the split stage is given.
 pub struct SplitStageInput<'a> {
-    pub output_dir: &'a Path,
     /// The embedded files the linked input reads by path (exp217): the
     /// runnable tree's `embedded/`.
     pub embedded_files: &'a [humanify_ag_core::unpack::chunk_link::EmbeddedFile],
@@ -131,7 +132,7 @@ fn load_prior_split_ledger(
 /// `removeConsumedSourceFile`: never outside the output dir, never the
 /// run's own input.
 fn remove_consumed_source_file(
-    output_dir: &Path,
+    tree: &mut OutputTree,
     source: &Path,
     input_file: &Path,
     working_dir: &Path,
@@ -141,16 +142,9 @@ fn remove_consumed_source_file(
     if resolved == abs(input_file) {
         return;
     }
-    if resolved.starts_with(abs(output_dir)) {
-        let _ = std::fs::remove_file(source);
+    if resolved.starts_with(abs(tree.root())) {
+        tree.remove(source);
     }
-}
-
-fn write_file(path: &Path, text: &str) -> Result<(), String> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
-    }
-    std::fs::write(path, text).map_err(|e| format!("write {}: {e}", path.display()))
 }
 
 fn placement_switches(s: &SwitchState) -> PlacementSwitches {
@@ -172,7 +166,7 @@ fn tiers_carry(carry: Option<&PriorCarry>) -> Option<humanify_ag_core::place::ti
 }
 
 /// How the split ended for the caller: complete, a post-commit step
-/// failed (the tree stays on disk), or the bundle's layout is not one the
+/// failed (the tree is still written), or the bundle's layout is not one the
 /// split reads — the named output was written unsplit (a WARNING, never
 /// an error after naming: finding C3). A pre-commit failure is an Err.
 pub enum SplitEnded {
@@ -242,6 +236,7 @@ pub fn run_split(
     code: &str,
     prior_carry: Option<&PriorCarry>,
     input: &mut SplitStageInput<'_>,
+    tree: &mut OutputTree,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<SplitRecords, String> {
     // The layout gate on the run's ORIGINAL input, once: a bundle whose
@@ -254,7 +249,15 @@ pub fn run_split(
             .original_bundle_binding_count(original)
         {
             Ok(count) => InputGate::Settled(count),
-            Err(why) => return finish_unsplit(code, input, &why.to_string(), renderer),
+            Err(why) => {
+                return Ok(finish_unsplit(
+                    code,
+                    input,
+                    tree,
+                    &why.to_string(),
+                    renderer,
+                ));
+            }
         },
         None => InputGate::TextAtHand,
     };
@@ -271,16 +274,12 @@ pub fn run_split(
         &outcome,
         prior_present,
         input,
+        tree,
         &mut post_split,
         renderer,
     ) {
         Ok(()) => SplitEnded::Complete,
-        Err(Committed(false, e)) => {
-            return Err(format!(
-                "stable split failed before any tree was written: {e}"
-            ));
-        }
-        Err(Committed(true, e)) => {
+        Err(PostCommit(e)) => {
             renderer.message(&format!(
                 "Post-split step failed ({e}); the split tree is already written"
             ));
@@ -290,7 +289,7 @@ pub fn run_split(
     match ended {
         SplitEnded::Complete => renderer.message(&format!(
             "Split complete: written to {}",
-            input.output_dir.display()
+            tree.root().display()
         )),
         SplitEnded::TreeWrittenPostFailure => {
             renderer.message("Split tree already written; a post-split step failed after commit")
@@ -316,12 +315,13 @@ pub fn run_split(
 fn finish_unsplit(
     code: &str,
     input: &SplitStageInput<'_>,
+    tree: &mut OutputTree,
     why: &str,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<SplitRecords, String> {
+) -> SplitRecords {
     let written = match input.processed_source {
         Some(path) => {
-            write_file(path, code)?;
+            tree.put(path.to_path_buf(), code);
             path.display().to_string()
         }
         None => String::from("(no processed file)"),
@@ -332,14 +332,14 @@ wrapper function holding the program (docs/plugin-spec.md P9, I25); the named ou
 is written unsplit to {written}"
     ));
     renderer.message(&format!("Next release: --prior-version {written}"));
-    Ok(SplitRecords {
+    SplitRecords {
         ended: SplitEnded::NotSplit,
         trail: PlacementTrail::default(),
         dump: None,
         method: not_split_record(why),
         post_split: PostSplitRecords::default(),
         failed_calls: SplitFailedCalls::default(),
-    })
+    }
 }
 
 /// The prior ledger + the split itself (nothing written yet).
@@ -430,61 +430,57 @@ fn report_namer(namer: &ProviderSplitNamer<'_>, renderer: &mut dyn ProgressRende
     ));
 }
 
-/// A failure after (`true`) or before (`false`) the commit point.
-struct Committed(bool, String);
+/// A failure after the commit point (committing into the in-memory tree
+/// cannot fail).
+struct PostCommit(String);
 
 /// Commit the tree, then finish it (tryStableSplit after the split).
+#[allow(clippy::too_many_arguments)]
 fn commit_and_finish(
     code: &str,
     prior_carry: Option<&PriorCarry>,
     outcome: &SplitOutcome,
     prior_present: bool,
     input: &mut SplitStageInput<'_>,
+    tree: &mut OutputTree,
     post_split: &mut PostSplitRecords,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<(), Committed> {
-    let before = |e: String| Committed(false, e);
-    let after = |e: String| Committed(true, e);
-    let out = input.output_dir;
+) -> Result<(), PostCommit> {
     let ph = humanify_ag_core::profiling::phase("split:write-tree");
     if let Some(source) = input.processed_source {
-        remove_consumed_source_file(out, source, input.input_file, input.working_dir);
+        remove_consumed_source_file(tree, source, input.input_file, input.working_dir);
     }
     for (path, content) in &outcome.files {
-        write_file(&out.join(path), content).map_err(before)?;
+        tree.put_rel(path, content.as_str());
     }
-    write_split_ledger(out, &outcome.ledger).map_err(|e| before(e.to_string()))?;
+    tree.put_rel(SPLIT_LEDGER_PATH, outcome.ledger.to_json());
     if debug_enabled()
         && let Some(carry) = prior_carry.filter(|c| !c.match_map.is_empty())
     {
         let map = OrderedMap(carry.match_map.clone());
-        write_file(
-            &out.join(".humanify").join("prior-match-map.json"),
-            &serde_json::to_string(&map).expect("a name map serializes"),
-        )
-        .map_err(before)?;
+        tree.put_rel(
+            ".humanify/prior-match-map.json",
+            serde_json::to_string(&map).expect("a name map serializes"),
+        );
     }
-    write_file(
-        &out.join(humanify_ag_core::place::layout::HUMANIFIED_SOURCE_PATH),
+    tree.put_rel(
+        humanify_ag_core::place::layout::HUMANIFIED_SOURCE_PATH,
         code,
-    )
-    .map_err(before)?;
-    write_stage_hashes(
-        out,
-        &StageHashes {
+    );
+    tree.put_rel(
+        STAGE_HASHES_PATH,
+        stage_hashes_text(&StageHashes {
             after_naming: stage_fingerprint(code),
             after_placement: stage_fingerprint(&outcome.ledger.to_json()),
-        },
-    )
-    .map_err(|e| before(e.to_string()))?;
+        }),
+    );
 
-    // -- committed: the tree, ledger and source are on disk -------------
+    // -- committed: the tree, ledger and source are in the tree ---------
     let finish_switches = FinishSwitches {
         vendor_inherit_disabled: input.switches.switch_on(Switch::VendorInherit),
         post_split_reconcile_disabled: input.switches.switch_on(Switch::PostSplitReconcile),
     };
     let finish_input = FinishInput {
-        output_dir: out,
         runnable: outcome.runnable.as_deref(),
         prior: input.prior,
         input_file: input.input_file,
@@ -505,12 +501,12 @@ fn commit_and_finish(
     drop(ph);
     let mut report = FinishReport::default();
     let ph = humanify_ag_core::profiling::phase("split:finish");
-    let finished = finish_stage(&finish_input, &mut report);
+    let finished = finish_stage(&finish_input, tree, &mut report);
     drop(ph);
     for m in &report.messages {
         renderer.message(m);
     }
-    let (relinked, reconciled) = finished.map_err(|e| after(e.to_string()))?;
+    let (relinked, reconciled) = finished.map_err(|e| PostCommit(e.to_string()))?;
     if let Some(names) = report.library_names.take() {
         post_split.trail = names.trail;
     }
@@ -529,18 +525,17 @@ fn commit_and_finish(
             .map(|(t, n)| (t.name().to_string(), n as u64))
             .collect(),
     );
-    write_placement_stats(
-        out,
-        &PlacementStats {
+    tree.put_rel(
+        PLACEMENT_STATS_PATH,
+        placement_stats_text(&PlacementStats {
             statements: stats.statements as u64,
             files: stats.files as u64,
             folders: stats.folders as u64,
             inherited: stats.tiers.inherited as u64,
             residue_locality: stats.tiers.residue_locality as u64,
             by_tier,
-        },
-    )
-    .map_err(|e| after(e.to_string()))?;
+        }),
+    );
     let runnable = if outcome.runnable.is_some() {
         format!(
             " [runnable CJS module graph{}]",
@@ -565,6 +560,9 @@ fn commit_and_finish(
     ));
     // The output FOLDER (exp179): `--prior-version` resolves it to its
     // `.humanify/humanified.js` (crate::config::PRIOR_IN_FOLDER).
-    renderer.message(&format!("Next release: --prior-version {}", out.display()));
+    renderer.message(&format!(
+        "Next release: --prior-version {}",
+        tree.root().display()
+    ));
     Ok(())
 }

@@ -9,12 +9,12 @@
 //! are the TS's templates: `run.cjs` is the TS output verbatim with the
 //! entry spliced in (`scaffold/run.cjs.template`).
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use humanify_ag_model::js::{cmp_utf16, is_js_whitespace, node_path_resolve};
 
 use crate::error::{FileError, FileOp};
+use crate::output_tree::{FolderReader, OutputTree};
 use crate::place::layout::METADATA_DIR;
 
 pub const RUNNER_FILENAME: &str = "run.cjs";
@@ -204,36 +204,38 @@ pub fn external_packages_from<'a>(contents: impl IntoIterator<Item = &'a str>) -
     found
 }
 
-/// `jsFilesUnder(dir)`: every `.js` / `.cjs` file, skipping
-/// `node_modules`, the metadata dir and the root's `embedded/` (readdir
-/// order; every consumer is per-file or order-free).
-pub fn js_files_under(dir: &Path) -> Result<Vec<PathBuf>, FileError> {
+/// `jsFilesUnder(dir)`: every `.js` / `.cjs` file of the output folder as
+/// it stands (this run's tree over what was already there), skipping
+/// `node_modules`, the metadata dir and the root's `embedded/` (sorted by
+/// name; every consumer is per-file or order-free).
+pub fn js_files_under(tree: &OutputTree) -> Result<Vec<PathBuf>, FileError> {
     let mut out = Vec::new();
-    walk(dir, &mut out, true)?;
+    walk(tree, tree.root(), &mut out, true)?;
     Ok(out)
 }
 
 /// `root`: `dir` is the tree root, whose `embedded/` holds a Bun app's
 /// embedded files (data, even when named `.js` — exp217), not code.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-fn walk(dir: &Path, out: &mut Vec<PathBuf>, root: bool) -> Result<(), FileError> {
-    let entries = fs::read_dir(dir).map_err(FileError::at(FileOp::Readdir, dir))?;
+fn walk(
+    tree: &OutputTree,
+    dir: &Path,
+    out: &mut Vec<PathBuf>,
+    root: bool,
+) -> Result<(), FileError> {
+    let entries = tree
+        .list(dir)
+        .map_err(FileError::at(FileOp::Readdir, dir))?;
     for entry in entries {
-        let entry = entry.map_err(FileError::at(FileOp::Readdir, dir))?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let full = entry.path();
-        let ty = entry
-            .file_type()
-            .map_err(FileError::at(FileOp::Stat, &full))?;
-        if ty.is_dir() {
+        let name = entry.name;
+        let full = dir.join(&name);
+        if entry.is_dir {
             if name == "node_modules"
                 || name == METADATA_DIR
                 || (root && name == crate::unpack::chunk_link::EMBEDDED_DIR)
             {
                 continue;
             }
-            walk(&full, out, false)?;
+            walk(tree, &full, out, false)?;
         } else if name.ends_with(".js") || name.ends_with(".cjs") {
             out.push(full);
         }
@@ -241,34 +243,35 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>, root: bool) -> Result<(), FileError>
     Ok(())
 }
 
-/// `readFile(…, "utf-8")`: invalid sequences become U+FFFD.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub(crate) fn read_utf8(path: &Path) -> Result<String, FileError> {
-    let bytes = fs::read(path).map_err(FileError::at(FileOp::Read, path))?;
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
-}
-
 /// `detectExternalPackages(dir)`.
-pub fn detect_external_packages(dir: &Path) -> Result<Vec<String>, FileError> {
-    let files = js_files_under(dir)?;
+pub fn detect_external_packages(tree: &OutputTree) -> Result<Vec<String>, FileError> {
+    let files = js_files_under(tree)?;
     let contents: Vec<String> = files
         .iter()
-        .map(|f| read_utf8(f))
+        .map(|f| tree.read_lossy(f))
         .collect::<Result<_, _>>()?;
     Ok(external_packages_from(contents.iter().map(String::as_str)))
 }
 
 /// The `version` of `pkg` installed nearest `from_dir` (Node's walk up the
 /// `node_modules` directories from `path.resolve(from_dir)` in
-/// `working_dir`), or None.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
+/// `working_dir`), or None. The manifests are read through `disk`.
+// default: a manifest that is not there, not text or not JSON is no
+// install at that level: Node's resolution walks on up, and so does this
 #[allow(clippy::disallowed_methods)]
-fn installed_version(pkg: &str, from_dir: &Path, working_dir: &Path) -> Option<String> {
+fn installed_version(
+    pkg: &str,
+    from_dir: &Path,
+    working_dir: &Path,
+    disk: &dyn FolderReader,
+) -> Option<String> {
     let mut dir = node_path_resolve(working_dir, from_dir);
     loop {
         let manifest = dir.join("node_modules").join(pkg).join("package.json");
-        if let Ok(text) = fs::read_to_string(&manifest)
+        if let Some(text) = disk
+            .read(&manifest)
+            .ok()
+            .and_then(|b| String::from_utf8(b).ok())
             && let Ok(serde_json::Value::Object(obj)) = serde_json::from_str(&text)
             && let Some(serde_json::Value::String(v)) = obj.get("version")
         {
@@ -287,11 +290,12 @@ pub fn resolve_external_versions(
     externals: &[String],
     from_dir: Option<&Path>,
     working_dir: &Path,
+    disk: &dyn FolderReader,
 ) -> Vec<(String, String)> {
     externals
         .iter()
         .map(|name| {
-            let version = from_dir.and_then(|d| installed_version(name, d, working_dir));
+            let version = from_dir.and_then(|d| installed_version(name, d, working_dir, disk));
             (name.clone(), version.unwrap_or_else(|| "*".into()))
         })
         .collect()
@@ -387,84 +391,38 @@ bun {r} [arguments]
     )
 }
 
-/// `writeRunnableScaffold(outputDir, entryFile, externals, resolveFromDir)`;
-/// a relative `resolve_from_dir` resolves against `working_dir`.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
+/// `writeRunnableScaffold(outputDir, entryFile, externals, resolveFromDir)`
+/// into the tree; a relative `resolve_from_dir` resolves against
+/// `working_dir`.
 pub fn write_runnable_scaffold(
-    output_dir: &Path,
+    tree: &mut OutputTree,
     entry_file: &str,
     externals: &[String],
     resolve_from_dir: Option<&Path>,
     working_dir: &Path,
-) -> Result<(), FileError> {
-    let dependencies = resolve_external_versions(externals, resolve_from_dir, working_dir);
-    let write = |name: &str, text: String| {
-        let p = output_dir.join(name);
-        fs::write(&p, text).map_err(FileError::at(FileOp::Write, &p))
-    };
-    write(RUNNER_FILENAME, runner_source(entry_file))?;
-    write("package.json", package_json_source(&dependencies))?;
-    write(SCAFFOLD_README, readme_source(entry_file, &dependencies))
+) {
+    let dependencies =
+        resolve_external_versions(externals, resolve_from_dir, working_dir, tree.disk());
+    tree.put_rel(RUNNER_FILENAME, runner_source(entry_file));
+    tree.put_rel("package.json", package_json_source(&dependencies));
+    tree.put_rel(SCAFFOLD_README, readme_source(entry_file, &dependencies));
 }
 
-/// Why an embedded file could not be copied into the tree.
-#[derive(Debug)]
-pub enum EmbeddedCopyError {
-    /// Its directory could not be made.
-    File(FileError),
-    /// The copy itself failed.
-    Copy {
-        from: PathBuf,
-        to: PathBuf,
-        source: std::io::Error,
-    },
-}
-
-impl std::fmt::Display for EmbeddedCopyError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::File(e) => e.fmt(f),
-            Self::Copy { from, to, source } => write!(
-                f,
-                "copy the embedded file {} to {}: {source}",
-                from.display(),
-                to.display()
-            ),
-        }
-    }
-}
-
-impl From<FileError> for EmbeddedCopyError {
-    fn from(e: FileError) -> Self {
-        Self::File(e)
-    }
-}
-
-/// Copy the embedded files a linked Bun app reads by path
-/// (`unpack::chunk_link::EmbeddedFile`, exp217) into the tree, each at
-/// `embedded/<its bunfs name>` — where the linked program's
-/// `__dirname+"/embedded/<name>"` points. Returns how many were copied; a
-/// file that cannot be copied fails the write (the tree would not run).
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
+/// Place the embedded files a linked Bun app reads by path
+/// (`unpack::chunk_link::EmbeddedFile`) in the tree, each a copy
+/// of its source at `embedded/<its bunfs name>` — where the linked
+/// program's `__dirname+"/embedded/<name>"` points. Returns how many were
+/// placed; the shell copies them when it writes the tree, and a file that
+/// cannot be copied fails the write (the tree would not run).
 pub fn write_embedded_files(
-    output_dir: &Path,
+    tree: &mut OutputTree,
     files: &[crate::unpack::chunk_link::EmbeddedFile],
-) -> Result<usize, EmbeddedCopyError> {
-    let root = output_dir.join(crate::unpack::chunk_link::EMBEDDED_DIR);
+) -> usize {
+    let root = tree.root().join(crate::unpack::chunk_link::EMBEDDED_DIR);
     for f in files {
-        let to = root.join(&f.rel);
-        if let Some(dir) = to.parent() {
-            fs::create_dir_all(dir).map_err(FileError::at(FileOp::Mkdir, dir))?;
-        }
-        fs::copy(&f.source, &to).map_err(|source| EmbeddedCopyError::Copy {
-            from: f.source.clone(),
-            to: to.clone(),
-            source,
-        })?;
+        tree.copy(root.join(&f.rel), f.source.clone());
     }
-    Ok(files.len())
+    files.len()
 }
 
 #[cfg(test)]

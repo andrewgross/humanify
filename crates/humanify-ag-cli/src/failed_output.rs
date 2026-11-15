@@ -13,6 +13,8 @@
 
 use std::path::Path;
 
+use humanify_ag_core::output_tree::OutputTree;
+
 use crate::report::FAILED_OUTPUT_DIR;
 
 /// One rejected file.
@@ -26,12 +28,14 @@ pub struct FailedOutputFile {
     pub validated_code: Option<String>,
 }
 
-/// `preserveFailedOutput(outputDir, failures)`.
-pub fn preserve_failed_output(output_dir: &Path, failures: &[FailedOutputFile]) {
+/// `preserveFailedOutput(outputDir, failures)`: each rejected file as the
+/// output tree holds it now (the run's own bytes, else what is on disk),
+/// and both sides of the check, written to disk at once.
+pub fn preserve_failed_output(tree: &OutputTree, failures: &[FailedOutputFile]) {
     if failures.is_empty() {
         return;
     }
-    let dest = output_dir.join(FAILED_OUTPUT_DIR);
+    let dest = tree.root().join(FAILED_OUTPUT_DIR);
     if std::fs::create_dir_all(&dest).is_err() {
         return;
     }
@@ -41,8 +45,8 @@ pub fn preserve_failed_output(output_dir: &Path, failures: &[FailedOutputFile]) 
             .file_name()
             .map(|b| b.to_string_lossy().into_owned())
             .unwrap_or_default();
-        if path.exists() {
-            let _ = std::fs::copy(path, dest.join(&base));
+        if let Ok(bytes) = tree.read(path) {
+            let _ = std::fs::write(dest.join(&base), bytes);
         }
         let _ = std::fs::write(dest.join(format!("{base}.original")), &f.original_code);
         if let Some(v) = &f.validated_code {

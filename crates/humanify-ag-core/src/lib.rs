@@ -23,6 +23,7 @@ pub mod libindex;
 pub mod matching;
 pub mod modules;
 pub mod naming;
+pub mod output_tree;
 pub mod par;
 pub mod place;
 pub mod prior;

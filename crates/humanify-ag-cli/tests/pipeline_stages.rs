@@ -735,6 +735,83 @@ fn a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files() {
     );
 }
 
+/// A run into an output folder that already holds files (an earlier run,
+/// or anything else) leaves every file it does not write itself, and its
+/// finish sees the folder as it stands: a leftover under `vendor/` is
+/// named, a leftover `.js` outside `node_modules` and `.humanify` is
+/// desugared for `using` and its requires reach `package.json`, and a
+/// leftover at a path the run writes and then removes (the unpack's
+/// `runtime.js`, consumed by the re-link) is gone. The tree is held in
+/// memory and written once; this pins that the folder ends up exactly as
+/// when every stage wrote straight to disk.
+#[test]
+fn a_run_into_a_folder_with_leftovers_keeps_and_reads_them_as_on_disk() {
+    let s = Scratch::new("leftovers");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../test/e2e/fixtures/esbuild-bundle-small/build/v1.0.0/build/index.js");
+    let out = s.out();
+    let stale = [
+        ("vendor/stale-lib.js", "module.exports = 1;\n".to_string()),
+        (
+            "left/over.js",
+            "function make() {\n  return { [Symbol.dispose]() {} };\n}\n{\n  using held = make();\n}\nrequire(\"left-pad\");\n"
+                .to_string(),
+        ),
+        (
+            "node_modules/kept/index.js",
+            "require(\"never-listed\");\n".to_string(),
+        ),
+        ("runtime.js", "stale runtime\n".to_string()),
+    ];
+    for (rel, text) in &stale {
+        let p = out.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, text).unwrap();
+    }
+    let o = run_with(
+        &s.0,
+        &[
+            &fixture.display().to_string(),
+            "-o",
+            &out.display().to_string(),
+        ],
+        &[SPLIT],
+    );
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    assert!(
+        err.contains("Re-linked"),
+        "a runnable, re-linked tree:\n{err}"
+    );
+    assert!(
+        err.contains("not written by this run") && err.contains("vendor/stale-lib.js"),
+        "the vendor leftover is named:\n{err}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.join("vendor/stale-lib.js")).unwrap(),
+        stale[0].1,
+        "a vendor leftover is never rewritten"
+    );
+    let over = std::fs::read_to_string(out.join("left/over.js")).unwrap();
+    assert!(
+        over.contains("_usingCtx") && over.contains("require(\"left-pad\")"),
+        "a leftover script is desugared in place, as on disk:\n{over}"
+    );
+    let package: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(out.join("package.json")).unwrap()).unwrap();
+    let deps = package["dependencies"].as_object().unwrap();
+    assert!(deps.contains_key("left-pad"), "{package}");
+    assert!(!deps.contains_key("never-listed"), "{package}");
+    assert_eq!(
+        std::fs::read_to_string(out.join("node_modules/kept/index.js")).unwrap(),
+        stale[2].1
+    );
+    assert!(
+        !out.join("runtime.js").exists(),
+        "the unpack's runtime file is consumed, the stale one with it"
+    );
+}
+
 /// Config sweep steps 4-5: a refused configuration — a bad value, a
 /// missing API key, a missing prior, and every `--config` refusal (an
 /// unknown key, a flag/file conflict, a file that is not TOML or not
