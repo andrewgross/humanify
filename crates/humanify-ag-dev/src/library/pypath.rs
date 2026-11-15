@@ -83,8 +83,8 @@ pub fn relpath(path: &str, start: &str) -> String {
 /// `for root, dirs, files in os.walk(d): dirs.sort(); for f in
 /// sorted(files)`: every file path, in that order. A symlinked directory
 /// is listed as a directory and not descended into; unreadable
-/// directories are skipped.
-pub fn walk_files(dir: &Path, out: &mut Vec<PathBuf>) {
+/// directories, and directories named `skip`, are skipped.
+pub fn walk_files(dir: &Path, skip: Option<&str>, out: &mut Vec<PathBuf>) {
     let Ok(read) = std::fs::read_dir(dir) else {
         return;
     };
@@ -95,7 +95,9 @@ pub fn walk_files(dir: &Path, out: &mut Vec<PathBuf>) {
         let path = e.path();
         let is_link = e.file_type().is_ok_and(|t| t.is_symlink());
         if path.is_dir() {
-            dirs.push((name, is_link));
+            if skip.is_none_or(|s| name != s) {
+                dirs.push((name, is_link));
+            }
         } else {
             files.push(name);
         }
@@ -107,7 +109,7 @@ pub fn walk_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
     for (d, is_link) in dirs {
         if !is_link {
-            walk_files(&dir.join(d), out);
+            walk_files(&dir.join(d), skip, out);
         }
     }
 }

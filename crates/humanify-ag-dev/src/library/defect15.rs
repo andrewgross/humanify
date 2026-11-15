@@ -130,21 +130,11 @@ pub fn judge_with(unit: &Lits, holds: impl Fn(&str) -> bool) -> Evidence {
 /// The sources of the corpus map that vote `label` inside [s, e), most
 /// bytes first (ties: lower source index first).
 pub fn label_sources(truth: &Truth, s: i64, e: i64, label: &str) -> Vec<usize> {
-    let segs = &truth.segments;
-    let mut k = segs.partition_point(|x| x.0 <= s).saturating_sub(1);
-    let mut by: BTreeMap<usize, i64> = BTreeMap::new();
-    while k < segs.len() && segs[k].0 < e {
-        let a = segs[k].0.max(s);
-        let b = if k + 1 < segs.len() { segs[k + 1].0 } else { e }.min(e);
-        if let Ok(si) = usize::try_from(segs[k].1)
-            && b > a
-            && truth.sources.get(si).is_some_and(|x| x.label == label)
-        {
-            *by.entry(si).or_default() += b - a;
-        }
-        k += 1;
-    }
-    let mut out: Vec<(usize, i64)> = by.into_iter().collect();
+    let mut out: Vec<(usize, i64)> = super::truth::source_bytes(&truth.segments, s, e)
+        .items()
+        .filter_map(|(si, n)| Some((usize::try_from(*si).ok()?, n)))
+        .filter(|(si, _)| truth.sources.get(*si).is_some_and(|x| x.label == label))
+        .collect();
     out.sort_by(|x, y| y.1.cmp(&x.1).then(x.0.cmp(&y.0)));
     out.into_iter().map(|x| x.0).collect()
 }

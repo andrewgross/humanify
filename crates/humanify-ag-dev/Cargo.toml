@@ -34,7 +34,7 @@ oxc_span.workspace = true
 # scorer 14's tokenizer (library::acorn) validates regex patterns with it.
 oxc_regular_expression.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 sha2.workspace = true
 clap.workspace = true
 # The censuses parse crates/ (clones, slop).

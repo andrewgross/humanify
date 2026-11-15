@@ -10,15 +10,15 @@
 //! again; at most 8 registry requests (curl, its own retry on a transient
 //! error) and `jobs` `npm pack`s run at once.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::corpus::Corpus;
 use super::origins::{marker_regions7, path_version};
-use crate::json::py::PyValue;
 use crate::proc::{self, Spawn};
+use serde_json::Value;
 
 /// The caches every layer builder reads (this host's).
 pub const REGISTRY: &str = "/work/exp112-data/registry";
@@ -183,37 +183,6 @@ pub fn metadata_path(cache: &Path, n: &str, v: &str) -> PathBuf {
     ))
 }
 
-/// `json.dumps(v, sort_keys=True)` (default separators, ensure_ascii).
-fn dumps_sorted(out: &mut String, v: &PyValue) {
-    match v {
-        PyValue::List(xs) => {
-            out.push('[');
-            for (i, x) in xs.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                dumps_sorted(out, x);
-            }
-            out.push(']');
-        }
-        PyValue::Dict(m) => {
-            let mut m: Vec<&(String, PyValue)> = m.iter().collect();
-            m.sort_by(|a, b| a.0.cmp(&b.0));
-            out.push('{');
-            for (i, (k, x)) in m.into_iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                crate::json::py::write_str(out, k);
-                out.push_str(": ");
-                dumps_sorted(out, x);
-            }
-            out.push('}');
-        }
-        other => out.push_str(crate::json::py::dumps(other).as_str()),
-    }
-}
-
 /// fetch_metadata.py `get`: false when the registry could not answer.
 fn fetch_one(cache: &Path, n: &str, v: &str) -> bool {
     let p = metadata_path(cache, n, v);
@@ -245,20 +214,15 @@ fn fetch_one(cache: &Path, n: &str, v: &str) -> bool {
     };
     let code = String::from_utf8_lossy(&done.stdout).trim().to_string();
     let body = match code.as_str() {
-        "404" | "405" => PyValue::Dict(vec![("__error".into(), PyValue::Int(code.clone()))]),
+        "404" | "405" => serde_json::json!({ "__error": code.parse::<u16>().expect("404 or 405") }),
         "200" => {
             let text = std::fs::read_to_string(&tmp).unwrap_or_default();
-            let Ok(PyValue::Dict(m)) = PyValue::parse(&text) else {
+            let Ok(Value::Object(mut m)) = serde_json::from_str::<Value>(&text) else {
                 let _ = std::fs::remove_file(&tmp);
                 return false;
             };
-            let mut keep: BTreeMap<String, PyValue> = BTreeMap::new();
-            for (k, x) in m {
-                if KEEP.contains(&k.as_str()) || k == "__error" {
-                    keep.insert(k, x);
-                }
-            }
-            PyValue::Dict(keep.into_iter().collect())
+            m.retain(|k, _| KEEP.contains(&k.as_str()) || k == "__error");
+            Value::Object(m)
         }
         _ => {
             let _ = std::fs::remove_file(&tmp);
@@ -266,9 +230,7 @@ fn fetch_one(cache: &Path, n: &str, v: &str) -> bool {
         }
     };
     let _ = std::fs::remove_file(&tmp);
-    let mut out = String::new();
-    dumps_sorted(&mut out, &body);
-    std::fs::write(&p, out).is_ok()
+    std::fs::write(&p, body.to_string()).is_ok()
 }
 
 /// fetch_metadata.py: every name's `latest` and every (name, version);
@@ -463,13 +425,7 @@ fn bundled_one(dir: &Path, pkg: &str, ver: Option<&str>) -> Result<(), String> {
                     out.extend(headings(&String::from_utf8_lossy(&tar[at..at + size])));
                 }
             }
-            let v = PyValue::Dict(vec![(
-                "bundled".into(),
-                PyValue::List(out.into_iter().map(PyValue::Str).collect()),
-            )]);
-            let mut s = String::new();
-            dumps_sorted(&mut s, &v);
-            write(&s)
+            write(&serde_json::json!({ "bundled": out }).to_string())
         }
         (r, _) => {
             let err = match r {
@@ -491,10 +447,7 @@ fn bundled_one(dir: &Path, pkg: &str, ver: Option<&str>) -> Result<(), String> {
                 .into_iter()
                 .rev()
                 .collect();
-            let v = PyValue::Dict(vec![("error".into(), PyValue::Str(tail))]);
-            let mut s = String::new();
-            dumps_sorted(&mut s, &v);
-            write(&s)
+            write(&serde_json::json!({ "error": tail }).to_string())
         }
     };
     let _ = std::fs::remove_dir_all(&td);
@@ -524,31 +477,10 @@ pub fn fill(
     if let Some(dir) = record {
         // origins7.py's `needs` / `owners` files, for the record
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let s = |x: &str| PyValue::Str(x.to_string());
-        let universe = PyValue::Dict(vec![
-            (
-                "names".into(),
-                PyValue::List(names.iter().map(|n| s(n)).collect()),
-            ),
-            (
-                "pv".into(),
-                PyValue::List(
-                    pv.iter()
-                        .map(|(p, v)| PyValue::List(vec![s(p), s(v)]))
-                        .collect(),
-                ),
-            ),
-        ]);
-        let ow = PyValue::List(
-            all_owners
-                .iter()
-                .map(|(p, v)| PyValue::List(vec![s(p), v.as_deref().map_or(PyValue::Null, s)]))
-                .collect(),
-        );
+        let universe = serde_json::json!({ "names": names, "pv": pv });
+        let ow = serde_json::json!(all_owners);
         for (f, v) in [("needs.json", universe), ("owners.json", ow)] {
-            let mut text = String::new();
-            dumps_sorted(&mut text, &v);
-            std::fs::write(dir.join(f), text).map_err(|e| e.to_string())?;
+            std::fs::write(dir.join(f), v.to_string()).map_err(|e| e.to_string())?;
         }
     }
     let names: Vec<String> = names.into_iter().filter(|n| keep(n)).collect();

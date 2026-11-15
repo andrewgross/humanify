@@ -1,7 +1,7 @@
 //! The registry machinery on a toy table (the pipeline's own table is held
 //! by config_file_test.rs, surface_test.rs and the help goldens): what the
-//! harness needs beyond the pipeline — repeated list flags, a registry's
-//! own retired flags, "did you mean" for a flag, typed `key=value` text.
+//! harness needs beyond the pipeline — repeated list flags, "did you mean"
+//! for a flag, typed `key=value` text.
 
 use clap::ArgMatches;
 use std::sync::LazyLock;
@@ -66,8 +66,6 @@ static TOY_KEYS: &[Key] = &[
 
 static TOY: Registry = Registry {
     keys: TOY_KEYS,
-    retired_keys: &[],
-    retired_flags: &[("--seeded-base", "renamed: use --base-mode seeded")],
     short_flags: &[],
     counted_flag: None,
     repeatable: &["run.pipeline_set"],
@@ -109,20 +107,6 @@ fn a_repeatable_list_flag_keeps_every_use_in_order() {
 #[test]
 fn a_non_repeatable_flag_given_twice_is_refused() {
     assert!(matches(&["--workdir", "a", "--workdir", "b"]).is_err());
-}
-
-#[test]
-fn a_registry_refuses_its_own_retired_flags_naming_the_replacement() {
-    let refusal = TOY
-        .retired_flag(&["x".into(), "--seeded-base".into()])
-        .expect("refused");
-    assert!(refusal.contains("--seeded-base"), "{refusal}");
-    assert!(refusal.contains("--base-mode seeded"), "{refusal}");
-    assert_eq!(
-        TOY.retired_flag(&["--".into(), "--seeded-base".into()]),
-        None,
-        "nothing after -- is a flag"
-    );
 }
 
 #[test]

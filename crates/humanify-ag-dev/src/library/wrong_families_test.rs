@@ -11,28 +11,27 @@ fn claim<'a>(claimed: &'a str, truth: &'a str, file: &'a str, bytes: i64) -> Wro
     }
 }
 
-fn get<'a>(v: &'a PyValue, path: &[&str]) -> &'a PyValue {
+fn get<'a>(v: &'a Value, path: &[&str]) -> &'a Value {
     path.iter()
         .fold(v, |v, k| v.get(k).unwrap_or_else(|| panic!("no key {k}")))
 }
 
-fn list(v: &PyValue) -> &[PyValue] {
+fn list(v: &Value) -> &[Value] {
     match v {
-        PyValue::List(xs) => xs,
+        Value::Array(xs) => xs,
         other => panic!("not a list: {other:?}"),
     }
 }
 
-fn int_of(v: &PyValue, k: &str) -> i64 {
-    match v.get(k) {
-        Some(PyValue::Int(d)) => d.parse().unwrap(),
-        other => panic!("{k}: {other:?}"),
-    }
+fn int_of(v: &Value, k: &str) -> i64 {
+    v.get(k)
+        .and_then(Value::as_i64)
+        .unwrap_or_else(|| panic!("{k}: {:?}", v.get(k)))
 }
 
-fn str_of<'a>(v: &'a PyValue, k: &str) -> &'a str {
+fn str_of<'a>(v: &'a Value, k: &str) -> &'a str {
     match v.get(k) {
-        Some(PyValue::Str(x)) => x,
+        Some(Value::String(x)) => x,
         other => panic!("{k}: {other:?}"),
     }
 }
@@ -78,7 +77,7 @@ fn the_doc_folds_packages_into_families_and_sorts_by_bytes() {
     check_two_families(&doc, &fam);
 }
 
-fn check_two_families(doc: &PyValue, fam: &Libix) {
+fn check_two_families(doc: &Value, fam: &Libix) {
     let set = get(doc, &["sets", "s"]);
     assert_eq!(int_of(set, "wrongFamilyBytes"), 175);
     assert_eq!(int_of(set, "units"), 4);
@@ -96,7 +95,7 @@ fn check_two_families(doc: &PyValue, fam: &Libix) {
     check_entries_and_packages(set);
 }
 
-fn check_entries_and_packages(set: &PyValue) {
+fn check_entries_and_packages(set: &Value) {
     let by_entry = list(get(set, &["byEntry"]));
     // an entry with no wrong bytes is left out
     assert_eq!(by_entry.len(), 2);
@@ -115,7 +114,7 @@ fn a_set_scored_on_sample_truth_says_it_is_not_broken_down() {
     let doc = doc("lbl", &sets, &["cc".to_string()], &fam);
     assert!(matches!(
         get(&doc, &["sets", "cc", "notBrokenDown"]),
-        PyValue::Str(_)
+        Value::String(_)
     ));
 }
 

@@ -16,9 +16,9 @@ use std::collections::{BTreeMap, HashMap};
 use super::copy_credit::{self, Claim, Credit, LiteralIndex, Outcome, Registry};
 use super::defect15::{self, EntryTexts, Evidence, Lits, PackageText};
 use super::index::{Index, Unit};
-use super::py::{dict, flt, int, kv, opt_s, s};
 use super::truth::{Label, Truth, is_library};
-use crate::json::py::PyValue;
+use super::value::{dict, flt, int, kv, opt_s, s};
+use serde_json::Value;
 
 /// The label a defect leaves on its unit (not a library: out of both sides).
 pub const DEFECT: &str = "<defect>";
@@ -312,7 +312,7 @@ impl Agg {
     }
 }
 
-fn by_block(m: &BTreeMap<String, i64>) -> PyValue {
+fn by_block(m: &BTreeMap<String, i64>) -> Value {
     let mut v: Vec<_> = m.iter().collect();
     v.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
     dict(v.into_iter().map(|(k, b)| (k.clone(), int(*b))).collect())
@@ -324,7 +324,7 @@ fn desc<K: Ord + Clone>(m: &BTreeMap<K, Agg>) -> Vec<(K, &Agg)> {
     v
 }
 
-fn defect_row(id: &str, d: &DefectRow) -> PyValue {
+fn defect_row(id: &str, d: &DefectRow) -> Value {
     dict(vec![
         kv("entry", s(id)),
         kv("start", int(d.s)),
@@ -337,19 +337,19 @@ fn defect_row(id: &str, d: &DefectRow) -> PyValue {
         kv("held", int(d.ev.held as i64)),
         kv(
             "absent",
-            PyValue::List(d.ev.absent.iter().map(|a| s(a)).collect()),
+            Value::Array(d.ev.absent.iter().map(|a| s(a)).collect()),
         ),
         kv(
             "holder",
             match &d.holder {
                 Some((p, sh)) => dict(vec![kv("source", s(p)), kv("share", flt(*sh))]),
-                None => PyValue::Null,
+                None => Value::Null,
             },
         ),
     ])
 }
 
-fn defects_block(entries: &[(String, &EntryAudit)]) -> PyValue {
+fn defects_block(entries: &[(String, &EntryAudit)]) -> Value {
     let mut by: BTreeMap<(String, String), Agg> = BTreeMap::new();
     let mut rows: Vec<(&str, &DefectRow)> = Vec::new();
     for (id, a) in entries {
@@ -382,7 +382,7 @@ fn defects_block(entries: &[(String, &EntryAudit)]) -> PyValue {
                 kv("claimedAs", by_block(&a.by)),
                 kv(
                     "entries",
-                    PyValue::List(a.entries.iter().map(|e| s(e)).collect()),
+                    Value::Array(a.entries.iter().map(|e| s(e)).collect()),
                 ),
             ])
         })
@@ -398,10 +398,10 @@ fn defects_block(entries: &[(String, &EntryAudit)]) -> PyValue {
                 .map(|r| r.1.bytes)
                 .sum()),
         ),
-        kv("byTruthFile", PyValue::List(groups)),
+        kv("byTruthFile", Value::Array(groups)),
         kv(
             "largest",
-            PyValue::List(
+            Value::Array(
                 rows.iter()
                     .take(ROWS)
                     .map(|(id, d)| defect_row(id, d))
@@ -414,7 +414,7 @@ fn defects_block(entries: &[(String, &EntryAudit)]) -> PyValue {
 /// One credited (claimed, truth, link)'s bytes and its claimed files.
 type CreditAgg = (Agg, BTreeMap<String, i64>);
 
-fn credits_block(entries: &[(String, &EntryAudit)]) -> PyValue {
+fn credits_block(entries: &[(String, &EntryAudit)]) -> Value {
     let mut by: BTreeMap<(String, String, String), CreditAgg> = BTreeMap::new();
     for (id, a) in entries {
         for c in &a.credits {
@@ -443,7 +443,7 @@ fn credits_block(entries: &[(String, &EntryAudit)]) -> PyValue {
                 kv("units", int(a.units)),
                 kv(
                     "entries",
-                    PyValue::List(a.entries.iter().map(|e| s(e)).collect()),
+                    Value::Array(a.entries.iter().map(|e| s(e)).collect()),
                 ),
                 kv("truthFiles", by_block(&a.by)),
                 kv("claimedFiles", by_block(own)),
@@ -491,12 +491,12 @@ fn credits_block(entries: &[(String, &EntryAudit)]) -> PyValue {
             "units",
             int(entries.iter().map(|(_, a)| a.credits.len() as i64).sum()),
         ),
-        kv("byPair", PyValue::List(rows)),
-        kv("largest", PyValue::List(largest)),
+        kv("byPair", Value::Array(rows)),
+        kv("largest", Value::Array(largest)),
     ])
 }
 
-fn refused_block(entries: &[(String, &EntryAudit)]) -> PyValue {
+fn refused_block(entries: &[(String, &EntryAudit)]) -> Value {
     let mut by: BTreeMap<(String, String), BTreeMap<String, i64>> = BTreeMap::new();
     for (_, a) in entries {
         for (k, reasons) in &a.refused {
@@ -532,13 +532,13 @@ fn refused_block(entries: &[(String, &EntryAudit)]) -> PyValue {
     dict(vec![
         kv("bytes", int(total_by.values().sum())),
         kv("reasons", by_block(&total_by)),
-        kv("byPair", PyValue::List(rows)),
+        kv("byPair", Value::Array(rows)),
     ])
 }
 
 /// The label's `truth15.json`: per set, the defects, the credits and the
 /// refused credits (map-truth sets only).
-pub fn doc(label: &str, sets: &BTreeMap<String, Vec<(String, &EntryAudit)>>) -> PyValue {
+pub fn doc(label: &str, sets: &BTreeMap<String, Vec<(String, &EntryAudit)>>) -> Value {
     let out = sets
         .iter()
         .map(|(k, es)| {

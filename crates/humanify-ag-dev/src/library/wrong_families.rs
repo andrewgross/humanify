@@ -12,8 +12,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use super::families::Libix;
-use super::py::{dict, int, kv, s};
-use crate::json::py::PyValue;
+use super::value::{dict, int, kv, s};
+use serde_json::Value;
 
 /// How many of a pair's truth files the doc lists (largest first).
 const TOP_FILES: usize = 5;
@@ -103,10 +103,10 @@ pub fn check_total(set: &str, entries: &[(String, EntryWrongs)], want: i64) -> R
     Ok(())
 }
 
-fn top_files(files: &BTreeMap<String, i64>) -> PyValue {
+fn top_files(files: &BTreeMap<String, i64>) -> Value {
     let mut v: Vec<_> = files.iter().collect();
     v.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-    PyValue::List(
+    Value::Array(
         v.into_iter()
             .take(TOP_FILES)
             .map(|(f, b)| dict(vec![kv("file", s(f)), kv("bytes", int(*b))]))
@@ -114,11 +114,11 @@ fn top_files(files: &BTreeMap<String, i64>) -> PyValue {
     )
 }
 
-fn rules_block(rules: &BTreeMap<String, i64>) -> PyValue {
+fn rules_block(rules: &BTreeMap<String, i64>) -> Value {
     dict(rules.iter().map(|(r, b)| (r.clone(), int(*b))).collect())
 }
 
-fn pair_row(claimed: &str, truth: &str, p: &Pair) -> PyValue {
+fn pair_row(claimed: &str, truth: &str, p: &Pair) -> Value {
     dict(vec![
         kv("claimed", s(claimed)),
         kv("truth", s(truth)),
@@ -137,7 +137,7 @@ fn sorted_desc<K: Ord + Clone, V>(m: &BTreeMap<K, V>, bytes: impl Fn(&V) -> i64)
 }
 
 /// One set's block: totals, by family pair, by package pair, by entry.
-fn set_block(entries: &[(String, EntryWrongs)], fam: &Libix) -> PyValue {
+fn set_block(entries: &[(String, EntryWrongs)], fam: &Libix) -> Value {
     let mut by_pkg: BTreeMap<(String, String), Pair> = BTreeMap::new();
     let mut by_fam: BTreeMap<(String, String), (Pair, Vec<String>)> = BTreeMap::new();
     let mut fam_of: HashMap<String, String> = HashMap::new();
@@ -186,7 +186,7 @@ fn set_block(entries: &[(String, EntryWrongs)], fam: &Libix) -> PyValue {
                 kv("units", int(e.units())),
                 kv(
                     "pairs",
-                    PyValue::List(
+                    Value::Array(
                         e.pairs()
                             .into_iter()
                             .map(|((c, t), p)| pair_row(c, t, p))
@@ -202,9 +202,9 @@ fn set_block(entries: &[(String, EntryWrongs)], fam: &Libix) -> PyValue {
             int(entries.iter().map(|(_, e)| e.bytes()).sum()),
         ),
         kv("units", int(entries.iter().map(|(_, e)| e.units()).sum())),
-        kv("byFamily", PyValue::List(fam_rows)),
-        kv("byPackage", PyValue::List(pkg_rows)),
-        kv("byEntry", PyValue::List(entry_rows)),
+        kv("byFamily", Value::Array(fam_rows)),
+        kv("byPackage", Value::Array(pkg_rows)),
+        kv("byEntry", Value::Array(entry_rows)),
     ])
 }
 
@@ -214,20 +214,21 @@ pub fn doc(
     sets: &BTreeMap<String, Vec<(String, EntryWrongs)>>,
     sample_sets: &[String],
     fam: &Libix,
-) -> PyValue {
+) -> Value {
     let note = || {
         kv(
             "notBrokenDown",
             s("sample truth: bytes are stratified estimates, not per claim"),
         )
     };
-    let mut out: Vec<(String, PyValue)> = sets
+    let mut out: Vec<(String, Value)> = sets
         .iter()
         .map(|(k, v)| {
             let mut block = set_block(v, fam);
-            if let (true, PyValue::Dict(es)) = (sample_sets.contains(k), &mut block) {
+            if let (true, Value::Object(es)) = (sample_sets.contains(k), &mut block) {
                 // a mixed set: its sample-truth entries are left out
-                es.push(note());
+                let (k, v) = note();
+                es.insert(k, v);
             }
             (k.clone(), block)
         })

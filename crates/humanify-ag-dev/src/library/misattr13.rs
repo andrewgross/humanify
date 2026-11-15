@@ -15,14 +15,12 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use super::corpus::{Corpus, Role, read_map};
-use super::counter::Counter;
 use super::index::Unit;
-use super::py::{dict, int, kv, opt_s, s as pys};
 use super::pypath;
 use super::pyre;
 use super::truth::{self, Truth};
+use super::value::{dict, int, kv, opt_s, s as pys};
 use crate::committed::library::CorpusEntry;
-use crate::json::py::PyValue;
 
 pub const SCHEMA: &str = "exp132-misattr13/4";
 const MIN_TOKENS: usize = 5;
@@ -38,8 +36,8 @@ const SIZE_SLACK: i64 = 8192;
 pub const ABOUT: &str = "scorer 13 rule `misattributed` (experiments/132-factory-precision/scorer13/misattr13.py): per entry, the sha256 of <DATA>/truth/<id>.misattr13.json.gz (rows: factory start, end, old package, new package, version, file, evidence, old file)";
 
 /// The manifest's `rules` block.
-pub fn rules() -> PyValue {
-    use super::py::flt;
+pub fn rules() -> Value {
+    use super::value::flt;
     dict(vec![
         kv("minTokens", int(MIN_TOKENS as i64)),
         kv("minStrings", int(MIN_STRINGS as i64)),
@@ -53,7 +51,7 @@ pub fn rules() -> PyValue {
 }
 
 /// `package_root`: (package name, root dir) of a path under node_modules.
-fn package_root(path: &str) -> Option<(String, String)> {
+pub fn package_root(path: &str) -> Option<(String, String)> {
     let k = path.rfind("/node_modules/")?;
     let (head, rest) = (&path[..k], &path[k + "/node_modules/".len()..]);
     let parts: Vec<&str> = rest.split('/').collect();
@@ -73,43 +71,14 @@ fn package_root(path: &str) -> Option<(String, String)> {
 /// `os.walk(root)` skipping `node_modules` dirs, sorted; files ending in
 /// one of `EXTS`, not symlinks, at most `MAX_FILE` bytes.
 fn walk_package(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(read) = std::fs::read_dir(dir) else {
-        return;
-    };
-    let mut dirs: Vec<(std::ffi::OsString, bool)> = Vec::new();
-    let mut files: Vec<std::ffi::OsString> = Vec::new();
-    for e in read.flatten() {
-        let name = e.file_name();
-        let is_link = e.file_type().is_ok_and(|t| t.is_symlink());
-        if e.path().is_dir() {
-            if name != "node_modules" {
-                dirs.push((name, is_link));
-            }
-        } else {
-            files.push(name);
-        }
-    }
-    files.sort();
-    dirs.sort();
-    for n in files {
-        let p = dir.join(&n);
-        let ns = n.to_string_lossy();
-        if !EXTS.iter().any(|x| ns.ends_with(x)) {
-            continue;
-        }
-        let Ok(meta) = std::fs::symlink_metadata(&p) else {
-            continue;
-        };
-        if meta.file_type().is_symlink() || meta.len() > MAX_FILE {
-            continue;
-        }
-        out.push(p);
-    }
-    for (d, is_link) in dirs {
-        if !is_link {
-            walk_package(&dir.join(d), out);
-        }
-    }
+    let mut all = Vec::new();
+    pypath::walk_files(dir, Some("node_modules"), &mut all);
+    out.extend(all.into_iter().filter(|p| {
+        let name = p.file_name().unwrap_or_default().to_string_lossy();
+        EXTS.iter().any(|x| name.ends_with(x))
+            && std::fs::symlink_metadata(p)
+                .is_ok_and(|m| !m.file_type().is_symlink() && m.len() <= MAX_FILE)
+    }));
 }
 
 /// `Installed`: the installed files of the packages a bundle's map names,
@@ -181,34 +150,24 @@ fn module_sized(file_bytes: usize, module_bytes: i64) -> bool {
 }
 
 /// `version_of`: package.json's `version`, as JSON (None when unreadable).
-fn version_of(root: &str) -> PyValue {
+fn version_of(root: &str) -> Value {
     let p = Path::new(root).join("package.json");
     let Ok(text) = std::fs::read_to_string(&p) else {
-        return PyValue::Null;
+        return Value::Null;
     };
-    match PyValue::parse(&text) {
-        Ok(PyValue::Dict(d)) => d
+    match serde_json::from_str::<Value>(&text) {
+        Ok(Value::Object(d)) => d
             .into_iter()
             .rev()
             .find(|(k, _)| k == "version")
-            .map_or(PyValue::Null, |(_, v)| v),
-        _ => PyValue::Null,
+            .map_or(Value::Null, |(_, v)| v),
+        _ => Value::Null,
     }
 }
 
 /// The majority source of [s, e) by mapped bytes (ties: lowest index).
-pub fn majority(segs: &[(i64, i64)], offs: &[i64], s: i64, e: i64) -> Option<i64> {
-    let mut k = offs.partition_point(|&o| o <= s).saturating_sub(1);
-    let mut votes: Counter<i64> = Counter::new();
-    while k < segs.len() && segs[k].0 < e {
-        let a = segs[k].0.max(s);
-        let b = if k + 1 < segs.len() { segs[k + 1].0 } else { e }.min(e);
-        if b > a {
-            votes.add(segs[k].1, b - a);
-        }
-        k += 1;
-    }
-    votes
+pub fn majority(segs: &[(i64, i64)], s: i64, e: i64) -> Option<i64> {
+    truth::source_bytes(segs, s, e)
         .items()
         .min_by(|x, y| y.1.cmp(&x.1).then_with(|| x.0.cmp(y.0)))
         .map(|(k, _)| *k)
@@ -300,7 +259,7 @@ impl Evidence<'_> {
 
     /// The token evidence's relabel: the smallest map source of another
     /// package holding the factory's rare tokens.
-    fn by_tokens(&mut self, t: &BTreeSet<String>, pkg: &str, size: i64) -> Option<Vec<PyValue>> {
+    fn by_tokens(&mut self, t: &BTreeSet<String>, pkg: &str, size: i64) -> Option<Vec<Value>> {
         if t.len() < MIN_TOKENS {
             return None;
         }
@@ -333,7 +292,7 @@ impl Evidence<'_> {
 
     /// The data-module evidence's relabel: the smallest installed file of
     /// another package holding the factory's long strings.
-    fn by_strings(&mut self, strs: &[Vec<u8>], pkg: &str, size: i64) -> Option<Vec<PyValue>> {
+    fn by_strings(&mut self, strs: &[Vec<u8>], pkg: &str, size: i64) -> Option<Vec<Value>> {
         if strs.len() < MIN_STRINGS {
             return None;
         }
@@ -369,11 +328,10 @@ impl Evidence<'_> {
 /// `factories` with their majority source, once per span (a later
 /// factory of the same span replaces the source, keeping the position).
 fn majorities(units: &[Unit], segs: &[(i64, i64)]) -> Vec<((i64, i64), i64)> {
-    let offs: Vec<i64> = segs.iter().map(|x| x.0).collect();
     let mut major: Vec<((i64, i64), i64)> = Vec::new();
     let mut seen: HashMap<(i64, i64), usize> = HashMap::new();
     for u in units.iter().filter(|u| u.k == "Factory" && !u.rt) {
-        let Some(si) = majority(segs, &offs, u.s, u.e) else {
+        let Some(si) = majority(segs, u.s, u.e) else {
             continue;
         };
         match seen.get(&(u.s, u.e)) {
@@ -425,7 +383,7 @@ fn entry_rows(
     entry: &CorpusEntry,
     truth: &Truth,
     units: &[Unit],
-) -> Result<Vec<PyValue>, String> {
+) -> Result<Vec<Value>, String> {
     let mut ev = evidence(corpus, entry, truth)?;
     let major = majorities(units, &truth.segments);
     let mut credited: HashMap<i64, usize> = HashMap::new();
@@ -477,7 +435,7 @@ fn entry_rows(
         let mut row = vec![int(s), int(e), pys(&pkg)];
         row.extend(new);
         row.push(opt_s(truth.sources[siu].file.as_deref()));
-        rows.push(PyValue::List(row));
+        rows.push(Value::Array(row));
     }
     Ok(rows)
 }
@@ -490,37 +448,33 @@ pub fn build(
     out: &Path,
 ) -> Result<(BTreeMap<String, String>, String), String> {
     let mut shas = BTreeMap::new();
-    for entry in corpus
-        .entries()
-        .iter()
-        .filter(|e| e.truth.method == "sourcemap")
-    {
+    for entry in super::layers::mapped_entries(corpus) {
         let units = super::score::label_units(corpus, units_label, entry)?.unwrap_or_default();
         let mut truth = truth::load_truth(corpus, entry)?;
         truth::redecode(corpus, entry, &mut truth, None)?;
         let rows = entry_rows(corpus, entry, &truth, &units)?;
         let doc = dict(vec![
             kv("schema", pys(SCHEMA)),
-            kv("rows", PyValue::List(rows)),
+            kv("rows", Value::Array(rows)),
         ]);
-        let p = out
-            .join("truth")
-            .join(format!("{}.misattr13.json.gz", entry.id));
-        super::gz::write_gz(&p, crate::json::py_text(&doc, true).as_bytes())?;
-        shas.insert(entry.id.clone(), super::corpus::sha256_file(&p)?);
+        let text = crate::json::frozen::identity_text(&doc);
+        super::layers::write_entry(
+            out,
+            crate::committed::library::LayerKind::Misattr13,
+            &entry.id,
+            &text,
+            &mut shas,
+        )?;
     }
     let man = dict(vec![
         kv("schema", pys(SCHEMA)),
         kv("corpusSha256", pys(&corpus.loaded.manifest_id)),
         kv("unitsLabel", pys(units_label)),
-        kv(
-            "entries",
-            dict(shas.iter().map(|(k, v)| (k.clone(), pys(v))).collect()),
-        ),
+        kv("entries", super::layers::entries_block(&shas)),
         kv("rules", rules()),
         kv("about", pys(ABOUT)),
     ]);
-    Ok((shas, crate::json::py_text(&man, true)))
+    Ok((shas, crate::json::frozen::identity_text(&man)))
 }
 
 #[cfg(test)]

@@ -134,8 +134,11 @@ cargo dev eval walk <from>..<to> --walk-dir D   # a real version walk; its repor
 cargo dev library score <label> --index D --rule agreement|structural   # library naming P/R on a frozen corpus
 ```
 
-**The library scorer is scorer 15 (`exp096-score/15`, exp214, 2026-11-10).**
-Scorer 14's cards plus two truth corrections, each its own column: a
+**The library scorer is scorer 16 (`exp096-score/16`, exp239).** It scores
+exactly as scorer 15 and writes plain serde JSON (no Python spelling); only
+the corpus and layer identities keep their frozen spelling
+(`crates/humanify-ag-dev/src/json/frozen.rs`), so recorded hashes stay valid.
+Scorer 15 (exp214) is scorer 14's cards plus two truth corrections, each its own column: a
 source-map DEFECT (the label's package — its map files, its published files
 in the index literal table and its installed copy — holds at most 20% of the
 unit's literals) is out of both sides (`defectExcludedBytes`); a COPY CREDIT

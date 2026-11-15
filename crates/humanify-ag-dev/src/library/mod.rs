@@ -1,10 +1,7 @@
-//! The exp096 library-matching scorer (scorer 15: scorer 14 plus exp214's
-//! map-defect exclusion and copy credit) and its instruments,
-//! ported from experiments/096-library-matching-score and the exp095
-//! "misses" scripts it imports (docs/dev-harness.md §1.4, lane L2b). The
-//! cards are byte-identical to score.py's: Python's float repr, sorted
-//! keys, `ensure_ascii`, banker's rounding and summation order are
-//! reproduced, not approximated.
+//! The library-matching scorer (version 16) and its instruments: the
+//! truth-layer builders, the corpus build and freeze, the npm caches. Its
+//! records are plain JSON (`crate::json::text`); a recorded identity is the
+//! sha of the frozen identity spelling (`crate::json::frozen`).
 
 pub mod acorn;
 pub mod audit15;
@@ -29,12 +26,12 @@ pub mod mapdefect14;
 pub mod misattr13;
 pub mod npm;
 pub mod origins;
-pub mod py;
 mod pyclass_table;
 pub mod pypath;
 pub mod pyre;
 pub mod score;
 pub mod tokens14;
 pub mod truth;
+pub mod value;
 pub mod vendor_precision;
 pub mod wrong_families;

@@ -589,39 +589,52 @@ struct Votes {
     by_origin: HashMap<String, Counter<(i64, i64)>>,
 }
 
-fn vote(
-    truth: &Truth,
-    offs: &[i64],
-    runs: &[(i64, i64, i64)],
-    s: i64,
-    e: i64,
-) -> Result<Votes, String> {
+/// The bytes each map segment (`(offset, source)`, by offset) holds inside
+/// [s, e), in segment order: `(segment index, bytes)`, empty ones left out.
+pub fn segment_bytes(segs: &[(i64, i64)], s: i64, e: i64) -> Vec<(usize, i64)> {
+    let mut out = Vec::new();
+    let mut k = segs.partition_point(|x| x.0 <= s).saturating_sub(1);
+    while k < segs.len() && segs[k].0 < e {
+        let a = segs[k].0.max(s);
+        let b = if k + 1 < segs.len() { segs[k + 1].0 } else { e }.min(e);
+        if b > a {
+            out.push((k, b - a));
+        }
+        k += 1;
+    }
+    out
+}
+
+/// The bytes of [s, e) per source index, sources in first-seen order.
+pub fn source_bytes(segs: &[(i64, i64)], s: i64, e: i64) -> Counter<i64> {
+    let mut by = Counter::new();
+    for (k, n) in segment_bytes(segs, s, e) {
+        by.add(segs[k].1, n);
+    }
+    by
+}
+
+fn vote(truth: &Truth, runs: &[(i64, i64, i64)], s: i64, e: i64) -> Result<Votes, String> {
     let segs = &truth.segments;
     let mut v = Votes {
         votes: Counter::new(),
         files: Counter::new(),
         by_origin: HashMap::new(),
     };
-    let mut k = offs.partition_point(|&o| o <= s).saturating_sub(1);
-    while k < segs.len() && segs[k].0 < e {
-        let a = segs[k].0.max(s);
-        let b = if k + 1 < segs.len() { segs[k + 1].0 } else { e }.min(e);
-        if b > a {
-            let src = usize::try_from(segs[k].1)
-                .ok()
-                .and_then(|i| truth.sources.get(i))
-                .ok_or_else(|| format!("segment {k} names no source"))?;
-            v.votes.add(src.label.clone(), b - a);
-            v.files.add(segs[k].1, b - a);
-            if !runs.is_empty() {
-                let r = run_at(runs, k as i64);
-                v.by_origin
-                    .entry(src.label.clone())
-                    .or_default()
-                    .add((r.1, r.2), b - a);
-            }
+    for (k, n) in segment_bytes(segs, s, e) {
+        let src = usize::try_from(segs[k].1)
+            .ok()
+            .and_then(|i| truth.sources.get(i))
+            .ok_or_else(|| format!("segment {k} names no source"))?;
+        v.votes.add(src.label.clone(), n);
+        v.files.add(segs[k].1, n);
+        if !runs.is_empty() {
+            let r = run_at(runs, k as i64);
+            v.by_origin
+                .entry(src.label.clone())
+                .or_default()
+                .add((r.1, r.2), n);
         }
-        k += 1;
     }
     Ok(v)
 }
@@ -701,13 +714,12 @@ pub fn label_units(
     audit: &Audit,
 ) -> Result<HashMap<usize, Label>, String> {
     let srcs = &truth.sources;
-    let offs: Vec<i64> = truth.segments.iter().map(|s| s.0).collect();
     let runs: &[(i64, i64, i64)] = origins.map_or(&[], |o| &o.runs);
     let mis = audit.misattributed(units);
     let mut out = HashMap::new();
     for u in scored {
         let (s, e) = (u.s, u.e);
-        let v = vote(truth, &offs, runs, s, e)?;
+        let v = vote(truth, runs, s, e)?;
         let lab = v
             .votes
             .most_common_first()
@@ -758,3 +770,7 @@ pub fn label_units(
     }
     Ok(out)
 }
+
+#[cfg(test)]
+#[path = "truth_test.rs"]
+mod truth_test;

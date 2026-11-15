@@ -332,9 +332,8 @@ pub fn layer(
 pub struct LoadedCorpus {
     pub corpus: &'static Corpus,
     pub manifest: Loaded<CorpusManifest>,
-    /// The manifest's IDENTITY (`corpusSha256`): the sha of its canonical
-    /// Python spelling, not of the file's bytes (lib096 `manifest_sha`: the
-    /// commit hook re-spells committed JSON).
+    /// The manifest's IDENTITY (`corpusSha256`): the sha of its frozen
+    /// identity spelling, not of the file's bytes.
     pub manifest_id: String,
     pub layers: Vec<Loaded<Layer>>,
     /// Each layer's identity by the summary's key (`originsSha256`), the
@@ -342,14 +341,14 @@ pub struct LoadedCorpus {
     pub layer_ids: BTreeMap<String, String>,
 }
 
-/// A library file's identity: sha256 of `json.dumps(obj, sort_keys=True,
-/// indent=1, ensure_ascii=True) + "\n"` (lib096 `dump`).
+/// A library file's identity: the sha256 of its value in the frozen
+/// identity spelling (`crate::json::frozen::identity_text`).
 pub fn canonical_id(path: &Path) -> Result<String, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let value =
-        crate::json::py::PyValue::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let value = serde_json::from_str::<serde_json::Value>(&text)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(super::sha256_hex(
-        crate::json::py_text(&value, true).as_bytes(),
+        crate::json::frozen::identity_text(&value).as_bytes(),
     ))
 }
 

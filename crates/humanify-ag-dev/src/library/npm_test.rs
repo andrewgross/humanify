@@ -38,11 +38,3 @@ fn quote_is_urllib_s() {
     assert_eq!(quote("@scope/pkg", "@"), "@scope%2Fpkg");
     assert_eq!(quote("1.0.0-beta/x", "/"), "1.0.0-beta/x");
 }
-
-#[test]
-fn json_dump_sorted() {
-    let v = PyValue::parse(r#"{"b": [1, "x"], "a": {"d": null, "c": true}}"#).expect("parse");
-    let mut s = String::new();
-    dumps_sorted(&mut s, &v);
-    assert_eq!(s, r#"{"a": {"c": true, "d": null}, "b": [1, "x"]}"#);
-}

@@ -1,11 +1,10 @@
 //! The harness's ONE parse point (docs/dev-harness.md §2.2): a verb's
 //! argv → its positionals and its settings, resolved against
 //! [`HARNESS`]. Everything is refused BEFORE anything runs, and every
-//! refusal is collected: a retired spelling (naming its replacement), an
-//! unknown flag (with a "did you mean"), a flag that is not a setting of
-//! this verb, a wrong type or range, and a `--pipeline-set` entry the
-//! PIPELINE's registry refuses (unknown key, retired key, wrong type or
-//! range, or a key the harness sets itself).
+//! refusal is collected: an unknown flag (with a "did you mean"), a flag
+//! that is not a setting of this verb, a wrong type or range, and a
+//! `--pipeline-set` entry the PIPELINE's registry refuses (unknown key,
+//! wrong type or range, or a key the harness sets itself).
 //!
 //! A run's settings are written once, as one run config file
 //! ([`run_config`], the JS spelling); its sha goes into the run identity.
@@ -78,9 +77,6 @@ pub fn parse(
     harness_owned: &[&str],
     args: &[String],
 ) -> Result<Parsed, Vec<String>> {
-    if let Some(refusal) = HARNESS.retired_flag(args) {
-        return Err(vec![refusal.trim_end().to_string()]);
-    }
     let unknown = unknown_flags(args);
     if !unknown.is_empty() {
         return Err(unknown);
@@ -134,7 +130,7 @@ pub fn parse(
 /// Check `--pipeline-set section.key=value` entries against the PIPELINE
 /// registry linked into this binary (HEAD's; an older binary's keys are
 /// checked at its first launch, docs/dev-harness.md §2.2): the key exists
-/// and is not retired, the harness does not set it itself, the value is
+/// the harness does not set it itself, the value is
 /// typed and in range. Every refusal is collected.
 pub fn check_pipeline_sets(
     entries: &[String],
@@ -163,9 +159,6 @@ fn check_one(
     let (dotted, raw) = entry
         .split_once('=')
         .ok_or_else(|| "not section.key=value".to_string())?;
-    if let Some((_, note)) = registry.retired_keys.iter().find(|(k, _)| *k == dotted) {
-        return Err(format!("{dotted} is retired ({note})"));
-    }
     let key = registry
         .find(dotted)
         .ok_or_else(|| registry.unknown_key("the pipeline's registry", dotted))?;

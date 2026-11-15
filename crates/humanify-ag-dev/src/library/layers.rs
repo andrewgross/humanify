@@ -18,9 +18,9 @@ use super::corpus::{Corpus, RULES7, RULES10, RULES12, Role, read_map};
 use super::decoder::{self, Inner};
 use super::families::Families;
 use super::origins::{self, ChunkCtx, Inputs, Origins, Rules};
-use super::py::{compact, dict, int, kv, s};
+use super::value::{dict, int, kv, s};
 use crate::committed::library::{CorpusEntry, LayerKind};
-use crate::json::py::PyValue;
+use crate::json::frozen::compact;
 
 /// Where scorer 7's cached npm metadata lives (fetch_metadata.py and
 /// bundled.py fill it; this host's copy).
@@ -158,7 +158,7 @@ fn origin_doc(
     layer: &OriginLayer,
     inputs: &Inputs,
     fam: &Families,
-) -> Result<PyValue, String> {
+) -> Result<Value, String> {
     let l = load(corpus, entry)?;
     let ctx = ChunkCtx {
         versions: &l.versions,
@@ -173,21 +173,52 @@ fn origin_doc(
         layer.rules.map(|_| &ctx),
     );
     let (names, kinds, runs) = origins::origin_runs(&l.segs, &o);
-    let strs = |v: Vec<String>| PyValue::List(v.into_iter().map(PyValue::Str).collect());
+    let strs = |v: Vec<String>| Value::Array(v.into_iter().map(Value::String).collect());
     Ok(dict(vec![
         kv("schema", s(origins::SCHEMA)),
         kv("names", strs(names)),
         kv("kinds", strs(kinds)),
         kv(
             "runs",
-            PyValue::List(
+            Value::Array(
                 runs.into_iter()
-                    .map(|(a, b, c)| PyValue::List(vec![int(a), int(b), int(c)]))
+                    .map(|(a, b, c)| Value::Array(vec![int(a), int(b), int(c)]))
                     .collect(),
             ),
         ),
         kv("segments", int(l.segs.len() as i64)),
     ]))
+}
+
+/// The entries a truth layer covers: the corpus's source-mapped ones.
+pub fn mapped_entries(corpus: &Corpus) -> Vec<&CorpusEntry> {
+    corpus
+        .entries()
+        .iter()
+        .filter(|e| e.truth.method == "sourcemap")
+        .collect()
+}
+
+/// Write one entry's file of a layer, `out/truth/<id>.<prefix>.json.gz`,
+/// and record its sha in `shas`.
+pub fn write_entry(
+    out: &Path,
+    kind: LayerKind,
+    id: &str,
+    text: &str,
+    shas: &mut BTreeMap<String, String>,
+) -> Result<(), String> {
+    let p = out
+        .join("truth")
+        .join(format!("{id}.{}.json.gz", kind.prefix()));
+    super::gz::write_gz(&p, text.as_bytes())?;
+    shas.insert(id.to_string(), super::corpus::sha256_file(&p)?);
+    Ok(())
+}
+
+/// A layer manifest's `entries` block: entry id -> file sha.
+pub fn entries_block(shas: &BTreeMap<String, String>) -> Value {
+    dict(shas.iter().map(|(k, v)| (k.clone(), s(v))).collect())
 }
 
 /// The outcome of re-freezing one layer.
@@ -214,19 +245,11 @@ pub fn refreeze_origin_layer(
     let inputs = Inputs::new(registry, bundled);
     let fam = Families::shipped();
     let mut shas: BTreeMap<String, String> = BTreeMap::new();
-    let entries: Vec<&CorpusEntry> = corpus
-        .entries()
-        .iter()
-        .filter(|e| e.truth.method == "sourcemap")
-        .collect();
-    for e in &entries {
+    for e in mapped_entries(corpus) {
         let doc = origin_doc(corpus, e, layer, &inputs, &fam)?;
-        let suffix = format!(".{}.json.gz", layer.kind.prefix());
-        let p: PathBuf = out.join("truth").join(format!("{}{suffix}", e.id));
-        super::gz::write_gz(&p, compact(&doc).as_bytes())?;
-        shas.insert(e.id.clone(), super::corpus::sha256_file(&p)?);
+        write_entry(out, layer.kind, &e.id, &compact(&doc), &mut shas)?;
     }
-    let entries_v = dict(shas.iter().map(|(k, v)| (k.clone(), s(v))).collect());
+    let entries_v = entries_block(&shas);
     let manifest = if layer.rules.is_none() {
         dict(vec![
             kv("schema", s(layer.schema)),
@@ -243,7 +266,7 @@ pub fn refreeze_origin_layer(
                     layer
                         .rules_json
                         .iter()
-                        .map(|(k, v)| kv(k, PyValue::Bool(*v)))
+                        .map(|(k, v)| kv(k, Value::Bool(*v)))
                         .collect(),
                 ),
             ),
@@ -251,7 +274,7 @@ pub fn refreeze_origin_layer(
             kv("entries", entries_v),
         ])
     };
-    let text = crate::json::py_text(&manifest, true);
+    let text = crate::json::frozen::identity_text(&manifest);
     compare(corpus, layer.kind, out, &shas, &text)
 }
 

@@ -7,8 +7,8 @@
 use std::path::Path;
 
 use super::corpus::{Corpus, sha256_file};
-use super::py::{dict, int, kv, s};
-use crate::json::py::PyValue;
+use super::value::{dict, int, kv, s};
+use serde_json::Value;
 
 const SAME: &[&str] = &[
     "buildCommit",
@@ -18,17 +18,14 @@ const SAME: &[&str] = &[
     "corpusSha256",
 ];
 
-fn read(path: &Path) -> Result<PyValue, String> {
-    let t = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    PyValue::parse(&t).map_err(|e| format!("{}: {e}", path.display()))
-}
+use crate::json::read;
 
 fn strip_label(path: &Path) -> Result<String, String> {
     let v = match read(path)? {
-        PyValue::Dict(es) => PyValue::Dict(es.into_iter().filter(|(k, _)| k != "label").collect()),
+        Value::Object(es) => Value::Object(es.into_iter().filter(|(k, _)| k != "label").collect()),
         other => other,
     };
-    Ok(crate::json::py_text(&v, true))
+    Ok(crate::json::text(&v))
 }
 
 /// Compare labels `a` and `b` of `corpus` (cards under `results`). Ok:
@@ -92,12 +89,12 @@ pub fn determinism(
             1,
         ));
     }
-    let g = |k: &str| pa.get(k).cloned().unwrap_or(PyValue::Null);
+    let g = |k: &str| pa.get(k).cloned().unwrap_or(Value::Null);
     let bands = dict(vec![
         kv(
             "provenance",
             dict(vec![
-                kv("labels", PyValue::List(vec![s(a), s(b)])),
+                kv("labels", Value::Array(vec![s(a), s(b)])),
                 kv("buildCommit", g("buildCommit")),
                 kv("binarySha256", g("binarySha256")),
                 kv("indexId", g("indexId")),
@@ -123,6 +120,6 @@ pub fn determinism(
         format!(
             "DETERMINISTIC: {n} reports, {n} cards and the summary byte-identical ({a} vs {b})\n"
         ),
-        crate::json::py_text(&bands, true),
+        crate::json::text(&bands),
     ))
 }

@@ -1,14 +1,14 @@
-//! The exp096 library scorer, scorer 14 (experiments/096 `score.py`): one
-//! CARD per (label, corpus entry) and one summary per label, from a
-//! label's raw discovery reports, byte for byte what score.py writes.
+//! The library scorer, version 16: one CARD per (label, corpus entry) and
+//! one summary per label, from a label's raw discovery reports, written as
+//! plain JSON. Version 16 scores exactly as version 15 (the copy credit and
+//! source-map defect corrections); only the spelling of its files changed.
 //!
 //! A card judges every statement and factory unit of the run against the
 //! frozen truth (`truth`): a claim is RIGHT when it names the unit's
 //! shipping package or its origin (or a member of either's family);
 //! precision / recall / F1 / F0.5 are over bytes; app code claimed as any
 //! package is the hard bar (0). Claude Code is scored on its labelled
-//! sample with the stratified ratio estimate. See score.py's docstring for
-//! every column; the bytes here are its bytes.
+//! sample with the stratified ratio estimate.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -23,13 +23,12 @@ use super::counter::Counter;
 use super::defect15::EntryTexts;
 use super::families::{self, Families};
 use super::index::{self, Index, Print, TruthFacts, Unit};
-use super::py::{dict, exact, flt, from_json, int, kv, round_int, s, share};
 use super::truth::{self, Audit, Label, Truth, is_library};
+use super::value::{dict, exact, flt, int, int_at, kv, round_int, s, share};
 use super::wrong_families::{self, EntryWrongs, WrongClaim};
 use crate::committed::library::{CorpusEntry, LayerKind};
-use crate::json::py::PyValue;
 
-pub const SCORER_VERSION: &str = "exp096-score/15";
+pub const SCORER_VERSION: &str = "exp096-score/16";
 pub const PRECISION_BAR: f64 = 0.998;
 pub const MISS_CLASSES: &[&str] = &[
     "no-discovery",
@@ -271,7 +270,7 @@ fn prf(
     app: f64,
     library: f64,
     suffix: &str,
-) -> Vec<(String, PyValue)> {
+) -> Vec<(String, Value)> {
     let p = share(named, named + wrong_family + app);
     let r = share(named, library);
     vec![
@@ -285,7 +284,7 @@ fn prf(
     ]
 }
 
-fn prf_i(named: i64, wrong: i64, app: i64, lib: i64, suffix: &str) -> Vec<(String, PyValue)> {
+fn prf_i(named: i64, wrong: i64, app: i64, lib: i64, suffix: &str) -> Vec<(String, Value)> {
     prf(exact(named), exact(wrong), exact(app), exact(lib), suffix)
 }
 
@@ -298,7 +297,7 @@ fn s15_cols(
     wrong: i64,
     app: i64,
     defect: (i64, i64),
-) -> Vec<(String, PyValue)> {
+) -> Vec<(String, Value)> {
     vec![
         kv("namedAsCopyCreditBytes", int(credit)),
         kv("defectExcludedBytes", int(defect.0)),
@@ -402,7 +401,7 @@ impl Names {
         }
     }
 
-    fn block(&self) -> Vec<(String, PyValue)> {
+    fn block(&self) -> Vec<(String, Value)> {
         vec![
             kv("exactUnits", int(self.exact_units)),
             kv("exactBytes", int(self.exact_bytes)),
@@ -419,11 +418,11 @@ impl Names {
 
 // ---------------------------------------------------------------- one card
 
-fn sorted_block(c: &Ctr) -> PyValue {
+fn sorted_block(c: &Ctr) -> Value {
     dict(c.items().map(|(k, v)| (k.clone(), int(v))).collect())
 }
 
-fn miss_block(m: &Ctr) -> PyValue {
+fn miss_block(m: &Ctr) -> Value {
     dict(
         MISS_CLASSES
             .iter()
@@ -445,10 +444,7 @@ struct ScopeCounts {
 /// The verdict columns a scope block and a card's totals share, from
 /// `libraryBytes` to `wrongFamilyBytesShipperOnly`; the totals also carry
 /// `namedAsShipperBytes` (`with_shipper`).
-fn verdict_cols(
-    (t, claimed, old): (&Ctr, &Ctr, &Ctr),
-    with_shipper: bool,
-) -> Vec<(String, PyValue)> {
+fn verdict_cols((t, claimed, old): (&Ctr, &Ctr, &Ctr), with_shipper: bool) -> Vec<(String, Value)> {
     let lib = t.get(LIBRARY);
     let named = named_of(claimed);
     let old_named = old.get("right") + old.get("family");
@@ -496,7 +492,7 @@ fn verdict_cols(
     e
 }
 
-fn scope_block(sc: &ScopeCounts) -> PyValue {
+fn scope_block(sc: &ScopeCounts) -> Value {
     let mut e = verdict_cols((&sc.t, &sc.claimed, &sc.old), false);
     e.extend([
         kv("statementBytes", sorted_block(&sc.t)),
@@ -507,7 +503,7 @@ fn scope_block(sc: &ScopeCounts) -> PyValue {
 }
 
 /// score.py `totals_scope`: a scope with no per-unit verdicts.
-fn totals_scope(lib: i64, named: i64, wrong: i64, app: i64, misses: PyValue) -> PyValue {
+fn totals_scope(lib: i64, named: i64, wrong: i64, app: i64, misses: Value) -> Value {
     let mut e = vec![kv("libraryBytes", int(lib)), kv("namedBytes", int(named))];
     e.extend(prf_i(named, wrong, app, lib, ""));
     e.extend([
@@ -594,7 +590,7 @@ fn sample_verdict(fam: &Families, p: &str, t: &truth::SampleRow) -> String {
 }
 
 /// A map card's body from its scope counters (score_map's return).
-fn map_body(by_scope: &[ScopeCounts; 2], seeds: &Ctr, names: &Names) -> Vec<(String, PyValue)> {
+fn map_body(by_scope: &[ScopeCounts; 2], seeds: &Ctr, names: &Names) -> Vec<(String, Value)> {
     let sum =
         |f: fn(&ScopeCounts) -> &Ctr| Counter::new().plus(f(&by_scope[0])).plus(f(&by_scope[1]));
     let (total, claimed, old, misses) = (
@@ -639,7 +635,7 @@ impl Scorer<'_> {
         truth: &Truth,
         origins: Option<&truth::Origins>,
         (audit, a15): (&Audit, &mut EntryAudit),
-    ) -> Result<(Vec<(String, PyValue)>, EntryWrongs), String> {
+    ) -> Result<(Vec<(String, Value)>, EntryWrongs), String> {
         let units = run_units(report)?;
         let st = statement_units(&units);
         let mut scope_of: HashMap<usize, usize> = st.iter().map(|u| (u.i, 0)).collect();
@@ -845,11 +841,7 @@ impl Scorer<'_> {
         ))
     }
 
-    fn score_sample(
-        &self,
-        report: &Report,
-        truth: &Truth,
-    ) -> Result<Vec<(String, PyValue)>, String> {
+    fn score_sample(&self, report: &Report, truth: &Truth) -> Result<Vec<(String, Value)>, String> {
         let (ix, fam) = (self.ix, self.fam);
         let units = run_units(report)?;
         let st = statement_units(&units);
@@ -979,7 +971,7 @@ impl Scorer<'_> {
             .ok_or("a sample report without grownStatementBytes")?;
         let nb = names.block();
         let mut wb = whole_names.block();
-        let pick = |b: &[(String, PyValue)], k: &str| {
+        let pick = |b: &[(String, Value)], k: &str| {
             b.iter().find(|(x, _)| x == k).expect("names key").1.clone()
         };
         wb.extend([
@@ -1029,7 +1021,7 @@ impl Scorer<'_> {
 
 /// score.py `score_floor`: no discovery ran; the denominator is the
 /// MAPPED library bytes.
-fn score_floor(entry: &CorpusEntry, truth: &Truth) -> Result<Vec<(String, PyValue)>, String> {
+fn score_floor(entry: &CorpusEntry, truth: &Truth) -> Result<Vec<(String, Value)>, String> {
     if truth.method == "sample" {
         return Err(format!(
             "{}: no discovery ran on a sample-truth bundle",
@@ -1093,7 +1085,7 @@ fn score_floor(entry: &CorpusEntry, truth: &Truth) -> Result<Vec<(String, PyValu
 // ---------------------------------------------------------------- the label
 
 /// A card's body entries (after its header).
-type CardBody = Vec<(String, PyValue)>;
+type CardBody = Vec<(String, Value)>;
 
 /// One scope block's ints and its miss bytes (in file order).
 type ScopeSum = (HashMap<String, i64>, Vec<(String, i64)>);
@@ -1111,30 +1103,17 @@ struct CardSum {
     app_claimed_sample_units: Option<i64>,
 }
 
-fn ints_of(v: &PyValue) -> HashMap<String, i64> {
-    match v {
-        PyValue::Dict(es) => es
-            .iter()
-            .filter_map(|(k, v)| match v {
-                PyValue::Int(d) => Some((k.clone(), d.parse().expect("an i64"))),
-                _ => None,
-            })
-            .collect(),
-        _ => HashMap::new(),
-    }
+/// An object's int fields, in key order.
+fn ordered_ints(v: &Value) -> Vec<(String, i64)> {
+    v.as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(k, v)| Some((k.clone(), v.as_i64()?)))
+        .collect()
 }
 
-fn ordered_ints(v: &PyValue) -> Vec<(String, i64)> {
-    match v {
-        PyValue::Dict(es) => es
-            .iter()
-            .filter_map(|(k, v)| match v {
-                PyValue::Int(d) => Some((k.clone(), d.parse().expect("an i64"))),
-                _ => None,
-            })
-            .collect(),
-        _ => Vec::new(),
-    }
+fn ints_of(v: &Value) -> HashMap<String, i64> {
+    ordered_ints(v).into_iter().collect()
 }
 
 const SCOPE_SUMS: &[&str] = &[
@@ -1172,7 +1151,7 @@ const NAME_KEYS: [&str; 5] = [
     "exactUnits",
 ];
 
-fn card_sum(card: &PyValue) -> CardSum {
+fn card_sum(card: &Value) -> CardSum {
     let get = |k: &str| card.get(k).expect("a card key");
     let names = ints_of(get("exploratory").get("names").expect("names"));
     let scope = |n: &str| {
@@ -1184,21 +1163,21 @@ fn card_sum(card: &PyValue) -> CardSum {
     };
     CardSum {
         entry: match card.get("entry") {
-            Some(PyValue::Str(e)) => Some(e.clone()),
+            Some(Value::String(e)) => Some(e.clone()),
             _ => None,
         },
         totals: ints_of(get("totals")),
         miss: ordered_ints(get("missBytes")),
         names: NAME_KEYS.map(|k| names[k]),
         claimed: ints_of(get("claimedBytes")),
-        discovery_ran: get("discoveryRan") == &PyValue::Bool(true),
+        discovery_ran: get("discoveryRan") == &Value::Bool(true),
         bundler_detected: get("detected").get(BUNDLER) == get("toolchain").get(BUNDLER),
         scopes: [scope("statement"), scope("factory")],
         app_claimed_sample_units: ints_of(get("totals")).get("appClaimedSampleUnits").copied(),
     }
 }
 
-fn miss_shares(mb: &Ctr, lib: i64) -> PyValue {
+fn miss_shares(mb: &Ctr, lib: i64) -> Value {
     dict(
         MISS_CLASSES
             .iter()
@@ -1208,7 +1187,7 @@ fn miss_shares(mb: &Ctr, lib: i64) -> PyValue {
     )
 }
 
-fn aggregate_scope(blocks: &[&ScopeSum]) -> PyValue {
+fn aggregate_scope(blocks: &[&ScopeSum]) -> Value {
     let mut t: HashMap<&str, i64> = HashMap::new();
     let mut mb: Ctr = Counter::new();
     for (b, m) in blocks {
@@ -1219,7 +1198,7 @@ fn aggregate_scope(blocks: &[&ScopeSum]) -> PyValue {
             mb.add(k.clone(), *v);
         }
     }
-    let mut e: Vec<(String, PyValue)> = SCOPE_SUMS.iter().map(|k| kv(k, int(t[k]))).collect();
+    let mut e: Vec<(String, Value)> = SCOPE_SUMS.iter().map(|k| kv(k, int(t[k]))).collect();
     e.extend(prf_i(
         t["namedBytes"],
         t["wrongFamilyBytes"],
@@ -1240,7 +1219,7 @@ fn aggregate_scope(blocks: &[&ScopeSum]) -> PyValue {
 }
 
 /// The summed precision with every credited copy charged as wrong.
-fn no_credit_precision(t: &HashMap<&str, i64>) -> (String, PyValue) {
+fn no_credit_precision(t: &HashMap<&str, i64>) -> (String, Value) {
     let named = t["namedBytes"];
     kv(
         "precisionNoCopyCredit",
@@ -1253,8 +1232,8 @@ fn no_credit_precision(t: &HashMap<&str, i64>) -> (String, PyValue) {
 
 /// score.py `aggregate`: per set, summed bytes and shares from the sums.
 fn aggregate(
-    sets: &std::collections::BTreeMap<String, Vec<(CardSum, PyValue)>>,
-) -> Vec<(String, PyValue, f64)> {
+    sets: &std::collections::BTreeMap<String, Vec<(CardSum, Value)>>,
+) -> Vec<(String, Value, f64)> {
     let mut out = Vec::new();
     for (set, cs) in sets {
         let mut t: HashMap<&str, i64> = HashMap::new();
@@ -1312,7 +1291,7 @@ fn aggregate(
             lib,
             "ShipperOnly",
         ));
-        let mut names: Vec<(String, PyValue)> = NAME_KEYS
+        let mut names: Vec<(String, Value)> = NAME_KEYS
             .iter()
             .zip(nm)
             .map(|(k, v)| kv(k, int(v)))
@@ -1345,11 +1324,7 @@ fn aggregate(
             ));
             e.push(kv(
                 "factoryScope",
-                cs[0]
-                    .1
-                    .get("factoryScope")
-                    .cloned()
-                    .unwrap_or(PyValue::Null),
+                cs[0].1.get("factoryScope").cloned().unwrap_or(Value::Null),
             ));
         }
         out.push((set.clone(), dict(e), precision));
@@ -1519,7 +1494,7 @@ impl Run<'_> {
         label: &str,
         entry: &CorpusEntry,
         run_dir: &Path,
-    ) -> Result<(PyValue, Option<EntryWrongs>, Option<EntryAudit>), String> {
+    ) -> Result<(Value, Option<EntryWrongs>, Option<EntryAudit>), String> {
         let rp = run_dir.join("reports").join(format!("{}.json", entry.id));
         let bytes = std::fs::read(&rp).map_err(|e| format!("{}: {e}", rp.display()))?;
         let doc: ReportDoc =
@@ -1541,17 +1516,12 @@ impl Run<'_> {
             kv("bundleSha256", s(&entry.files.bundle.sha256)),
             kv("indexId", s(&p.index_id)),
             kv("rule", s(&p.rule)),
-            kv("toolchain", from_json(&doc.toolchain)?),
-            kv("detected", from_json(&doc.detected)?),
-            kv(
-                "discoveryRan",
-                PyValue::Bool(doc.library_discovery.is_some()),
-            ),
+            kv("toolchain", doc.toolchain.clone()),
+            kv("detected", doc.detected.clone()),
+            kv("discoveryRan", Value::Bool(doc.library_discovery.is_some())),
             kv(
                 "noDiscovery",
-                doc.no_discovery
-                    .as_ref()
-                    .map_or(Ok(PyValue::Null), from_json)?,
+                doc.no_discovery.as_ref().cloned().unwrap_or(Value::Null),
             ),
             kv("reportSha256", s(&crate::committed::sha256_hex(&bytes))),
         ];
@@ -1561,13 +1531,13 @@ impl Run<'_> {
 }
 
 /// summary.json's `config` block.
-fn summary_config(corpus: &Corpus, pipeline: &Pipeline) -> Result<PyValue, String> {
+fn summary_config(corpus: &Corpus, pipeline: &Pipeline) -> Result<Value, String> {
     let mut config = vec![
         kv("indexId", s(&pipeline.index_id)),
-        kv("indexBytes", from_json(&pipeline.index_bytes)?),
+        kv("indexBytes", pipeline.index_bytes.clone()),
         kv("rule", s(&pipeline.rule)),
-        kv("buildCommit", from_json(&pipeline.build_commit)?),
-        kv("binarySha256", from_json(&pipeline.binary_sha256)?),
+        kv("buildCommit", pipeline.build_commit.clone()),
+        kv("binarySha256", pipeline.binary_sha256.clone()),
         kv("corpusSha256", s(&pipeline.corpus_sha256)),
         kv("familiesSha256", s(&families::derived_sha())),
     ];
@@ -1586,7 +1556,7 @@ fn summary_config(corpus: &Corpus, pipeline: &Pipeline) -> Result<PyValue, Strin
         config.push((kind.summary_key(), s(corpus.layer_id(kind)?)));
     }
     if let Some(st) = pipeline.settings.as_ref().filter(|v| truthy(v)) {
-        config.push(kv("settings", from_json(st)?));
+        config.push(kv("settings", st.clone()));
     }
     if corpus.name() != "dev" {
         config.push(kv("corpus", s(corpus.name())));
@@ -1594,30 +1564,27 @@ fn summary_config(corpus: &Corpus, pipeline: &Pipeline) -> Result<PyValue, Strin
     if let Some(sets) = pipeline.sets.as_ref().filter(|s| !s.is_empty()) {
         config.push(kv(
             "sets",
-            super::py::list_s(sets.iter().map(String::as_str)),
+            super::value::list_s(sets.iter().map(String::as_str)),
         ));
     }
     Ok(dict(config))
 }
 
 /// summary.json's `bars` block.
-fn bars(agg: &[(String, PyValue, f64)]) -> PyValue {
+fn bars(agg: &[(String, Value, f64)]) -> Value {
     let app_total: i64 = agg
         .iter()
-        .map(|(_, r, _)| match r.get("appClaimedBytes") {
-            Some(PyValue::Int(d)) => d.parse::<i64>().expect("an i64"),
-            _ => 0,
-        })
+        .map(|(_, r, _)| int_at(r, "appClaimedBytes").unwrap_or(0))
         .sum();
     dict(vec![
         kv("appClaimedBytes", int(app_total)),
-        kv("appBarPassed", PyValue::Bool(app_total == 0)),
+        kv("appBarPassed", Value::Bool(app_total == 0)),
         kv("precisionBar", flt(PRECISION_BAR)),
         kv(
             "precisionBarPassed",
             dict(
                 agg.iter()
-                    .map(|(set, _, p)| (set.clone(), PyValue::Bool(*p >= PRECISION_BAR)))
+                    .map(|(set, _, p)| (set.clone(), Value::Bool(*p >= PRECISION_BAR)))
                     .collect(),
             ),
         ),
@@ -1657,10 +1624,10 @@ pub fn rescore(
         literals: None,
         registry: Registry::new(registry),
     };
-    let mut sets: std::collections::BTreeMap<String, Vec<(CardSum, PyValue)>> = Default::default();
+    let mut sets: std::collections::BTreeMap<String, Vec<(CardSum, Value)>> = Default::default();
     let mut audits: std::collections::BTreeMap<String, Vec<(String, EntryAudit)>> =
         Default::default();
-    let mut timing: Vec<(String, PyValue)> = Vec::new();
+    let mut timing: Vec<(String, Value)> = Vec::new();
     let mut wrongs: std::collections::BTreeMap<String, Vec<(String, EntryWrongs)>> =
         Default::default();
     let mut sample_sets: Vec<String> = Vec::new();
@@ -1688,7 +1655,7 @@ pub fn rescore(
         }
         write(
             &cards_dir.join(format!("{}.json", entry.id)),
-            &crate::json::py_text(&card, true),
+            &crate::json::text(&card),
         )?;
         let tp = run_dir
             .join("reports")
@@ -1697,7 +1664,7 @@ pub fn rescore(
             let t = std::fs::read_to_string(&tp).map_err(|e| format!("{}: {e}", tp.display()))?;
             timing.push((
                 entry.id.clone(),
-                PyValue::parse(&t).map_err(|e| format!("{}: {e}", tp.display()))?,
+                serde_json::from_str::<Value>(&t).map_err(|e| format!("{}: {e}", tp.display()))?,
             ));
         }
         if !private {
@@ -1712,8 +1679,8 @@ pub fn rescore(
     write_truth15(&cards_dir, label, &sets, &audits)?;
     let bars = bars(&agg);
     let mut config = summary_config(&corpus, &pipeline)?;
-    if let PyValue::Dict(es) = &mut config {
-        es.push(kv("copyCredit", copy_credit_config(&run, registry)));
+    if let Value::Object(es) = &mut config {
+        es.insert("copyCredit".into(), copy_credit_config(&run, registry));
     }
     let summary = dict(vec![
         kv("schema", s(SCORER_VERSION)),
@@ -1725,20 +1692,17 @@ pub fn rescore(
             dict(agg.into_iter().map(|(k, v, _)| (k, v)).collect()),
         ),
     ]);
-    write(
-        &out_dir.join("summary.json"),
-        &crate::json::py_text(&summary, true),
-    )?;
+    write(&out_dir.join("summary.json"), &crate::json::text(&summary))?;
     write(
         &out_dir.join("timing.json"),
-        &crate::json::py_text(&timing_doc(&timing, private), true),
+        &crate::json::text(&timing_doc(&timing, private)),
     )?;
-    log.push_str(&crate::json::py_text(&bars, true));
+    log.push_str(&crate::json::text(&bars));
     Ok(log)
 }
 
 /// summary.json's `config.copyCredit`: what scorer 15's credits read.
-fn copy_credit_config(run: &Run, registry: &Path) -> PyValue {
+fn copy_credit_config(run: &Run, registry: &Path) -> Value {
     let lits = match &run.literals {
         Some(Some(_)) => "the label's index literal table (literals.bin)",
         Some(None) => "none: the label's index has no literal table, so no claim is credited",
@@ -1755,7 +1719,7 @@ fn copy_credit_config(run: &Run, registry: &Path) -> PyValue {
 fn write_truth15(
     cards_dir: &Path,
     label: &str,
-    sets: &std::collections::BTreeMap<String, Vec<(CardSum, PyValue)>>,
+    sets: &std::collections::BTreeMap<String, Vec<(CardSum, Value)>>,
     audits: &std::collections::BTreeMap<String, Vec<(String, EntryAudit)>>,
 ) -> Result<(), String> {
     let mut by_set: std::collections::BTreeMap<String, Vec<(String, &EntryAudit)>> =
@@ -1784,7 +1748,7 @@ fn write_truth15(
     }
     write(
         &cards_dir.join("truth15.json"),
-        &crate::json::py_text(&audit15::doc(label, &by_set), true),
+        &crate::json::text(&audit15::doc(label, &by_set)),
     )
 }
 
@@ -1793,7 +1757,7 @@ fn write_truth15(
 fn write_wrong_families(
     cards_dir: &Path,
     label: &str,
-    agg: &[(String, PyValue, f64)],
+    agg: &[(String, Value, f64)],
     wrongs: &std::collections::BTreeMap<String, Vec<(String, EntryWrongs)>>,
     sample_sets: &[String],
     fam: &Families,
@@ -1807,10 +1771,7 @@ fn write_wrong_families(
     }
     let doc = wrong_families::doc(label, wrongs, sample_sets, &fam.libix);
     let dir = cards_dir.parent().unwrap_or(cards_dir);
-    write(
-        &dir.join("wrong-families.json"),
-        &crate::json::py_text(&doc, true),
-    )
+    write(&dir.join("wrong-families.json"), &crate::json::text(&doc))
 }
 
 fn truthy(v: &Value) -> bool {
@@ -1882,16 +1843,10 @@ fn check_layers(corpus: &Corpus, sha: &str) -> Result<(), String> {
 }
 
 /// score.py's per-entry progress line.
-fn entry_line(id: &str, card: &PyValue) -> String {
+fn entry_line(id: &str, card: &Value) -> String {
     let t = card.get("totals").expect("totals");
-    let f = |k: &str| match t.get(k) {
-        Some(PyValue::Float(x)) => *x,
-        _ => 0.0,
-    };
-    let app = match t.get("appClaimedBytes") {
-        Some(PyValue::Int(d)) => d.clone(),
-        _ => "0".into(),
-    };
+    let f = |k: &str| t.get(k).and_then(Value::as_f64).unwrap_or(0.0);
+    let app = int_at(t, "appClaimedBytes").unwrap_or(0);
     format!(
         "{id:60} P {:.3} R {:.3} F0.5 {:.3} F1 {:.3} app {app}\n",
         f("precision"),
@@ -1902,14 +1857,8 @@ fn entry_line(id: &str, card: &PyValue) -> String {
 }
 
 /// timing.json (NOT deterministic: wall clock and peak memory).
-fn timing_doc(timing: &[(String, PyValue)], private: bool) -> PyValue {
-    let num = |v: &PyValue, k: &str| -> f64 {
-        match v.get(k) {
-            Some(PyValue::Float(x)) => *x,
-            Some(PyValue::Int(d)) => d.parse().unwrap_or(0.0),
-            _ => 0.0,
-        }
-    };
+fn timing_doc(timing: &[(String, Value)], private: bool) -> Value {
+    let num = |v: &Value, k: &str| v.get(k).and_then(Value::as_f64).unwrap_or(0.0);
     let walls: f64 = timing
         .iter()
         .map(|(_, t)| num(t, "wallSeconds"))
@@ -1918,12 +1867,8 @@ fn timing_doc(timing: &[(String, PyValue)], private: bool) -> PyValue {
         .iter()
         .filter_map(|(_, t)| t.get("peakRssMb").cloned())
         .max_by(|a, b| {
-            let f = |v: &PyValue| match v {
-                PyValue::Int(d) => d.parse::<f64>().unwrap_or(0.0),
-                PyValue::Float(x) => *x,
-                _ => 0.0,
-            };
-            f(a).partial_cmp(&f(b)).unwrap_or(std::cmp::Ordering::Equal)
+            let f = |v: &Value| v.as_f64().unwrap_or(0.0);
+            f(a).total_cmp(&f(b))
         })
         .unwrap_or(int(0));
     let mut e = vec![
@@ -1933,11 +1878,11 @@ fn timing_doc(timing: &[(String, PyValue)], private: bool) -> PyValue {
                 "NOT deterministic: wall clock and peak memory of each `humanify-ag discover` run (index load included); the cards and summary.json are the deterministic part",
             ),
         ),
-        kv("totalWallSeconds", flt(super::py::round_n(walls, 1))),
+        kv("totalWallSeconds", flt(super::value::round_n(walls, 1))),
         kv("maxPeakRssMb", peak),
     ];
     if !private {
-        e.push(kv("perEntry", PyValue::Dict(timing.to_vec())));
+        e.push(kv("perEntry", dict(timing.to_vec())));
     }
     dict(e)
 }
@@ -1957,21 +1902,22 @@ pub fn proof(
         .join("summary.json");
     let text =
         std::fs::read_to_string(&summary).map_err(|e| format!("{}: {e}", summary.display()))?;
-    let v = PyValue::parse(&text).map_err(|e| format!("{}: {e}", summary.display()))?;
+    let v =
+        serde_json::from_str::<Value>(&text).map_err(|e| format!("{}: {e}", summary.display()))?;
     match v.get("schema") {
-        Some(PyValue::Str(x)) if x == SCORER_VERSION => {}
+        Some(Value::String(x)) if x == SCORER_VERSION => {}
         other => {
             return Err(format!(
                 "REFUSED: {label} was scored by {}, this harness is {SCORER_VERSION}: a proof compares one scorer version with itself (re-score the label with `library rescore --out DIR`)",
                 match other {
-                    Some(PyValue::Str(x)) => x.as_str(),
+                    Some(Value::String(x)) => x.as_str(),
                     _ => "an unknown scorer",
                 }
             ));
         }
     }
     let corpus_name = match v.get("config").and_then(|c| c.get("corpus")) {
-        Some(PyValue::Str(c)) => c.clone(),
+        Some(Value::String(c)) => c.clone(),
         _ => "dev".to_string(),
     };
     let corpus = Corpus::open(repo, &corpus_name, None)?;
@@ -2022,3 +1968,7 @@ pub fn proof(
         ),
     ))
 }
+
+#[cfg(test)]
+#[path = "score_test.rs"]
+mod score_test;

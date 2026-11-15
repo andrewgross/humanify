@@ -18,9 +18,9 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use super::decoder;
-use super::py::{compact, dict, from_json, int, kv, opt_s, s};
 use super::pypath;
-use crate::json::py::PyValue;
+use super::value::{dict, int, kv, opt_s, s};
+use crate::json::frozen::compact;
 
 /// How an entry's truth is made (corpus.py `build_truth`'s `how`).
 #[derive(Clone, Debug)]
@@ -34,14 +34,14 @@ pub enum How {
 /// One planned entry: its manifest fields, its input files by role, and
 /// how its truth is made.
 pub struct Planned {
-    pub meta: Vec<(String, PyValue)>,
+    pub meta: Vec<(String, Value)>,
     pub files: Vec<(&'static str, String)>,
     pub how: How,
 }
 
 /// A corpus's freeze plan: the manifest's head fields and its entries.
 pub struct Plan {
-    pub head: Vec<(String, PyValue)>,
+    pub head: Vec<(String, Value)>,
     pub entries: Vec<Planned>,
 }
 
@@ -49,7 +49,7 @@ pub struct Plan {
 
 /// truth.py `package_root`: (package, its root in the source string,
 /// the file inside it).
-fn package_root(src: &str) -> Option<(String, String, String)> {
+pub fn package_root(src: &str) -> Option<(String, String, String)> {
     let k = src.rfind("node_modules/")?;
     let (head, rest) = (&src[..k], &src[k + "node_modules/".len()..]);
     let parts: Vec<&str> = rest.split('/').collect();
@@ -67,35 +67,35 @@ fn package_root(src: &str) -> Option<(String, String, String)> {
 fn sources_table(
     sources: &[Value],
     app: Option<&str>,
-    version_of: &mut dyn FnMut(&str, &str) -> PyValue,
-) -> PyValue {
+    version_of: &mut dyn FnMut(&str, &str) -> Value,
+) -> Value {
     let mut out = Vec::new();
     for src in sources {
         let src = src.as_str().unwrap_or("");
         let row = if src.starts_with('\0') {
-            vec![s("<unmapped>"), PyValue::Null, s(src)]
+            vec![s("<unmapped>"), Value::Null, s(src)]
         } else if ["http:", "https:", "webpack:"]
             .iter()
             .any(|p| src.starts_with(p))
         {
-            vec![s("<foreign>"), PyValue::Null, s(src)]
+            vec![s("<foreign>"), Value::Null, s(src)]
         } else {
             match package_root(src) {
-                None => vec![s("<app>"), PyValue::Null, PyValue::Null],
+                None => vec![s("<app>"), Value::Null, Value::Null],
                 Some((pkg, _, f)) if app == Some(pkg.as_str()) => {
-                    vec![s("<self>"), PyValue::Null, s(&f)]
+                    vec![s("<self>"), Value::Null, s(&f)]
                 }
                 Some((pkg, root, f)) => vec![s(&pkg), version_of(&root, &pkg), s(&f)],
             }
         };
-        out.push(PyValue::List(row));
+        out.push(Value::Array(row));
     }
-    PyValue::List(out)
+    Value::Array(out)
 }
 
 /// corpus.py `install_versions(base)`: package.json's `version` beside
 /// the mapped file, cached per path.
-fn install_version(base: &str, root: &str, cache: &mut BTreeMap<String, PyValue>) -> PyValue {
+fn install_version(base: &str, root: &str, cache: &mut BTreeMap<String, Value>) -> Value {
     let p = pypath::normpath(&pypath::join(&pypath::join(base, root), "package.json"));
     if let Some(v) = cache.get(&p) {
         return v.clone();
@@ -103,12 +103,8 @@ fn install_version(base: &str, root: &str, cache: &mut BTreeMap<String, PyValue>
     let v = std::fs::read_to_string(&p)
         .ok()
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-        .and_then(|j| match j {
-            Value::Object(m) => Some(m.get("version").map_or(Ok(PyValue::Null), from_json)),
-            _ => None,
-        })
-        .and_then(Result::ok)
-        .unwrap_or(PyValue::Null);
+        .and_then(|j| j.get("version").cloned())
+        .unwrap_or(Value::Null);
     cache.insert(p, v.clone());
     v
 }
@@ -130,10 +126,10 @@ fn read_value(p: &Path) -> Result<Value, String> {
 }
 
 /// A source's version, from its package root (and name).
-type VersionOf = Box<dyn FnMut(&str, &str) -> PyValue>;
+type VersionOf = Box<dyn FnMut(&str, &str) -> Value>;
 
 /// corpus.py `map_truth`.
-fn map_truth(js: &str, how: &How) -> Result<PyValue, String> {
+fn map_truth(js: &str, how: &How) -> Result<Value, String> {
     let text = read_text(Path::new(js))?;
     let smap = super::corpus::read_map(Path::new(&format!("{js}.map")))?;
     let (segs, sources, app, mut version_of): (_, _, Option<String>, VersionOf) = match how {
@@ -154,9 +150,9 @@ fn map_truth(js: &str, how: &How) -> Result<PyValue, String> {
     let mut seg_rows = Vec::with_capacity(segs.len());
     for x in &segs {
         let src = x.1.ok_or("an unmapped segment in scorer 4's decode")?;
-        seg_rows.push(PyValue::List(vec![int(x.0), int(src)]));
+        seg_rows.push(Value::Array(vec![int(x.0), int(src)]));
     }
-    let segments = PyValue::List(seg_rows);
+    let segments = Value::Array(seg_rows);
     Ok(dict(vec![
         kv("schema", s("exp096-truth/1")),
         kv("method", s("sourcemap")),
@@ -167,7 +163,7 @@ fn map_truth(js: &str, how: &How) -> Result<PyValue, String> {
 }
 
 /// corpus.py `cc_truth`: Claude Code's labelled sample (never committed).
-fn cc_truth(neg: &str) -> Result<PyValue, String> {
+fn cc_truth(neg: &str) -> Result<Value, String> {
     let mut specs: BTreeMap<String, String> = BTreeMap::new();
     let spec_file = format!("{neg}/exactlab/specs.txt");
     if let Ok(t) = std::fs::read_to_string(&spec_file) {
@@ -191,7 +187,7 @@ fn cc_truth(neg: &str) -> Result<PyValue, String> {
         .ok_or("sample-meta: no strata")?;
     let labels = std::fs::read_to_string(format!("{neg}/labels.jsonl"))
         .map_err(|e| format!("labels.jsonl: {e}"))?;
-    let mut rows: Vec<(i64, PyValue)> = Vec::new();
+    let mut rows: Vec<(i64, Value)> = Vec::new();
     for line in labels.lines().filter(|l| !l.trim().is_empty()) {
         let r: Value = serde_json::from_str(line).map_err(|e| format!("labels.jsonl: {e}"))?;
         let stratum = r["stratum"].as_str().unwrap_or("");
@@ -205,9 +201,9 @@ fn cc_truth(neg: &str) -> Result<PyValue, String> {
         };
         let start = r["start"].as_i64().ok_or("a label row without start")?;
         let mut row = vec![
-            kv("s", from_json(&r["start"])?),
-            kv("e", from_json(&r["end"])?),
-            kv("b", from_json(&r["bytes"])?),
+            kv("s", r["start"].clone()),
+            kv("e", r["end"].clone()),
+            kv("b", r["bytes"].clone()),
             kv("stratum", s(stratum)),
             kv("label", s(&label)),
         ];
@@ -217,10 +213,10 @@ fn cc_truth(neg: &str) -> Result<PyValue, String> {
                 .get("version_if_known")
                 .filter(|v| v.as_str().is_some_and(|x| !x.is_empty()));
             let version = match known {
-                Some(v) => from_json(v)?,
+                Some(v) => v.clone(),
                 None => opt_s(specs.get(pkg).map(String::as_str)),
             };
-            row.push(kv("pkg", from_json(&r["pkg"])?));
+            row.push(kv("pkg", r["pkg"].clone()));
             row.push(kv("version", version));
         }
         rows.push((start, dict(row)));
@@ -229,18 +225,18 @@ fn cc_truth(neg: &str) -> Result<PyValue, String> {
     Ok(dict(vec![
         kv("schema", s("exp096-truth/1")),
         kv("method", s("sample")),
-        kv("strata", from_json(&meta["strata"])?),
-        kv("seed", from_json(&meta["seed"])?),
-        kv("populationUnits", from_json(&meta["populationUnits"])?),
-        kv("populationBytes", from_json(&meta["populationBytes"])?),
+        kv("strata", meta["strata"].clone()),
+        kv("seed", meta["seed"].clone()),
+        kv("populationUnits", meta["populationUnits"].clone()),
+        kv("populationBytes", meta["populationBytes"].clone()),
         kv(
             "rows",
-            PyValue::List(rows.into_iter().map(|r| r.1).collect()),
+            Value::Array(rows.into_iter().map(|r| r.1).collect()),
         ),
     ]))
 }
 
-fn build_truth(p: &Planned) -> Result<PyValue, String> {
+fn build_truth(p: &Planned) -> Result<Value, String> {
     match &p.how {
         How::Cc { neg } => cc_truth(neg),
         how => {
@@ -278,7 +274,7 @@ pub fn freeze(plan: Plan, data: &Path) -> Result<Frozen, String> {
             .iter()
             .find(|(k, _)| k == "id")
             .and_then(|(_, v)| match v {
-                PyValue::Str(x) => Some(x.clone()),
+                Value::String(x) => Some(x.clone()),
                 _ => None,
             })
             .ok_or("a planned entry without an id")?;
@@ -321,9 +317,9 @@ pub fn freeze(plan: Plan, data: &Path) -> Result<Frozen, String> {
     }
     let n = entries.len();
     let mut head = plan.head;
-    head.push(kv("entries", PyValue::List(entries)));
+    head.push(kv("entries", Value::Array(entries)));
     Ok(Frozen {
-        manifest: crate::json::py_text(&dict(head), true),
+        manifest: crate::json::frozen::identity_text(&dict(head)),
         entries: n,
     })
 }
@@ -417,8 +413,8 @@ fn kind_plan(corpus: &str, kind: &str) -> Result<Plan, String> {
                 kv("builtWith", s(kind)),
                 kv("target", s("node")),
                 kv("appPackage", s(&app)),
-                kv("kind", from_json(&a["kind"])?),
-                kv("stratum", from_json(&a["stratum"])?),
+                kv("kind", a["kind"].clone()),
+                kv("stratum", a["stratum"].clone()),
                 kv("description", s(&format!("exp181 app {id}: {desc}"))),
             ],
             files: vec![("bundle", js.clone()), ("map", format!("{js}.map"))],
@@ -432,7 +428,7 @@ fn kind_plan(corpus: &str, kind: &str) -> Result<Plan, String> {
         head: vec![
             kv("schema", s("exp096-corpus/1")),
             kv("corpus", s(corpus)),
-            kv("frozen", PyValue::Bool(true)),
+            kv("frozen", Value::Bool(true)),
             kv(
                 "note",
                 s(&format!(
@@ -478,8 +474,8 @@ fn bun_plan(corpus: &str) -> Result<Plan, String> {
                     kv("builtWith", s("bun")),
                     kv("target", s(t)),
                     kv("appPackage", s(&app)),
-                    kv("kind", from_json(&a["kind"])?),
-                    kv("stratum", from_json(&a["stratum"])?),
+                    kv("kind", a["kind"].clone()),
+                    kv("stratum", a["stratum"].clone()),
                     kv(
                         "description",
                         s(&format!(
@@ -499,7 +495,7 @@ fn bun_plan(corpus: &str) -> Result<Plan, String> {
         head: vec![
             kv("schema", s("exp096-corpus/1")),
             kv("corpus", s(corpus)),
-            kv("frozen", PyValue::Bool(true)),
+            kv("frozen", Value::Bool(true)),
             kv("note", s(note)),
         ],
         entries,
@@ -512,7 +508,7 @@ fn cc_plan() -> Plan {
         head: vec![
             kv("schema", s("exp096-corpus/1")),
             kv("corpus", s("cc")),
-            kv("frozen", PyValue::Bool(true)),
+            kv("frozen", Value::Bool(true)),
             kv(
                 "note",
                 s(

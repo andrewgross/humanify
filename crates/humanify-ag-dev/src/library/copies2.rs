@@ -20,12 +20,12 @@ use super::corpus::{Corpus, read_map};
 use super::counter::Counter;
 use super::families::Families;
 use super::index::{Print, Unit, greedy_cover, hash_key};
-use super::py::{compact, dict, flt, int, kv, round_n, s};
 use super::pypath;
 use super::pyre::is_word;
 use super::truth::{self, Audit, AuditLayers, Label, NOT_LIBRARY};
+use super::value::{dict, flt, int, kv, round_n, s};
 use crate::committed::library::CorpusEntry;
-use crate::json::py::PyValue;
+use crate::json::frozen::compact;
 
 pub const SCHEMA: &str = "exp129-copies/2";
 const COVER: f64 = 0.5;
@@ -303,7 +303,7 @@ fn py_str(v: Option<&Value>) -> String {
         Some(Value::Bool(true)) => "True".into(),
         Some(Value::Bool(false)) => "False".into(),
         Some(Value::Number(n)) if n.is_i64() || n.is_u64() => n.to_string(),
-        Some(Value::Number(n)) => crate::json::py::float_repr(n.as_f64().unwrap_or(f64::NAN)),
+        Some(Value::Number(n)) => crate::json::frozen::float_text(n.as_f64().unwrap_or(f64::NAN)),
         Some(other) => other.to_string(),
     }
 }
@@ -544,7 +544,7 @@ fn entry_copies(
     entry: &CorpusEntry,
     labels: &[String],
     ctx: &Ctx,
-) -> Result<(PyValue, Counter<String>), String> {
+) -> Result<(Value, Counter<String>), String> {
     let mut rows: Vec<(i64, i64, String, String, String, f64)> = Vec::new();
     let mut stats: Counter<String> = Counter::new();
     if let Some(units) = entry_units(corpus, labels, entry)? {
@@ -673,10 +673,10 @@ fn entry_copies(
             .cmp(&(b.0, b.1, &b.2, &b.3, &b.4))
             .then(a.5.total_cmp(&b.5))
     });
-    let ranges = PyValue::List(
+    let ranges = Value::Array(
         rows.into_iter()
             .map(|r| {
-                PyValue::List(vec![
+                Value::Array(vec![
                     int(r.0),
                     int(r.1),
                     s(&r.2),
@@ -707,11 +707,7 @@ pub fn build(
     ixs: &[PathBuf],
     out: &Path,
 ) -> Result<(BTreeMap<String, String>, String), String> {
-    let entries: Vec<&CorpusEntry> = corpus
-        .entries()
-        .iter()
-        .filter(|e| e.truth.method == "sourcemap")
-        .collect();
+    let entries = super::layers::mapped_entries(corpus);
     // step 1: every print hash the corpus's judged units hold
     let per_entry =
         humanify_ag_core::par::map_ordered(&entries, |e| -> Result<HashSet<u64>, String> {
@@ -754,11 +750,15 @@ pub fn build(
         for (k, v) in stats.items() {
             tot.add(k.clone(), v);
         }
-        let p = out.join("truth").join(format!("{}.copies2.json.gz", e.id));
-        super::gz::write_gz(&p, compact(&doc).as_bytes())?;
-        shas.insert(e.id.clone(), super::corpus::sha256_file(&p)?);
+        super::layers::write_entry(
+            out,
+            crate::committed::library::LayerKind::Copies2,
+            &e.id,
+            &compact(&doc),
+            &mut shas,
+        )?;
     }
-    let table_names: Vec<PyValue> = tables
+    let table_names: Vec<Value> = tables
         .paths
         .iter()
         .map(|t| s(&pypath::relpath(t, &pypath::dirname(&pypath::dirname(t)))))
@@ -777,7 +777,7 @@ pub fn build(
                     .collect(),
             ),
         ),
-        kv("tables", PyValue::List(table_names)),
+        kv("tables", Value::Array(table_names)),
         kv("cover", flt(COVER)),
         kv("minNodes", int(MIN_NODES)),
         kv("maxFamilies", int(MAX_FAMILIES as i64)),
@@ -786,12 +786,9 @@ pub fn build(
             "bytes",
             dict(tot.items().map(|(k, v)| (k.clone(), int(v))).collect()),
         ),
-        kv(
-            "entries",
-            dict(shas.iter().map(|(k, v)| (k.clone(), s(v))).collect()),
-        ),
+        kv("entries", super::layers::entries_block(&shas)),
     ]);
-    Ok((shas, crate::json::py_text(&man, true)))
+    Ok((shas, crate::json::frozen::identity_text(&man)))
 }
 
 #[cfg(test)]
