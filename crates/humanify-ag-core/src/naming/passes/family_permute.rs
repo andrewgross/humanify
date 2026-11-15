@@ -232,13 +232,37 @@ fn wrapper_scope(
         .find(|&s| view.scope(s).node == node.id())
 }
 
+/// Why the family permute did not run (the caller ships its input).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PermuteError {
+    /// The prior text does not parse: the parser's first diagnostic.
+    PriorParse(String),
+    /// The text does not parse: the parser's first diagnostic.
+    Parse(String),
+    /// A member's declaring statement is not in the ESTree JSON.
+    Absent { start: u64, end: u64 },
+}
+
+impl std::fmt::Display for PermuteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PriorParse(e) => write!(f, "prior text does not parse: {e}"),
+            Self::Parse(e) => write!(f, "text does not parse: {e}"),
+            Self::Absent { start, end } => write!(
+                f,
+                "declaring statement {start}..{end} is absent from the estree json"
+            ),
+        }
+    }
+}
+
 /// `collectMembers`: the wrapper scope's bindings, then the program's, each
 /// once, with their declaring statement's hash and masked contexts.
 fn collect_members(
     semantic: &Semantic<'_>,
     state: &RenameState,
     layout: BundleLayout,
-) -> Result<Vec<MemberInfo>, String> {
+) -> Result<Vec<MemberInfo>, PermuteError> {
     let text = semantic.source_text();
     let lines: Vec<&str> = text.split('\n').collect();
     let diff_lines = DiffLines::new(text);
@@ -275,10 +299,10 @@ fn collect_members(
     let mut spans: Vec<(u64, u64)> = wanted.into_iter().collect();
     spans.sort_unstable();
     if let Some(missing) = spans.iter().find(|k| !index.contains_key(*k)) {
-        return Err(format!(
-            "declaring statement {}..{} is absent from the estree json",
-            missing.0, missing.1
-        ));
+        return Err(PermuteError::Absent {
+            start: missing.0,
+            end: missing.1,
+        });
     }
     let hashes = crate::par::map_ordered(&spans, |k| statement_hash(index[k]));
     let hash_of: HashMap<(u64, u64), String> = spans.into_iter().zip(hashes).collect();
@@ -495,7 +519,7 @@ pub struct FamilyPermuteOutcome {
 /// The prior text's members by structural hash — depends on the prior
 /// alone, so it is built beside the naming era
 /// ([`PriorMembers::of`]) instead of after it.
-pub struct PriorMembers(Result<HashMap<String, Vec<MemberInfo>>, String>);
+pub struct PriorMembers(Result<HashMap<String, Vec<MemberInfo>>, PermuteError>);
 
 impl PriorMembers {
     pub fn of(prior_text: &str, profile: NameProfile, layout: BundleLayout) -> PriorMembers {
@@ -507,11 +531,11 @@ fn prior_by_hash(
     prior_text: &str,
     profile: NameProfile,
     layout: BundleLayout,
-) -> Result<HashMap<String, Vec<MemberInfo>>, String> {
+) -> Result<HashMap<String, Vec<MemberInfo>>, PermuteError> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, prior_text);
     if !ingest.errors.is_empty() {
-        return Err(format!("prior text does not parse: {}", ingest.errors[0]));
+        return Err(PermuteError::PriorParse(ingest.errors[0].clone()));
     }
     let semantic = ingest.semantic();
     let state =
@@ -529,7 +553,7 @@ pub fn run_family_permute(
     eligible: &Eligibility,
     profile: NameProfile,
     layout: BundleLayout,
-) -> Result<FamilyPermuteOutcome, String> {
+) -> Result<FamilyPermuteOutcome, PermuteError> {
     let ph = crate::profiling::phase("permute:prior-by-hash");
     let prior = PriorMembers::of(prior_text, profile, layout);
     drop(ph);
@@ -544,13 +568,13 @@ pub fn run_family_permute_with(
     eligible: &Eligibility,
     profile: NameProfile,
     layout: BundleLayout,
-) -> Result<FamilyPermuteOutcome, String> {
+) -> Result<FamilyPermuteOutcome, PermuteError> {
     let prior = prior.0?;
     let ph = crate::profiling::phase("permute:fresh-members");
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
     if !ingest.errors.is_empty() {
-        return Err(format!("text does not parse: {}", ingest.errors[0]));
+        return Err(PermuteError::Parse(ingest.errors[0].clone()));
     }
     let semantic = ingest.semantic();
     let mut state =

@@ -25,7 +25,8 @@ use super::library::{LibraryOutcome, run_library_prefix_pass};
 use crate::artifact_dump::DispatchLog;
 use crate::graph::UnifiedGraph;
 use crate::libdetect::function_carry::{
-    LibraryClassification, LibraryFunctionKey, classify_library_functions, library_function_rows,
+    CarryError, LibraryClassification, LibraryFunctionKey, classify_library_functions,
+    library_function_rows,
 };
 use crate::matching::cascade::ResolutionStats;
 use crate::modules::soundness::collect_eval_with_taint;
@@ -45,7 +46,9 @@ use crate::prior::MatchStage;
 use crate::rename::eligibility::Eligibility;
 use crate::rename::transfer::carry::{MatcherCarry, PriorCarry, build_prior_match_map};
 use crate::rename::transfer::rows::Rows;
-use crate::rename::transfer::{PreFreeze, PriorCounts, TransferStats, pre_transfer_states};
+use crate::rename::transfer::{
+    PreFreeze, PriorCounts, TransferError, TransferStats, pre_transfer_states,
+};
 use crate::rename::validated::{RenameClaimStats, RenameState};
 use crate::trail::{Anchor, StrategyTrail};
 use crate::twins::gates::PrivateRenameSet;
@@ -344,13 +347,49 @@ struct WaveStart {
     lazy_init_helpers: std::collections::HashSet<String>,
 }
 
+/// Why a naming era could not be built.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EraError {
+    /// The fresh text does not parse (the side parser's message).
+    Parse(String),
+    /// The library classification failed.
+    Carry(CarryError),
+    /// Carrying the prior version's names failed.
+    Transfer(TransferError),
+    /// A close-matched prior function has no recorded span.
+    CloseNoSpan { prior_id: String },
+}
+
+impl std::fmt::Display for EraError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse(e) => f.write_str(e),
+            Self::Carry(e) => e.fmt(f),
+            Self::Transfer(e) => e.fmt(f),
+            Self::CloseNoSpan { prior_id } => write!(f, "close prior {prior_id} has no span"),
+        }
+    }
+}
+
+impl From<CarryError> for EraError {
+    fn from(e: CarryError) -> Self {
+        Self::Carry(e)
+    }
+}
+
+impl From<TransferError> for EraError {
+    fn from(e: TransferError) -> Self {
+        Self::Transfer(e)
+    }
+}
+
 /// The era over a prior-version match stage.
 pub fn prior_era<P: NameProvider>(
     stage: &MatchStage<'_, '_>,
     opts: &EraOptions<'_>,
     provider: &P,
     log: &mut DispatchLog,
-) -> Result<NamingEra, String> {
+) -> Result<NamingEra, EraError> {
     let semantic = stage.fresh.ingest.semantic();
     let graph = stage.fresh.graph;
     // The claimed regions must be planned BEFORE the transfer: its moved
@@ -500,9 +539,10 @@ pub fn fresh_era<P: NameProvider>(
     opts: &EraOptions<'_>,
     provider: &P,
     log: &mut DispatchLog,
-) -> Result<NamingEra, String> {
+) -> Result<NamingEra, EraError> {
     let allocator = Allocator::default();
-    let ingest = crate::prior::parse_side(&allocator, fresh, "input.js")?;
+    let ingest =
+        crate::prior::parse_side(&allocator, fresh, "input.js").map_err(EraError::Parse)?;
     let json = crate::ingest::program_estree_json(ingest.program);
     let parts = crate::prior::build_side_parts(
         &ingest,
@@ -1211,7 +1251,7 @@ fn statement_of_span(body_spans: &[(u32, u32)], span: oxc_span::Span) -> Option<
 fn close_contexts(
     stage: &crate::prior::MatchStage<'_, '_>,
     close_prior: &[Option<String>],
-) -> Result<Vec<Option<CloseContext>>, String> {
+) -> Result<Vec<Option<CloseContext>>, EraError> {
     let prior_semantic = stage.prior.ingest.semantic();
     let prior_view = TextView::build(prior_semantic);
     let ident_index = identifier_index(prior_semantic);
@@ -1242,7 +1282,9 @@ fn close_contexts(
         };
         let span = *prior_spans
             .get(prior_id)
-            .ok_or_else(|| format!("close prior {prior_id} has no span"))?;
+            .ok_or_else(|| EraError::CloseNoSpan {
+                prior_id: prior_id.clone(),
+            })?;
         let prior_code = prior_view.pretty(span, &[], true);
         let prior_names = match prior_fn_by_span.get(&(span.start, span.end)) {
             Some(&pi) => collect_prior_names(

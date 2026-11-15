@@ -2188,9 +2188,9 @@ const NAMES_BUNDLE: &str = concat!(
 /// the index's whole-module answers live.
 /// The error string of a run that should have refused (the outcome has no
 /// Debug, so `unwrap_err` is out).
-fn refuse(r: Result<crate::unpack::bun::BunUnpackOutcome, String>) -> String {
+fn refuse(r: Result<crate::unpack::bun::BunUnpackOutcome, crate::unpack::bun::BunError>) -> String {
     match r {
-        Err(e) => e,
+        Err(e) => e.to_string(),
         Ok(_) => panic!("the run should have refused"),
     }
 }

@@ -141,7 +141,7 @@ pub(super) fn build_import_aliases(
     files: &[String],
     scope: &ImportScope,
     prior: Option<&PriorImportAliases>,
-) -> Result<ImportAliases, String> {
+) -> Result<ImportAliases, super::cjs::EmitError> {
     let empty = HashSet::new();
     let mut candidates: HashMap<usize, Vec<String>> = HashMap::new();
     let mut out = ImportAliases::new();
@@ -173,10 +173,10 @@ pub(super) fn build_import_aliases(
             pending = chooser.rung(pending, |m| candidates[&m].get(tier).cloned());
         }
         if let Some(&m) = pending.first() {
-            return Err(format!(
-                "runnable emit: no free namespace variable for {} in {}",
-                files[m], files[importer]
-            ));
+            return Err(super::cjs::EmitError::NoNamespaceVariable {
+                module: files[m].clone(),
+                importer: files[importer].clone(),
+            });
         }
         out.insert(importer, chooser.chosen);
     }

@@ -26,7 +26,7 @@ pub mod transform;
 
 use helpers::helper_declaration;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
@@ -34,10 +34,12 @@ use oxc_ast::ast::VariableDeclarationKind;
 
 use super::relink::parse_or_err;
 use super::scaffold::{js_files_under, read_utf8};
+use crate::error::{FileError, FileOp};
+use crate::format::FormatError;
 use crate::format::ast::{Kind, Tree};
 use crate::format::convert::Converter;
 use crate::format::printer::{Mode, Printer};
-use crate::ingest::Ingest;
+use crate::ingest::{Ingest, ParseError};
 use crate::rename::validated::scopes::BabelScopes;
 
 /// `/\busing\b/` (ASCII word boundaries, as a non-unicode JS regex).
@@ -56,6 +58,80 @@ fn has_using_token(code: &str) -> bool {
         from = at + 1;
     }
     false
+}
+
+/// Why the `using` desugar refused a file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum UsingError {
+    /// The file does not parse.
+    Parse(ParseError),
+    /// The formatter's converter refused the file.
+    Format(FormatError),
+    /// An input the port refuses rather than guess at.
+    Refused(&'static str),
+    /// Two splices overlap, or one falls outside the text.
+    OverlappingSplice { at: usize },
+    /// A program-scope binding shadows a global the helpers read.
+    ShadowedGlobal { name: &'static str },
+    /// A helper the desugar does not carry.
+    UnknownHelper { name: String },
+    /// A carried helper's source does not parse.
+    HelperParse { name: String },
+}
+
+impl std::fmt::Display for UsingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse(e) => e.fmt(f),
+            Self::Format(e) => e.fmt(f),
+            Self::Refused(why) => f.write_str(why),
+            Self::OverlappingSplice { at } => {
+                write!(f, "using desugar: overlapping splice at {at}")
+            }
+            Self::ShadowedGlobal { name } => write!(
+                f,
+                "using desugar: a program-scope binding shadows helper global {name}"
+            ),
+            Self::UnknownHelper { name } => write!(f, "unknown Babel helper {name}"),
+            Self::HelperParse { name } => write!(f, "helper {name} does not parse"),
+        }
+    }
+}
+
+impl From<ParseError> for UsingError {
+    fn from(e: ParseError) -> Self {
+        Self::Parse(e)
+    }
+}
+
+impl From<FormatError> for UsingError {
+    fn from(e: FormatError) -> Self {
+        Self::Format(e)
+    }
+}
+
+/// Why desugaring an output tree failed.
+#[derive(Debug)]
+pub enum UsingTreeError {
+    /// Listing, reading or writing a file failed.
+    File(FileError),
+    /// The desugar refused one file.
+    InFile { path: PathBuf, source: UsingError },
+}
+
+impl std::fmt::Display for UsingTreeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::File(e) => e.fmt(f),
+            Self::InFile { path, source } => write!(f, "{}: {source}", path.display()),
+        }
+    }
+}
+
+impl From<FileError> for UsingTreeError {
+    fn from(e: FileError) -> Self {
+        Self::File(e)
+    }
 }
 
 /// `declaresUsing(ast)`.
@@ -84,9 +160,11 @@ const HELPER_GLOBALS: [&str; 6] = [
 /// The inputs the port refuses rather than guess at (each fails the
 /// finishing stage loudly, as a Babel throw would). Comments are kept:
 /// the splices never move them.
-fn refuse(ingest: &Ingest<'_>, code: &str) -> Result<(), String> {
+fn refuse(ingest: &Ingest<'_>, code: &str) -> Result<(), UsingError> {
     if code.contains("_usingCtx") || code.contains("_setFunctionName") {
-        return Err("using desugar: an identifier spelled like a generated uid".into());
+        return Err(UsingError::Refused(
+            "using desugar: an identifier spelled like a generated uid",
+        ));
     }
     let scopes = BabelScopes::build(ingest.semantic());
     let program = scopes.program_scope();
@@ -95,9 +173,7 @@ fn refuse(ingest: &Ingest<'_>, code: &str) -> Result<(), String> {
             .iter()
             .any(|(n, _)| n == name)
         {
-            return Err(format!(
-                "using desugar: a program-scope binding shadows helper global {name}"
-            ));
+            return Err(UsingError::ShadowedGlobal { name });
         }
     }
     Ok(())
@@ -107,14 +183,14 @@ fn refuse(ingest: &Ingest<'_>, code: &str) -> Result<(), String> {
 /// with NO plugins: parse, then print — the printer the desugar prints
 /// through, exercised alone by the unit tests.
 #[cfg(test)]
-pub(crate) fn print_retaining_lines(code: &str) -> Result<String, String> {
+pub(crate) fn print_retaining_lines(code: &str) -> Result<String, UsingError> {
     let allocator = Allocator::default();
     let ingest = parse_or_err(&allocator, code)?;
     if !ingest.program.comments.is_empty() {
-        return Err("comments are not ported".into());
+        return Err(UsingError::Refused("comments are not ported"));
     }
     if ingest.program.source_type.is_module() {
-        return Err("module source (not a desugar input)".into());
+        return Err(UsingError::Refused("module source (not a desugar input)"));
     }
     let mut converter = Converter::new(code);
     let program = converter.program(ingest.program)?;
@@ -124,7 +200,7 @@ pub(crate) fn print_retaining_lines(code: &str) -> Result<String, String> {
 /// The helpers' declarations (`addHelper` order; Babel unshifts each, so
 /// the last added comes first), printed as Babel prints them: compact, on
 /// one line.
-fn helpers_text(tree: &mut Tree, helpers: &[(&'static str, String)]) -> Result<String, String> {
+fn helpers_text(tree: &mut Tree, helpers: &[(&'static str, String)]) -> Result<String, UsingError> {
     let mut body = Vec::new();
     for (name, uid) in helpers {
         body.insert(0, helper_declaration(tree, name, uid)?);
@@ -145,7 +221,7 @@ fn helpers_text(tree: &mut Tree, helpers: &[(&'static str, String)]) -> Result<S
 /// of each block's braces, `const` and the context call on each `using`
 /// statement. Nothing else is reprinted, so a file that starts or stops
 /// declaring with `using` changes only those lines.
-pub fn desugar_using(code: &str) -> Result<Option<String>, String> {
+pub fn desugar_using(code: &str) -> Result<Option<String>, UsingError> {
     if !has_using_token(code) {
         return Ok(None);
     }
@@ -156,7 +232,7 @@ pub fn desugar_using(code: &str) -> Result<Option<String>, String> {
     }
     refuse(&ingest, code)?;
     if ingest.program.source_type.is_module() {
-        return Err("module source (not a desugar input)".into());
+        return Err(UsingError::Refused("module source (not a desugar input)"));
     }
     let mut converter = Converter::new(code);
     let program = converter.program(ingest.program)?;
@@ -172,15 +248,18 @@ pub fn desugar_using(code: &str) -> Result<Option<String>, String> {
 /// `desugarUsingInTree(outputDir)`: the number of files rewritten.
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
-pub fn desugar_using_in_tree(output_dir: &Path) -> Result<usize, String> {
+pub fn desugar_using_in_tree(output_dir: &Path) -> Result<usize, UsingTreeError> {
     let mut transformed = 0;
     for file in js_files_under(output_dir)? {
         let code = read_utf8(&file)?;
-        let Some(out) = desugar_using(&code).map_err(|e| format!("{}: {e}", file.display()))?
+        let Some(out) = desugar_using(&code).map_err(|source| UsingTreeError::InFile {
+            path: file.clone(),
+            source,
+        })?
         else {
             continue;
         };
-        std::fs::write(&file, out).map_err(|e| format!("write {}: {e}", file.display()))?;
+        std::fs::write(&file, out).map_err(FileError::at(FileOp::Write, &file))?;
         transformed += 1;
     }
     Ok(transformed)

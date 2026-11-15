@@ -392,9 +392,15 @@ fn the_input_bundle_gate_reads_the_original_text() {
     // (the WP1.5 negative) — the same ≥50 threshold, measured on the
     // input.
     let err = original_bundle_binding_count("var a=1;console.log(a);").unwrap_err();
-    assert!(err.contains("no recognizable bundle wrapper"), "{err}");
+    assert!(
+        err.to_string().contains("no recognizable bundle wrapper"),
+        "{err}"
+    );
     let err = original_bundle_binding_count("(function(){var b=1;return b;})();").unwrap_err();
-    assert!(err.contains("no recognizable bundle wrapper"), "{err}");
+    assert!(
+        err.to_string().contains("no recognizable bundle wrapper"),
+        "{err}"
+    );
 }
 
 #[test]

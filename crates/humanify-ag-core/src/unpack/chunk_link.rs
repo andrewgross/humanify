@@ -57,10 +57,12 @@
 mod analyse;
 mod embedded;
 mod emit;
+mod error;
 mod graph;
 mod names;
 
 pub use embedded::{EMBEDDED_DIR, EmbeddedFile};
+pub use error::{DecodeError, LinkError};
 
 use std::path::Path;
 
@@ -149,7 +151,7 @@ fn sibling_specifiers(text: &str) -> Vec<&str> {
 }
 
 /// Link the layout whose entry is `entry` (see the module doc).
-pub fn link(entry: &Path) -> Result<(String, LinkReport), String> {
+pub fn link(entry: &Path) -> Result<(String, LinkReport), LinkError> {
     let mut loader = Loader::new(entry);
     let mut chunks: Vec<Chunk> = Vec::new();
     while let Some(path) = loader.queue.get(chunks.len()).cloned() {

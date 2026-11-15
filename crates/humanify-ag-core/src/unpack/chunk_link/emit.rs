@@ -3,6 +3,7 @@
 //! chunk's imports and exports gone and every name its linked one.
 
 use super::analyse::{Chunk, Declarator, Edit, Imported, Spec, Stmt, StmtKind};
+use super::error::LinkError;
 use super::graph::{Order, Placement, Target, resolve_export, resolve_sym};
 use super::names::Names;
 
@@ -50,7 +51,7 @@ fn render(text: &str, range: (usize, usize), edits: &[Edit]) -> String {
 /// The program: pragma, wrapper, the entry's header comments, the
 /// `__esm` helper when any chunk has an init, every chunk, the wrapper's
 /// close.
-pub(super) fn program(plan: &Plan<'_>) -> Result<String, String> {
+pub(super) fn program(plan: &Plan<'_>) -> Result<String, LinkError> {
     let entry = &plan.chunks[0];
     let first_line = entry.text.lines().next().unwrap_or("");
     let first_stmt = entry
@@ -84,7 +85,7 @@ pub(super) fn program(plan: &Plan<'_>) -> Result<String, String> {
 
 /// The edits that rename a chunk's bindings to their linked names and
 /// replace its lazy loads.
-fn edits(plan: &Plan<'_>, c: usize) -> Result<Vec<Edit>, String> {
+fn edits(plan: &Plan<'_>, c: usize) -> Result<Vec<Edit>, LinkError> {
     let chunk = &plan.chunks[c];
     let removed: Vec<(u32, u32)> = chunk
         .stmts
@@ -141,11 +142,10 @@ fn edits(plan: &Plan<'_>, c: usize) -> Result<Vec<Edit>, String> {
     out.dedup();
     let out = drop_require_aliases(plan, c, out);
     if let Some(w) = out.windows(2).find(|w| w[0].end > w[1].start) {
-        return Err(format!(
-            "{}: overlapping edits at {}",
-            chunk.path.display(),
-            w[1].start
-        ));
+        return Err(LinkError::OverlappingEdits {
+            path: chunk.path.clone(),
+            at: w[1].start,
+        });
     }
     Ok(out)
 }
@@ -214,7 +214,7 @@ fn lazy_load(plan: &Plan<'_>, target: usize, sync: bool) -> String {
 /// then its init: the inits of the lazy chunks it imports, its external
 /// loads, its moved statements (ESM: a module's imports are evaluated
 /// before its body).
-fn chunk(plan: &Plan<'_>, c: usize) -> Result<String, String> {
+fn chunk(plan: &Plan<'_>, c: usize) -> Result<String, LinkError> {
     let ch = &plan.chunks[c];
     let edits = edits(plan, c)?;
     let mut top = String::new();
@@ -293,7 +293,7 @@ fn statement(
     st: &Stmt,
     out: &Out<'_>,
     (top, init): (&mut String, &mut String),
-) -> Result<(), String> {
+) -> Result<(), LinkError> {
     let moved = plan.placement.moved[c][i];
     let name = |s| plan.names.name(Target::Sym(c, s)).to_string();
     match &st.kind {
@@ -452,7 +452,7 @@ fn lazy_loads(declared: &[String], loads: &[String]) -> String {
 
 /// A chunk's namespace object, Bun's way: `var ns={};__export(ns,{name:
 /// ()=>binding,…})` — a live getter per export.
-fn namespace(plan: &Plan<'_>, c: usize, ns: &str) -> Result<String, String> {
+fn namespace(plan: &Plan<'_>, c: usize, ns: &str) -> Result<String, LinkError> {
     let mut props = Vec::new();
     for (name, _) in &plan.chunks[c].exports {
         let t = resolve_export(plan.chunks, c, &Imported::Name(name.clone()))?;

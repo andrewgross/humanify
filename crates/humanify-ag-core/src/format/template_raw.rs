@@ -71,8 +71,18 @@ fn raw_from_value(value: &str) -> String {
     out
 }
 
-/// The quasi's recomputed `cooked`, or Err("Invalid raw").
-pub fn template_element_cooked(raw: &str) -> Result<Option<String>, String> {
+/// A raw that cannot be a template quasi (an unescaped backtick or `${`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InvalidRaw;
+
+impl std::fmt::Display for InvalidRaw {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Invalid raw")
+    }
+}
+
+/// The quasi's recomputed `cooked`, or [`InvalidRaw`].
+pub fn template_element_cooked(raw: &str) -> Result<Option<String>, InvalidRaw> {
     let units: Vec<u16> = raw.encode_utf16().collect();
     let mut out: Vec<u16> = Vec::with_capacity(units.len());
     let mut invalid = false;
@@ -89,7 +99,7 @@ pub fn template_element_cooked(raw: &str) -> Result<Option<String>, String> {
         let ch = units[pos];
         let at = |i: usize| units.get(i).copied();
         if ch == 0x60 || (ch == 0x24 && at(pos + 1) == Some(0x7B)) {
-            return Err("Invalid raw".into());
+            return Err(InvalidRaw);
         }
         if ch == 0x5C {
             out.extend_from_slice(&units[chunk..pos]);

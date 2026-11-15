@@ -162,12 +162,12 @@ pub enum InputSplitMethod {
     /// The method a fresh run would choose.
     Chosen(SplitChoice),
     /// A layout the split does not read: the run finishes unsplit.
-    NotSplit(String),
+    NotSplit(crate::modules::wrapper::InputGateError),
     /// The layout is the split's, but the input's statements could not be
     /// read here (the ESTree substrate refuses some raw literals — a lone
     /// surrogate escape, `1e400` — that a run's split never sees once the
     /// unpack has extracted the vendor code holding them).
-    Unmeasured(String),
+    Unmeasured(super::input::SplitInputError),
 }
 
 impl InputSplitMethod {
@@ -175,7 +175,7 @@ impl InputSplitMethod {
     pub fn record(&self) -> humanify_ag_model::stats::SplitMethodStats {
         match self {
             InputSplitMethod::Chosen(choice) => method_record(choice),
-            InputSplitMethod::NotSplit(why) => not_split_record(why),
+            InputSplitMethod::NotSplit(why) => not_split_record(&why.to_string()),
             InputSplitMethod::Unmeasured(why) => unchosen_record(
                 "unmeasured",
                 format!("could not read the bundle's statements: {why}"),

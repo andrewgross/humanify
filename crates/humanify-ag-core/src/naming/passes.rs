@@ -59,6 +59,16 @@ use crate::rename::validated::RenameState;
 use crate::trail::{Anchor, StrategyTrail};
 use census::{MintedCensus, collect_free_references, collect_minted_bindings, summarize_census};
 
+/// The shipped text does not parse: the parser's first diagnostic.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShippedParseError(pub String);
+
+impl std::fmt::Display for ShippedParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "shipped text does not parse: {}", self.0)
+    }
+}
+
 /// The end-of-run census of the shipped text (plugin.ts: after the
 /// permute's traverse-cache clear, so the walk sees a FRESH crawl — scope
 /// maps in registration order under the final names, as a new parse).
@@ -66,11 +76,11 @@ pub fn census_of_text(
     text: &str,
     eligible: &Eligibility,
     profile: NameProfile,
-) -> Result<MintedCensus, String> {
+) -> Result<MintedCensus, ShippedParseError> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
-    if !ingest.errors.is_empty() {
-        return Err(format!("shipped text does not parse: {}", ingest.errors[0]));
+    if let Some(first) = ingest.errors.first() {
+        return Err(ShippedParseError(first.clone()));
     }
     let semantic = ingest.semantic();
     let state =

@@ -33,6 +33,7 @@ pub mod ast;
 pub mod beautify;
 pub mod comments;
 pub mod convert;
+pub mod error;
 pub mod jsesc;
 pub mod printer;
 pub mod scope;
@@ -46,6 +47,7 @@ use crate::libdetect::CommentRegion;
 use crate::libdetect::function_carry::{FunctionLibraryCarry, carry_format_tree};
 
 pub use beautify::Plugins;
+pub use error::FormatError;
 
 /// A planted perturbation (gate red runs only — proves the byte gate can
 /// see each mechanism; never set in the pipeline).
@@ -69,18 +71,34 @@ pub enum Plant {
 impl Plant {
     /// The CLI spelling: `drop:<visitor>`, `requeue-deferred`,
     /// `rust-number-format`.
-    pub fn parse(s: &str) -> Result<Plant, String> {
+    pub fn parse(s: &str) -> Result<Plant, UnknownPlant> {
         if let Some(name) = s.strip_prefix("drop:") {
             return Plugins::bit(name)
                 .map(Plant::DropVisitor)
-                .ok_or_else(|| format!("unknown visitor {name}"));
+                .ok_or_else(|| UnknownPlant::Visitor(name.to_string()));
         }
         match s {
             "requeue-deferred" => Ok(Plant::RequeueDeferred),
             "no-requeue" => Ok(Plant::NoRequeue),
             "no-crawl" => Ok(Plant::NoCrawl),
             "rust-number-format" => Ok(Plant::RustNumberFormat),
-            other => Err(format!("unknown plant {other}")),
+            other => Err(UnknownPlant::Plant(other.to_string())),
+        }
+    }
+}
+
+/// A plant spelling [`Plant::parse`] does not know.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum UnknownPlant {
+    Visitor(String),
+    Plant(String),
+}
+
+impl std::fmt::Display for UnknownPlant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Visitor(name) => write!(f, "unknown visitor {name}"),
+            Self::Plant(name) => write!(f, "unknown plant {name}"),
         }
     }
 }
@@ -126,7 +144,7 @@ pub fn format_file(
     code: &str,
     opts: &FormatOptions,
     regions: &[CommentRegion],
-) -> Result<Formatted, String> {
+) -> Result<Formatted, FormatError> {
     format_file_inner(code, opts, regions, false)
 }
 
@@ -136,7 +154,7 @@ pub fn format_file_with_origins(
     code: &str,
     opts: &FormatOptions,
     regions: &[CommentRegion],
-) -> Result<Formatted, String> {
+) -> Result<Formatted, FormatError> {
     format_file_inner(code, opts, regions, true)
 }
 
@@ -145,16 +163,16 @@ fn format_file_inner(
     opts: &FormatOptions,
     regions: &[CommentRegion],
     origins: bool,
-) -> Result<Formatted, String> {
+) -> Result<Formatted, FormatError> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_module(&allocator, code);
     if let Some(e) = ingest.errors.first() {
-        return Err(format!("parse error: {e}"));
+        return Err(FormatError::Parse(e.to_string()));
     }
     let mut converter = convert::Converter::new(code);
     let root = converter.file(ingest.program)?;
     let mut tree = converter.tree;
-    comments::attach(&mut tree, code, ingest.program, root)?;
+    comments::attach(&mut tree, code, ingest.program, root);
     let licenses = comments::license_comments(&tree);
     let mut plugins = opts.plugins;
     if let Some(Plant::DropVisitor(bit)) = opts.plant {
@@ -226,7 +244,7 @@ fn with_license_header(text: String, licenses: &[String]) -> String {
 
 /// `transformWithPlugins(code, plugins)` with the stage-6 settings: the
 /// formatted text, or the error a Babel throw would be.
-pub fn format(code: &str, opts: &FormatOptions) -> Result<String, String> {
+pub fn format(code: &str, opts: &FormatOptions) -> Result<String, FormatError> {
     format_file(code, opts, &[]).map(|f| f.text)
 }
 

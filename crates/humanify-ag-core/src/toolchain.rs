@@ -502,7 +502,10 @@ impl BundleLayout {
     /// The run's input-bundle gate on the ORIGINAL text (what the unpack
     /// saw): Ok(the container's binding count) when it is a bundled app
     /// under this layout, else why not.
-    pub fn original_bundle_binding_count(self, original: &str) -> Result<usize, String> {
+    pub fn original_bundle_binding_count(
+        self,
+        original: &str,
+    ) -> Result<usize, crate::modules::wrapper::InputGateError> {
         match self {
             BundleLayout::SingleWrapperFunction | BundleLayout::WebpackBootstrap => {
                 crate::modules::wrapper::original_bundle_binding_count(original)

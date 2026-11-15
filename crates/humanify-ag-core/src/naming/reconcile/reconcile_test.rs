@@ -147,7 +147,7 @@ fn the_pre_split_step_diffs_through_the_injected_differ() {
         &[],
     );
     match result {
-        Err((error, _)) => assert_eq!(error, "diff timed out (planted)"),
+        Err((error, _)) => assert_eq!(error.to_string(), "diff timed out (planted)"),
         Ok(_) => panic!("a failing differ must fail the step"),
     }
 }

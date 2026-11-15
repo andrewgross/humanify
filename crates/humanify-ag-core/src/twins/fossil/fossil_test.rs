@@ -250,7 +250,7 @@ fn a_hash_count_mismatch_fails_loud() {
     let (hashes, values) = inventory_of("var a = 1;\nvar b = 2;\n");
     let err = extract_fossil_modules(&values[..1], &hashes).expect_err("the lengths must agree");
     assert!(
-        err.contains("hashes for"),
+        err.to_string().contains("hashes for"),
         "the error names the mismatch: {err}"
     );
 }

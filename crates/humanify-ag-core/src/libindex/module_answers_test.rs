@@ -93,7 +93,7 @@ fn a_missing_modules_file_refuses_loudly() {
     let d = MemoryIndexFiles::default();
     let err = read_module_answers(&d, "s", &keys(&["k1"])).unwrap_err();
     assert!(
-        err.contains("modules.s.jsonl"),
+        err.to_string().contains("modules.s.jsonl"),
         "the refusal names the file it wanted: {err}"
     );
 }

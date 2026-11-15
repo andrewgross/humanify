@@ -19,7 +19,7 @@ use serde_json::Value;
 
 use crate::ingest::{Ingest, program_estree_json};
 use crate::toolchain::BundleLayout;
-use crate::twins::statement_inventory_from_json;
+use crate::twins::{InventoryError, statement_inventory_from_json};
 
 /// The wrapper body, ready for placement.
 #[derive(Debug, Clone)]
@@ -33,19 +33,46 @@ pub struct SplitInput {
     pub hashes: Vec<String>,
 }
 
+/// Why a text gives no split input.
+#[derive(Debug)]
+pub enum SplitInputError {
+    /// The text does not parse, or its statements could not be listed.
+    Inventory(InventoryError),
+    /// The text is not a bundle the split can cut.
+    NotSplittable(&'static str),
+}
+
+impl std::fmt::Display for SplitInputError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Inventory(e) => e.fmt(f),
+            Self::NotSplittable(why) => f.write_str(why),
+        }
+    }
+}
+
+impl From<InventoryError> for SplitInputError {
+    fn from(e: InventoryError) -> Self {
+        Self::Inventory(e)
+    }
+}
+
 /// The prior release's top-level statement TEXTS — prior-version.ts's
 /// `MatcherCarry.statementTexts` (`topLevelStatements(priorGraph)`): the
 /// wrapper body's statements when the wrapper gate passes, else the
 /// program's, each sliced from the text. The wrapper is the one the run's
 /// bundle `layout` finds.
-pub fn top_level_statement_texts(text: &str, layout: BundleLayout) -> Result<Vec<String>, String> {
+pub fn top_level_statement_texts(
+    text: &str,
+    layout: BundleLayout,
+) -> Result<Vec<String>, InventoryError> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, text, "prior.js");
     if !ingest.errors.is_empty() {
-        return Err(format!(
-            "oxc failed to parse the prior text: {} diagnostic(s)",
-            ingest.errors.len()
-        ));
+        return Err(InventoryError::Parse {
+            anchor: "prior",
+            diagnostics: ingest.errors.len(),
+        });
     }
     let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
     let program_json = program_estree_json(ingest.program);
@@ -69,7 +96,7 @@ pub fn top_level_statement_texts(text: &str, layout: BundleLayout) -> Result<Vec
 /// default for every text that has no recorded ORIGINAL (prior releases,
 /// the standalone owners, the tests). The wrapper is the one the run's
 /// bundle `layout` finds.
-pub fn split_input(text: &str, layout: BundleLayout) -> Result<SplitInput, String> {
+pub fn split_input(text: &str, layout: BundleLayout) -> Result<SplitInput, SplitInputError> {
     split_input_with_original_bundle(text, None, layout)
 }
 
@@ -91,14 +118,14 @@ pub fn split_input_with_original_bundle(
     text: &str,
     original_binding_count: Option<usize>,
     layout: BundleLayout,
-) -> Result<SplitInput, String> {
+) -> Result<SplitInput, SplitInputError> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, text, "shipped.js");
     if !ingest.errors.is_empty() {
-        return Err(format!(
-            "oxc failed to parse the shipped text: {} diagnostic(s)",
-            ingest.errors.len()
-        ));
+        return Err(SplitInputError::Inventory(InventoryError::Parse {
+            anchor: "shipped",
+            diagnostics: ingest.errors.len(),
+        }));
     }
     let wrapper = match original_binding_count {
         // The input settled "is this really a bundled app?"; the text at
@@ -107,7 +134,9 @@ pub fn split_input_with_original_bundle(
         Some(_) => layout.recognize_wrapper(ingest.program, ingest.semantic()),
         None => layout.find_wrapper(ingest.program, ingest.semantic()),
     }
-    .ok_or("not stable-splittable: no recognizable bundle wrapper")?;
+    .ok_or(SplitInputError::NotSplittable(
+        "not stable-splittable: no recognizable bundle wrapper",
+    ))?;
     let program_json = program_estree_json(ingest.program);
     let (inventory, body) = statement_inventory_from_json(
         &program_json,
@@ -117,7 +146,9 @@ pub fn split_input_with_original_bundle(
         true,
     )?;
     if body.len() < 2 {
-        return Err("not stable-splittable: fewer than two wrapper statements".into());
+        return Err(SplitInputError::NotSplittable(
+            "not stable-splittable: fewer than two wrapper statements",
+        ));
     }
     Ok(SplitInput {
         body,

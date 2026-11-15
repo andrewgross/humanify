@@ -230,7 +230,7 @@ fn the_same_file_named_twice_is_copied_once() {
 fn a_missing_embedded_file_is_refused() {
     let entry = layout(&[("index.js", reads_text("gone-1.md").as_bytes()), RUNTIME]);
     let err = read_input(&entry).unwrap_err();
-    assert!(err.contains("gone-1.md"), "{err}");
+    assert!(err.to_string().contains("gone-1.md"), "{err}");
 }
 
 #[test]
@@ -244,7 +244,7 @@ fn a_name_that_leaves_the_root_is_refused() {
         ("secret.txt", b"s"),
     ]);
     let err = read_input(&entry).unwrap_err();
-    assert!(err.contains("secret.txt"), "{err}");
+    assert!(err.to_string().contains("secret.txt"), "{err}");
 }
 
 #[test]
@@ -280,7 +280,7 @@ fn a_path_where_dirname_is_rebound_is_refused() {
         CHUNK,
     ]);
     let err = read_input(&entry).unwrap_err();
-    assert!(err.contains("__dirname"), "{err}");
+    assert!(err.to_string().contains("__dirname"), "{err}");
 }
 
 #[test]
@@ -313,5 +313,5 @@ fn a_require_with_more_than_the_name_is_refused() {
         ("db-1.sqlite", b"SQLite format 3\x00"),
     ]);
     let err = read_input(&entry).unwrap_err();
-    assert!(err.contains("db-1.sqlite"), "{err}");
+    assert!(err.to_string().contains("db-1.sqlite"), "{err}");
 }

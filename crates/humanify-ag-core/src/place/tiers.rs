@@ -467,12 +467,23 @@ pub struct TierInput<'a> {
     pub switches: PlacementSwitches,
 }
 
+/// No placement tier claimed a statement (the fallback tier always
+/// does, so this is an invariant failure).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Unclaimed;
+
+impl std::fmt::Display for Unclaimed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("stable split: no placement tier claimed the statement")
+    }
+}
+
 /// `assignWithPrior`: inherit prior assignments; residue follows its
 /// preceding neighbour.
 pub fn assign_with_prior(
     input: &TierInput,
     mut trail: Option<&mut PlacementTrail>,
-) -> Result<(Vec<String>, TierStats), String> {
+) -> Result<(Vec<String>, TierStats), Unclaimed> {
     let body = input.body;
     let names: Vec<Vec<String>> = body.iter().map(declared_names).collect();
     let fresh_texts: Vec<&str> = input
@@ -526,7 +537,7 @@ pub fn assign_with_prior(
         let (tier, file) = PLACEMENT_TIERS
             .iter()
             .find_map(|t| decide(*t, &ctx).map(|f| (*t, f)))
-            .ok_or("stable split: no placement tier claimed the statement")?;
+            .ok_or(Unclaimed)?;
         stats.record(tier);
         if let Some(trail) = trail.as_deref_mut() {
             let home = prior_home(&ctx);

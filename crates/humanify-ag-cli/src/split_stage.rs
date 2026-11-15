@@ -254,7 +254,7 @@ pub fn run_split(
             .original_bundle_binding_count(original)
         {
             Ok(count) => InputGate::Settled(count),
-            Err(why) => return finish_unsplit(code, input, &why, renderer),
+            Err(why) => return finish_unsplit(code, input, &why.to_string(), renderer),
         },
         None => InputGate::TextAtHand,
     };
@@ -389,7 +389,8 @@ fn split_before_commit(
             library: input.library,
             app_modules: input.app_modules,
         },
-    )?;
+    )
+    .map_err(|e| e.to_string())?;
     renderer.message(&format!(
         "Split method: {} — {}",
         method_name(outcome.method.regime),
@@ -509,7 +510,7 @@ fn commit_and_finish(
     for m in &report.messages {
         renderer.message(m);
     }
-    let (relinked, reconciled) = finished.map_err(after)?;
+    let (relinked, reconciled) = finished.map_err(|e| after(e.to_string()))?;
     if let Some(names) = report.library_names.take() {
         post_split.trail = names.trail;
     }

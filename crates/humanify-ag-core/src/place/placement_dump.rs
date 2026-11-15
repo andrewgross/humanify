@@ -3,13 +3,14 @@
 //! placement for the split stage ([`crate::emit::stable_split`]).
 
 use super::assign::cluster::{ClusterNamers, ClusterSizing, assign_clustered};
-use super::assign::fossil::{FossilOptions, MIN_FOLDER_FILES, assign_fossil};
+use super::assign::fossil::{FossilOptions, FossilSplitError, MIN_FOLDER_FILES, assign_fossil};
 use super::assign::namer::{SplitNamer, TreeReviser};
 use super::input::SplitInput;
 use super::ledger::FossilLedgerModule;
 use super::ledger::StableSplitLedger;
 use super::tiers::{
-    PlacementSwitches, PriorCarry, TierInput, TierStats, assign_with_prior, placement_summary,
+    PlacementSwitches, PriorCarry, TierInput, TierStats, Unclaimed, assign_with_prior,
+    placement_summary,
 };
 use super::trail::{PlacementTrail, TrailEntry};
 
@@ -55,6 +56,39 @@ pub struct PlacementGate<'a, 'n> {
     pub app_factories: std::collections::HashSet<usize>,
 }
 
+/// Why a placement regime could not place the bundle.
+#[derive(Debug)]
+pub enum PlaceError {
+    /// The fossil regime failed.
+    Fossil(FossilSplitError),
+    /// The tiers regime was asked for without a prior ledger.
+    NoPriorLedger,
+    /// The prior-carried tiers left a statement unplaced.
+    Unclaimed(Unclaimed),
+}
+
+impl std::fmt::Display for PlaceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Fossil(e) => e.fmt(f),
+            Self::NoPriorLedger => f.write_str("the tiers regime needs --prior-ledger"),
+            Self::Unclaimed(e) => e.fmt(f),
+        }
+    }
+}
+
+impl From<FossilSplitError> for PlaceError {
+    fn from(e: FossilSplitError) -> Self {
+        Self::Fossil(e)
+    }
+}
+
+impl From<Unclaimed> for PlaceError {
+    fn from(e: Unclaimed) -> Self {
+        Self::Unclaimed(e)
+    }
+}
+
 /// What one placement regime decided.
 #[derive(Debug, Default)]
 pub struct Placed {
@@ -78,7 +112,7 @@ pub fn assign_regime(
     gate: PlacementGate<'_, '_>,
     prior: Option<&StableSplitLedger>,
     trail: &mut PlacementTrail,
-) -> Result<Placed, String> {
+) -> Result<Placed, PlaceError> {
     let summary;
     let mut fossil_modules = None;
     let mut tier_stats = TierStats::default();
@@ -142,7 +176,7 @@ pub fn assign_regime(
             assignment
         }
         Regime::Tiers => {
-            let prior = prior.ok_or("the tiers regime needs --prior-ledger")?;
+            let prior = prior.ok_or(PlaceError::NoPriorLedger)?;
             let carry = gate.carry;
             let (assignment, stats) = assign_with_prior(
                 &TierInput {

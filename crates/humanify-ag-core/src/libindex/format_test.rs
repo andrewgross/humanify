@@ -120,7 +120,10 @@ fn the_edge_stamps_split_between_the_shard_rows_and_the_readable_contract() {
     let mut old = manifest_for(&[BUN]);
     old.fingerprints.edges = Some(super::format::LIBRARY_EDGE_ROWS_VERSION.into());
     let err = old.check_compatible().expect_err("an edges/1 index");
-    assert!(err.contains("edges/1") && err.contains("edges/2"), "{err}");
+    assert!(
+        err.to_string().contains("edges/1") && err.to_string().contains("edges/2"),
+        "{err}"
+    );
     assert!(
         super::format::check_manifest_stamps(&serde_json::to_string(&old).unwrap()).is_err(),
         "the stamp check refuses before the parse"
@@ -134,7 +137,7 @@ fn the_names_stamp_is_optional_but_must_match_when_present() {
     // names TABLE format this binary does not read is refused.
     let mut old = manifest_for(&[BUN]);
     old.fingerprints.names = None;
-    assert_eq!(old.check_compatible(), Ok(()));
+    assert!(old.check_compatible().is_ok());
     assert!(
         super::format::check_manifest_stamps(&serde_json::to_string(&old).unwrap()).is_ok(),
         "the stamp check accepts an index without the stamp"
@@ -142,7 +145,10 @@ fn the_names_stamp_is_optional_but_must_match_when_present() {
     let mut newer = manifest_for(&[BUN]);
     newer.fingerprints.names = Some("names/2".into());
     let err = newer.check_compatible().expect_err("a names/2 index");
-    assert!(err.contains("names/1") && err.contains("names/2"), "{err}");
+    assert!(
+        err.to_string().contains("names/1") && err.to_string().contains("names/2"),
+        "{err}"
+    );
     assert!(
         super::format::check_manifest_stamps(&serde_json::to_string(&newer).unwrap()).is_err(),
         "the stamp check refuses before the parse"
@@ -183,9 +189,10 @@ const BUN: &str = "bun:target=bun,format=cjs,minify";
 
 #[test]
 fn a_manifest_built_by_this_binary_is_compatible() {
-    assert_eq!(
-        manifest_for(&[BUN, "esbuild:target=node,format=cjs,minify"]).check_compatible(),
-        Ok(())
+    assert!(
+        manifest_for(&[BUN, "esbuild:target=node,format=cjs,minify"])
+            .check_compatible()
+            .is_ok()
     );
 }
 
@@ -215,8 +222,11 @@ fn every_compatibility_version_is_checked_and_named() {
         let mut m = manifest_for(&[BUN]);
         edit(&mut m);
         let err = m.check_compatible().expect_err(field);
-        assert!(err.contains(field), "{field}: {err}");
-        assert!(err.contains("humanify-ag index build"), "{field}: {err}");
+        assert!(err.to_string().contains(field), "{field}: {err}");
+        assert!(
+            err.to_string().contains("humanify-ag index build"),
+            "{field}: {err}"
+        );
     }
 }
 
@@ -267,22 +277,22 @@ fn an_index_fingerprinted_before_the_identity_transforms_is_refused() {
     let cb64 = r#"{"format":"humanify-library-index/4","fingerprints":{"module":"vendor-content-key/4","literals":"literals/1","units":"units/3","edges":"edges/2","names":"names/1"},"slices":[{"slice":"bun"}]}"#;
     let err = super::format::check_manifest_stamps(cb64).expect_err("v4-era index");
     assert!(
-        err.contains("vendor-content-key/4") && err.contains("units/3"),
+        err.to_string().contains("vendor-content-key/4") && err.to_string().contains("units/3"),
         "{err}"
     );
-    assert!(err.contains("humanify-ag index build"), "{err}");
+    assert!(err.to_string().contains("humanify-ag index build"), "{err}");
     let ahead = cb64
         .replace("vendor-content-key/4", "vendor-content-key/6")
         .replace("units/3", "units/5");
     let err = super::format::check_manifest_stamps(&ahead).expect_err("future index");
     assert!(
-        err.contains("vendor-content-key/6") && err.contains("units/5"),
+        err.to_string().contains("vendor-content-key/6") && err.to_string().contains("units/5"),
         "{err}"
     );
     let ours = cb64
         .replace("vendor-content-key/4", "vendor-content-key/5")
         .replace("units/3", "units/4");
-    assert_eq!(super::format::check_manifest_stamps(&ours), Ok(()));
+    assert!(super::format::check_manifest_stamps(&ours).is_ok());
 }
 
 #[test]
@@ -291,18 +301,15 @@ fn an_older_manifest_is_refused_by_its_stamps_not_a_parse_error() {
     let old = r#"{"format":"humanify-library-index/1","fingerprints":{"module":"vendor-content-key/4","literals":"literals/1","units":"units/2"},"slices":[{"slice":"bun"}]}"#;
     let err = super::format::check_manifest_stamps(old).expect_err("older era");
     assert!(
-        err.contains("humanify-library-index/1") && err.contains("units/2"),
+        err.to_string().contains("humanify-library-index/1") && err.to_string().contains("units/2"),
         "{err}"
     );
-    assert!(err.contains("humanify-ag index build"), "{err}");
+    assert!(err.to_string().contains("humanify-ag index build"), "{err}");
     let mut ours = serde_json::to_value(manifest_for(&[BUN])).unwrap();
-    assert_eq!(
-        super::format::check_manifest_stamps(&ours.to_string()),
-        Ok(())
-    );
+    assert!(super::format::check_manifest_stamps(&ours.to_string()).is_ok());
     ours["fingerprints"]["serializer"] = "x/1".into();
     let err = super::format::check_manifest_stamps(&ours.to_string()).expect_err("unknown");
-    assert!(err.contains("serializer"), "{err}");
+    assert!(err.to_string().contains("serializer"), "{err}");
 }
 
 #[test]
@@ -312,7 +319,8 @@ fn a_format_3_manifest_is_refused() {
     old.fingerprints.edges = None;
     let err = old.check_compatible().expect_err("a /3 index is refused");
     assert!(
-        err.contains("this binary reads humanify-library-index/4"),
+        err.to_string()
+            .contains("this binary reads humanify-library-index/4"),
         "{err}"
     );
     let text = serde_json::to_string(&old).unwrap();

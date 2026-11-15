@@ -10,6 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::analyse::{Chunk, Imported, Spec};
+use super::error::LinkError;
 use super::graph::{Order, Target, resolve_sym};
 
 /// The CommonJS wrapper's parameters (and two names a binding can't take).
@@ -75,7 +76,7 @@ impl Names {
 }
 
 /// Which chunks reference each binding through an import.
-fn importers(chunks: &[Chunk]) -> Result<BTreeMap<Target, BTreeSet<usize>>, String> {
+fn importers(chunks: &[Chunk]) -> Result<BTreeMap<Target, BTreeSet<usize>>, LinkError> {
     let mut out: BTreeMap<Target, BTreeSet<usize>> = BTreeMap::new();
     for (c, chunk) in chunks.iter().enumerate() {
         for s in chunk.syms.iter().filter(|s| s.is_import) {
@@ -92,7 +93,7 @@ pub(super) fn assign(
     order: &Order,
     needs_init: &[bool],
     needs_ns: &[bool],
-) -> Result<Names, String> {
+) -> Result<Names, LinkError> {
     let mut globals = BTreeSet::new();
     let mut taken = BTreeSet::new();
     for c in chunks {
@@ -333,7 +334,9 @@ fn member(name: &str) -> String {
 /// The `var x = import.meta.require` bindings that may become the
 /// wrapper's `require`: every reference to them, in the declaring chunk
 /// and in every chunk that imports them, reads `require` unshadowed.
-fn require_aliases(chunks: &[Chunk]) -> Result<BTreeSet<(usize, oxc_semantic::SymbolId)>, String> {
+fn require_aliases(
+    chunks: &[Chunk],
+) -> Result<BTreeSet<(usize, oxc_semantic::SymbolId)>, LinkError> {
     let mut candidates: BTreeMap<Target, bool> = BTreeMap::new();
     for (c, chunk) in chunks.iter().enumerate() {
         for st in &chunk.stmts {

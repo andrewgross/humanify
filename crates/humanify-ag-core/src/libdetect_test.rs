@@ -25,7 +25,7 @@ fn detect_libraries(
     files: &[UnpackedFile],
 ) -> Result<LibraryDetectionResult, String> {
     let read = |path: &Path| fs::read(path).map(|b| String::from_utf8_lossy(&b).into_owned());
-    crate::libdetect::detect_libraries(detector, files, &read)
+    crate::libdetect::detect_libraries(detector, files, &read).map_err(|e| e.to_string())
 }
 
 struct TempDir(PathBuf);

@@ -20,7 +20,8 @@ use std::collections::BTreeSet;
 use humanify_ag_model::llm::NameProvider;
 
 use crate::artifact_dump::DispatchLog;
-use crate::naming::driver::{NamingConfig, NamingInput, NamingOutcome, run_naming};
+use crate::error::{FileError, FileOp};
+use crate::naming::driver::{NamingConfig, NamingError, NamingInput, NamingOutcome, run_naming};
 
 /// The joined, named bodies of one run: the next release's prior for this
 /// pass, beside `.humanify/humanified.js` (the era's).
@@ -47,7 +48,7 @@ pub struct VendorNaming {
     /// program is dropped and the bodies are named fresh).
     pub prior_used: bool,
     /// Why the driver refused the prior, when it did.
-    pub prior_refusal: Option<String>,
+    pub prior_refusal: Option<NamingError>,
     /// The bodies left as extracted, with why (path order).
     pub skipped: Vec<(String, Skip)>,
     pub outcome: NamingOutcome,
@@ -92,21 +93,44 @@ pub fn join_bodies<'b>(bodies: impl IntoIterator<Item = &'b str>) -> String {
     out
 }
 
+/// Why the named text does not split back into its bodies.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SplitBodiesError {
+    /// The joined text does not parse: the parser's first diagnostic.
+    Parse(String),
+    /// A top-level statement is not an expression statement.
+    NotExpression,
+    /// The text holds a different number of bodies.
+    Count { expected: usize, found: usize },
+}
+
+impl std::fmt::Display for SplitBodiesError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse(e) => write!(f, "the joined bodies do not parse: {e}"),
+            Self::NotExpression => f.write_str("a joined body is not an expression statement"),
+            Self::Count { expected, found } => {
+                write!(f, "{expected} bodies expected, {found} found")
+            }
+        }
+    }
+}
+
 /// The joined text split back into its bodies: each top-level statement's
 /// expression, its parentheses dropped. `n` is the body count the text
 /// must hold — anything else is an error, never a guess.
-pub fn split_bodies(code: &str, n: usize) -> Result<Vec<String>, String> {
+pub fn split_bodies(code: &str, n: usize) -> Result<Vec<String>, SplitBodiesError> {
     use oxc_ast::ast::{Expression, Statement};
     use oxc_span::GetSpan;
     let allocator = oxc_allocator::Allocator::default();
     let ingest = crate::ingest::Ingest::parse(&allocator, code, "vendor-bodies.js");
     if let Some(e) = ingest.errors.first() {
-        return Err(format!("the joined bodies do not parse: {e}"));
+        return Err(SplitBodiesError::Parse(e.clone()));
     }
     let mut out = Vec::with_capacity(n);
     for statement in &ingest.program.body {
         let Statement::ExpressionStatement(s) = statement else {
-            return Err("a joined body is not an expression statement".into());
+            return Err(SplitBodiesError::NotExpression);
         };
         let mut e = &s.expression;
         while let Expression::ParenthesizedExpression(p) = e {
@@ -116,7 +140,10 @@ pub fn split_bodies(code: &str, n: usize) -> Result<Vec<String>, String> {
         out.push(code[span.start as usize..span.end as usize].to_string());
     }
     if out.len() != n {
-        return Err(format!("{} bodies expected, {} found", n, out.len()));
+        return Err(SplitBodiesError::Count {
+            expected: n,
+            found: out.len(),
+        });
     }
     Ok(out)
 }
@@ -139,7 +166,7 @@ pub fn name_vendor_bodies<P: NameProvider>(
     provider: &P,
     differ: &dyn crate::naming::reconcile::hunks::Differ,
     log: &mut DispatchLog,
-) -> Result<Option<VendorNaming>, String> {
+) -> Result<Option<VendorNaming>, NamingError> {
     let mut order: Vec<usize> = (0..bodies.len()).collect();
     order.sort_by(|&a, &b| bodies[a].path.cmp(&bodies[b].path));
     let mut formatted: Vec<(usize, String)> = Vec::new();
@@ -265,15 +292,14 @@ fn has_lone_surrogate_escape(text: &str) -> bool {
 pub fn bodies_of_bridge(
     out_dir: &std::path::Path,
     bridge: &crate::naming::module_names::EraBridge,
-) -> Result<Vec<VendorBody>, String> {
+) -> Result<Vec<VendorBody>, FileError> {
     let mut out = Vec::new();
     for ((start, end), path) in &bridge.factories {
         if !path.starts_with("vendor/") {
             continue;
         }
         let file = out_dir.join(path);
-        let text =
-            std::fs::read_to_string(&file).map_err(|e| format!("read {}: {e}", file.display()))?;
+        let text = std::fs::read_to_string(&file).map_err(FileError::at(FileOp::Read, &file))?;
         out.push(VendorBody {
             path: path.clone(),
             text,
@@ -294,21 +320,20 @@ pub fn write_vendor_naming(
     out_dir: &std::path::Path,
     bodies: &[VendorBody],
     named: &VendorNaming,
-) -> Result<usize, String> {
+) -> Result<usize, FileError> {
     let mut written = 0;
     for (body, text) in bodies.iter().zip(&named.texts) {
         if *text != body.text {
             let file = out_dir.join(&body.path);
-            std::fs::write(&file, text).map_err(|e| format!("write {}: {e}", file.display()))?;
+            std::fs::write(&file, text).map_err(FileError::at(FileOp::Write, &file))?;
             written += 1;
         }
     }
     let joined = out_dir.join(VENDOR_NAMING_SOURCE);
     if let Some(parent) = joined.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(FileError::at(FileOp::Mkdir, parent))?;
     }
-    std::fs::write(&joined, &named.joined)
-        .map_err(|e| format!("write {}: {e}", joined.display()))?;
+    std::fs::write(&joined, &named.joined).map_err(FileError::at(FileOp::Write, &joined))?;
     Ok(written)
 }
 

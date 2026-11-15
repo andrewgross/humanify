@@ -12,12 +12,13 @@ use oxc_allocator::Allocator;
 
 use crate::hash::forms::STATEMENT;
 use crate::ingest::Ingest;
+use crate::modules::wrapper::InputGateError;
 use crate::place::assign::namer::{SplitNamer, TreeReviser};
 use crate::place::declared::declared_names;
-use crate::place::input::{SplitInput, split_input_with_original_bundle};
+use crate::place::input::{SplitInput, SplitInputError, split_input_with_original_bundle};
 use crate::place::ledger::{SplitLedger, StableSplitLedger};
 use crate::place::method::{MarkerOffer, SplitChoice, bundle_marker_coverage, choose_split_method};
-use crate::place::placement_dump::{Placed, PlacementGate, Regime, assign_regime};
+use crate::place::placement_dump::{PlaceError, Placed, PlacementGate, Regime, assign_regime};
 use crate::place::tiers::{PlacementSwitches, PriorCarry, TierStats};
 use crate::place::trail::PlacementTrail;
 use crate::rename::validated::scopes::BabelScopes;
@@ -27,7 +28,7 @@ use super::cjs::{RunnableInput, emit_runnable_cjs, wrapper_view};
 use super::entry_order::read_prior_entry_order;
 use super::import_alias::read_prior_import_aliases;
 use super::load_order::{LoadOrderFacts, bundle_load_order_facts};
-use super::review::{review_split, statement_align_name};
+use super::review::{ReconstructError, review_split, statement_align_name};
 use crate::finish::relink::VendorBridge;
 use crate::modules::vendor_names::ManifestCapture;
 use crate::twins::fossil::declared_names as fossil_declared_names;
@@ -163,7 +164,7 @@ pub struct SplitOutcome {
     /// list); None when the review tree was written.
     pub runnable: Option<Vec<String>>,
     /// The runnable emit's decline reason.
-    pub declined: Option<String>,
+    pub declined: Option<super::cjs::EmitError>,
     /// The persisted ledger.
     pub ledger: SplitLedger,
     pub stats: SplitStats,
@@ -221,8 +222,118 @@ fn build_ledger(
     }
 }
 
+/// Why the stable split failed (before anything is written).
+#[derive(Debug)]
+pub enum SplitError {
+    /// The run's input is not a bundled app.
+    InputGate(InputGateError),
+    /// The shipped or fresh text gives no split input.
+    Input(SplitInputError),
+    /// A library layout under a regime other than the fossil split.
+    LibraryNeedsFossil { regime: Regime },
+    /// The placement regime failed.
+    Place(PlaceError),
+    /// The review tree does not reconstruct the bundle.
+    Reconstruct(ReconstructError),
+    /// A step that holds by construction did not.
+    Invariant(&'static str),
+    /// The fresh and shipped texts hold different statement counts.
+    Misaligned {
+        what: &'static str,
+        fresh: usize,
+        shipped: usize,
+    },
+    /// A captured raw name is declared by zero or several fresh statements.
+    BridgeAmbiguous {
+        name: String,
+        hits: Vec<(usize, usize)>,
+    },
+    /// A statement declares different name counts fresh and shipped.
+    BridgeNameCount {
+        statement: usize,
+        fresh: usize,
+        shipped: usize,
+    },
+    /// The captured name's slot is gone from the shipped statement.
+    BridgeLostSlot { statement: usize, name: String },
+    /// The captured name's statement has no file.
+    BridgeUnplaced { statement: usize, name: String },
+}
+
+impl std::fmt::Display for SplitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InputGate(e) => e.fmt(f),
+            Self::Input(e) => e.fmt(f),
+            Self::LibraryNeedsFossil { regime } => write!(
+                f,
+                "library placement requires the fossil split, but this bundle chose {regime:?} \
+             (check the fossil-split disable, and the markers' coverage)"
+            ),
+            Self::Place(e) => e.fmt(f),
+            Self::Reconstruct(e) => e.fmt(f),
+            Self::Invariant(what) => f.write_str(what),
+            Self::Misaligned {
+                what,
+                fresh,
+                shipped,
+            } => write!(
+                f,
+                "{what}: the fresh text has {fresh} wrapper statements, the shipped code has {shipped} — they no longer align"
+            ),
+            Self::BridgeAmbiguous { name, hits } => write!(
+                f,
+                "vendor bridge: the app-scope read of '{name}' matches {hits:?} fresh statements — expected exactly one"
+            ),
+            Self::BridgeNameCount {
+                statement,
+                fresh,
+                shipped,
+            } => write!(
+                f,
+                "vendor bridge: statement {statement} declares {fresh} names fresh but {shipped} shipped"
+            ),
+            Self::BridgeLostSlot { statement, name } => write!(
+                f,
+                "vendor bridge: statement {statement} lost the slot of '{name}' across the rename"
+            ),
+            Self::BridgeUnplaced { statement, name } => write!(
+                f,
+                "vendor bridge: statement {statement} (the home of '{name}') has no placement"
+            ),
+        }
+    }
+}
+
+impl From<InputGateError> for SplitError {
+    fn from(e: InputGateError) -> Self {
+        Self::InputGate(e)
+    }
+}
+
+impl From<SplitInputError> for SplitError {
+    fn from(e: SplitInputError) -> Self {
+        Self::Input(e)
+    }
+}
+
+impl From<PlaceError> for SplitError {
+    fn from(e: PlaceError) -> Self {
+        Self::Place(e)
+    }
+}
+
+impl From<ReconstructError> for SplitError {
+    fn from(e: ReconstructError) -> Self {
+        Self::Reconstruct(e)
+    }
+}
+
 /// `stableSplitFromCode` + `tryEmitRunnableCjs` over the shipped text.
-pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<SplitOutcome, String> {
+pub fn stable_split(
+    shipped: &str,
+    options: SplitOptions<'_, '_>,
+) -> Result<SplitOutcome, SplitError> {
     use crate::profiling::phase;
     let ph = phase("split:input");
     // The input-bundle gate, measured ONCE: being a bundled app is a
@@ -250,11 +361,9 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     // two stages, or a fossil-split disable) — refuse it rather than
     // move library code without its exclusion.
     if !options.library.is_empty() && method.regime != Regime::Fossil {
-        return Err(format!(
-            "library placement requires the fossil split, but this bundle chose {:?} \
-             (check the fossil-split disable, and the markers' coverage)",
-            method.regime
-        ));
+        return Err(SplitError::LibraryNeedsFossil {
+            regime: method.regime,
+        });
     }
     let (use_namer, use_reviser) = namers_used(method.regime);
     let module_ends = module_ends_kept(&method, options.markers, &input.body);
@@ -301,8 +410,9 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     // split_input_with_original_bundle above, over the same bytes.
     let wrapper = layout
         .recognize_wrapper(ingest.program, ingest.semantic())
-        .ok_or("no recognizable bundle wrapper")?;
-    let view = wrapper_view(ingest.semantic(), wrapper.span).ok_or("wrapper node not found")?;
+        .ok_or(SplitError::Invariant("no recognizable bundle wrapper"))?;
+    let view = wrapper_view(ingest.semantic(), wrapper.span)
+        .ok_or(SplitError::Invariant("wrapper node not found"))?;
     let statements = &view.body.statements;
     let typed_spans: Vec<(u32, u32)> = statements
         .iter()
@@ -312,7 +422,9 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         })
         .collect();
     if typed_spans != input.spans {
-        return Err("the typed wrapper body and the split input disagree on spans".into());
+        return Err(SplitError::Invariant(
+            "the typed wrapper body and the split input disagree on spans",
+        ));
     }
     let names: Vec<Option<String>> = input
         .body
@@ -492,16 +604,17 @@ fn app_factory_statements(
     body_len: usize,
     original_binding_count: Option<usize>,
     layout: crate::toolchain::BundleLayout,
-) -> Result<std::collections::HashSet<usize>, String> {
+) -> Result<std::collections::HashSet<usize>, SplitError> {
     let (false, Some(fresh)) = (app_modules.is_empty(), fresh) else {
         return Ok(std::collections::HashSet::new());
     };
     let fresh_body = split_input_with_original_bundle(fresh, original_binding_count, layout)?.body;
     if fresh_body.len() != body_len {
-        return Err(format!(
-            "app modules: the fresh text has {} wrapper statements, the shipped code has {body_len} — they no longer align",
-            fresh_body.len()
-        ));
+        return Err(SplitError::Misaligned {
+            what: "app modules",
+            fresh: fresh_body.len(),
+            shipped: body_len,
+        });
     }
     let wanted: std::collections::HashSet<&str> = app_modules.iter().map(String::as_str).collect();
     Ok(fresh_body
@@ -537,20 +650,21 @@ fn resolve_vendor_bridges(
     // the same GRAMMAR and reads the same ORIGINAL threshold.
     original_binding_count: Option<usize>,
     layout: crate::toolchain::BundleLayout,
-) -> Result<Vec<VendorBridge>, String> {
+) -> Result<Vec<VendorBridge>, SplitError> {
     if captures.is_empty() {
         return Ok(Vec::new());
     }
-    let fresh = fresh
-        .ok_or("vendor bridge: the manifest carries captures but the run has no fresh text")?;
+    let fresh = fresh.ok_or(SplitError::Invariant(
+        "vendor bridge: the manifest carries captures but the run has no fresh text",
+    ))?;
     let fresh_input = split_input_with_original_bundle(fresh, original_binding_count, layout)?;
     let fresh_body = &fresh_input.body;
     if fresh_body.len() != body.len() {
-        return Err(format!(
-            "vendor bridge: the fresh text has {} wrapper statements, the shipped code has {} — they no longer align",
-            fresh_body.len(),
-            body.len()
-        ));
+        return Err(SplitError::Misaligned {
+            what: "vendor bridge",
+            fresh: fresh_body.len(),
+            shipped: body.len(),
+        });
     }
     let mut out = Vec::with_capacity(captures.len());
     for c in captures {
@@ -565,31 +679,31 @@ fn resolve_vendor_bridges(
             }
         }
         let [(si, pos)] = hits[..] else {
-            return Err(format!(
-                "vendor bridge: the app-scope read of '{}' matches {hits:?} fresh statements — expected exactly one",
-                c.name
-            ));
+            return Err(SplitError::BridgeAmbiguous {
+                name: c.name.clone(),
+                hits,
+            });
         };
         let fresh_names = fossil_declared_names(&fresh_body[si]);
         let shipped_names = fossil_declared_names(&body[si]);
         if shipped_names.len() != fresh_names.len() {
-            return Err(format!(
-                "vendor bridge: statement {si} declares {} names fresh but {} shipped",
-                fresh_names.len(),
-                shipped_names.len()
-            ));
+            return Err(SplitError::BridgeNameCount {
+                statement: si,
+                fresh: fresh_names.len(),
+                shipped: shipped_names.len(),
+            });
         }
         let Some(accessor) = shipped_names.get(pos) else {
-            return Err(format!(
-                "vendor bridge: statement {si} lost the slot of '{}' across the rename",
-                c.name
-            ));
+            return Err(SplitError::BridgeLostSlot {
+                statement: si,
+                name: c.name.clone(),
+            });
         };
         let Some(file) = assignment.get(si) else {
-            return Err(format!(
-                "vendor bridge: statement {si} (the home of '{}') has no placement",
-                c.name
-            ));
+            return Err(SplitError::BridgeUnplaced {
+                statement: si,
+                name: c.name.clone(),
+            });
         };
         out.push(VendorBridge {
             name: c.name.clone(),

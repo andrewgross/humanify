@@ -58,8 +58,8 @@ fn files_inside_the_shims_directory_are_returned_in_order() {
 fn a_shim_file_outside_the_out_dir_is_refused() {
     let shim = ran("{\"files\":[{\"path\":\"/etc/passwd\"}]}\n");
     let err = unpack_webcrack("x", Path::new("out"), &shim).expect_err("outside the out dir");
-    assert!(err.contains("/etc/passwd"), "{err}");
-    assert!(err.contains("/run/out"), "{err}");
+    assert!(err.to_string().contains("/etc/passwd"), "{err}");
+    assert!(err.to_string().contains("/run/out"), "{err}");
 }
 
 #[test]
@@ -70,11 +70,11 @@ fn a_failed_shim_run_is_the_unpacks_error_word_for_word() {
         error: Some("webcrack shim exited exit status: 3: boom".to_string()),
     };
     let err = unpack_webcrack("x", Path::new("out"), &shim).expect_err("failed run");
-    assert_eq!(err, "webcrack shim exited exit status: 3: boom");
+    assert_eq!(err.to_string(), "webcrack shim exited exit status: 3: boom");
 }
 
 #[test]
 fn a_shim_that_printed_nothing_is_an_error() {
     let err = unpack_webcrack("x", Path::new("out"), &ran("\n  \n")).expect_err("no output");
-    assert_eq!(err, "webcrack shim: no output");
+    assert_eq!(err.to_string(), "webcrack shim: no output");
 }

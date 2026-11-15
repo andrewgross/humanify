@@ -19,6 +19,8 @@ use oxc_syntax::symbol::SymbolFlags;
 
 use super::ROOT;
 use super::embedded::{Callee, FileRef, is_bun_module};
+use super::error::LinkError;
+use crate::error::{FileError, FileOp};
 
 /// A text edit: replace `[start, end)` with `text`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -188,16 +190,16 @@ impl Loader {
     /// missing fails: the layout would be linked with a hole.
     // io: legacy effect site, listed in dev/census/effects-allowlist.json
     #[allow(clippy::disallowed_methods)]
-    pub fn spec(&mut self, s: &str) -> Result<Spec, String> {
+    pub fn spec(&mut self, s: &str) -> Result<Spec, LinkError> {
         let Some(rest) = s.strip_prefix(ROOT) else {
             return Ok(Spec::External(s.to_string()));
         };
         let path = self.dir.join(rest);
         if !path.is_file() {
-            return Err(format!(
-                "{s} is imported but {} does not exist",
-                path.display()
-            ));
+            return Err(LinkError::Missing {
+                spec: s.to_string(),
+                path,
+            });
         }
         let next = self.index.len();
         let id = *self.index.entry(path.clone()).or_insert(next);
@@ -211,16 +213,16 @@ impl Loader {
 /// Read and analyse one chunk.
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
-pub(super) fn analyse(path: &Path, loader: &mut Loader) -> Result<Chunk, String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+pub(super) fn analyse(path: &Path, loader: &mut Loader) -> Result<Chunk, LinkError> {
+    let bytes = std::fs::read(path).map_err(FileError::at(FileOp::CannotRead, path))?;
     let text = String::from_utf8_lossy(&bytes).into_owned();
     let alloc = Allocator::default();
     let ret = Parser::new(&alloc, &text, SourceType::mjs()).parse();
     if let Some(e) = ret.diagnostics.first() {
-        return Err(format!(
-            "{} does not parse as a module: {e}",
-            path.display()
-        ));
+        return Err(LinkError::Parse {
+            path: path.to_path_buf(),
+            diagnostic: e.to_string(),
+        });
     }
     let program = alloc.alloc(ret.program);
     let semantic = SemanticBuilder::new()
@@ -465,6 +467,14 @@ fn to_esm_helper(text: &str, body: &[Statement<'_>], scoping: &Scoping) -> Optio
 }
 
 impl Ctx<'_, '_> {
+    /// This chunk refuses `what`.
+    fn refused(&self, what: &'static str) -> LinkError {
+        LinkError::Refused {
+            path: self.path.to_path_buf(),
+            what,
+        }
+    }
+
     fn symbol_of_ref(&self, r: &oxc_ast::ast::IdentifierReference<'_>) -> Option<SymbolId> {
         self.scoping.get_reference(r.reference_id()).symbol_id()
     }
@@ -491,7 +501,7 @@ impl Ctx<'_, '_> {
         st: &Statement<'_>,
         loader: &mut Loader,
         chunk: &mut Chunk,
-    ) -> Result<StmtKind, String> {
+    ) -> Result<StmtKind, LinkError> {
         Ok(match st {
             Statement::ImportDeclaration(d) => {
                 let spec = loader.spec(&d.source.value)?;
@@ -529,7 +539,7 @@ impl Ctx<'_, '_> {
                 StmtKind::Removed
             }
             Statement::ExportAllDeclaration(_) => {
-                return Err(format!("{}: `export *` is not linked", self.path.display()));
+                return Err(self.refused("`export *` is not linked"));
             }
             Statement::ExportDefaultDeclaration(d) => {
                 self.export_default(d.span.start, &d.declaration, chunk)
@@ -555,12 +565,12 @@ impl Ctx<'_, '_> {
         })
     }
 
-    fn export_local(&self, local: &ModuleExportName<'_>) -> Result<SymbolId, String> {
+    fn export_local(&self, local: &ModuleExportName<'_>) -> Result<SymbolId, LinkError> {
         match local {
             ModuleExportName::IdentifierReference(r) => self.symbol_of_ref(r),
             _ => None,
         }
-        .ok_or_else(|| format!("{}: exports an unbound name", self.path.display()))
+        .ok_or_else(|| self.refused("exports an unbound name"))
     }
 
     fn export_default(
@@ -649,7 +659,7 @@ impl Ctx<'_, '_> {
         &self,
         loader: &mut Loader,
         chunk: &mut Chunk,
-    ) -> Result<BTreeSet<(u32, u32)>, String> {
+    ) -> Result<BTreeSet<(u32, u32)>, LinkError> {
         let mut shorthand = BTreeSet::new();
         for node in self.nodes.iter() {
             match node.kind() {
@@ -685,7 +695,7 @@ impl Ctx<'_, '_> {
         Ok(shorthand)
     }
 
-    fn refuse_top_level_await(&self, id: oxc_semantic::NodeId) -> Result<(), String> {
+    fn refuse_top_level_await(&self, id: oxc_semantic::NodeId) -> Result<(), LinkError> {
         let in_function = self.nodes.ancestor_kinds(id).any(|k| {
             matches!(
                 k,
@@ -695,10 +705,7 @@ impl Ctx<'_, '_> {
         if in_function {
             return Ok(());
         }
-        Err(format!(
-            "{}: top-level await cannot be linked into one program",
-            self.path.display()
-        ))
+        Err(self.refused("top-level await cannot be linked into one program"))
     }
 
     /// `import.meta.<p>` → its CommonJS equivalent; `import.meta.require(
@@ -709,13 +716,10 @@ impl Ctx<'_, '_> {
         span: Span,
         loader: &mut Loader,
         chunk: &mut Chunk,
-    ) -> Result<(), String> {
+    ) -> Result<(), LinkError> {
         let parent = self.nodes.parent_id(id);
         let AstKind::StaticMemberExpression(member) = self.nodes.kind(parent) else {
-            return Err(format!(
-                "{}: a bare `import.meta` is not linked",
-                self.path.display()
-            ));
+            return Err(self.refused("a bare `import.meta` is not linked"));
         };
         let prop = member.property.name.as_str();
         if prop == "require"
@@ -748,10 +752,10 @@ impl Ctx<'_, '_> {
             "require" => ("require", ["require"].as_slice()),
             "env" => ("process.env", ["process"].as_slice()),
             other => {
-                return Err(format!(
-                    "{}: `import.meta.{other}` is not linked",
-                    self.path.display()
-                ));
+                return Err(LinkError::MetaProperty {
+                    path: self.path.to_path_buf(),
+                    prop: other.to_string(),
+                });
             }
         };
         let scope = self.nodes.get_node(id).scope_id();
@@ -759,10 +763,11 @@ impl Ctx<'_, '_> {
             .iter()
             .find(|n| self.scoping.find_binding(scope, (**n).into()).is_some())
         {
-            return Err(format!(
-                "{}: `import.meta.{prop}` sits where `{name}` is bound; not linked",
-                self.path.display()
-            ));
+            return Err(LinkError::MetaShadowed {
+                path: self.path.to_path_buf(),
+                prop: prop.to_string(),
+                name,
+            });
         }
         chunk.meta_edits.push(Edit {
             start: member.span.start as usize,

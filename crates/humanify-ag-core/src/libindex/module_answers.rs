@@ -30,6 +30,31 @@ pub fn modules_file(slice: &str) -> String {
     format!("modules.{slice}.jsonl")
 }
 
+/// Why the planner's answers could not be read.
+#[derive(Debug)]
+pub enum AnswersError {
+    /// The answers file could not be opened or read.
+    Io {
+        file: String,
+        source: std::io::Error,
+    },
+    /// A line of it is not a module row.
+    Line {
+        file: String,
+        line: usize,
+        source: serde_json::Error,
+    },
+}
+
+impl std::fmt::Display for AnswersError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io { file, source } => write!(f, "{file}: {source}"),
+            Self::Line { file, line, source } => write!(f, "{file} line {line}: {source}"),
+        }
+    }
+}
+
 /// The planner's answers for `keys`: one entry per key the index holds.
 /// Keys the index lacks are simply absent (a miss is a synthetic name,
 /// not an error). An empty `keys` reads nothing. The file is streamed
@@ -38,23 +63,32 @@ pub fn read_module_answers(
     files: &dyn IndexFiles,
     slice: &str,
     keys: &BTreeSet<String>,
-) -> Result<BTreeMap<String, ModuleAnswer>, String> {
+) -> Result<BTreeMap<String, ModuleAnswer>, AnswersError> {
     if keys.is_empty() {
         return Ok(BTreeMap::new());
     }
     let file = modules_file(slice);
-    let reader = files.open(&file).map_err(|e| format!("{file}: {e}"))?;
+    let reader = files.open(&file).map_err(|source| AnswersError::Io {
+        file: file.clone(),
+        source,
+    })?;
     let mut rows: BTreeMap<String, Vec<ModuleRow>> = BTreeMap::new();
     for (n, line) in std::io::BufReader::new(Sequential::new(reader))
         .lines()
         .enumerate()
     {
-        let line = line.map_err(|e| format!("{file}: {e}"))?;
+        let line = line.map_err(|source| AnswersError::Io {
+            file: file.clone(),
+            source,
+        })?;
         if line.is_empty() {
             continue;
         }
-        let row: ModuleRow =
-            serde_json::from_str(&line).map_err(|e| format!("{file} line {}: {e}", n + 1))?;
+        let row: ModuleRow = serde_json::from_str(&line).map_err(|source| AnswersError::Line {
+            file: file.clone(),
+            line: n + 1,
+            source,
+        })?;
         if keys.contains(&row.key) {
             let key = row.key.clone();
             rows.entry(key).or_default().push(row);

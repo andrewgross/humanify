@@ -122,6 +122,57 @@ impl SideInventory {
 /// the hash bookkeeping and may pass `None` (e.g. a probe gate on the big
 /// bundles, where the row assignment is verified on the fixtures).
 ///
+/// Why a side's statement inventory could not be built.
+#[derive(Debug)]
+pub enum InventoryError {
+    /// The side's text does not parse.
+    Parse {
+        anchor: &'static str,
+        diagnostics: usize,
+    },
+    /// The program's ESTree JSON did not read back.
+    EstreeJson(crate::ingest::EstreeJsonError),
+    /// The program JSON handed in is `Null` (text that did not read).
+    NullJson,
+    /// The wrapper's body block is not in the JSON.
+    WrapperBlockAbsent(Span),
+    /// The JSON has no program body.
+    NoProgramBody,
+    /// A statement lacks its `start` or `end`.
+    NoStatementBound(&'static str),
+}
+
+impl std::fmt::Display for InventoryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse {
+                anchor,
+                diagnostics,
+            } => write!(
+                f,
+                "oxc failed to parse the {anchor} text: {diagnostics} diagnostic(s)"
+            ),
+            Self::EstreeJson(e) => e.fmt(f),
+            Self::NullJson => f.write_str("the estree json did not parse (read as null)"),
+            Self::WrapperBlockAbsent(span) => write!(
+                f,
+                "wrapper detected (body span {}..{}) but that block is absent from the estree json",
+                span.start, span.end
+            ),
+            Self::NoProgramBody => f.write_str("estree json program body missing"),
+            Self::NoStatementBound(which) => {
+                write!(f, "statement {which} missing from the estree json")
+            }
+        }
+    }
+}
+
+impl From<crate::ingest::EstreeJsonError> for InventoryError {
+    fn from(e: crate::ingest::EstreeJsonError) -> Self {
+        Self::EstreeJson(e)
+    }
+}
+
 /// Statement SELECTION is the TS `topLevelStatements` semantics: the
 /// wrapper body when the wrapper gate passes (`graph.wrapperPath` —
 /// modules::wrapper's 50-binding threshold is that gate's owner), else the
@@ -134,7 +185,7 @@ pub fn statement_inventory(
     anchor: &'static str,
     graph: Option<&UnifiedGraph>,
     layout: BundleLayout,
-) -> Result<SideInventory, String> {
+) -> Result<SideInventory, InventoryError> {
     statement_inventory_inner(text, anchor, graph, false, layout).map(|(inv, _)| inv)
 }
 
@@ -150,7 +201,7 @@ pub fn statement_inventory_with_values(
     anchor: &'static str,
     graph: Option<&UnifiedGraph>,
     layout: BundleLayout,
-) -> Result<(SideInventory, Vec<Value>), String> {
+) -> Result<(SideInventory, Vec<Value>), InventoryError> {
     statement_inventory_inner(text, anchor, graph, true, layout)
 }
 
@@ -160,14 +211,14 @@ fn statement_inventory_inner(
     graph: Option<&UnifiedGraph>,
     retain_values: bool,
     layout: BundleLayout,
-) -> Result<(SideInventory, Vec<Value>), String> {
+) -> Result<(SideInventory, Vec<Value>), InventoryError> {
     let allocator = oxc_allocator::Allocator::default();
     let ingest = Ingest::parse(&allocator, text, anchor);
     if !ingest.errors.is_empty() {
-        return Err(format!(
-            "oxc failed to parse the {anchor} text: {} diagnostic(s)",
-            ingest.errors.len()
-        ));
+        return Err(InventoryError::Parse {
+            anchor,
+            diagnostics: ingest.errors.len(),
+        });
     }
 
     // The wrapper gate (TS `graph.wrapperPath`): presence decides between
@@ -199,23 +250,18 @@ pub fn statement_inventory_from_json(
     anchor: &'static str,
     graph: Option<&UnifiedGraph>,
     retain_values: bool,
-) -> Result<(SideInventory, Vec<Value>), String> {
-    let statement_values: Vec<&Value> = crate::cut::container_statement_values(
-        program_json,
-        wrapper_body,
-    )
-    .ok_or_else(|| match wrapper_body {
-        // `parse_estree_json` answers Null for text it could not read: say
-        // so, rather than blame the wrapper's block.
-        _ if program_json.is_null() => "the estree json did not parse (read as null)".to_string(),
-        Some(body_span) => format!(
-            "wrapper detected (body span {}..{}) but that block is absent from the estree json",
-            body_span.start, body_span.end
-        ),
-        None => "estree json program body missing".to_string(),
-    })?
-    .iter()
-    .collect();
+) -> Result<(SideInventory, Vec<Value>), InventoryError> {
+    let statement_values: Vec<&Value> =
+        crate::cut::container_statement_values(program_json, wrapper_body)
+            .ok_or(match wrapper_body {
+                // `parse_estree_json` answers Null for text it could not read: say
+                // so, rather than blame the wrapper's block.
+                _ if program_json.is_null() => InventoryError::NullJson,
+                Some(body_span) => InventoryError::WrapperBlockAbsent(body_span),
+                None => InventoryError::NoProgramBody,
+            })?
+            .iter()
+            .collect();
 
     let mut inventory = SideInventory {
         anchor,
@@ -226,11 +272,11 @@ pub fn statement_inventory_from_json(
         let start = stmt
             .get("start")
             .and_then(Value::as_u64)
-            .ok_or("statement start missing from the estree json")?;
+            .ok_or(InventoryError::NoStatementBound("start"))?;
         let end = stmt
             .get("end")
             .and_then(Value::as_u64)
-            .ok_or("statement end missing from the estree json")?;
+            .ok_or(InventoryError::NoStatementBound("end"))?;
         inventory.statements.push(StatementRecord {
             span: Span::new(start as u32, end as u32),
             hash,

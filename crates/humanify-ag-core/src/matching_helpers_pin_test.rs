@@ -369,7 +369,8 @@ fn match_stage_and_transfers_are_pinned() {
                 stage,
                 &Default::default(),
                 crate::rename::name_profile::NameProfile::Bun,
-            )?;
+            )
+            .map_err(|e| e.to_string())?;
             let _ = writeln!(s, "{:?}", outcome.rename.trail().transfer_rows());
             Ok(s)
         })

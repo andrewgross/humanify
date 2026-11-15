@@ -469,13 +469,59 @@ struct Stamps {
 /// The manifest TEXT's format and fingerprint stamps against this
 /// binary's, before the strict parse: Err names every one that differs
 /// (an unknown or missing stamp included) and how to rebuild.
-pub fn check_manifest_stamps(text: &str) -> Result<(), String> {
-    let theirs: Stamps = serde_json::from_str(text).map_err(|e| format!("manifest.json: {e}"))?;
+pub fn check_manifest_stamps(text: &str) -> Result<(), ManifestError> {
+    let theirs: Stamps = serde_json::from_str(text).map_err(ManifestError::Json)?;
     let wrong = stamp_mismatches(&theirs.format, &theirs.fingerprints);
     if wrong.is_empty() {
         Ok(())
     } else {
-        Err(format!("built with {}; {REBUILD}", wrong.join(", ")))
+        Err(ManifestError::Stamps(wrong))
+    }
+}
+
+/// Why this binary refuses an index's manifest.
+#[derive(Debug)]
+pub enum ManifestError {
+    /// `manifest.json` is not JSON of the manifest's shape.
+    Json(serde_json::Error),
+    /// The stamps that differ from this binary's, each named with both
+    /// spellings.
+    Stamps(Vec<String>),
+}
+
+impl std::fmt::Display for ManifestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Json(e) => write!(f, "manifest.json: {e}"),
+            Self::Stamps(wrong) => write!(f, "built with {}; {REBUILD}", wrong.join(", ")),
+        }
+    }
+}
+
+/// A slice whose recipe does not parse, or names another slice.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SliceRecipeError {
+    Parse(super::recipe::RecipeError),
+    Mismatch {
+        slice: String,
+        recipe: String,
+        recipe_slice: String,
+    },
+}
+
+impl std::fmt::Display for SliceRecipeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse(e) => e.fmt(f),
+            Self::Mismatch {
+                slice,
+                recipe,
+                recipe_slice,
+            } => write!(
+                f,
+                "slice {slice} records recipe {recipe} (whose slice is {recipe_slice})"
+            ),
+        }
     }
 }
 
@@ -486,7 +532,7 @@ impl Manifest {
     /// spellings (fail early: a half-matching index would silently
     /// half-claim). Which slice a bundle reads is [`Manifest::recipes`] +
     /// `recipe::choose_slice`, a separate question.
-    pub fn check_compatible(&self) -> Result<(), String> {
+    pub fn check_compatible(&self) -> Result<(), ManifestError> {
         let f = &self.fingerprints;
         let stamps: BTreeMap<String, String> = [
             ("module", Some(&f.module)),
@@ -512,30 +558,29 @@ impl Manifest {
             );
         }
         if let Err(e) = self.recipes() {
-            wrong.push(e);
+            wrong.push(e.to_string());
         }
         if wrong.is_empty() {
             Ok(())
         } else {
-            Err(format!("built with {}; {REBUILD}", wrong.join(", ")))
+            Err(ManifestError::Stamps(wrong))
         }
     }
 
     /// The index's recipes in manifest order, each with its
     /// default-for-bundler mark; Err when a slice's recipe does not parse
     /// or its name is not its recipe's.
-    pub fn recipes(&self) -> Result<Vec<(super::recipe::Recipe, bool)>, String> {
+    pub fn recipes(&self) -> Result<Vec<(super::recipe::Recipe, bool)>, SliceRecipeError> {
         self.slices
             .iter()
             .map(|s| {
-                let r = super::recipe::Recipe::parse(&s.recipe)?;
+                let r = super::recipe::Recipe::parse(&s.recipe).map_err(SliceRecipeError::Parse)?;
                 if r.slice_name() != s.slice {
-                    return Err(format!(
-                        "slice {} records recipe {} (whose slice is {})",
-                        s.slice,
-                        s.recipe,
-                        r.slice_name()
-                    ));
+                    return Err(SliceRecipeError::Mismatch {
+                        slice: s.slice.clone(),
+                        recipe: s.recipe.clone(),
+                        recipe_slice: r.slice_name(),
+                    });
                 }
                 Ok((r, s.default_for_bundler))
             })

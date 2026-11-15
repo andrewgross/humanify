@@ -282,14 +282,14 @@ impl LibraryIndex {
         recipe: &super::recipe::DetectedRecipe,
         terser: super::recipe::TerserSlices,
     ) -> Result<LibraryIndex, LoadError> {
-        let read = |name: &str| files.read_text(name).map_err(|e| format!("{name}: {e}"));
+        let read = |name: &str| files.read_text(name).map_err(IndexError::file(name));
         let manifest_text = read("manifest.json")?;
-        super::format::check_manifest_stamps(&manifest_text)?;
+        super::format::check_manifest_stamps(&manifest_text).map_err(IndexError::Manifest)?;
         let manifest: Manifest =
-            serde_json::from_str(&manifest_text).map_err(|e| format!("manifest.json: {e}"))?;
-        manifest.check_compatible()?;
+            serde_json::from_str(&manifest_text).map_err(IndexError::json("manifest.json"))?;
+        manifest.check_compatible().map_err(IndexError::Manifest)?;
         let id = hex_sha256(manifest_text.as_bytes());
-        let recipes = manifest.recipes()?;
+        let recipes = manifest.recipes().map_err(IndexError::Recipes)?;
         let (chosen, reason) =
             super::recipe::choose_slice(&recipes, recipe).map_err(|e| LoadError::NoSlice {
                 why: format!("library index {id} has {e}"),
@@ -297,19 +297,18 @@ impl LibraryIndex {
             })?;
         let slice = chosen.slice_name();
         let packages: Vec<String> = serde_json::from_str(&read(table::PACKAGES_FILE)?)
-            .map_err(|e| format!("{}: {e}", table::PACKAGES_FILE))?;
+            .map_err(IndexError::json(table::PACKAGES_FILE))?;
         let open = |name: &str| {
             files
                 .open(name)
                 .map(Source::paged)
-                .map_err(|e| format!("{name}: {e}"))
+                .map_err(IndexError::file(name))
         };
         let units_name = table::units_file(&slice);
-        let units =
-            UnitTable::open(open(&units_name)?).map_err(|e| format!("{units_name}: {e}"))?;
+        let units = UnitTable::open(open(&units_name)?).map_err(IndexError::table(&units_name))?;
         let open_edges = |slice: &str| {
             let file = table::edges_file(slice);
-            EdgeTable::open(open(&file)?).map_err(|e| format!("{file}: {e}"))
+            EdgeTable::open(open(&file)?).map_err(IndexError::table(&file))
         };
         // exp155: every `/4` index this binary accepts (`edges/2`) writes
         // the flat callee-print table beside the edge table — a missing
@@ -317,7 +316,7 @@ impl LibraryIndex {
         // must never mistake a broken index for recorded silence
         let open_callee_prints = |slice: &str| {
             let file = table::callee_prints_file(slice);
-            CalleePrintTable::open(open(&file)?).map_err(|e| format!("{file}: {e}"))
+            CalleePrintTable::open(open(&file)?).map_err(IndexError::table(&file))
         };
         let mut edges = Some(vec![open_edges(&slice)?]);
         let mut callee_prints = Some(vec![open_callee_prints(&slice)?]);
@@ -333,7 +332,7 @@ impl LibraryIndex {
             }
             NameTable::open(open(&file)?)
                 .map(Some)
-                .map_err(|e| format!("{file}: {e}"))
+                .map_err(IndexError::table(&file))
         };
         let mut names_tables = vec![open_names(&slice)?];
         let mut reason = reason.to_string();
@@ -343,8 +342,7 @@ impl LibraryIndex {
             let names: Vec<String> = extra.iter().map(|r| r.slice_name()).collect();
             for name in &names {
                 let file = table::units_file(name);
-                terser_units
-                    .push(UnitTable::open(open(&file)?).map_err(|e| format!("{file}: {e}"))?);
+                terser_units.push(UnitTable::open(open(&file)?).map_err(IndexError::table(&file))?);
                 if let Some(tables) = edges.as_mut() {
                     tables.push(open_edges(name)?);
                 }
@@ -364,11 +362,10 @@ impl LibraryIndex {
             ));
         }
         let literals = LiteralTable::open(open(table::LITERALS_FILE)?)
-            .map_err(|e| format!("{}: {e}", table::LITERALS_FILE))?;
+            .map_err(IndexError::table(table::LITERALS_FILE))?;
         let name_strings = if names_tables.iter().any(|t| t.is_some()) {
             let text = read(table::NAMES_STRINGS_FILE)?;
-            serde_json::from_str(&text)
-                .map_err(|e| format!("{}: {e}", table::NAMES_STRINGS_FILE))?
+            serde_json::from_str(&text).map_err(IndexError::json(table::NAMES_STRINGS_FILE))?
         } else {
             Vec::new()
         };
@@ -378,7 +375,7 @@ impl LibraryIndex {
                 .lines()
                 .map(serde_json::from_str::<HelperRow>)
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| format!("{}: {e}", table::HELPERS_FILE))?;
+                .map_err(IndexError::json(table::HELPERS_FILE))?;
             helper_table(rows)
         } else {
             BTreeMap::new()
@@ -1052,18 +1049,18 @@ impl LibraryIndex {
 }
 
 /// Why an index was not loaded.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum LoadError {
     /// Missing, unreadable or incompatible: the run must stop.
-    Unusable(String),
+    Unusable(IndexError),
     /// Readable and compatible, but it holds no slice for the bundle's
     /// recipe: a loud WARNING in report mode (the run loses only its
     /// report), a failure for an instrument. `id`: the index's id.
     NoSlice { id: String, why: String },
 }
 
-impl From<String> for LoadError {
-    fn from(e: String) -> Self {
+impl From<IndexError> for LoadError {
+    fn from(e: IndexError) -> Self {
         LoadError::Unusable(e)
     }
 }
@@ -1071,7 +1068,67 @@ impl From<String> for LoadError {
 impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LoadError::Unusable(e) | LoadError::NoSlice { why: e, .. } => f.write_str(e),
+            LoadError::Unusable(e) => e.fmt(f),
+            LoadError::NoSlice { why, .. } => f.write_str(why),
+        }
+    }
+}
+
+/// Why an index's files cannot be read: which file, and how.
+#[derive(Debug)]
+pub enum IndexError {
+    /// A file could not be opened or read.
+    File {
+        name: String,
+        source: std::io::Error,
+    },
+    /// A JSON file does not parse.
+    Json {
+        name: String,
+        source: serde_json::Error,
+    },
+    /// The manifest's stamps are not this binary's.
+    Manifest(super::format::ManifestError),
+    /// A slice's recipe does not parse.
+    Recipes(super::format::SliceRecipeError),
+    /// A lookup table does not open.
+    Table {
+        name: String,
+        source: super::table::TableError,
+    },
+}
+
+impl IndexError {
+    fn file(name: &str) -> impl FnOnce(std::io::Error) -> IndexError + '_ {
+        move |source| IndexError::File {
+            name: name.to_string(),
+            source,
+        }
+    }
+
+    fn json(name: &str) -> impl FnOnce(serde_json::Error) -> IndexError + '_ {
+        move |source| IndexError::Json {
+            name: name.to_string(),
+            source,
+        }
+    }
+
+    fn table(name: &str) -> impl FnOnce(super::table::TableError) -> IndexError + '_ {
+        move |source| IndexError::Table {
+            name: name.to_string(),
+            source,
+        }
+    }
+}
+
+impl std::fmt::Display for IndexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::File { name, source } => write!(f, "{name}: {source}"),
+            Self::Json { name, source } => write!(f, "{name}: {source}"),
+            Self::Manifest(e) => e.fmt(f),
+            Self::Recipes(e) => e.fmt(f),
+            Self::Table { name, source } => write!(f, "{name}: {source}"),
         }
     }
 }

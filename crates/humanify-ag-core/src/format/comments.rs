@@ -305,14 +305,9 @@ fn is_external_source_map(value: &str) -> bool {
 }
 
 /// Attach the program's comments to the tree's nodes (root: the File).
-pub fn attach(
-    tree: &mut Tree,
-    code: &str,
-    program: &Program<'_>,
-    root: NodeId,
-) -> Result<(), String> {
+pub fn attach(tree: &mut Tree, code: &str, program: &Program<'_>, root: NodeId) {
     if program.comments.is_empty() {
-        return Ok(());
+        return;
     }
     let lines = BabelLines::new(code);
     for c in &program.comments {
@@ -368,7 +363,6 @@ pub fn attach(
     // The File node was synthesized: its span was only for the replay.
     a.tree.node_mut(root).span = None;
     drop_source_map_comments(a.tree);
-    Ok(())
 }
 
 /// normalizeFile: drop the inline source-map comments, then (none found)

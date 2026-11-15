@@ -9,8 +9,9 @@
 
 use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use crate::error::{FileError, FileOp};
 use crate::modules::vendor_names::BunModulesManifest;
 use crate::place::layout::METADATA_DIR;
 use crate::rename::eligibility::{Eligibility, NeverRename};
@@ -21,9 +22,12 @@ use super::carry::{CarryResult, carry_renames_into_bundle};
 use super::reconcile::{PostSplitInput, PostSplitResult, post_split_reconcile};
 
 use super::relink::{
-    FactoryLookup, VendorBridge, relink_factory_references, wrap_extracted_factory,
+    FactoryLookup, RelinkError, VendorBridge, relink_factory_references, wrap_extracted_factory,
 };
-use super::scaffold::{detect_external_packages, read_utf8, write_runnable_scaffold};
+use super::scaffold::{
+    EmbeddedCopyError, detect_external_packages, read_utf8, write_runnable_scaffold,
+};
+use super::using::UsingTreeError;
 use super::vendor_inherit::VendorBodyInheritor;
 
 #[cfg(test)]
@@ -189,8 +193,56 @@ pub fn runnable_entry_file(keys: &[String]) -> String {
 
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
-fn write_file(path: &Path, text: &str) -> Result<(), String> {
-    fs::write(path, text).map_err(|e| format!("write {}: {e}", path.display()))
+fn write_file(path: &Path, text: &str) -> Result<(), FileError> {
+    fs::write(path, text).map_err(FileError::at(FileOp::Write, path))
+}
+
+/// Why the finishing stage failed (the TS's "Post-split step failed").
+#[derive(Debug)]
+pub enum FinishError {
+    /// Reading, writing or making a file or directory failed.
+    File(FileError),
+    /// One file of the tree could not be re-linked.
+    Relink { file: String, source: RelinkError },
+    /// The `using` desugar failed.
+    Using(UsingTreeError),
+    /// An embedded file could not be copied into the tree.
+    Embedded(EmbeddedCopyError),
+    /// The split ledger is not valid JSON.
+    Ledger {
+        path: PathBuf,
+        source: serde_json::Error,
+    },
+}
+
+impl std::fmt::Display for FinishError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::File(e) => e.fmt(f),
+            Self::Relink { file, source } => write!(f, "{file}: {source}"),
+            Self::Using(e) => e.fmt(f),
+            Self::Embedded(e) => e.fmt(f),
+            Self::Ledger { path, source } => write!(f, "{}: {source}", path.display()),
+        }
+    }
+}
+
+impl From<FileError> for FinishError {
+    fn from(e: FileError) -> Self {
+        Self::File(e)
+    }
+}
+
+impl From<UsingTreeError> for FinishError {
+    fn from(e: UsingTreeError) -> Self {
+        Self::Using(e)
+    }
+}
+
+impl From<EmbeddedCopyError> for FinishError {
+    fn from(e: EmbeddedCopyError) -> Self {
+        Self::Embedded(e)
+    }
 }
 
 /// What the stage did (the TS's progress lines, in order).
@@ -213,7 +265,7 @@ fn relink_bun_modules(
     bridges: &[VendorBridge],
     interop: crate::toolchain::InteropHelpers,
     report: &mut FinishReport,
-) -> Result<(), String> {
+) -> Result<(), FinishError> {
     let lookup: FactoryLookup = manifest
         .factories
         .iter()
@@ -221,7 +273,7 @@ fn relink_bun_modules(
         .collect();
     let runtime_path = output_dir.join(interop.runtime_file());
     if let Some(dir) = runtime_path.parent() {
-        fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+        fs::create_dir_all(dir).map_err(FileError::at(FileOp::Mkdir, dir))?;
     }
     write_file(&runtime_path, interop.relink_runtime())?;
     let mut inherit = prior.map(VendorBodyInheritor::new);
@@ -229,9 +281,13 @@ fn relink_bun_modules(
     for (file_name, _) in &manifest.factories {
         let abs = output_dir.join(file_name);
         let body = read_utf8(&abs)?;
-        let (rendered, bridged) =
-            wrap_extracted_factory(&body, file_name, &lookup, bridges, interop)
-                .map_err(|e| format!("{file_name}: {e}"))?;
+        let (rendered, bridged) = wrap_extracted_factory(
+            &body, file_name, &lookup, bridges, interop,
+        )
+        .map_err(|source| FinishError::Relink {
+            file: file_name.clone(),
+            source,
+        })?;
         bridged_reads += bridged;
         let bytes = match inherit.as_mut() {
             Some(i) => i.bytes_for(file_name, rendered),
@@ -258,7 +314,10 @@ fn relink_bun_modules(
         let abs = output_dir.join(rel);
         let code = read_utf8(&abs)?;
         let out =
-            relink_factory_references(&code, rel, &lookup).map_err(|e| format!("{rel}: {e}"))?;
+            relink_factory_references(&code, rel, &lookup).map_err(|e| FinishError::Relink {
+                file: rel.clone(),
+                source: e.into(),
+            })?;
         write_file(&abs, &out)?;
     }
     if let Some(runtime) = &manifest.runtime_file {
@@ -275,7 +334,7 @@ fn relink_bun_modules(
 pub fn finish_split_output(
     input: &FinishInput<'_>,
     report: &mut FinishReport,
-) -> Result<bool, String> {
+) -> Result<bool, FinishError> {
     let output_dir = input.output_dir;
     let manifest = this_runs_manifest(input.vendor_record);
     let leftovers = leftover_vendor_files(output_dir, input.vendor_record, &input.split_files);
@@ -373,7 +432,7 @@ pub fn finish_split_output(
 pub fn finish_stage(
     input: &FinishInput<'_>,
     report: &mut FinishReport,
-) -> Result<(bool, Option<ReconcileReport>), String> {
+) -> Result<(bool, Option<ReconcileReport>), FinishError> {
     let relinked = finish_split_output(input, report)?;
     // Each split file names its own library imports (`path`, not the
     // bundle-wide `pathModule54`; finding #91) on the FINAL text, before
@@ -446,7 +505,7 @@ pub fn reconcile_post_split(
     rules: PostSplitRules<'_>,
     layout: crate::toolchain::BundleLayout,
     report: &mut FinishReport,
-) -> Result<Option<ReconcileReport>, String> {
+) -> Result<Option<ReconcileReport>, FinishError> {
     let PostSplitRules {
         name_profile,
         never_rename,
@@ -460,7 +519,10 @@ pub fn reconcile_post_split(
         let _ph = crate::profiling::phase("split:finish:reconcile-ledger");
         (
             serde_json::from_str::<crate::place::ledger::SplitLedger>(&read_utf8(&ledger_path)?)
-                .map_err(|e| format!("{}: {e}", ledger_path.display()))?,
+                .map_err(|source| FinishError::Ledger {
+                    path: ledger_path.clone(),
+                    source,
+                })?,
             Eligibility::new(never_rename),
         )
     };

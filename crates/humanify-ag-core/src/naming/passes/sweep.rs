@@ -1219,6 +1219,17 @@ pub struct DeferredSweepOutcome {
     pub ledger: Option<crate::rename::validated::ledger::RenameLedger>,
 }
 
+/// The deferred sweep's input does not parse: the parser's first
+/// diagnostic.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SweepParseError(pub String);
+
+impl std::fmt::Display for SweepParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "sweep input does not parse: {}", self.0)
+    }
+}
+
 /// `runDeferredSweep(code)`: the prior-aware sweep over its OWN parse of
 /// the shipping text (`anchor` = reconciled when the reconcile produced
 /// the text, else generated). Err when the text does not parse.
@@ -1241,14 +1252,11 @@ pub fn run_deferred_sweep<P: NameProvider>(
     decided: &DecidedNames,
     stems: &MinifiedStems,
     library_spans: &[(u32, u32)],
-) -> Result<DeferredSweepOutcome, (String, StrategyTrail)> {
+) -> Result<DeferredSweepOutcome, (SweepParseError, StrategyTrail)> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
     if !ingest.errors.is_empty() {
-        return Err((
-            format!("sweep input does not parse: {}", ingest.errors[0]),
-            trail,
-        ));
+        return Err((SweepParseError(ingest.errors[0].clone()), trail));
     }
     let semantic = ingest.semantic();
     let ph = crate::profiling::phase("sweep:names");

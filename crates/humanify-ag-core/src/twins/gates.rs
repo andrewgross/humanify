@@ -75,7 +75,9 @@ use crate::hash::forms::{MATCH_KEY_PRIVATES_BLINDED, MATCH_KEY_PRIVATES_VERBATIM
 use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use crate::matching::alternation::GraphSide;
 use crate::twins::SideInventory;
-use crate::twins::fossil::{FossilModule, extract_fossil_modules, module_signature};
+use crate::twins::fossil::{
+    FossilMapError, FossilModule, extract_fossil_modules, module_signature,
+};
 use crate::twins::role::{RoleSide, binding_roles_agree, compute_binding_role};
 
 // ---------------------------------------------------------------------------
@@ -1344,7 +1346,7 @@ fn pair_by_module_context(
     fresh: &GateSide<'_, '_>,
     prior: &GateSide<'_, '_>,
     stats: &mut StatementTwinStats,
-) -> Result<Vec<(usize, usize)>, String> {
+) -> Result<Vec<(usize, usize)>, FossilMapError> {
     let fresh_hashes: Vec<String> = fresh
         .inventory
         .statements
@@ -1636,7 +1638,7 @@ pub fn compute_gated_statement_twins(
     prior: &GateSide<'_, '_>,
     fresh: &GateSide<'_, '_>,
     input: &TwinInputs<'_>,
-) -> Result<TwinGateOutput, String> {
+) -> Result<TwinGateOutput, FossilMapError> {
     let mut output = TwinGateOutput::default();
     let mut stats = StatementTwinStats {
         fresh_statements: fresh.inventory.statements.len(),

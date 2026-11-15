@@ -5,6 +5,7 @@
 use oxc_semantic::SymbolId;
 
 use super::analyse::{Chunk, Declarator, ExportTarget, Imported, Spec, StmtKind};
+use super::error::LinkError;
 
 /// A binding of the linked program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -22,7 +23,7 @@ pub(super) fn resolve_export(
     chunks: &[Chunk],
     chunk: usize,
     imported: &Imported,
-) -> Result<Target, String> {
+) -> Result<Target, LinkError> {
     let mut at = (chunk, imported.clone());
     for _ in 0..chunks.len() + 1 {
         let (c, imp) = at;
@@ -32,10 +33,10 @@ pub(super) fn resolve_export(
             Imported::Name(n) => n,
         };
         let Some((_, target)) = chunks[c].exports.iter().find(|(n, _)| *n == name) else {
-            return Err(format!(
-                "{} does not export `{name}`",
-                chunks[c].path.display()
-            ));
+            return Err(LinkError::NoExport {
+                path: chunks[c].path.clone(),
+                name,
+            });
         };
         at = match target {
             ExportTarget::Local(s) => match import_of(&chunks[c], *s) {
@@ -44,18 +45,18 @@ pub(super) fn resolve_export(
             },
             ExportTarget::From(Spec::Chunk(d), imp) => (*d, imp.clone()),
             ExportTarget::From(Spec::External(s), _) => {
-                return Err(format!(
-                    "{}: re-exports from \"{s}\"; not linked",
-                    chunks[c].path.display()
-                ));
+                return Err(LinkError::ReExportExternal {
+                    path: chunks[c].path.clone(),
+                    spec: s.clone(),
+                });
             }
             ExportTarget::DefaultExpr => return Ok(Target::Default(c)),
         };
     }
-    Err(format!(
-        "{}: a re-export cycle",
-        chunks[chunk].path.display()
-    ))
+    Err(LinkError::Refused {
+        path: chunks[chunk].path.clone(),
+        what: "a re-export cycle",
+    })
 }
 
 /// The import declaring `sym`, when `sym` is an import binding.
@@ -70,7 +71,11 @@ fn import_of(chunk: &Chunk, sym: SymbolId) -> Option<(Spec, Imported)> {
 
 /// The binding a chunk's top-level symbol stands for: itself, or (an
 /// import of a chunk) the binding the import resolves to.
-pub(super) fn resolve_sym(chunks: &[Chunk], chunk: usize, sym: SymbolId) -> Result<Target, String> {
+pub(super) fn resolve_sym(
+    chunks: &[Chunk],
+    chunk: usize,
+    sym: SymbolId,
+) -> Result<Target, LinkError> {
     match import_of(&chunks[chunk], sym) {
         Some((Spec::Chunk(d), imp)) => resolve_export(chunks, d, &imp),
         _ => Ok(Target::Sym(chunk, sym)),
@@ -202,7 +207,7 @@ pub(super) struct Placement {
 /// a nested block (`if (x) { var y }`) — moved into the init, its `var`
 /// would become the init's own. Bun hoists those itself: none in any
 /// Claude Code release from 2.1.242 to 2.1.322.
-pub(super) fn placement(chunks: &[Chunk], order: &Order) -> Result<Placement, String> {
+pub(super) fn placement(chunks: &[Chunk], order: &Order) -> Result<Placement, LinkError> {
     let mut moved = Vec::with_capacity(chunks.len());
     let mut stays = Vec::with_capacity(chunks.len());
     for (c, chunk) in chunks.iter().enumerate() {
@@ -211,10 +216,10 @@ pub(super) fn placement(chunks: &[Chunk], order: &Order) -> Result<Placement, St
             .iter()
             .any(|st| matches!(st.kind, StmtKind::Other { nested_decl: true }));
         if nested && !order.eager[c] {
-            return Err(format!(
-                "{}: a lazily loaded chunk declares a top-level `var` inside a nested block; not linked",
-                chunk.path.display()
-            ));
+            return Err(LinkError::Refused {
+                path: chunk.path.clone(),
+                what: "a lazily loaded chunk declares a top-level `var` inside a nested block; not linked",
+            });
         }
         let per: Vec<Vec<bool>> = chunk
             .stmts
