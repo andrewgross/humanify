@@ -1,7 +1,7 @@
 # exp251 — a run that cannot write the runnable tree fails, and placement no longer makes the load-time cycle that caused it
 
-STATUS: BUILT, GATED (`cargo dev check`, all 13 stages). Neutrality: see
-"Neutrality" below. Branch `exp251-runnable-emit-fails`, not merged.
+STATUS: BUILT, GATED (`cargo dev check`, all 13 stages), NEUTRAL on two
+pairs (warm, standing priors, 0 cache writes on both legs). Branch `exp251-runnable-emit-fails`, not merged.
 
 ## Totals
 
@@ -103,4 +103,27 @@ its pair), `walk/report_test` (a non-zero hop is flagged).
 
 ## Neutrality
 
-PENDING
+`cargo dev eval neutrality fb0ab7b2c <pair> --priors /work/neutrality-priors
+--cache /work/neutrality-cache`, candidate = the committed product change:
+
+| pair | differing files | differing lines | cache writes (candidate / baseline) | exit codes | verdict |
+| --- | ---: | ---: | --- | --- | --- |
+| 2.1.118->2.1.119 | 0 | 0 | 0 / 0 | 0 / 0 | NEUTRAL |
+| 2.1.197->2.1.198 | 0 | 0 | 0 / 0 | 0 / 0 | NEUTRAL |
+
+The guard never triggers on these pairs (no cycle forms), so the bytes are
+the same.
+
+## Open items
+
+- The guard runs only after the emit has declined on a cycle, so it costs
+  one extra split write (review tree + emit) on that path and nothing
+  otherwise. A guard inside placement itself (refusing the move as it is
+  made) would need each placement rule to know the load-time graph.
+- The full pipeline on 2.1.301->2.1.302 with the guard was shown offline
+  (the walk's shipped text and ledger), not by a full cold run: the
+  current pipeline asks different prompts than 3cb20421, so its own run
+  does not reproduce the same placement, and current main did not form
+  the cycle there.
+- The pipeline still has one failure exit code (1) for every way a run
+  marks itself failed; the stderr line says which.
