@@ -11,7 +11,6 @@ humanify-config| dump_asks = "<TMP>/out-prior/asks.jsonl"
 humanify-config| [llm]
 humanify-config| retries = 0
 humanify-config| [naming]
-humanify-config| schedule = "sequential"
 humanify-config| batch_size = 10
 humanify-config| [split]
 humanify-config| enabled = false

@@ -10,7 +10,6 @@
 /// its doc section.
 pub const PATTERNS: &[(&str, &str)] = &[
     ("par-seam", "cpu-parallelism"),
-    ("order-mode", "the-ordered-mode-rule-9"),
     ("llm-runtime", "async-io"),
     ("rate-limiter", "async-io"),
     ("single-flight", "shared-state"),

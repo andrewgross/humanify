@@ -4,7 +4,9 @@ How the FIRST version of a bundle (a cold run, no prior version) is processed:
 how functions are ordered and queued for LLM naming.
 
 As of main 799499a8 (2026-09-29). Default = relaxed schedule; --sequential
-shows the conservative variant.
+shows the conservative variant. Since exp242 the relaxed schedule is the
+only one: `--sequential`, the relaxed-lever switches and the turn driver
+are gone, so every `--sequential` branch below no longer exists.
 
 ## Walk-through: one function, graph entry to applied rename
 

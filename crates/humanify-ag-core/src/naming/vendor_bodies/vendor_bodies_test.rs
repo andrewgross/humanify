@@ -46,7 +46,6 @@ fn config() -> crate::naming::driver::NamingConfig {
         capture_dump: false,
         tunables: Default::default(),
         shingle_probe: false,
-        fast: crate::fast::FastTier::Off,
         prompt_window: crate::naming::waves::processor::DEFAULT_PROMPT_WINDOW,
         module_naming: None,
     }

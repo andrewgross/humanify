@@ -16,11 +16,6 @@ Options:
   -V, --version
           Print version
 
-Run [run]:
-      --run-order <throughput|ordered>
-          "throughput" (the default: work through items as fast as the pool and the semaphore allow; results land in canonical order where they are consumed) or "ordered" (the TEST MODE: the waves' turn driver, the parallel helpers sequential, one-call dispatch windows). Ordered forces the conservative naming schedule and refuses naming.relaxed_levers. Determinism-sensitive tests opt in; regular runs never pay for it (docs/concurrency.md, rule 9).
-          [default: "throughput"] [config: run.order]
-
 Output [io]:
   -o, --output-dir <dir>
           Output directory.
@@ -77,14 +72,6 @@ Cross-version matching [matching]:
           [default: on; --no-matching-reconcile-prior-diff turns it off] [config: matching.reconcile_prior_diff]
 
 Naming [naming]:
-      --naming-schedule <relaxed|sequential>
-          "relaxed" (both relaxed levers on) or "sequential" (the pre-2026-09-28 default's bytes at the same batch_size).
-          [default: "relaxed"] [config: naming.schedule]
-
-      --naming-relaxed-levers <a,b,...>
-          Lever-sizing knob: the relaxed levers to turn on (relaxed schedule only).
-          [unset: every lever] [config: naming.relaxed_levers]
-
       --naming-batch-size <n>
           Identifiers per LLM batch.
           [default: 25] [config: naming.batch_size]

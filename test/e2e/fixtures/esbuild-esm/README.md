@@ -55,7 +55,7 @@ and writes what a run without `--split` writes: the named `runtime.js` and
 the extracted `vendor/`. `--stats-json` records
 `splitMethod.method = "not-split"`; the v2 leg runs with that file as its
 prior. The e2e holds the fixture to exactly that (`expect.splitMethod`):
-fresh + prior + `--sequential` twice each, byte-deterministic, and no
+fresh, then prior twice, byte-deterministic, and no
 runnable tree written. The layout itself is still open (spec I25): when a
 second layout lands, this fixture's expectation becomes a split method and
 the boot step runs its tree.

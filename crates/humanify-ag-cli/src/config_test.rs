@@ -10,7 +10,6 @@ use crate::config::{
     ReasoningEffort, setting_keys,
 };
 use crate::surface::{CommandOptions, PipelineParse, parse_pipeline};
-use humanify_ag_core::fast::{FastTier, Levers};
 use humanify_ag_core::naming::waves::batch::WaveTunables;
 use humanify_ag_model::llm::{DEFAULT_LLM_TIMEOUT_MS, RateLimitConfig};
 
@@ -71,7 +70,6 @@ fn every_naming_default_is_the_one_named_default() {
         c.naming.code_window_lines,
         humanify_ag_core::naming::code_window::MAX_CODE_LINES
     );
-    assert_eq!(c.naming.schedule, FastTier::Relaxed(Levers::all()));
     assert!(c.naming.naming_floor && c.naming.naming_floor_sweep);
     assert!(c.library.skips_libraries());
     assert_eq!(c.library.matching, crate::config::LibraryMatching::Names);
@@ -154,7 +152,6 @@ fn the_record_is_the_whole_config_without_the_secret() {
     assert!(!format!("{c:?}").contains("env-key"), "Debug leaks the key");
     assert_eq!(record["split"]["enabled"], true);
     assert_eq!(record["switches"]["disabled"][0], "family-permute");
-    assert_eq!(record["naming"]["schedule"]["tier"], "relaxed");
     for section in [
         "io",
         "llm",
@@ -294,54 +291,6 @@ fn a_zero_code_window_is_refused() {
         .expect_err("a window must show code");
     assert_eq!(err.len(), 1, "{err:?}");
     assert!(err[0].contains("naming.code_window_lines"), "{err:?}");
-}
-
-// --- the ordered mode (run.order; exp163's ordering audit, rule 9) ---------
-
-#[test]
-fn the_run_order_default_is_throughput() {
-    let c = config(&["in.js"]);
-    assert_eq!(c.naming.schedule, FastTier::Relaxed(Levers::all()));
-    assert!(!c.naming.schedule.is_turn_driver());
-}
-
-#[test]
-fn ordered_mode_forces_the_turn_driver_schedule() {
-    // The mode admits proven byte-identical territory only: the turn
-    // driver's tier. The empirical result behind it (the replay test
-    // `the_ordered_mode_writes_the_default_mode_s_tree`'s first shape):
-    // a relaxed tier + turn driver asks DIFFERENT questions than the
-    // pipelined driver, so the orthogonal design was refuted and removed.
-    let c = with_file(&["in.js"], "[run]\norder = \"ordered\"\n");
-    assert!(c.naming.schedule.is_turn_driver());
-
-    // Redundant, allowed: the schedule key agrees with what ordered forces.
-    let c = with_file(
-        &["in.js"],
-        "[run]\norder = \"ordered\"\n[naming]\nschedule = \"sequential\"\n",
-    );
-    assert!(c.naming.schedule.is_turn_driver());
-}
-
-#[test]
-fn ordered_mode_refuses_the_relaxed_levers() {
-    let errs = refusals(
-        &["in.js"],
-        "[run]\norder = \"ordered\"\n[naming]\nrelaxed_levers = [\"window-lanes\"]\n",
-    );
-    assert!(
-        errs.iter().any(|e| e.contains("run.order = \"ordered\"")),
-        "{errs:?}"
-    );
-}
-
-#[test]
-fn run_order_refuses_an_unknown_value() {
-    // The registry's Choice check refuses the value at file-check time,
-    // before `build` resolves anything.
-    let err = ConfigFile::check("cfg.toml", "[run]\norder = \"serially\"\n")
-        .expect_err("must be refused");
-    assert!(format!("{err:?}").contains("run.order"), "{err:?}");
 }
 
 /// `--prior-version` takes the prior run's OUTPUT FOLDER (exp179): a

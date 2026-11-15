@@ -103,7 +103,7 @@ fn pipeline_sets_are_checked_against_the_pipelines_registry() {
         &args(&[
             "x",
             "--pipeline-set",
-            "naming.schedule=sequential",
+            "naming.lane_threshold=30",
             "--pipeline-set",
             "library.matching=off",
         ]),
@@ -112,10 +112,7 @@ fn pipeline_sets_are_checked_against_the_pipelines_registry() {
     assert_eq!(
         ok.pipeline_sets,
         vec![
-            (
-                "naming.schedule".to_string(),
-                Val::Text("sequential".into())
-            ),
+            ("naming.lane_threshold".to_string(), Val::Int(30)),
             ("library.matching".to_string(), Val::Text("off".into())),
         ],
         "typed, order kept"
@@ -127,7 +124,7 @@ fn pipeline_sets_are_checked_against_the_pipelines_registry() {
         &args(&[
             "x",
             "--pipeline-set",
-            "naming.schedul=sequential",
+            "naming.lane_treshold=30",
             "--pipeline-set",
             "library.matching=maybe",
             "--pipeline-set",
@@ -138,7 +135,11 @@ fn pipeline_sets_are_checked_against_the_pipelines_registry() {
     )
     .expect_err("all refused");
     assert_eq!(e.len(), 4, "{e:#?}");
-    assert!(e[0].contains("did you mean naming.schedule"), "{}", e[0]);
+    assert!(
+        e[0].contains("did you mean naming.lane_threshold"),
+        "{}",
+        e[0]
+    );
     assert!(e[1].contains("off, report, names"), "{}", e[1]);
     assert!(e[2].contains("set by the harness"), "{}", e[2]);
     assert!(e[3].contains("section.key=value"), "{}", e[3]);

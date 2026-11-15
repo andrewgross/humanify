@@ -22,11 +22,6 @@
 //!    fixture's input behaviour is its compiled executable's recorded
 //!    stdout, [`recorded_behavior`]); a layout the split does not read
 //!    is written unsplit and must hold no runnable tree.
-//! 5. SEQUENTIAL — `naming.schedule = "sequential"` + `naming.batch_size
-//!    = 10`, fresh and prior each twice, byte-identical, and equal to the
-//!    committed legacy goldens (`test/golden/legacy-default/`) where the
-//!    pair has one (a post-flip fixture has none: said, not skipped
-//!    silently).
 //!
 //! DETECTION (`detect --toolchain`) is printed first for every pair, and
 //! the fixture's `expect` block is checked LAST (`super::expect`). KNOWN
@@ -64,8 +59,6 @@ use crate::settings::Parsed;
 
 /// The committed library-index store every launch reads.
 const LIBRARY_STORE: &str = "test/e2e/library-index";
-/// The legacy goldens of the pre-flip default.
-const LEGACY_GOLDENS: &str = "test/golden/legacy-default";
 /// The notice a run prints before it BUILDS an index (runtime_index.rs).
 const BUILD_NOTICE: &str = "NOTICE: library names (the default) needs a library index";
 /// The launch golden this stage holds.
@@ -198,16 +191,15 @@ impl FixturePair {
     }
 }
 
-/// The three output legs the boot step reads.
+/// The two output legs the boot step reads.
 struct Legs {
     fresh: PathBuf,
     prior: PathBuf,
-    sequential: PathBuf,
 }
 
 impl Legs {
-    fn each(&self) -> [&Path; 3] {
-        [&self.fresh, &self.prior, &self.sequential]
+    fn each(&self) -> [&Path; 2] {
+        [&self.fresh, &self.prior]
     }
 }
 
@@ -573,60 +565,6 @@ impl Stage {
         assert_identical_trees(&a, &b, &label)
     }
 
-    /// The byte comparison against a committed legacy golden, if any.
-    fn compare_golden(&self, actual: &Path, golden: &Path, label: &str, step: &str) -> Step<()> {
-        if golden.exists() {
-            return assert_identical_trees(
-                actual,
-                golden,
-                &format!("{label} {step} vs the pre-flip default's golden"),
-            );
-        }
-        println!(
-            "  {label}: no committed golden for this pair — golden comparison skipped ({step})"
-        );
-        Ok(())
-    }
-
-    /// Step 5. Returns the sequential-prior output dir.
-    fn sequenced_leg(&mut self, fp: &FixturePair, root: &Path, split: &[Setting]) -> Step<PathBuf> {
-        let label = fp.label();
-        let mut seq = split.to_vec();
-        seq.push(setting("naming.schedule", JsValue::str("sequential")));
-        seq.push(setting("naming.batch_size", JsValue::Number(10.0)));
-        let goldens = self.repo.join(LEGACY_GOLDENS);
-        let (fresh_a, fresh_b) = (root.join("seq-fresh-a"), root.join("seq-fresh-b"));
-        let (prior_a, prior_b) = (root.join("seq-prior-a"), root.join("seq-prior-b"));
-        let v1 = self.input_of(&fp.name, &fp.pair.v1)?;
-        let stderr = self.twice(
-            &v1,
-            None,
-            (&fresh_a, &fresh_b),
-            &seq,
-            (&label, "sequential fresh"),
-        )?;
-        assert_identical_trees(&fresh_a, &fresh_b, &format!("{label} --sequential fresh"))?;
-        let fresh_golden = goldens.join(format!("{}-{}-fresh", fp.name, fp.pair.v1));
-        self.compare_golden(&fresh_a, &fresh_golden, &label, "--sequential fresh")?;
-        let prior_ref = if fp.bundle {
-            next_release_prior(&stderr, &format!("{label} sequential fresh"))?
-        } else {
-            fresh_a.join("index.js").display().to_string()
-        };
-        let v2 = self.input_of(&fp.name, &fp.pair.v2)?;
-        self.twice(
-            &v2,
-            Some(&prior_ref),
-            (&prior_a, &prior_b),
-            &seq,
-            (&label, "sequential prior"),
-        )?;
-        assert_identical_trees(&prior_a, &prior_b, &format!("{label} --sequential prior"))?;
-        let prior_golden = goldens.join(format!("{}-{}-{}", fp.name, fp.pair.v1, fp.pair.v2));
-        self.compare_golden(&prior_a, &prior_golden, &label, "--sequential prior")?;
-        Ok(prior_a)
-    }
-
     /// A BUNDLE's observable behaviour: stdout and exit of the file run
     /// AS-IS by Node in its own directory.
     fn behavior_of(&self, file: &Path, label: &str) -> Step<(String, i32)> {
@@ -679,11 +617,11 @@ impl Stage {
     /// A bundle's split trees boot with the input's behaviour.
     fn boot_trees(&self, fp: &FixturePair, legs: &Legs) -> Step<()> {
         let label = fp.label();
-        let versions = [&fp.pair.v1, &fp.pair.v2, &fp.pair.v2];
+        let versions = [&fp.pair.v1, &fp.pair.v2];
         for ((out, tag), version) in legs
             .each()
             .into_iter()
-            .zip(["fresh", "prior", "sequential"])
+            .zip(["fresh", "prior"])
             .zip(versions)
         {
             let input = self.input_of(&fp.name, version)?;
@@ -711,7 +649,7 @@ impl Stage {
             }
         }
         println!(
-            "  {label}: fresh + prior (+ --sequential, twice) split trees ran, deterministic, boots with the input's behavior"
+            "  {label}: fresh + prior split trees ran, deterministic, boots with the input's behavior"
         );
         Ok(())
     }
@@ -719,11 +657,11 @@ impl Stage {
     /// A single-module fixture boots with the input's module surface.
     fn boot_surfaces(&self, fp: &FixturePair, root: &Path, legs: &Legs) -> Step<()> {
         let label = fp.label();
-        let versions = [&fp.pair.v1, &fp.pair.v2, &fp.pair.v2];
+        let versions = [&fp.pair.v1, &fp.pair.v2];
         for ((out, tag), version) in legs
             .each()
             .into_iter()
-            .zip(["fresh", "prior", "sequential"])
+            .zip(["fresh", "prior"])
             .zip(versions)
         {
             let input = self.input_of(&fp.name, version)?;
@@ -737,9 +675,7 @@ impl Stage {
                 ));
             }
         }
-        println!(
-            "  {label}: fresh + prior (+ --sequential, twice, vs the legacy goldens) ran, deterministic, boots with the input's surface"
-        );
+        println!("  {label}: fresh + prior ran, deterministic, boots with the input's surface");
         Ok(())
     }
 
@@ -751,11 +687,9 @@ impl Stage {
         let split = vec![setting("split.enabled", JsValue::Bool(fp.bundle))];
         let prior_ref = self.fresh_leg(fp, &fresh, &split, bundler)?;
         self.prior_leg(fp, &prior_ref, root, &split)?;
-        let sequential = self.sequenced_leg(fp, root, &split)?;
         let legs = Legs {
             fresh: fresh.clone(),
             prior: root.join("prior-a"),
-            sequential,
         };
         if !fp.bundle {
             self.boot_surfaces(fp, root, &legs)
@@ -933,9 +867,7 @@ fn check_unsplit(label: &str, legs: &Legs) -> Step<()> {
             }
         }
     }
-    println!(
-        "  {label}: fresh + prior (+ --sequential, twice) ran unsplit, deterministic — no runnable tree to boot"
-    );
+    println!("  {label}: fresh + prior ran unsplit, deterministic — no runnable tree to boot");
     Ok(())
 }
 

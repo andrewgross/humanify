@@ -12,11 +12,6 @@
 # DISAGREE are refused, naming both. The API key is never a setting: it is
 # read from HUMANIFY_API_KEY in the environment.
 
-[run]
-# "throughput" (the default: work through items as fast as the pool and the semaphore allow; results land in canonical order where they are consumed) or "ordered" (the TEST MODE: the waves' turn driver, the parallel helpers sequential, one-call dispatch windows). Ordered forces the conservative naming schedule and refuses naming.relaxed_levers. Determinism-sensitive tests opt in; regular runs never pay for it (docs/concurrency.md, rule 9).
-# flag: --run-order
-# order = "throughput"
-
 [io]
 # Output directory.
 # flag: --output-dir
@@ -63,12 +58,6 @@
 # reconcile_prior_diff = true
 
 [naming]
-# "relaxed" (both relaxed levers on) or "sequential" (the pre-2026-09-28 default's bytes at the same batch_size).
-# flag: --naming-schedule
-# schedule = "relaxed"
-# Lever-sizing knob: the relaxed levers to turn on (relaxed schedule only).
-# flag: --naming-relaxed-levers
-# relaxed_levers =   (unset: every lever)
 # Identifiers per LLM batch.
 # flag: --naming-batch-size
 # batch_size = 25

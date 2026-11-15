@@ -58,7 +58,7 @@ fn the_config_file_is_one_table_per_section_in_first_seen_order() {
         setting("llm.retries", JsValue::Number(0.0)),
         setting("library.index_store_dir", JsValue::str("/r/store")),
         setting("split.enabled", JsValue::Bool(true)),
-        setting("naming.schedule", JsValue::str("sequential")),
+        setting("naming.lane_threshold", JsValue::Number(30.0)),
         setting("llm.concurrency", JsValue::Number(472.0)),
         setting("library.skip", JsValue::str_array(&["a", "b"])),
     ])
@@ -66,7 +66,7 @@ fn the_config_file_is_one_table_per_section_in_first_seen_order() {
     assert_eq!(
         text,
         "[llm]\nretries = 0\nconcurrency = 472\n[library]\nindex_store_dir = \"/r/store\"\n\
-         skip = [\"a\", \"b\"]\n[split]\nenabled = true\n[naming]\nschedule = \"sequential\"\n"
+         skip = [\"a\", \"b\"]\n[split]\nenabled = true\n[naming]\nlane_threshold = 30\n"
     );
 }
 

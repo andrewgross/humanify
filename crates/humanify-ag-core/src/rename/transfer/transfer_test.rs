@@ -84,7 +84,6 @@ fn synthetic_pairs_match_the_ts_probe() {
             fresh: case["fresh"].as_str().unwrap(),
             prior: case["prior"].as_str().unwrap(),
             never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
-            fast: false,
             same_program_check: true,
         };
         let rows = match_prior_version(input, |stage| {

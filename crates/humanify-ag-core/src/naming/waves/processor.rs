@@ -43,7 +43,6 @@ use super::render::{FnPrinter, Occurrences};
 use super::taken::TakenNames;
 use super::used_set::{NameLayer, UsedSet};
 use crate::artifact_dump::{AskRowParts, Dispatch, DispatchLog, RecordMode};
-use crate::fast::Lever;
 use crate::graph::UnifiedGraph;
 use crate::naming::ask_trace::{AskScope, AskSite};
 use crate::naming::code_window::{FunctionCodeSelection, cap_context_code, select_function_code};
@@ -116,11 +115,6 @@ pub struct WaveInputs<'a, 's> {
     /// `--batch-size` / `--max-retries` / `--max-free-retries` /
     /// `--lane-threshold`.
     pub tunables: WaveTunables,
-    /// The naming schedule: any non-Off tier pipelines each round's LLM
-    /// calls (a lane's
-    /// follow-up starts as soon as ITS answer lands, not when the round's
-    /// slowest does).
-    pub fast: crate::fast::FastTier,
     /// How many rendered prompts may be alive at once (in flight plus the
     /// backfill headroom — finding #65's bounded prompt window; the
     /// rate limiter's slot count plus headroom, never the whole round).
@@ -1146,7 +1140,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             .collect();
         drop(setup_phase);
         self.drive_round(lanes, retries);
-        let mut rejections = self.barrier();
+        let rejections = self.barrier();
 
         // ---- the gate release: shadowed bindings, in node order ---------
         let gate_phase = crate::profiling::phase("waves:gate-release");
@@ -1162,12 +1156,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         }
         drop(gate_phase);
         // ---- round B -----------------------------------------------------
-        if self.inp.fast.lever(Lever::DeferShadowed) {
-            self.deferred = lanes;
-        } else {
-            self.drive_round(lanes, Vec::new());
-            rejections.extend(self.barrier());
-        }
+        self.deferred = lanes;
         self.build_retry_seeds(rejections)
     }
 
@@ -1291,7 +1280,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         let strategy = self.strategies.len() - 1;
         let session = self.inp.graph.functions[f].session_id.clone();
         let batch = self.inp.tunables.batch_size.max(1);
-        let n_lanes = if self.inp.fast.lever(Lever::WindowLanes) && names.len() > batch {
+        let n_lanes = if names.len() > batch {
             names.len().div_ceil(batch)
         } else {
             compute_lane_count(names.len(), self.inp.tunables.lane_threshold)
@@ -2310,76 +2299,8 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         self.entry_seq - 1
     }
 
-    /// Run every lane and retry of a round to completion, dispatching one
-    /// call per active lane per turn (a lane's sequence is independent of
-    /// the others: its reads are frozen for the round).
-    fn drive_round(&mut self, lanes: Vec<LaneRun>, retries: Vec<RetryRun>) {
-        if self.inp.fast.on() {
-            self.drive_round_pipelined(lanes, retries);
-        } else {
-            self.drive_round_turns(lanes, retries);
-        }
-    }
-
-    /// The parity-faithful driver: turn by turn, every active lane's next
-    /// call dispatched together and the turn waiting for its slowest.
-    fn drive_round_turns(&mut self, mut lanes: Vec<LaneRun>, retries: Vec<RetryRun>) {
-        self.run_retries(retries);
-        loop {
-            let mut active: Vec<(usize, LaneCall)> = Vec::new();
-            for (i, lr) in lanes.iter_mut().enumerate() {
-                if lr.lane.is_finished() {
-                    continue;
-                }
-                if let Some(call) = lr.lane.next_call() {
-                    active.push((i, call));
-                }
-            }
-            // Lanes with no further call run their tail now.
-            let calling: HashSet<usize> = active.iter().map(|(a, _)| *a).collect();
-            for (i, lr) in lanes.iter_mut().enumerate() {
-                if !lr.lane.is_finished() && !calling.contains(&i) {
-                    self.finish_lane(lr);
-                    // Contention events land as the lanes finish.
-                    let events = std::mem::take(&mut lr.lane.report.contention);
-                    self.processor.contention.extend(events);
-                }
-            }
-            if active.is_empty() {
-                break;
-            }
-            // The turn's dispatch, one bounded window at a time (finding
-            // #65): requests are built and prompts rendered per window,
-            // results collected in lane order — the turn still waits for
-            // its slowest call before any lane is fed, exactly as before.
-            let window = self.inp.window.max(1);
-            let mut results = Vec::with_capacity(active.len());
-            for chunk in active.chunks(window) {
-                let requests: Vec<BatchRenameRequest> = chunk
-                    .iter()
-                    .map(|(i, call)| self.lane_request(&lanes[*i], call))
-                    .collect();
-                let targets: Vec<(usize, String, AskSite)> = chunk
-                    .iter()
-                    .map(|(i, call)| {
-                        (
-                            lanes[*i].ctx,
-                            lanes[*i].function_id.clone(),
-                            AskSite::lane_reask(&call.rejections, lanes[*i].phase),
-                        )
-                    })
-                    .collect();
-                results.extend(self.dispatch(requests, &targets));
-            }
-            for ((i, _), res) in active.into_iter().zip(results) {
-                self.feed_lane(&mut lanes[i], res);
-            }
-        }
-        self.collect_lanes(lanes);
-    }
-
-    /// The fast schedule (the relaxed default and `--sequential` alike):
-    /// the same round, PIPELINED — through a BOUNDED window of rendered
+    /// Run every lane and retry of a round to completion, PIPELINED —
+    /// through a BOUNDED window of rendered
     /// prompts (finding #65). The retries and the lanes' first calls form
     /// a backlog in dispatch order; only the first `window` are prepared
     /// now, and each completion starts backlog items (and the finished
@@ -2390,12 +2311,12 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
     /// Decision-neutral by construction — a lane reads only the round's
     /// frozen state and its own claims (`batch.rs`), so its call sequence
     /// depends neither on completion order nor on when its first call was
-    /// started — and everything order-sensitive is put back into the turn
-    /// driver's canonical order before it is recorded: dispatch records by
+    /// started — and everything order-sensitive is put back into a
+    /// canonical order before it is recorded: dispatch records by
     /// (turn, lane) with the retries first, contention events by
     /// (finishing turn, lane), retry entries in retry order ahead of the
     /// lanes' effects.
-    fn drive_round_pipelined(&mut self, mut lanes: Vec<LaneRun>, retries: Vec<RetryRun>) {
+    fn drive_round(&mut self, mut lanes: Vec<LaneRun>, retries: Vec<RetryRun>) {
         let n_retries = retries.len();
         let window = self.inp.window.max(1);
         // (canonical order key, prepared record): retries are turn 0, a
@@ -2617,44 +2538,6 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         }
         if let Some((c, _, s, reps)) = group {
             self.attach_report(c, s, reps);
-        }
-    }
-
-    /// The barrier retries of a round: one call each.
-    fn run_retries(&mut self, retries: Vec<RetryRun>) {
-        if !retries.is_empty() {
-            // The bounded window: requests are built (and prompts rendered)
-            // one window at a time — a fresh run's retry seeds are thousands
-            // of dispatches (finding #65).
-            let window = self.inp.window.max(1);
-            let mut results = Vec::with_capacity(retries.len());
-            for chunk in retries.chunks(window) {
-                let requests: Vec<BatchRenameRequest> =
-                    chunk.iter().map(|r| self.retry_request(r)).collect();
-                let targets: Vec<(usize, String, AskSite)> = chunk
-                    .iter()
-                    .map(|r| {
-                        (
-                            r.seed.ctx,
-                            r.function_id.clone(),
-                            AskSite::reask(r.seed.cause, r.seed.phase, r.seed.cause_code),
-                        )
-                    })
-                    .collect();
-                results.extend(self.dispatch(requests, &targets));
-            }
-            for (r, res) in retries.iter().zip(results) {
-                let renames = match res {
-                    Ok((renames, finish)) => {
-                        if let Some(report) = self.ctxs[r.seed.ctx].report.as_mut() {
-                            report.bump_retry_call(finish);
-                        }
-                        renames
-                    }
-                    Err(()) => Renames::default(),
-                };
-                self.collect_retry_entries(r, &renames);
-            }
         }
     }
 
@@ -2912,40 +2795,6 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         }
     }
 
-    /// Dispatch one turn's requests through the provider, recording each
-    /// (prompts.jsonl + cache-keys.jsonl). The targets carry the ask-trace
-    /// site (a lane's phase fresh, or a retry seed's recorded cause).
-    fn dispatch(
-        &mut self,
-        requests: Vec<BatchRenameRequest>,
-        targets: &[(usize, String, AskSite)],
-    ) -> Vec<Result<(Renames, Option<String>), ()>> {
-        let mut calls = Vec::with_capacity(requests.len());
-        for (request, (ctx, function_id, site)) in requests.into_iter().zip(targets) {
-            let (prepared, call) = self.prepare_dispatch(request, *ctx, function_id, site.clone());
-            // The replay sources belong to the pipelined path only; this
-            // commit is immediate.
-            self.commit_prepared_immediate(prepared);
-            calls.push(call);
-        }
-        // The gauge: every call of one run_wave is alive until it returns
-        // (the callers chunk at the window, so this stays bounded).
-        let live = calls.len();
-        let bytes = calls.iter().map(prompt_bytes).sum();
-        self.note_live(live, bytes);
-        let results = {
-            let mut ph = crate::profiling::phase("waves:llm-dispatch");
-            if let Some(ph) = ph.as_mut() {
-                ph.note("calls", calls.len());
-            }
-            self.provider.run_wave(calls)
-        };
-        let mut tally = Tally::default();
-        let mapped = results.into_iter().map(|r| tally.map(r)).collect();
-        self.apply_tally(tally);
-        mapped
-    }
-
     /// A request's prompts and the recorder's material for it (the mode
     /// decides what survives the dispatch — finding #65; the call itself
     /// always carries the rendered prompts, dropped once dispatched). The
@@ -3041,17 +2890,6 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         *round += 1;
         parts.set_round(*round);
         self.log.record_ask_parts(parts);
-    }
-
-    /// The immediate commit of the turn driver's path (the record was
-    /// prepared for this very moment; no replay source exists).
-    fn commit_prepared_immediate(&mut self, prepared: Prepared) {
-        match prepared {
-            Prepared::Full(record) => self.commit_record(record),
-            Prepared::Ask(mut parts) => self.commit_ask_parts(&mut parts),
-            Prepared::Replay(_) => unreachable!("the turn driver never replays"),
-            Prepared::None => {}
-        }
     }
 
     /// Commit whatever [`Self::prepare_dispatch`] or

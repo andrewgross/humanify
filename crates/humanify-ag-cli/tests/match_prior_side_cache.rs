@@ -6,7 +6,7 @@
 //!    ONCE per run — one parse of the prior text, however many files the
 //!    work dir holds. The single-call design the verb grew from (the
 //!    pipeline's per-file `match_prior_version`) reparsed the whole prior
-//!    per file — twice per file in the default fast schedule — which on a
+//!    per file — twice per file — which on a
 //!    raw bun-bundle tree (a runtime plus hundreds of vendor files,
 //!    against a ~33MB prior) turned minutes of matching into hours of
 //!    rebuilding the same index. Pinning the count keeps the amortization
@@ -121,7 +121,7 @@ fn normalized(dump: &Value) -> String {
 fn the_prior_side_is_built_once_and_the_dump_bytes_hold() {
     // ── the parse-count pin, single-file first ───────────────────────────
     // One file, one prior parse. (The pre-cache code parsed TWICE even
-    // here: the fast schedule's side thread and its main-thread re-parse.)
+    // here: the side thread and its main-thread re-parse.)
     let dir = temp_dir("single");
     let input = write(&dir, "input.js", SINGLE_FILE);
     let prior = formatted(&dir, "prior.js", SINGLE_PRIOR);

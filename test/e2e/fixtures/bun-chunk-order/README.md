@@ -25,7 +25,7 @@ On main `6477bf247` the split tree fails at load (`<helper> is not a
 function`: the wrapped module's `var` stayed at the top level, its helper
 moved into the chunk's init). With exp218's linker every statement of a
 lazily loaded chunk runs in its init, after the inits of the chunks it
-imports and before nothing that uses it; the fresh, prior and sequential
+imports and before nothing that uses it; the fresh and prior
 split trees print exactly what the input prints. The input itself is run
 by Node with the bunfs resolve hook (as `bun-chunks`). v1.1.0 changes the
 alpha report.

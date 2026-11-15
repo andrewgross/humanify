@@ -10,9 +10,6 @@ Options:
   -h, --help           Print help (see more with '--help')
   -V, --version        Print version
 
-Run [run]:
-      --run-order <throughput|ordered>  "throughput" (the default: work through items as fast as the pool and the semaphore allow;...
-
 Output [io]:
   -o, --output-dir <dir>  Output directory
 
@@ -43,26 +40,14 @@ Cross-version matching [matching]:
       --matching-reconcile-prior-diff  With a prior: snap rename-noise diff hunks back to the prior's names
 
 Naming [naming]:
-      --naming-schedule <relaxed|sequential>
-          "relaxed" (both relaxed levers on) or "sequential" (the pre-2026-09-28 default's bytes at the...
-      --naming-relaxed-levers <a,b,...>
-          Lever-sizing knob: the relaxed levers to turn on (relaxed schedule only)
-      --naming-batch-size <n>
-          Identifiers per LLM batch
-      --naming-max-retries <n>
-          Per-identifier LLM call limit, initial + retries
-      --naming-rename-retries <n>
-          Name-conflict re-asks per rejected suggestion, each disclosing every failed one
-      --naming-max-free-retries <n>
-          Cross-lane collision retry limit
-      --naming-lane-threshold <n>
-          Min bindings to enable parallel lanes
-      --naming-code-window-lines <n>
-          Most lines of a function the naming prompt shows (longer functions are windowed around the names...
-      --naming-floor
-          The deterministic naming floor (closes minted-token gaps)
-      --naming-floor-sweep
-          The LLM sweep of minted survivors (needs naming_floor)
+      --naming-batch-size <n>         Identifiers per LLM batch
+      --naming-max-retries <n>        Per-identifier LLM call limit, initial + retries
+      --naming-rename-retries <n>     Name-conflict re-asks per rejected suggestion, each disclosing every failed one
+      --naming-max-free-retries <n>   Cross-lane collision retry limit
+      --naming-lane-threshold <n>     Min bindings to enable parallel lanes
+      --naming-code-window-lines <n>  Most lines of a function the naming prompt shows (longer functions are windowed around the names...
+      --naming-floor                  The deterministic naming floor (closes minted-token gaps)
+      --naming-floor-sweep            The LLM sweep of minted survivors (needs naming_floor)
 
 Library matching [library]:
       --library-matching <off|report|names>

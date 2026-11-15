@@ -8,7 +8,6 @@ pub mod babel_view;
 pub mod cut;
 pub mod detect;
 pub mod emit;
-pub mod fast;
 pub mod finish;
 pub mod format;
 pub mod graph;

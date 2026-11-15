@@ -351,7 +351,6 @@ fn match_stage_and_transfers_are_pinned() {
             fresh: &b,
             prior: &a,
             never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
-            fast: false,
             same_program_check: false,
         };
         let line = match_prior_version(input, |stage| {
