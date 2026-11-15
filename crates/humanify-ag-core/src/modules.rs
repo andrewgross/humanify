@@ -393,6 +393,8 @@ impl CarriedName {
 }
 
 /// One detected CJS factory (CjsFactoryRecord's dumped fields).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FactoryRecord {
     /// The minified handle (the declarator's id name).
     pub factory_var: String,
@@ -418,11 +420,13 @@ pub struct FactoryRecord {
     pub name: Option<String>,
     /// How THIS run got the name — set by the naming cascade (run state:
     /// the LLM pass reads it, the per-source counts report it).
+    #[serde(skip)]
     pub name_source: Option<NameSource>,
     /// Where the NAME originally came from — the manifest's `nameSource`
     /// label. Equal to `name_source`, except a carry, which keeps the
     /// prior manifest's label so an unchanged library's entry is
     /// byte-identical across hops (finding #71).
+    #[serde(skip)]
     pub name_origin: Option<NameSource>,
     /// The module's ORIGINAL source path, when the bundler kept it —
     /// esbuild's unminified form uses it as the factory object's key
@@ -441,10 +445,12 @@ pub struct FactoryRecord {
     /// What a carry took from the prior release — a content or declared
     /// pair (finding #90/#95) or the exact structural-hash carry (exp194):
     /// the prior file and identifier the unpack reuses. None otherwise.
+    #[serde(skip)]
     pub carried: Option<vendor_pairing::CarriedIdentity>,
     /// What the module declares about itself (finding #95,
     /// [`identity::declare`]) — set by the unpack before any name is
     /// chosen; None for an app text asset or when no reader named it.
+    #[serde(skip)]
     pub identity: Option<identity::DeclaredIdentity>,
     /// Declared facts too weak to name the module (a version constant, a
     /// repository URL) — shown to the model, never a name.
@@ -470,6 +476,8 @@ pub struct FactoryRecord {
 }
 
 /// The classification: the helper var + every factory, in source order.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BunModuleClassification {
     pub helper_var: String,
     pub factories: Vec<FactoryRecord>,
@@ -478,6 +486,7 @@ pub struct BunModuleClassification {
     pub container: Vec<Span>,
     /// WHERE each vendor name came from, once `name_cjs_factories` has run.
     /// Undefined until then — absent is not "all zero" (the TS note).
+    #[serde(skip)]
     pub name_counts: Option<FactoryNameCounts>,
 }
 
@@ -980,116 +989,42 @@ pub(crate) fn bang_block_value(source: &str, span: Span) -> Option<String> {
 
 /// modules.json's rows in the `--dump-artifacts` catalog: the Bun
 /// classification per site (helper var, wrapper, factory rows).
-pub mod modules_dump {
+/// One classification site (the dump's modules section): the Bun CJS
+/// classification of a text and the wrapper it ran against.
+#[derive(serde::Serialize)]
+pub struct ClassificationSite {
+    pub classification: BunModuleClassification,
+    pub wrapper: Option<wrapper::WrapperFunction>,
+}
 
-    use crate::hash::serialize::SymbolTables;
-    use crate::ingest::Ingest;
-    use oxc_allocator::Allocator;
-    use serde_json::{Value, json};
-
-    /// One classification site's modules.json object (`recordBunModules`):
-    /// helper var, wrapper, factory rows sorted by span — Null without a
-    /// classification.
-    pub fn site_json(
-        data: Option<(
-            &super::BunModuleClassification,
-            Option<&super::wrapper::WrapperFunction>,
-        )>,
-        label: &str,
-    ) -> Value {
-        let Some((data, wrapper)) = data else {
-            return Value::Null;
-        };
-        let span = |s: oxc_span::Span| json!({"text": label, "start": s.start, "end": s.end});
-        let mut rows: Vec<Value> = data
-            .factories
-            .iter()
-            .map(|f| {
-                let mut row = json!({
-                    "key": span(f.span),
-                    "factoryVar": f.factory_var,
-                    "lineRange": [f.line_range.0, f.line_range.1],
-                    "contentHash": f.content_hash,
-                    "structuralHash": f.structural_hash,
-                });
-                let obj = row.as_object_mut().expect("row object");
-                // The TS writes the banner fields only when present
-                // (JSON.stringify drops undefined) — mirror the omission.
-                if let Some(t) = &f.banner_text {
-                    obj.insert("bannerText".into(), json!(t));
-                }
-                if let Some(p) = &f.banner_package {
-                    obj.insert("bannerPackage".into(), json!(p));
-                }
-                if let Some(v) = &f.banner_version {
-                    obj.insert("bannerVersion".into(), json!(v));
-                }
-                // esbuild's unminified builds carry the module's original
-                // source path (exp075) — recorded, never load-bearing.
-                if let Some(p) = &f.source_path {
-                    obj.insert("sourcePath".into(), json!(p));
-                }
-                row
-            })
-            .collect();
-        rows.sort_by(|a, b| {
-            let key = |v: &Value| {
-                (
-                    v["key"]["start"].as_u64().unwrap_or(0),
-                    v["key"]["end"].as_u64().unwrap_or(0),
-                )
-            };
-            key(a).cmp(&key(b))
-        });
-        let wrapper_json = wrapper.map(|w| {
-            json!({
-                "span": {"text": label, "start": w.span.start, "end": w.span.end},
-                "bodySpan": {"text": label, "start": w.body_span.start, "end": w.body_span.end},
-                "bindingCount": w.binding_count,
-            })
-        });
-        json!({
-            "helperVar": data.helper_var,
-            "wrapper": wrapper_json,
-            "factories": rows,
-        })
+/// Classify `text` as the unpack does: None when the run's grammar finds
+/// no factory helper in it, or nothing classifies.
+pub fn classify_site(
+    text: &str,
+    layout: crate::toolchain::BundleLayout,
+    grammar: crate::toolchain::ModuleWrapperGrammar,
+) -> Result<Option<ClassificationSite>, String> {
+    if grammar.identify_factory_helper(text).is_none() {
+        return Ok(None);
     }
-
-    /// One classification site over a text: the Bun CJS classification and
-    /// the wrapper it ran against (None when no helper scan hit).
-    pub fn classify_site(
-        text: &str,
-        layout: crate::toolchain::BundleLayout,
-        grammar: crate::toolchain::ModuleWrapperGrammar,
-    ) -> Result<
-        Option<(
-            super::BunModuleClassification,
-            Option<super::wrapper::WrapperFunction>,
-        )>,
-        String,
-    > {
-        // No factory helper, no classification — and no parse (an ESM text
-        // is not a bundle; the scan is the classifier's own first step —
-        // the run's grammar's helper).
-        if grammar.identify_factory_helper(text).is_none() {
-            return Ok(None);
-        }
-        let allocator = Allocator::default();
-        let ingest = Ingest::parse_unambiguous(&allocator, text);
-        if !ingest.errors.is_empty() {
-            return Err(format!("oxc: {} diagnostic(s)", ingest.errors.len()));
-        }
-        let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
-        let tables = SymbolTables::build(ingest.semantic());
-        let classification = grammar.classify_factories(
-            text,
-            ingest.program,
-            ingest.semantic(),
-            wrapper.as_ref().map(|w| w.body_span),
-            &tables,
-        );
-        Ok(classification.map(|c| (c, wrapper)))
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse_unambiguous(&allocator, text);
+    if !ingest.errors.is_empty() {
+        return Err(format!("oxc: {} diagnostic(s)", ingest.errors.len()));
     }
+    let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
+    let tables = crate::hash::serialize::SymbolTables::build(ingest.semantic());
+    let classification = grammar.classify_factories(
+        text,
+        ingest.program,
+        ingest.semantic(),
+        wrapper.as_ref().map(|w| w.body_span),
+        &tables,
+    );
+    Ok(classification.map(|classification| ClassificationSite {
+        classification,
+        wrapper,
+    }))
 }
 
 #[cfg(test)]

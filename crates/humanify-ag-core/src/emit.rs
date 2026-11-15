@@ -22,12 +22,10 @@
 //! - [`cjs`] — the runnable live-binding CommonJS module graph;
 //! - [`import_alias`] — which alias each file binds a module it imports to;
 //! - [`paths`] / [`substitutions`] — the relative-import and positional
-//!   text-splice owners the post-split passes share;
-//! - [`emit_dump`] — the emit section of the `--dump-artifacts` catalog.
+//!   text-splice owners the post-split passes share.
 
 pub mod align;
 pub mod cjs;
-pub mod emit_dump;
 pub mod entry_order;
 pub mod import_alias;
 pub mod load_order;

@@ -191,38 +191,6 @@ impl PlacementTrail {
         out.insert("trails", JsValue::Array(trails));
         JsValue::Object(out)
     }
-
-    /// The dump's `placement.json` as `writePlacement` writes it: rows
-    /// sorted by span key (stable), each `{key, index, names, nameCount?,
-    /// placedBy, file, priorFile?, priorFileFrom?, hashMiss?, alternatives?,
-    /// evidence}` — the writer's literal order, the alternatives in the
-    /// tiers' order and the evidence in the record site's.
-    pub fn placement_json(&self) -> humanify_ag_model::js::JsValue {
-        use humanify_ag_model::js::{JsObject, JsValue};
-        let mut order: Vec<usize> = (0..self.rows.len()).collect();
-        order.sort_by_key(|&i| (self.rows[i].key.start, self.rows[i].key.end));
-        let placements = order
-            .into_iter()
-            .map(|i| {
-                let r = &self.rows[i];
-                let mut key = JsObject::new();
-                key.insert("text", JsValue::str(r.key.text.as_str()));
-                key.insert("start", JsValue::Number(r.key.start as f64));
-                key.insert("end", JsValue::Number(r.key.end as f64));
-                let mut o = JsObject::new();
-                o.insert("key", JsValue::Object(key));
-                o.insert("index", JsValue::Number(r.index as f64));
-                o.insert("names", str_list(&r.names));
-                o.insert_opt("nameCount", r.name_count.map(|n| JsValue::Number(n as f64)));
-                insert_placed(&mut o, r, self.dissent_order[i].as_deref());
-                JsValue::Object(o)
-            })
-            .collect();
-        let mut out = JsObject::new();
-        out.insert("schemaVersion", JsValue::Number(1.0));
-        out.insert("placements", JsValue::Array(placements));
-        JsValue::Object(out)
-    }
 }
 
 fn str_list(v: &[String]) -> humanify_ag_model::js::JsValue {

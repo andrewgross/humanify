@@ -22,10 +22,8 @@
 //!   [`super::close::find_close_matches`]'s pairs — a drift between the two
 //!   implementations of the derivation is a gate failure, not a silent
 //!   mismatch.
-//! - the candidate-vector reconstruction — [`super::close`]`::build_vector_map`
-//!   is private (hands-off file), so the same loop is re-derived here from
-//!   the public index API with a KEEP-IN-SYNC note; `score_pairs` itself is
-//!   public and IS the scoring both sides share.
+//! - the candidate rows — the tier's own scored candidates
+//!   ([`super::close::CloseMatchResult::candidates`]).
 //!
 //! The TS writes the file only when its artifact dump is armed, and skips
 //! it entirely when one side has no unmatched functions (the early return
@@ -46,10 +44,7 @@ use humanify_ag_model::dump::{
 
 use crate::hash::serialize::SymbolTables;
 
-use super::close::{
-    self, CloseCandidate, Corroboration, DEFAULT_CLOSE_MATCH_THRESHOLD, compute_feature_vector,
-    score_pairs,
-};
+use super::close::{self, CloseCandidate, Corroboration};
 use super::statement_align::{AlignSide, TransferPair, compute_body_local_transfers, row_json_in};
 use super::{IndexNode, row_node_ids};
 
@@ -133,18 +128,8 @@ pub fn close_dump_with_context(
         return Ok((None, Vec::new()));
     }
 
-    // The vector reconstruction (KEEP-IN-SYNC with close::build_vector_map —
-    // private there; this re-derives it from the public index API so
-    // `score_pairs` can be called for the candidate rows).
-    let (prior_vectors, _) = rebuild_vectors(&unmatched_prior, sides.prior_index);
-    let (fresh_vectors, _) = rebuild_vectors(&unmatched_fresh, sides.fresh_index);
-    let candidates: Vec<CloseCandidate> = score_pairs(
-        &prior_vectors,
-        &fresh_vectors,
-        DEFAULT_CLOSE_MATCH_THRESHOLD,
-    );
-
-    // The real assignment + the skip counters (the tier itself).
+    // The real assignment + the skip counters (the tier itself); its
+    // scored candidates are the candidate rows.
     let real = close::find_close_matches(
         &unmatched_prior,
         &unmatched_fresh,
@@ -153,7 +138,7 @@ pub fn close_dump_with_context(
         None,
     );
 
-    let events = derive_close_assignment_events(&candidates, &real.pairs);
+    let events = derive_close_assignment_events(&real.candidates, &real.pairs);
     // Drift detector: the replay's won set must BE the assignment. A
     // mismatch means the two derivation implementations disagree — a gate
     // that compares rows built on a broken derivation is worse than no
@@ -648,32 +633,6 @@ fn fold_hints(
         }
     }
     (hint_rows, snap_rows)
-}
-
-/// The vector reconstruction — KEEP-IN-SYNC with `close::build_vector_map`
-/// (private there; the hands-off file): graph-row-order ids, featureless
-/// ids skipped and counted, callee count from the fingerprint's callee
-/// hashes.
-fn rebuild_vectors(
-    ids: &[String],
-    index: &super::FingerprintIndex<'_>,
-) -> (Vec<(String, close::FeatureVector)>, usize) {
-    let mut vectors = Vec::with_capacity(ids.len());
-    let mut skipped = 0usize;
-    for id in ids {
-        let entry = index.entry_of_session(id).map(|i| &index.entries[i]);
-        let features = entry.and_then(|e| e.fingerprint.features());
-        let (entry, features) = match (entry, features) {
-            (Some(e), Some(f)) => (e, f),
-            _ => {
-                skipped += 1;
-                continue;
-            }
-        };
-        let callee_count = entry.fingerprint.callee_hashes().len();
-        vectors.push((id.clone(), compute_feature_vector(features, callee_count)));
-    }
-    (vectors, skipped)
 }
 
 /// One candidate's fate in the greedy assignment — the TS

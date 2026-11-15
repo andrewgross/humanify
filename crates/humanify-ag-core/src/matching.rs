@@ -58,7 +58,6 @@ pub mod close;
 pub mod close_dump;
 pub mod features;
 pub mod match_map;
-pub mod matches_dump;
 pub mod member_key;
 pub mod rules;
 pub mod statement_align;

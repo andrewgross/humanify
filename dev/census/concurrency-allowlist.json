@@ -79,13 +79,6 @@
       "reason": "--log-file: one file shared by the debug and verbose writers; locked per line so lines never interleave. Diagnostics only"
     },
     {
-      "file": "crates/humanify-ag-cli/src/unified.rs",
-      "scope": "git_short_sha",
-      "construct": "subprocess",
-      "pattern": "subprocess",
-      "reason": "`git rev-parse --short HEAD` for the dump's manifest, through crate::subprocess::run under GIT_DEADLINE (1 min; it answers in ms): not a checkout or no git reads the decided quiet \"unknown\"; a git past the deadline is killed and WARNED"
-    },
-    {
       "file": "crates/humanify-ag-core/src/naming/reconcile/hunks.rs",
       "scope": "compute_normal_diff",
       "construct": "subprocess",

@@ -23,7 +23,8 @@ use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
 
 /// One `artifactDump.recordName` row from a path the strategy trail does
 /// not see. `span` None = the TS's no-position sentinel (-1/-1).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecordedName {
     pub span: Option<Span>,
     pub old_name: String,

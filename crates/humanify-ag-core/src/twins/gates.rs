@@ -293,7 +293,8 @@ pub struct TwinTransferPair {
 /// One private id's transfer: every fresh PrivateIdentifier node carrying
 /// it, spans in source order (statement-twin.ts :98 — TS carries the
 /// PrivateName NODES; WP3.2 mutates them directly).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PrivateRenameSet {
     pub old_name: String,
     pub new_name: String,
