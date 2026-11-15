@@ -63,31 +63,19 @@ pub struct CloseDumpSides<'a> {
 }
 
 /// Why the close-match dump could not be built.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum CloseDumpError {
     /// The replayed outcome's won pairs differ from the assignment.
+    #[error(
+        "close-dump drift: the outcome replay's won set ({won}) does not equal the assignment ({assigned})"
+    )]
     Drift { won: usize, assigned: usize },
     /// A pair's id is not a function entry of its side's index.
+    #[error("close-dump: {side} {id} is not a function index entry")]
     NotAFunction { side: &'static str, id: String },
     /// A pair's row JSON is missing.
+    #[error("close-dump: row JSON unavailable for {prior} / {fresh}")]
     RowJsonUnavailable { prior: String, fresh: String },
-}
-
-impl std::fmt::Display for CloseDumpError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Drift { won, assigned } => write!(
-                f,
-                "close-dump drift: the outcome replay's won set ({won}) does not equal the assignment ({assigned})"
-            ),
-            Self::NotAFunction { side, id } => {
-                write!(f, "close-dump: {side} {id} is not a function index entry")
-            }
-            Self::RowJsonUnavailable { prior, fresh } => {
-                write!(f, "close-dump: row JSON unavailable for {prior} / {fresh}")
-            }
-        }
-    }
 }
 
 /// Build the matches-close.json content, or `None` when the tier would not

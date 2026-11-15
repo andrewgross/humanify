@@ -469,14 +469,9 @@ pub struct TierInput<'a> {
 
 /// No placement tier claimed a statement (the fallback tier always
 /// does, so this is an invariant failure).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("stable split: no placement tier claimed the statement")]
 pub struct Unclaimed;
-
-impl std::fmt::Display for Unclaimed {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("stable split: no placement tier claimed the statement")
-    }
-}
 
 /// `assignWithPrior`: inherit prior assignments; residue follows its
 /// preceding neighbour.

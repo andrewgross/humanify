@@ -17,7 +17,8 @@ use std::io::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-use crate::sourcemap::SourceMap;
+use crate::error::{FileError, at, op_at};
+use crate::sourcemap::{MapError, SourceMap};
 
 const KEY: &[u8] = b"\"sourcesContent\"";
 
@@ -29,7 +30,7 @@ fn skip_ws(b: &[u8], mut i: usize) -> usize {
 }
 
 /// The end (one past the closing quote) of the JSON string opening at `i`.
-fn skip_string(b: &[u8], i: usize) -> Result<usize, String> {
+fn skip_string(b: &[u8], i: usize) -> Result<usize, Malformed> {
     let mut j = i + 1;
     while j < b.len() {
         match b[j] {
@@ -38,12 +39,12 @@ fn skip_string(b: &[u8], i: usize) -> Result<usize, String> {
             _ => j += 1,
         }
     }
-    Err("map: unterminated string".into())
+    Err(Malformed("unterminated string"))
 }
 
 /// The end of the JSON value starting at `i` (containers are matched by
 /// depth only: the result is validated by a real parse before use).
-fn skip_value(b: &[u8], i: usize) -> Result<usize, String> {
+fn skip_value(b: &[u8], i: usize) -> Result<usize, Malformed> {
     match b.get(i) {
         Some(b'"') => skip_string(b, i),
         Some(b'{' | b'[') => {
@@ -65,7 +66,7 @@ fn skip_value(b: &[u8], i: usize) -> Result<usize, String> {
                 }
                 j += 1;
             }
-            Err("map: unterminated container".into())
+            Err(Malformed("unterminated container"))
         }
         Some(_) => {
             let mut j = i;
@@ -74,22 +75,22 @@ fn skip_value(b: &[u8], i: usize) -> Result<usize, String> {
                 j += 1;
             }
             if j == i {
-                return Err("map: missing value".into());
+                return Err(Malformed("missing value"));
             }
             Ok(j)
         }
-        None => Err("map: missing value".into()),
+        None => Err(Malformed("missing value")),
     }
 }
 
 /// `text` (a sourcemap: one JSON object) without its top-level
 /// `sourcesContent` member and the comma that joined it, every other byte
 /// kept; `None` when it has none. Refuses text that is not one object.
-pub fn strip_sources_content(text: &str) -> Result<Option<String>, String> {
+pub fn strip_sources_content(text: &str) -> Result<Option<String>, Malformed> {
     let b = text.as_bytes();
     let mut i = skip_ws(b, 0);
     if b.get(i) != Some(&b'{') {
-        return Err("map: not a JSON object".into());
+        return Err(Malformed("not a JSON object"));
     }
     i += 1;
     // the end of the previous member's value (a last member takes the
@@ -104,13 +105,13 @@ pub fn strip_sources_content(text: &str) -> Result<Option<String>, String> {
                 break;
             }
             Some(b'"') => {}
-            _ => return Err("map: expected a member name".into()),
+            _ => return Err(Malformed("expected a member name")),
         }
         let key_start = i;
         let key_end = skip_string(b, i)?;
         i = skip_ws(b, key_end);
         if b.get(i) != Some(&b':') {
-            return Err("map: expected ':'".into());
+            return Err(Malformed("expected ':'"));
         }
         i = skip_ws(b, i + 1);
         let value_end = skip_value(b, i)?;
@@ -131,13 +132,35 @@ pub fn strip_sources_content(text: &str) -> Result<Option<String>, String> {
                 i += 1;
                 break;
             }
-            _ => return Err("map: expected ',' or '}'".into()),
+            _ => return Err(Malformed("expected ',' or '}'")),
         }
     }
     if skip_ws(b, i) != b.len() {
-        return Err("map: text after the object".into());
+        return Err(Malformed("text after the object"));
     }
     Ok(cut.map(|(s, e)| format!("{}{}", &text[..s], &text[e..])))
+}
+
+/// Why the JSON scan of a map stopped (the map is left as it is).
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("map: {0}")]
+pub struct Malformed(pub &'static str);
+
+/// Why slimming a map failed.
+#[derive(Debug, thiserror::Error)]
+pub enum SlimError {
+    #[error(transparent)]
+    File(#[from] FileError),
+    #[error("{}: a path the journal cannot record", .0.display())]
+    Unrecordable(PathBuf),
+    #[error("{}: slimmed map: {source}", .path.display())]
+    Slimmed { path: PathBuf, source: MapError },
+    #[error("{}: the slimmed map reads differently", .0.display())]
+    ReadsDifferently(PathBuf),
+    #[error("{}: no path line", .0.display())]
+    NoPathLine(PathBuf),
+    #[error("{}: {} is another file now", .entry.display(), .target.display())]
+    AnotherFile { entry: PathBuf, target: PathBuf },
 }
 
 /// What slimming one map did.
@@ -154,16 +177,15 @@ pub enum SlimOutcome {
 
 /// Overwrite `path`'s inode with `bytes` (every hard link sees it), mtime
 /// kept.
-fn overwrite(path: &Path, bytes: &[u8], mtime: std::time::SystemTime) -> Result<(), String> {
-    let io = |e: std::io::Error| format!("{}: {e}", path.display());
+fn overwrite(path: &Path, bytes: &[u8], mtime: std::time::SystemTime) -> Result<(), FileError> {
     let mut f = std::fs::File::options()
         .write(true)
         .open(path)
-        .map_err(io)?;
-    f.write_all(bytes).map_err(io)?;
-    f.set_len(bytes.len() as u64).map_err(io)?;
-    f.set_modified(mtime).map_err(io)?;
-    f.sync_data().map_err(io)
+        .map_err(at(path))?;
+    f.write_all(bytes).map_err(at(path))?;
+    f.set_len(bytes.len() as u64).map_err(at(path))?;
+    f.set_modified(mtime).map_err(at(path))?;
+    f.sync_data().map_err(at(path))
 }
 
 /// Write the journal entry for one rewrite (`<dev>-<ino>`: the path, a
@@ -173,14 +195,14 @@ fn journal_entry(
     path: &Path,
     meta: &std::fs::Metadata,
     slim: &str,
-) -> Result<PathBuf, String> {
-    let shown = path.to_str().filter(|p| !p.contains('\n')).ok_or(format!(
-        "{}: a path the journal cannot record",
-        path.display()
-    ))?;
+) -> Result<PathBuf, SlimError> {
+    let shown = path
+        .to_str()
+        .filter(|p| !p.contains('\n'))
+        .ok_or_else(|| SlimError::Unrecordable(path.to_path_buf()))?;
     let entry = journal.join(format!("{}-{}", meta.dev(), meta.ino()));
     let tmp = entry.with_extension("tmp");
-    let jio = |e: std::io::Error| format!("journal {}: {e}", tmp.display());
+    let jio = |e: std::io::Error| op_at("journal ", &tmp)(e);
     let mut f = std::fs::File::create(&tmp).map_err(jio)?;
     f.write_all(format!("{shown}\n").as_bytes()).map_err(jio)?;
     f.write_all(slim.as_bytes()).map_err(jio)?;
@@ -193,15 +215,14 @@ fn journal_entry(
 /// written there first, so a rewrite interrupted half-way is finished by
 /// [`recover`] rather than leaving a truncated map behind a valid build
 /// stamp.
-pub fn slim_map_file(path: &Path, journal: Option<&Path>) -> Result<SlimOutcome, String> {
-    let io = |e: std::io::Error| format!("{}: {e}", path.display());
-    let Ok(text) = String::from_utf8(std::fs::read(path).map_err(io)?) else {
+pub fn slim_map_file(path: &Path, journal: Option<&Path>) -> Result<SlimOutcome, SlimError> {
+    let Ok(text) = String::from_utf8(std::fs::read(path).map_err(at(path))?) else {
         return Ok(SlimOutcome::Unreadable("not UTF-8".into()));
     };
     let mut slim = match strip_sources_content(&text) {
         Ok(None) => return Ok(SlimOutcome::Absent),
         Ok(Some(s)) => s,
-        Err(e) => return Ok(SlimOutcome::Unreadable(e)),
+        Err(e) => return Ok(SlimOutcome::Unreadable(e.to_string())),
     };
     // a repeated key (JSON keeps the last): every copy goes
     while let Ok(Some(s)) = strip_sources_content(&slim) {
@@ -209,24 +230,23 @@ pub fn slim_map_file(path: &Path, journal: Option<&Path>) -> Result<SlimOutcome,
     }
     let old = match SourceMap::parse(&text) {
         Ok(m) => m,
-        Err(e) => return Ok(SlimOutcome::Unreadable(e)),
+        Err(e) => return Ok(SlimOutcome::Unreadable(e.to_string())),
     };
-    let new =
-        SourceMap::parse(&slim).map_err(|e| format!("{}: slimmed map: {e}", path.display()))?;
+    let new = SourceMap::parse(&slim).map_err(|source| SlimError::Slimmed {
+        path: path.to_path_buf(),
+        source,
+    })?;
     if old.sources != new.sources || old.segments != new.segments {
-        return Err(format!(
-            "{}: the slimmed map reads differently",
-            path.display()
-        ));
+        return Err(SlimError::ReadsDifferently(path.to_path_buf()));
     }
-    let meta = std::fs::metadata(path).map_err(io)?;
-    let mtime = meta.modified().map_err(io)?;
+    let meta = std::fs::metadata(path).map_err(at(path))?;
+    let mtime = meta.modified().map_err(at(path))?;
     let entry = journal
         .map(|j| journal_entry(j, path, &meta, &slim))
         .transpose()?;
     overwrite(path, slim.as_bytes(), mtime)?;
     if let Some(entry) = entry {
-        std::fs::remove_file(&entry).map_err(|e| format!("journal {}: {e}", entry.display()))?;
+        std::fs::remove_file(&entry).map_err(op_at("journal ", &entry))?;
     }
     Ok(SlimOutcome::Stripped {
         before: text.len() as u64,
@@ -238,7 +258,7 @@ pub fn slim_map_file(path: &Path, journal: Option<&Path>) -> Result<SlimOutcome,
 /// never committed: its map was never touched, and it is dropped). Returns
 /// how many were finished. Refuses an entry whose path no longer names
 /// the inode it was written for.
-pub fn recover(journal: &Path) -> Result<usize, String> {
+pub fn recover(journal: &Path) -> Result<usize, SlimError> {
     let Ok(entries) = std::fs::read_dir(journal) else {
         return Ok(0);
     };
@@ -246,7 +266,7 @@ pub fn recover(journal: &Path) -> Result<usize, String> {
     for entry in entries.flatten() {
         let p = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
-        let err = |e: std::io::Error| format!("{}: {e}", p.display());
+        let err = |e: std::io::Error| at(&p)(e);
         if name.ends_with(".tmp") {
             std::fs::remove_file(&p).map_err(err)?;
             continue;
@@ -255,15 +275,11 @@ pub fn recover(journal: &Path) -> Result<usize, String> {
         let nl = bytes
             .iter()
             .position(|&c| c == b'\n')
-            .ok_or(format!("{}: no path line", p.display()))?;
+            .ok_or_else(|| SlimError::NoPathLine(p.clone()))?;
         let target = PathBuf::from(String::from_utf8_lossy(&bytes[..nl]).into_owned());
-        let meta = std::fs::metadata(&target).map_err(|e| format!("{}: {e}", target.display()))?;
+        let meta = std::fs::metadata(&target).map_err(at(&target))?;
         if name != format!("{}-{}", meta.dev(), meta.ino()) {
-            return Err(format!(
-                "{}: {} is another file now",
-                p.display(),
-                target.display()
-            ));
+            return Err(SlimError::AnotherFile { entry: p, target });
         }
         let mtime = meta.modified().map_err(err)?;
         overwrite(&target, &bytes[nl + 1..], mtime)?;
@@ -339,7 +355,7 @@ pub struct SlimReport {
     pub skipped_symlinks: usize,
     pub recovered: usize,
     pub unreadable: Vec<(PathBuf, String)>,
-    pub errors: Vec<String>,
+    pub errors: Vec<SlimError>,
 }
 
 /// Slim every map of `work_dirs` (journaled in `journal`, which is
@@ -350,8 +366,8 @@ pub fn slim_cache(
     work_dirs: &[PathBuf],
     journal: &Path,
     progress: &mut dyn FnMut(&SlimReport),
-) -> Result<SlimReport, String> {
-    std::fs::create_dir_all(journal).map_err(|e| format!("{}: {e}", journal.display()))?;
+) -> Result<SlimReport, SlimError> {
+    std::fs::create_dir_all(journal).map_err(at(journal))?;
     let mut report = SlimReport {
         recovered: recover(journal)?,
         ..SlimReport::default()

@@ -229,110 +229,60 @@ fn build_ledger(
 }
 
 /// Why the stable split failed (before anything is written).
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum SplitError {
     /// The run's input is not a bundled app.
-    InputGate(InputGateError),
+    #[error(transparent)]
+    InputGate(#[from] InputGateError),
     /// The shipped or fresh text gives no split input.
-    Input(SplitInputError),
+    #[error(transparent)]
+    Input(#[from] SplitInputError),
     /// A library layout under a regime other than the fossil split.
+    #[error(
+        "library placement requires the fossil split, but this bundle chose {regime:?} (check the fossil-split disable, and the markers' coverage)"
+    )]
     LibraryNeedsFossil { regime: Regime },
     /// The placement regime failed.
-    Place(PlaceError),
+    #[error(transparent)]
+    Place(#[from] PlaceError),
     /// The review tree does not reconstruct the bundle.
-    Reconstruct(ReconstructError),
+    #[error(transparent)]
+    Reconstruct(#[from] ReconstructError),
     /// A step that holds by construction did not.
+    #[error("{0}")]
     Invariant(&'static str),
     /// The fresh and shipped texts hold different statement counts.
+    #[error(
+        "{what}: the fresh text has {fresh} wrapper statements, the shipped code has {shipped} — they no longer align"
+    )]
     Misaligned {
         what: &'static str,
         fresh: usize,
         shipped: usize,
     },
     /// A captured raw name is declared by zero or several fresh statements.
+    #[error(
+        "vendor bridge: the app-scope read of '{name}' matches {hits:?} fresh statements — expected exactly one"
+    )]
     BridgeAmbiguous {
         name: String,
         hits: Vec<(usize, usize)>,
     },
     /// A statement declares different name counts fresh and shipped.
+    #[error(
+        "vendor bridge: statement {statement} declares {fresh} names fresh but {shipped} shipped"
+    )]
     BridgeNameCount {
         statement: usize,
         fresh: usize,
         shipped: usize,
     },
     /// The captured name's slot is gone from the shipped statement.
+    #[error("vendor bridge: statement {statement} lost the slot of '{name}' across the rename")]
     BridgeLostSlot { statement: usize, name: String },
     /// The captured name's statement has no file.
+    #[error("vendor bridge: statement {statement} (the home of '{name}') has no placement")]
     BridgeUnplaced { statement: usize, name: String },
-}
-
-impl std::fmt::Display for SplitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InputGate(e) => e.fmt(f),
-            Self::Input(e) => e.fmt(f),
-            Self::LibraryNeedsFossil { regime } => write!(
-                f,
-                "library placement requires the fossil split, but this bundle chose {regime:?} \
-             (check the fossil-split disable, and the markers' coverage)"
-            ),
-            Self::Place(e) => e.fmt(f),
-            Self::Reconstruct(e) => e.fmt(f),
-            Self::Invariant(what) => f.write_str(what),
-            Self::Misaligned {
-                what,
-                fresh,
-                shipped,
-            } => write!(
-                f,
-                "{what}: the fresh text has {fresh} wrapper statements, the shipped code has {shipped} — they no longer align"
-            ),
-            Self::BridgeAmbiguous { name, hits } => write!(
-                f,
-                "vendor bridge: the app-scope read of '{name}' matches {hits:?} fresh statements — expected exactly one"
-            ),
-            Self::BridgeNameCount {
-                statement,
-                fresh,
-                shipped,
-            } => write!(
-                f,
-                "vendor bridge: statement {statement} declares {fresh} names fresh but {shipped} shipped"
-            ),
-            Self::BridgeLostSlot { statement, name } => write!(
-                f,
-                "vendor bridge: statement {statement} lost the slot of '{name}' across the rename"
-            ),
-            Self::BridgeUnplaced { statement, name } => write!(
-                f,
-                "vendor bridge: statement {statement} (the home of '{name}') has no placement"
-            ),
-        }
-    }
-}
-
-impl From<InputGateError> for SplitError {
-    fn from(e: InputGateError) -> Self {
-        Self::InputGate(e)
-    }
-}
-
-impl From<SplitInputError> for SplitError {
-    fn from(e: SplitInputError) -> Self {
-        Self::Input(e)
-    }
-}
-
-impl From<PlaceError> for SplitError {
-    fn from(e: PlaceError) -> Self {
-        Self::Place(e)
-    }
-}
-
-impl From<ReconstructError> for SplitError {
-    fn from(e: ReconstructError) -> Self {
-        Self::Reconstruct(e)
-    }
 }
 
 /// `stableSplitFromCode` + `tryEmitRunnableCjs` over the shipped text.

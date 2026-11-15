@@ -61,9 +61,16 @@ impl From<String> for Crash {
     }
 }
 
+impl Crash {
+    /// For `map_err`: a typed error's text as the crash line.
+    fn of(e: impl std::fmt::Display) -> Crash {
+        Crash(e.to_string())
+    }
+}
+
 impl From<crate::output_tree::WriteError> for Crash {
     fn from(e: crate::output_tree::WriteError) -> Self {
-        Crash(e.to_string())
+        Crash::of(e)
     }
 }
 
@@ -121,7 +128,7 @@ pub fn run(config: &Config) -> i32 {
     ));
     let provider = match build_provider(&config.llm, &ledger) {
         Ok(p) => p,
-        Err(e) => return crash(&mut *renderer, &e, log_file.is_some()),
+        Err(e) => return crash(&mut *renderer, &e.to_string(), log_file.is_some()),
     };
 
     let ended = run_pipeline(config, &provider, &ledger, &profiler, &mut *renderer);
@@ -171,7 +178,7 @@ type SharedFile = Arc<Mutex<std::fs::File>>;
 /// `--log-file`: append the debug AND verbose streams, raise the level to
 /// at least 2. (The TS opens its stream lazily and an open failure
 /// surfaces asynchronously later; the Rust binary reports it here.)
-fn open_log_file(path: Option<&str>) -> Result<Option<SharedFile>, String> {
+fn open_log_file(path: Option<&str>) -> Result<Option<SharedFile>, crate::util::NodeFsError> {
     let Some(path) = path else {
         return Ok(None);
     };
@@ -179,7 +186,11 @@ fn open_log_file(path: Option<&str>) -> Result<Option<SharedFile>, String> {
         .create(true)
         .append(true)
         .open(path)
-        .map_err(|e| node_fs_error(&e, "open", path))?;
+        .map_err(|source| crate::util::NodeFsError {
+            source,
+            syscall: "open",
+            path: path.to_string(),
+        })?;
     let file: SharedFile = Arc::new(Mutex::new(file));
     let writer = |f: SharedFile| {
         Box::new(move |text: &str| {
@@ -264,7 +275,7 @@ fn split_namer_budget(llm: &crate::config::Llm) -> SplitNamerBudget {
 fn build_provider(
     llm: &crate::config::Llm,
     ledger: &Arc<CallLedger>,
-) -> Result<LlmClient<LiveStack>, String> {
+) -> std::io::Result<LlmClient<LiveStack>> {
     let reasoning_effort = llm.reasoning_effort.map(|e| e.name().to_string());
     let mut config = LlmConfig::new(&llm.endpoint, llm.api_key.expose(), &llm.model);
     config.timeout_ms = llm.timeout_ms;
@@ -286,7 +297,6 @@ fn build_provider(
         ledger: Some(ledger.clone()),
         log: Some(crate::log::llm_log_sink()),
     })
-    .map_err(|e| e.to_string())
 }
 
 /// What an LLM cache entry is keyed by beyond the prompt. The TS passes a
@@ -521,7 +531,7 @@ fn pipeline_body(
             // invalid output writes no dump files at all — the parts are
             // discarded).
             if outcome.coverage.is_some() {
-                dispatch_log.close().map_err(|e| Crash(e.to_string()))?;
+                dispatch_log.close().map_err(Crash::of)?;
             } else {
                 dispatch_log.discard();
             }
@@ -625,7 +635,7 @@ its init name, {} renamed to it, {} refused",
         }
         if let Some(dest) = &outputs.dump_asks {
             let n = crate::writers::write_ask_log(Path::new(dest), dispatch_log.ask_rows())
-                .map_err(|e| Crash(e.to_string()))?;
+                .map_err(Crash::of)?;
             renderer.message(&format!("Ask log: {n} ask(s) → {dest}"));
         }
         reports.write_rename_ledger(renderer)?;
@@ -716,7 +726,8 @@ fn build_tree(
             .then(|| config.library.discovery_request(library.index.as_ref())),
         profiler,
         renderer,
-    )?;
+    )
+    .map_err(Crash::of)?;
     drop(ph);
     let ph = phase("library-detection");
     let unpacked_files = std::mem::take(&mut unpacked.files);
@@ -727,7 +738,8 @@ fn build_tree(
             toolchain.library_detector.piece,
             profiler,
             renderer,
-        )?;
+        )
+        .map_err(Crash::of)?;
         (filtered.files_to_process, filtered.mixed_files)
     } else {
         (unpacked_files, Vec::new())
@@ -856,7 +868,8 @@ fn build_tree(
             &mut split,
             tree,
             renderer,
-        )?;
+        )
+        .map_err(Crash::of)?;
         span.end(Some(humanify_ag_model::profiling::Fields::new().with(
             "stable",
             matches!(records.ended, crate::split_stage::SplitEnded::Complete),
@@ -1037,7 +1050,7 @@ fn load_library_index(
                 .library
                 .index_dir()
                 .expect("report needs an index or the machinery (checked at the parse point)")
-                .map_err(Crash)?,
+                .map_err(Crash::of)?,
             None,
         ),
     };
@@ -1244,7 +1257,7 @@ impl RunReports<'_> {
             },
             &folder,
         )
-        .map_err(|e| Crash(e.to_string()))?;
+        .map_err(Crash::of)?;
         renderer.message(&format!("Artifact dump written to {}", ctx.dir));
         Ok(())
     }
@@ -1357,7 +1370,7 @@ fn name_vendor_bodies_stage(
 ) -> Result<usize, Crash> {
     use humanify_ag_core::naming::vendor_bodies as vb;
     let started = std::time::Instant::now();
-    let bodies = vb::bodies_of_bridge(tree, bridge).map_err(|e| Crash(e.to_string()))?;
+    let bodies = vb::bodies_of_bridge(tree, bridge).map_err(Crash::of)?;
     // No module step: the bodies are not the bundle's module markers.
     let mut config = config.clone();
     config.module_naming = None;
@@ -1370,7 +1383,7 @@ fn name_vendor_bodies_stage(
         &humanify_ag_io::diff::compute_normal_diff,
         &mut log,
     )
-    .map_err(|e| Crash(e.to_string()))?
+    .map_err(Crash::of)?
     else {
         return Ok(0);
     };
@@ -1900,7 +1913,7 @@ fn load_prior_inputs(
         prior_file.map(Path::new),
         config.split.ledger.as_deref().map(Path::new),
     )
-    .map_err(|e| Crash(e.to_string()))?;
+    .map_err(Crash::of)?;
     if let (Some(path), Some(tree)) = (prior_file, &inputs.tree) {
         if humanify_ag_model::js::trim(&tree.code).is_empty() {
             return Err(Crash(format!("--prior-version file is empty: {path}")));

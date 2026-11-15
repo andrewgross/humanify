@@ -72,14 +72,9 @@ fn raw_from_value(value: &str) -> String {
 }
 
 /// A raw that cannot be a template quasi (an unescaped backtick or `${`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("Invalid raw")]
 pub struct InvalidRaw;
-
-impl std::fmt::Display for InvalidRaw {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Invalid raw")
-    }
-}
 
 /// The quasi's recomputed `cooked`, or [`InvalidRaw`].
 pub fn template_element_cooked(raw: &str) -> Result<Option<String>, InvalidRaw> {

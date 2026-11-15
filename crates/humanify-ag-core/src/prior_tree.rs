@@ -73,33 +73,20 @@ impl PriorFiles {
 }
 
 /// Why a prior tree was refused.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum PriorTreeError {
     /// The vendor manifest is there but is not one this binary reads
     /// (not UTF-8, not JSON, no `hashVersion`, an entry missing a field
     /// it always writes).
+    #[error(
+        "prior vendor manifest {} is not one this binary reads ({why}); rebuild the prior release with this binary",
+        vendor_manifest_path()
+    )]
     VendorManifest { why: String },
     /// The named vendor bodies' joined source is there but is not UTF-8.
+    #[error("prior {VENDOR_NAMING_SOURCE} is not UTF-8 text ({why})")]
     VendorNamingNotText { why: String },
 }
-
-impl std::fmt::Display for PriorTreeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PriorTreeError::VendorManifest { why } => write!(
-                f,
-                "prior vendor manifest {} is not one this binary reads ({why}); \
-                 rebuild the prior release with this binary",
-                vendor_manifest_path()
-            ),
-            PriorTreeError::VendorNamingNotText { why } => {
-                write!(f, "prior {VENDOR_NAMING_SOURCE} is not UTF-8 text ({why})")
-            }
-        }
-    }
-}
-
-impl std::error::Error for PriorTreeError {}
 
 /// The vendor manifest's path within a tree.
 pub fn vendor_manifest_path() -> String {

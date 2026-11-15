@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use humanify_ag_core::libindex::recipe::{Recipe, RecipeBundler, Target};
+use humanify_ag_io::subprocess::SubprocessError;
 
 /// The build recipe's version (in every shard key and the manifest's
 /// slice records; the pipeline's loader checks it).
@@ -94,18 +95,41 @@ pub fn version_command_of(bundler: RecipeBundler, bin: &Path) -> Command {
     cmd
 }
 
+/// Why a bundler run (a build or its `--version`) failed.
+#[derive(Debug, thiserror::Error)]
+pub enum RecipeRunError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("{0}")]
+    Run(#[from] SubprocessError),
+    /// The bundler's own error text (stderr, then stdout).
+    #[error("{0}")]
+    Bundler(String),
+    #[error("{0}: {1}")]
+    Rename(&'static str, std::io::Error),
+    #[error(transparent)]
+    Slim(#[from] crate::slim::SlimError),
+    #[error("{}: {why}", .bin.display())]
+    Version { bin: PathBuf, why: SubprocessError },
+    #[error("{} --version failed", .0.display())]
+    VersionFailed(PathBuf),
+}
+
 /// `bundler`'s `--version` from `bin` (trimmed), under `deadline`.
 pub fn bundler_version_of(
     bundler: RecipeBundler,
     bin: &Path,
     deadline: std::time::Duration,
-) -> Result<String, String> {
+) -> Result<String, RecipeRunError> {
     let out =
         humanify_ag_io::subprocess::run(&mut version_command_of(bundler, bin), None, deadline)
-            .map_err(|e| format!("{}: {e}", bin.display()))?;
+            .map_err(|why| RecipeRunError::Version {
+                bin: bin.to_path_buf(),
+                why,
+            })?;
     let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if !out.status.success() || v.is_empty() {
-        return Err(format!("{} --version failed", bin.display()));
+        return Err(RecipeRunError::VersionFailed(bin.to_path_buf()));
     }
     Ok(v)
 }
@@ -117,7 +141,7 @@ impl RecipeBuild {
     }
 
     /// The bundler's `--version` (trimmed).
-    pub fn bundler_version(&self) -> Result<String, String> {
+    pub fn bundler_version(&self) -> Result<String, RecipeRunError> {
         bundler_version_of(self.recipe.bundler, &self.bin, VERSION_DEADLINE)
     }
 
@@ -208,18 +232,17 @@ impl RecipeBuild {
         out_dir: &Path,
         externals: &[String],
         esm: bool,
-    ) -> Result<(), String> {
+    ) -> Result<(), RecipeRunError> {
         let _ = std::fs::remove_dir_all(out_dir);
-        std::fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(out_dir)?;
         let mut cmd = self.command(cwd, entry, out_dir, externals, esm);
-        let out = humanify_ag_io::subprocess::run(&mut cmd, None, BUILD_DEADLINE)
-            .map_err(|e| e.to_string())?;
+        let out = humanify_ag_io::subprocess::run(&mut cmd, None, BUILD_DEADLINE)?;
         if !out.status.success() {
-            return Err(format!(
+            return Err(RecipeRunError::Bundler(format!(
                 "{}{}",
                 String::from_utf8_lossy(&out.stderr),
                 String::from_utf8_lossy(&out.stdout)
-            ));
+            )));
         }
         if self.recipe.bundler == RecipeBundler::Bun {
             let stem = Path::new(entry)
@@ -227,12 +250,12 @@ impl RecipeBuild {
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default();
             std::fs::rename(out_dir.join(format!("{stem}.js")), out_dir.join("out.js"))
-                .map_err(|e| format!("bun output: {e}"))?;
+                .map_err(|e| RecipeRunError::Rename("bun output", e))?;
             std::fs::rename(
                 out_dir.join(format!("{stem}.js.map")),
                 out_dir.join("out.js.map"),
             )
-            .map_err(|e| format!("bun map: {e}"))?;
+            .map_err(|e| RecipeRunError::Rename("bun map", e))?;
         }
         // Bun has no flag for it: whatever a bundler embedded, the map
         // keeps only what the builder reads (exp131)

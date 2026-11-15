@@ -31,28 +31,21 @@ pub fn modules_file(slice: &str) -> String {
 }
 
 /// Why the planner's answers could not be read.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum AnswersError {
     /// The answers file could not be opened or read.
+    #[error("{file}: {source}")]
     Io {
         file: String,
         source: std::io::Error,
     },
     /// A line of it is not a module row.
+    #[error("{file} line {line}: {source}")]
     Line {
         file: String,
         line: usize,
         source: serde_json::Error,
     },
-}
-
-impl std::fmt::Display for AnswersError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Io { file, source } => write!(f, "{file}: {source}"),
-            Self::Line { file, line, source } => write!(f, "{file} line {line}: {source}"),
-        }
-    }
 }
 
 /// The planner's answers for `keys`: one entry per key the index holds.

@@ -62,77 +62,40 @@ fn has_using_token(code: &str) -> bool {
 }
 
 /// Why the `using` desugar refused a file.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum UsingError {
     /// The file does not parse.
-    Parse(ParseError),
+    #[error(transparent)]
+    Parse(#[from] ParseError),
     /// The formatter's converter refused the file.
-    Format(FormatError),
+    #[error(transparent)]
+    Format(#[from] FormatError),
     /// An input the port refuses rather than guess at.
+    #[error("{0}")]
     Refused(&'static str),
     /// Two splices overlap, or one falls outside the text.
+    #[error("using desugar: overlapping splice at {at}")]
     OverlappingSplice { at: usize },
     /// A program-scope binding shadows a global the helpers read.
+    #[error("using desugar: a program-scope binding shadows helper global {name}")]
     ShadowedGlobal { name: &'static str },
     /// A helper the desugar does not carry.
+    #[error("unknown Babel helper {name}")]
     UnknownHelper { name: String },
     /// A carried helper's source does not parse.
+    #[error("helper {name} does not parse")]
     HelperParse { name: String },
 }
 
-impl std::fmt::Display for UsingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Parse(e) => e.fmt(f),
-            Self::Format(e) => e.fmt(f),
-            Self::Refused(why) => f.write_str(why),
-            Self::OverlappingSplice { at } => {
-                write!(f, "using desugar: overlapping splice at {at}")
-            }
-            Self::ShadowedGlobal { name } => write!(
-                f,
-                "using desugar: a program-scope binding shadows helper global {name}"
-            ),
-            Self::UnknownHelper { name } => write!(f, "unknown Babel helper {name}"),
-            Self::HelperParse { name } => write!(f, "helper {name} does not parse"),
-        }
-    }
-}
-
-impl From<ParseError> for UsingError {
-    fn from(e: ParseError) -> Self {
-        Self::Parse(e)
-    }
-}
-
-impl From<FormatError> for UsingError {
-    fn from(e: FormatError) -> Self {
-        Self::Format(e)
-    }
-}
-
 /// Why desugaring an output tree failed.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum UsingTreeError {
     /// Listing, reading or writing a file failed.
-    File(FileError),
+    #[error(transparent)]
+    File(#[from] FileError),
     /// The desugar refused one file.
+    #[error("{}: {source}", path.display())]
     InFile { path: PathBuf, source: UsingError },
-}
-
-impl std::fmt::Display for UsingTreeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::File(e) => e.fmt(f),
-            Self::InFile { path, source } => write!(f, "{}: {source}", path.display()),
-        }
-    }
-}
-
-impl From<FileError> for UsingTreeError {
-    fn from(e: FileError) -> Self {
-        Self::File(e)
-    }
 }
 
 /// `declaresUsing(ast)`.

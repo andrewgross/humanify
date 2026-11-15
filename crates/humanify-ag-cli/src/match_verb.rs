@@ -69,6 +69,63 @@ use serde_json::{Value, json};
 
 use crate::pipeline_config::enum_name;
 
+/// Why a verb (`match`, `discover`, `unpack`) failed: the core stage's
+/// own error, or the verb's file and argument checks.
+#[derive(Debug, thiserror::Error)]
+pub enum VerbError {
+    #[error("{0}")]
+    Input(humanify_ag_core::unpack::input::InputError),
+    #[error("cannot read {0}: {1}")]
+    Read(String, std::io::Error),
+    #[error("--prior-version file is empty: {0}")]
+    EmptyPrior(String),
+    #[error("unknown {what} \"{name}\" (valid: {valid})")]
+    Override {
+        what: String,
+        name: String,
+        valid: String,
+    },
+    #[error("mkdir {0}: {1}")]
+    Mkdir(String, std::io::Error),
+    #[error("write {0}: {1}")]
+    Write(String, std::io::Error),
+    #[error("stdout: {0}")]
+    Stdout(std::io::Error),
+    #[error(transparent)]
+    Unpack(#[from] humanify_ag_core::unpack::UnpackError),
+    #[error(transparent)]
+    Tree(#[from] crate::output_tree::WriteError),
+    #[error(transparent)]
+    Format(#[from] humanify_ag_core::format::FormatError),
+    #[error(transparent)]
+    Relink(#[from] humanify_ag_core::finish::relink::RelinkError),
+    #[error(transparent)]
+    Carry(#[from] humanify_ag_core::libdetect::function_carry::CarryError),
+    #[error(transparent)]
+    Transfer(#[from] humanify_ag_core::rename::transfer::TransferError),
+    #[error(transparent)]
+    Prior(#[from] humanify_ag_core::prior::PriorMatchError),
+    #[error(
+        "every unpacked file failed; no matching ran at all — \
+         see the recorded parse and match errors"
+    )]
+    NothingMatched,
+    #[error("library index {dir}: {why}")]
+    Index {
+        dir: String,
+        why: Box<humanify_ag_core::libindex::lookup::LoadError>,
+    },
+    #[error(transparent)]
+    Scratch(#[from] humanify_ag_io::scratch::ScratchError),
+    /// Every refused `[library]` key of the `--config` file, one a line.
+    #[error("{}", .0.join("\n"))]
+    Settings(Vec<String>),
+    #[error("{0}")]
+    Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    PriorLoad(#[from] crate::prior_tree::PriorLoadError),
+}
+
 /// The dump's schema version for the SINGLE-FILE shape (every exp092
 /// corpus dump): each `files[]` section embeds the full prior
 /// inventories next to its own. Bump on a breaking shape change so a
@@ -112,19 +169,16 @@ pub struct MatchVerbArgs<'a> {
 /// The whole dump: one `files[]` entry per unpacked file the verb
 /// matched. Deterministic: inventory rows are in build order and pair
 /// rows are sorted by prior span (matches_dump's dump order).
-pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
+pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, VerbError> {
     let code = humanify_ag_core::unpack::input::read_input(
         std::path::Path::new(args.input),
         &crate::output_tree::Disk,
     )
-    .map_err(|e| e.to_string())?
+    .map_err(VerbError::Input)?
     .text;
     let prior = read_text(args.prior_version)?;
     if humanify_ag_model::js::trim(&prior).is_empty() {
-        return Err(format!(
-            "--prior-version file is empty: {}",
-            args.prior_version
-        ));
+        return Err(VerbError::EmptyPrior(args.prior_version.to_string()));
     }
 
     // Stages 1-2: detect, then the same toolchain the pipeline resolves
@@ -155,7 +209,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
         ),
     };
     if owned {
-        std::fs::create_dir_all(&work_dir).map_err(|e| format!("mkdir {work_dir}: {e}"))?;
+        std::fs::create_dir_all(&work_dir).map_err(|e| VerbError::Mkdir(work_dir.clone(), e))?;
     }
     let shim = args
         .webcrack_shim
@@ -176,11 +230,10 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
                 toolchain.module_identity.piece,
             )
         },
-    )
-    .map_err(|e| e.to_string())?
+    )?
     .into_result();
     // The candidates are read back from the work folder.
-    crate::output_tree::write_tree(&tree).map_err(|e| e.to_string())?;
+    crate::output_tree::write_tree(&tree)?;
     drop(tree);
 
     // A MULTI-file tree (>= 2 candidates) is the raw-bundle regime: the
@@ -222,7 +275,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
         for (path, text) in &candidates {
             run.add_file(&ctx, path, text)?;
         }
-        Ok::<_, String>(())
+        Ok::<_, VerbError>(())
     });
     built?;
     if owned && !args.keep_work_dir {
@@ -253,7 +306,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
 fn collect_candidates(
     result: &humanify_ag_core::unpack::UnpackResult,
     work_dir: &str,
-) -> Result<Vec<(String, String)>, String> {
+) -> Result<Vec<(String, String)>, VerbError> {
     let mut candidates = Vec::new();
     for file in &result.files {
         if file.path.extension().is_some_and(|e| e != "js") {
@@ -318,7 +371,7 @@ impl MatchRun {
         ctx: &MatchContext<'_, '_>,
         path: &str,
         text: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), VerbError> {
         let MatchContext {
             prior,
             never_rename,
@@ -335,7 +388,8 @@ impl MatchRun {
                     wrapped
                 }
                 Err(error) => {
-                    self.skipped.push(json!({ "path": path, "error": error }));
+                    self.skipped
+                        .push(json!({ "path": path, "error": error.to_string() }));
                     return Ok(());
                 }
             }
@@ -344,27 +398,25 @@ impl MatchRun {
                 text,
                 &humanify_ag_core::format::FormatOptions::default(),
                 &[],
-            )
-            .map_err(|e| e.to_string())?
+            )?
             .text
         };
         // The prior side is the run's shared state: this file's stage
         // borrows it (`match_stage_with_prior`), never rebuilds it.
-        let section = humanify_ag_core::prior::match_stage_with_prior(
+        let section: Result<Value, VerbError> = humanify_ag_core::prior::match_stage_with_prior(
             &fresh,
             never_rename,
             layout,
             *side,
             !multi,
             |stage| {
-                let freeze = humanify_ag_core::rename::transfer::library_freeze(stage, None, false)
-                    .map_err(|e| e.to_string())?;
+                let freeze =
+                    humanify_ag_core::rename::transfer::library_freeze(stage, None, false)?;
                 let twins = humanify_ag_core::rename::transfer::statement_twins(
                     stage,
                     &freeze,
                     name_profile,
-                )
-                .map_err(|e| e.to_string())?;
+                )?;
                 let section = file_section(stage, &twins, &fresh, prior, path, !multi)?;
                 self.matched_any = true;
                 if multi {
@@ -379,7 +431,8 @@ impl MatchRun {
         let section = match section {
             Ok(section) => section,
             Err(error) if multi => {
-                self.skipped.push(json!({ "path": path, "error": error }));
+                self.skipped
+                    .push(json!({ "path": path, "error": error.to_string() }));
                 return Ok(());
             }
             Err(error) => return Err(error),
@@ -392,11 +445,9 @@ impl MatchRun {
     /// sanity check at the DUMP's granularity: the union of every file's
     /// pairs against the shared prior inventory — the same owner formula
     /// and message (humanify_ag_core::prior), ONCE instead of per call.
-    fn hoisted_prior_block(&self) -> Result<Value, String> {
+    fn hoisted_prior_block(&self) -> Result<Value, VerbError> {
         if !self.matched_any {
-            return Err("every unpacked file failed; no matching ran at all — \
-                 see the recorded parse and match errors"
-                .to_string());
+            return Err(VerbError::NothingMatched);
         }
         let block = self
             .shared_prior
@@ -484,38 +535,35 @@ fn wrapped_factory_text(
     raw: &str,
     from_file: &str,
     interop: humanify_ag_core::toolchain::InteropHelpers,
-) -> Result<String, String> {
+) -> Result<String, VerbError> {
     let (wrapped, _) = humanify_ag_core::finish::relink::wrap_extracted_factory(
         humanify_ag_model::js::trim(raw),
         from_file,
         &std::collections::BTreeMap::new(),
         &[],
         interop,
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(humanify_ag_core::format::format_file(
         &wrapped,
         &humanify_ag_core::format::FormatOptions::default(),
         &[],
-    )
-    .map_err(|e| e.to_string())?
+    )?
     .text)
 }
 
 /// The verb action: build the dump, write it to `out` (pretty) or stdout.
-pub fn run_match(args: &MatchVerbArgs<'_>, out: Option<&str>) -> Result<(), String> {
+pub fn run_match(args: &MatchVerbArgs<'_>, out: Option<&str>) -> Result<(), VerbError> {
     let dump = match_dump(args)?;
     let text = serde_json::to_string_pretty(&dump).expect("the dump serializes") + "\n";
     match out {
-        Some(path) => std::fs::write(path, text).map_err(|e| format!("write {path}: {e}"))?,
+        Some(path) => std::fs::write(path, text).map_err(|e| VerbError::Write(path.into(), e)),
         None => {
             use std::io::Write;
             std::io::stdout()
                 .write_all(text.as_bytes())
-                .map_err(|e| format!("stdout: {e}"))?;
+                .map_err(VerbError::Stdout)
         }
     }
-    Ok(())
 }
 
 /// A `--bundler`/`--minifier` override: the enum's serialized name, with
@@ -525,7 +573,7 @@ pub(crate) fn parse_override<T>(
     value: Option<&str>,
     valid: &[T],
     what: &str,
-) -> Result<Option<T>, String>
+) -> Result<Option<T>, VerbError>
 where
     T: serde::de::DeserializeOwned + serde::Serialize + Copy,
 {
@@ -534,18 +582,19 @@ where
     };
     if !valid.iter().any(|v| enum_name(*v) == name) {
         let names: Vec<String> = valid.iter().map(|v| enum_name(*v)).collect();
-        return Err(format!(
-            "unknown {what} \"{name}\" (valid: {})",
-            names.join(", ")
-        ));
+        return Err(VerbError::Override {
+            what: what.to_string(),
+            name: name.to_string(),
+            valid: names.join(", "),
+        });
     }
     Ok(serde_json::from_value(json!(name)).ok())
 }
 
-fn read_text(path: &str) -> Result<String, String> {
+fn read_text(path: &str) -> Result<String, VerbError> {
     std::fs::read(path)
         .map(|b| String::from_utf8_lossy(&b).into_owned())
-        .map_err(|e| format!("cannot read {path}: {e}"))
+        .map_err(|e| VerbError::Read(path.to_string(), e))
 }
 
 /// Slice a side's text by byte span (oxc spans need no conversion).
@@ -570,7 +619,7 @@ fn file_section(
     prior_text: &str,
     path: &str,
     include_prior: bool,
-) -> Result<Value, String> {
+) -> Result<Value, VerbError> {
     let close = stage
         .close_file
         .map(|f| serde_json::to_value(f).expect("the close file serializes"))

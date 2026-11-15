@@ -107,7 +107,9 @@ fn the_newest_installed_tool_wins_and_none_names_the_fetch() {
     assert_eq!(tool.version, "0.25.10");
     let bare = temp("none");
     for bundler in ALL_RECIPE_BUNDLERS {
-        let err = find_tool(&bare, bundler).expect_err("nothing installed");
+        let err = find_tool(&bare, bundler)
+            .expect_err("nothing installed")
+            .to_string();
         let specs = fetch_specs(bundler).join(" ");
         assert!(err.contains(&specs), "{}: {err}", bundler.name());
         assert!(

@@ -214,8 +214,12 @@ impl Registry {
     /// The typed value of the key's text (a flag's argument, or the value
     /// of a `section.key=value` setting); the range is checked by
     /// [`check_range`]. `who` names it as written.
-    pub fn typed_text(key: &Key, who: &str, raw: &str) -> Result<Val, String> {
-        let bad = |what: &str| format!("invalid value '{raw}' for '{who}': {what}");
+    pub fn typed_text(key: &Key, who: &str, raw: &str) -> Result<Val, ValueError> {
+        let bad = |what| ValueError::Setting {
+            raw: raw.to_string(),
+            who: who.to_string(),
+            what,
+        };
         match key.kind {
             Kind::Int { .. } => raw
                 .parse::<u64>()
@@ -240,6 +244,26 @@ impl Registry {
             _ => Ok(Val::Text(raw.to_string())),
         }
     }
+}
+
+/// A value whose text is not of its key's kind.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ValueError {
+    /// A `section.key=value` setting (`who` as written).
+    #[error("invalid value '{raw}' for '{who}': {what}")]
+    Setting {
+        raw: String,
+        who: String,
+        what: &'static str,
+    },
+    /// A flag's argument, as clap words a usage error (`who` is
+    /// `--<long> <VALUE>`).
+    #[error("error: invalid value '{raw}' for '{who}': {what}\n")]
+    Flag {
+        raw: String,
+        who: String,
+        what: &'static str,
+    },
 }
 
 /// Where a resolved value came from.

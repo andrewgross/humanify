@@ -144,21 +144,12 @@ pub enum Profile {
 }
 
 /// A rule a profile will not run, and why.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{profile:?} profile refuses rule {rule}: {why}")]
 pub struct Refusal {
     pub profile: Profile,
     pub rule: &'static str,
     pub why: String,
-}
-
-impl std::fmt::Display for Refusal {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{:?} profile refuses rule {}: {}",
-            self.profile, self.rule, self.why
-        )
-    }
 }
 
 impl Profile {

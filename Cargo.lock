@@ -514,6 +514,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "thiserror",
  "toml",
 ]
 
@@ -538,6 +539,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2",
+ "thiserror",
 ]
 
 [[package]]
@@ -581,12 +583,16 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "thiserror",
  "toml",
 ]
 
 [[package]]
 name = "humanify-ag-io"
 version = "0.0.0"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "humanify-ag-llm"
@@ -609,6 +615,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "thiserror",
 ]
 
 [[package]]
@@ -1702,6 +1709,26 @@ dependencies = [
  "smawk",
  "unicode-linebreak",
  "unicode-width",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e"
+dependencies = [
+ "thiserror-impl",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.6",
 ]
 
 [[package]]

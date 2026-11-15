@@ -8,7 +8,7 @@
 
 use clap::{Arg, ArgAction, ArgMatches};
 
-use super::{FlagValue, Key, Kind, Registry, Val};
+use super::{FlagValue, Key, Kind, Registry, Val, ValueError};
 
 /// One key's flag, as the command line spells it.
 pub struct FlagSpec {
@@ -171,12 +171,11 @@ pub fn add_flags(mut cmd: clap::Command, specs: &'static [FlagSpec]) -> clap::Co
 
 /// A flag's text as the key's value: typed by the key's kind (a range is
 /// checked later, by the resolver, under the flag's name).
-fn typed_flag(spec: &FlagSpec, raw: &str) -> Result<Val, String> {
-    let bad = |what: &str| {
-        format!(
-            "error: invalid value '{raw}' for '--{} <{}>': {what}\n",
-            spec.long, spec.value_name
-        )
+fn typed_flag(spec: &FlagSpec, raw: &str) -> Result<Val, ValueError> {
+    let bad = |what| ValueError::Flag {
+        raw: raw.to_string(),
+        who: format!("--{} <{}>", spec.long, spec.value_name),
+        what,
     };
     match spec.key.kind {
         Kind::Int { .. } => raw
@@ -199,7 +198,10 @@ fn typed_flag(spec: &FlagSpec, raw: &str) -> Result<Val, String> {
 }
 
 /// Every flag given, as (key, value), in registry order.
-pub fn flag_values(specs: &'static [FlagSpec], m: &ArgMatches) -> Result<Vec<FlagValue>, String> {
+pub fn flag_values(
+    specs: &'static [FlagSpec],
+    m: &ArgMatches,
+) -> Result<Vec<FlagValue>, ValueError> {
     let mut out = Vec::new();
     for spec in specs {
         let dotted: &'static str = spec.dotted.as_str();

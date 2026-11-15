@@ -1049,49 +1049,41 @@ impl LibraryIndex {
 }
 
 /// Why an index was not loaded.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LoadError {
     /// Missing, unreadable or incompatible: the run must stop.
-    Unusable(IndexError),
+    #[error(transparent)]
+    Unusable(#[from] IndexError),
     /// Readable and compatible, but it holds no slice for the bundle's
     /// recipe: a loud WARNING in report mode (the run loses only its
     /// report), a failure for an instrument. `id`: the index's id.
+    #[error("{why}")]
     NoSlice { id: String, why: String },
 }
 
-impl From<IndexError> for LoadError {
-    fn from(e: IndexError) -> Self {
-        LoadError::Unusable(e)
-    }
-}
-
-impl std::fmt::Display for LoadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LoadError::Unusable(e) => e.fmt(f),
-            LoadError::NoSlice { why, .. } => f.write_str(why),
-        }
-    }
-}
-
 /// Why an index's files cannot be read: which file, and how.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum IndexError {
     /// A file could not be opened or read.
+    #[error("{name}: {source}")]
     File {
         name: String,
         source: std::io::Error,
     },
     /// A JSON file does not parse.
+    #[error("{name}: {source}")]
     Json {
         name: String,
         source: serde_json::Error,
     },
     /// The manifest's stamps are not this binary's.
+    #[error(transparent)]
     Manifest(super::format::ManifestError),
     /// A slice's recipe does not parse.
+    #[error(transparent)]
     Recipes(super::format::SliceRecipeError),
     /// A lookup table does not open.
+    #[error("{name}: {source}")]
     Table {
         name: String,
         source: super::table::TableError,
@@ -1117,18 +1109,6 @@ impl IndexError {
         move |source| IndexError::Table {
             name: name.to_string(),
             source,
-        }
-    }
-}
-
-impl std::fmt::Display for IndexError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::File { name, source } => write!(f, "{name}: {source}"),
-            Self::Json { name, source } => write!(f, "{name}: {source}"),
-            Self::Manifest(e) => e.fmt(f),
-            Self::Recipes(e) => e.fmt(f),
-            Self::Table { name, source } => write!(f, "{name}: {source}"),
         }
     }
 }

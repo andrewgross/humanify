@@ -8,19 +8,12 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// A folder or file under the root could not be read.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("read {}: {source}", path.display())]
 pub struct TreeError {
     pub path: PathBuf,
     pub source: std::io::Error,
 }
-
-impl std::fmt::Display for TreeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "read {}: {}", self.path.display(), self.source)
-    }
-}
-
-impl std::error::Error for TreeError {}
 
 /// Every file under `root` (an empty path is the working directory).
 /// `enter(name)` decides, per sub-folder name, whether the folder is read.

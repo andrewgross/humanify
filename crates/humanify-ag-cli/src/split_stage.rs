@@ -16,7 +16,9 @@ use std::path::Path;
 
 use humanify_ag_core::artifact_dump::SplitSections;
 use humanify_ag_core::emit::align::AlignSwitches;
-use humanify_ag_core::emit::stable_split::{InputGate, SplitOptions, SplitOutcome, stable_split};
+use humanify_ag_core::emit::stable_split::{
+    InputGate, SplitError, SplitOptions, SplitOutcome, stable_split,
+};
 use humanify_ag_core::finish::driver::{FinishInput, FinishReport, FinishSwitches, finish_stage};
 use humanify_ag_core::place::assign::namer::{
     ProviderSplitNamer, ProviderTreeReviser, SplitNamer, SplitNamerBudget, TreeReviser,
@@ -234,6 +236,11 @@ fn split_dump(code: &str, outcome: &SplitOutcome, trail: &PlacementTrail) -> Spl
     }
 }
 
+/// The split failed before any tree was written.
+#[derive(Debug, thiserror::Error)]
+#[error("stable split failed before any tree was written: {0}")]
+pub struct SplitFailed(pub SplitError);
+
 /// `runSplit` over the naming stage's shipped text.
 pub fn run_split(
     code: &str,
@@ -241,7 +248,7 @@ pub fn run_split(
     input: &mut SplitStageInput<'_>,
     tree: &mut OutputTree,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<SplitRecords, String> {
+) -> Result<SplitRecords, SplitFailed> {
     // The layout gate on the run's ORIGINAL input, once: a bundle whose
     // layout the split does not read finishes UNSPLIT (finding C3).
     let gate = match input.input_bundle {
@@ -268,7 +275,7 @@ pub fn run_split(
     let ph = humanify_ag_core::profiling::phase("split:compute");
     let (outcome, prior_present, failed_calls) =
         split_before_commit(code, prior_carry, input, gate, &mut trail, renderer)
-            .map_err(|e| format!("stable split failed before any tree was written: {e}"))?;
+            .map_err(SplitFailed)?;
     drop(ph);
     let mut post_split = PostSplitRecords::default();
     let ended = match commit_and_finish(
@@ -355,7 +362,7 @@ fn split_before_commit(
     gate: InputGate<'_>,
     trail: &mut PlacementTrail,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<(SplitOutcome, bool, SplitFailedCalls), String> {
+) -> Result<(SplitOutcome, bool, SplitFailedCalls), SplitError> {
     let ph = humanify_ag_core::profiling::phase("split:load-prior-ledger");
     let prior = load_prior_split_ledger(input, renderer);
     drop(ph);
@@ -394,8 +401,7 @@ fn split_before_commit(
             library: input.library,
             app_modules: input.app_modules,
         },
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     renderer.message(&format!(
         "Split method: {} — {}",
         method_name(outcome.method.regime),

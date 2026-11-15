@@ -480,49 +480,28 @@ pub fn check_manifest_stamps(text: &str) -> Result<(), ManifestError> {
 }
 
 /// Why this binary refuses an index's manifest.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
     /// `manifest.json` is not JSON of the manifest's shape.
+    #[error("manifest.json: {0}")]
     Json(serde_json::Error),
     /// The stamps that differ from this binary's, each named with both
     /// spellings.
+    #[error("built with {}; {REBUILD}", .0.join(", "))]
     Stamps(Vec<String>),
 }
 
-impl std::fmt::Display for ManifestError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Json(e) => write!(f, "manifest.json: {e}"),
-            Self::Stamps(wrong) => write!(f, "built with {}; {REBUILD}", wrong.join(", ")),
-        }
-    }
-}
-
 /// A slice whose recipe does not parse, or names another slice.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum SliceRecipeError {
+    #[error(transparent)]
     Parse(super::recipe::RecipeError),
+    #[error("slice {slice} records recipe {recipe} (whose slice is {recipe_slice})")]
     Mismatch {
         slice: String,
         recipe: String,
         recipe_slice: String,
     },
-}
-
-impl std::fmt::Display for SliceRecipeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Parse(e) => e.fmt(f),
-            Self::Mismatch {
-                slice,
-                recipe,
-                recipe_slice,
-            } => write!(
-                f,
-                "slice {slice} records recipe {recipe} (whose slice is {recipe_slice})"
-            ),
-        }
-    }
 }
 
 impl Manifest {

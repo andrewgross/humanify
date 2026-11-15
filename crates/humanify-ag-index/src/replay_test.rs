@@ -53,6 +53,8 @@ fn a_replay_pins_exactly_the_indexed_versions_under_the_same_recipes() {
 fn a_replay_refuses_an_index_built_under_another_recipe_version() {
     // a different recipe version means different bundles: re-fingerprinting
     // the stored builds would not reproduce that index's plan
-    let err = replay_plan(&manifest("recipe/1", true)).expect_err("old recipes");
+    let err = replay_plan(&manifest("recipe/1", true))
+        .expect_err("old recipes")
+        .to_string();
     assert!(err.contains("recipe/1"), "{err}");
 }

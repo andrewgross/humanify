@@ -36,20 +36,32 @@ pub struct ReplayPlan {
     pub names: bool,
 }
 
+/// Why an index cannot be replayed.
+#[derive(Debug, thiserror::Error)]
+pub enum ReplayError {
+    #[error("replay: manifest.json: {0}")]
+    Manifest(#[from] serde_json::Error),
+    #[error(
+        "replay: slice {slice} was built under {built}, this binary bundles under {RECIPE_VERSION} — \
+         its stored builds are not what this binary would build; make the index from a spec"
+    )]
+    RecipeVersion { slice: String, built: String },
+    #[error("replay: {0}")]
+    Recipe(#[from] humanify_ag_core::libindex::recipe::RecipeError),
+}
+
 /// The replay plan of the index whose `manifest.json` text is given.
-pub fn replay_plan(manifest_text: &str) -> Result<ReplayPlan, String> {
-    let m: Manifest =
-        serde_json::from_str(manifest_text).map_err(|e| format!("replay: manifest.json: {e}"))?;
+pub fn replay_plan(manifest_text: &str) -> Result<ReplayPlan, ReplayError> {
+    let m: Manifest = serde_json::from_str(manifest_text)?;
     let mut recipes = Vec::new();
     for s in &m.slices {
         if s.recipe_version != RECIPE_VERSION {
-            return Err(format!(
-                "replay: slice {} was built under {}, this binary bundles under {RECIPE_VERSION} — \
-                 its stored builds are not what this binary would build; make the index from a spec",
-                s.slice, s.recipe_version
-            ));
+            return Err(ReplayError::RecipeVersion {
+                slice: s.slice.clone(),
+                built: s.recipe_version.clone(),
+            });
         }
-        let recipe = Recipe::parse(&s.recipe).map_err(|e| format!("replay: {e}"))?;
+        let recipe = Recipe::parse(&s.recipe)?;
         recipes.push((recipe, s.version.clone()));
     }
     Ok(ReplayPlan {

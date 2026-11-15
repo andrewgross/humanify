@@ -57,36 +57,17 @@ pub struct PlacementGate<'a, 'n> {
 }
 
 /// Why a placement regime could not place the bundle.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum PlaceError {
     /// The fossil regime failed.
-    Fossil(FossilSplitError),
+    #[error(transparent)]
+    Fossil(#[from] FossilSplitError),
     /// The tiers regime was asked for without a prior ledger.
+    #[error("the tiers regime needs --prior-ledger")]
     NoPriorLedger,
     /// The prior-carried tiers left a statement unplaced.
-    Unclaimed(Unclaimed),
-}
-
-impl std::fmt::Display for PlaceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Fossil(e) => e.fmt(f),
-            Self::NoPriorLedger => f.write_str("the tiers regime needs --prior-ledger"),
-            Self::Unclaimed(e) => e.fmt(f),
-        }
-    }
-}
-
-impl From<FossilSplitError> for PlaceError {
-    fn from(e: FossilSplitError) -> Self {
-        Self::Fossil(e)
-    }
-}
-
-impl From<Unclaimed> for PlaceError {
-    fn from(e: Unclaimed) -> Self {
-        Self::Unclaimed(e)
-    }
+    #[error(transparent)]
+    Unclaimed(#[from] Unclaimed),
 }
 
 /// What one placement regime decided.

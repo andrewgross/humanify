@@ -496,3 +496,691 @@ fn prior_match_errors_keep_their_words() {
             .to_string(),
     );
 }
+
+/// The variants the tests above leave out: every variant of every error
+/// type is pinned, so deriving a `Display` cannot move a word unseen.
+mod every_variant {
+    use std::path::PathBuf;
+
+    use oxc_span::Span;
+
+    use super::{io, json_error, same};
+    use crate::error::{FileError, FileOp};
+
+    fn file_error() -> FileError {
+        FileError::at(FileOp::Read, std::path::Path::new("in/a.js"))(io("gone"))
+    }
+
+    #[test]
+    fn dump_errors() {
+        use crate::artifact_dump::DumpError;
+        same(DumpError::File(file_error()), "read in/a.js: gone");
+        same(
+            DumpError::Serialize {
+                name: "modules.json".into(),
+                source: json_error(),
+            },
+            &format!("serialize modules.json: {}", json_error()),
+        );
+        same(
+            DumpError::Site(crate::modules::UnparsedSite { diagnostics: 3 }),
+            "oxc: 3 diagnostic(s)",
+        );
+        same(DumpError::Part(io("full")), "full");
+        same(
+            DumpError::NamingPartLost,
+            "the naming part writer failed mid-run",
+        );
+        same(
+            DumpError::ReadPart {
+                name: "naming.part",
+                source: io("gone"),
+            },
+            "read naming.part: gone",
+        );
+        same(
+            DumpError::AskRow(json_error()),
+            &format!("ask row: {}", json_error()),
+        );
+    }
+
+    #[test]
+    fn emit_errors() {
+        use crate::emit::cjs::EmitError;
+        use crate::emit::review::ReconstructError;
+        let cases = [
+            (
+                EmitError::NoAlias {
+                    module: "m".into(),
+                    reader: "r".into(),
+                },
+                "runnable emit: no alias for m in r (internal)",
+            ),
+            (
+                EmitError::FunctionRedeclaration { name: "f".into() },
+                "runnable emit: cross-file function redeclaration of \"f\" cannot preserve hoisting",
+            ),
+            (
+                EmitError::PatternRedeclaration { name: "p".into() },
+                "runnable emit: cross-file redeclaration of \"p\" through a destructuring declarator is not supported",
+            ),
+            (
+                EmitError::ParamRedeclared { param: "e".into() },
+                "runnable emit: wrapper parameter \"e\" is redeclared",
+            ),
+            (
+                EmitError::LoadOrderHazard {
+                    reader: "a.js".into(),
+                    read: "b.js".into(),
+                },
+                "runnable emit: load-order hazard: a.js reads b.js at load before its body runs",
+            ),
+            (EmitError::Internal("internal step"), "internal step"),
+            (
+                EmitError::NoCrossRecord { name: "x".into() },
+                "runnable emit: no cross record for x",
+            ),
+            (
+                EmitError::OrderLength {
+                    order: 2,
+                    statements: 3,
+                },
+                "runnable emit: ledger.order has 2 entries but the wrapper has 3 statements",
+            ),
+            (
+                EmitError::OrderMissing {
+                    file: "a.js".into(),
+                },
+                "runnable emit: ledger.order references \"a.js\" missing from ledger.files",
+            ),
+            (
+                EmitError::NoNamespaceVariable {
+                    module: "m".into(),
+                    importer: "i".into(),
+                },
+                "runnable emit: no free namespace variable for m in i",
+            ),
+            (
+                EmitError::BridgeNoFile {
+                    file: "v.js".into(),
+                    name: "n".into(),
+                },
+                "vendor bridge: no emitted file v.js to export n from",
+            ),
+        ];
+        for (e, want) in cases {
+            same(e, want);
+        }
+        same(
+            ReconstructError::Short {
+                file: "x.js".into(),
+                at: 4,
+            },
+            "reconstruct: x.js is short of statement 4",
+        );
+        same(
+            ReconstructError::Mismatch,
+            "stable split: emitted tree does not reconstruct the source statements (tree/ledger invariant violated)",
+        );
+    }
+
+    #[test]
+    fn split_errors() {
+        use crate::emit::review::ReconstructError;
+        use crate::emit::stable_split::SplitError;
+        use crate::modules::wrapper::InputGateError;
+        use crate::place::input::SplitInputError;
+        use crate::place::placement_dump::PlaceError;
+        same(
+            SplitError::InputGate(InputGateError::Parse { diagnostics: 2 }),
+            "oxc failed to parse the input bundle: 2 diagnostic(s)",
+        );
+        same(
+            SplitError::Input(SplitInputError::NotSplittable("no wrapper")),
+            "no wrapper",
+        );
+        same(
+            SplitError::Place(PlaceError::NoPriorLedger),
+            "the tiers regime needs --prior-ledger",
+        );
+        same(
+            SplitError::Reconstruct(ReconstructError::Short {
+                file: "x.js".into(),
+                at: 1,
+            }),
+            "reconstruct: x.js is short of statement 1",
+        );
+        same(SplitError::Invariant("holds"), "holds");
+        same(
+            SplitError::BridgeNameCount {
+                statement: 1,
+                fresh: 2,
+                shipped: 3,
+            },
+            "vendor bridge: statement 1 declares 2 names fresh but 3 shipped",
+        );
+        same(
+            SplitError::BridgeLostSlot {
+                statement: 1,
+                name: "x".into(),
+            },
+            "vendor bridge: statement 1 lost the slot of 'x' across the rename",
+        );
+        same(
+            SplitError::BridgeUnplaced {
+                statement: 1,
+                name: "x".into(),
+            },
+            "vendor bridge: statement 1 (the home of 'x') has no placement",
+        );
+        same(
+            SplitInputError::Inventory(crate::twins::InventoryError::NullJson),
+            "the estree json did not parse (read as null)",
+        );
+    }
+
+    #[test]
+    fn place_errors() {
+        use crate::place::assign::fossil::FossilSplitError;
+        use crate::place::ledger::{LedgerParseError, RederiveError};
+        use crate::place::placement_dump::PlaceError;
+        use crate::place::tiers::Unclaimed;
+        use crate::twins::fossil::FossilMapError;
+        let map = FossilMapError {
+            hashes: 2,
+            statements: 3,
+        };
+        same(map, "fossil map: 2 hashes for 3 statements");
+        same(
+            FossilSplitError::Map(map),
+            "fossil map: 2 hashes for 3 statements",
+        );
+        same(
+            FossilSplitError::LibraryOutside { module: 4 },
+            "library placement: module 4 is outside this bundle's fossils",
+        );
+        same(
+            FossilSplitError::Unassigned { module: 4 },
+            "fossil split: module 4 was never assigned a file",
+        );
+        same(
+            PlaceError::Fossil(FossilSplitError::Unassigned { module: 1 }),
+            "fossil split: module 1 was never assigned a file",
+        );
+        same(
+            PlaceError::Unclaimed(Unclaimed),
+            "stable split: no placement tier claimed the statement",
+        );
+        same(
+            RederiveError::NoHashes,
+            "the ledger records no per-statement hashes",
+        );
+        same(
+            RederiveError::Input(crate::place::input::SplitInputError::NotSplittable("no")),
+            "no",
+        );
+        same(
+            RederiveError::UnknownHash { hash: "h1".into() },
+            "hash h1 is not among the ledger's statements",
+        );
+        same(LedgerParseError::Json("bad json".into()), "bad json");
+        same(
+            LedgerParseError::UnsupportedVersion,
+            "Unsupported split ledger version",
+        );
+    }
+
+    #[test]
+    fn finish_and_format_errors() {
+        use crate::finish::driver::FinishError;
+        use crate::finish::using::{UsingError, UsingTreeError};
+        use crate::format::FormatError;
+        use crate::format::ast::Field;
+        use crate::ingest::ParseError;
+        use crate::libdetect::function_carry::CarryError;
+        same(FinishError::File(file_error()), "read in/a.js: gone");
+        same(
+            FinishError::Using(UsingTreeError::File(file_error())),
+            "read in/a.js: gone",
+        );
+        same(UsingError::Parse(ParseError("bad".into())), "bad");
+        same(
+            UsingError::Format(FormatError::Parse("bad".into())),
+            "parse error: bad",
+        );
+        same(UsingError::Refused("refused"), "refused");
+        same(UsingTreeError::File(file_error()), "read in/a.js: gone");
+        same(FormatError::Traverse("traverse"), "traverse");
+        same(
+            FormatError::ExpectedArray {
+                field: Field::Body,
+                kind: "BlockStatement",
+                got_node: true,
+            },
+            "Property Body of BlockStatement expected type of array but got object",
+        );
+        same(
+            FormatError::Carry(CarryError::Missing),
+            "library regions reached the naming stage without a function classification — raw offsets cannot classify beautified functions (#32)",
+        );
+        same(
+            crate::format::UnknownPlant::Visitor("v".into()),
+            "unknown visitor v",
+        );
+        same(
+            crate::format::UnknownPlant::Plant("p".into()),
+            "unknown plant p",
+        );
+        same(crate::format::template_raw::InvalidRaw, "Invalid raw");
+        same(
+            crate::ingest::EstreeJsonError(json_error()),
+            &format!("estree json: {}", json_error()),
+        );
+        same(
+            CarryError::TypeMismatch {
+                ordinal: 3,
+                before: "FunctionDeclaration".into(),
+                after: "ArrowFunctionExpression".into(),
+            },
+            "library carry: function #3 is a FunctionDeclaration before re-parse and a ArrowFunctionExpression after",
+        );
+        same(
+            CarryError::NoFunctionAt {
+                span: Span::new(1, 4),
+                session_id: None,
+            },
+            "library classification: no function at fresh span 1..4",
+        );
+        same(
+            crate::libdetect::DetectError::File(file_error()),
+            "read in/a.js: gone",
+        );
+    }
+
+    #[test]
+    fn library_index_errors() {
+        use crate::libindex::format::{ManifestError, SliceRecipeError};
+        use crate::libindex::lookup::{IndexError, LoadError};
+        use crate::libindex::module_answers::AnswersError;
+        use crate::libindex::recipe::{RecipeError, RecipeFault};
+        use crate::libindex::table::{TableError, TableWriteError};
+        same(
+            ManifestError::Stamps(vec!["format 3 (this binary: 4)".into(), "units/4".into()]),
+            "built with format 3 (this binary: 4), units/4; rebuild the index with this binary's `humanify-ag index build` (the shard store rebuilds only what changed)",
+        );
+        let recipe = || RecipeError {
+            text: "x".into(),
+            why: RecipeFault::NoColon,
+        };
+        let form = "(form: <bun|esbuild|webpack|rollup>:target=<bun|node>,format=<cjs|esm>[,minify][,production])";
+        same(
+            SliceRecipeError::Parse(recipe()),
+            &format!("--recipe \"x\": no `:` {form}"),
+        );
+        for (why, text) in [
+            (RecipeFault::UnknownBundler, "unknown bundler".to_string()),
+            (
+                RecipeFault::UnknownSetting("k=v".into()),
+                "unknown setting \"k=v\"".into(),
+            ),
+            (RecipeFault::NoTarget, "no target".into()),
+            (
+                RecipeFault::NoBunPlatform("webpack"),
+                "webpack has no bun platform".into(),
+            ),
+        ] {
+            same(
+                RecipeError {
+                    text: "x".into(),
+                    why,
+                },
+                &format!("--recipe \"x\": {text} {form}"),
+            );
+        }
+        same(
+            LoadError::NoSlice {
+                id: "abc".into(),
+                why: "no slice here".into(),
+            },
+            "no slice here",
+        );
+        same(
+            IndexError::Json {
+                name: "slices.json".into(),
+                source: json_error(),
+            },
+            &format!("slices.json: {}", json_error()),
+        );
+        same(
+            IndexError::Manifest(ManifestError::Json(json_error())),
+            &format!("manifest.json: {}", json_error()),
+        );
+        same(
+            IndexError::Recipes(SliceRecipeError::Parse(recipe())),
+            &format!("--recipe \"x\": no `:` {form}"),
+        );
+        same(
+            AnswersError::Io {
+                file: "modules.s.jsonl".into(),
+                source: io("gone"),
+            },
+            "modules.s.jsonl: gone",
+        );
+        let tables = [
+            (
+                TableError::ColumnOverrun {
+                    n: 1,
+                    at: 2,
+                    len: 3,
+                },
+                "a key column of 1 keys at byte 2 runs past the table's 3 bytes",
+            ),
+            (
+                TableError::EdgeWithoutUnit {
+                    hash: "h".into(),
+                    owner: "o".into(),
+                    file: "f".into(),
+                },
+                "edge row h o f has no unit row",
+            ),
+            (TableError::TwoEdgeRows, "two edge rows for one unit row"),
+            (
+                TableError::NamesWithoutSlice { slice: "s".into() },
+                "names rows for slice s: the slice has no unit rows",
+            ),
+            (
+                TableError::NamesOutOfOrder { row: 2, prev: 3 },
+                "names row 2 follows 3 — the rows must be in row-id order, one per row",
+            ),
+            (
+                TableError::EntriesOverrun {
+                    from: 1,
+                    to: 5,
+                    n: 4,
+                },
+                "names entries 1..5 run past the table's 4",
+            ),
+            (
+                TableError::NameIdPast {
+                    name: 9,
+                    strings: 8,
+                },
+                "names entry's name id 9 past the 8 strings",
+            ),
+            (
+                TableError::NoKind { kind: 7 },
+                "names entry's kind ordinal 7 is no kind",
+            ),
+            (TableError::PackageCount, "literal table: package count"),
+        ];
+        for (e, want) in tables {
+            same(e, want);
+        }
+        same(TableError::Json(json_error()), &json_error().to_string());
+        same(
+            TableWriteError::<String>::Table(TableError::TwoEdgeRows),
+            "two edge rows for one unit row",
+        );
+    }
+
+    #[test]
+    fn matching_and_naming_errors() {
+        use crate::matching::close_dump::CloseDumpError;
+        use crate::naming::driver::NamingError;
+        use crate::naming::driver::era::EraError;
+        use crate::naming::passes::ShippedParseError;
+        use crate::naming::passes::family_permute::PermuteError;
+        use crate::naming::reconcile::hunks::DiffError;
+        use crate::naming::reconcile::step::StepError;
+        use crate::naming::vendor_bodies::SplitBodiesError;
+        use crate::prior::{PriorMatchError, SideParseError};
+        use crate::rename::transfer::TransferError;
+        same(
+            CloseDumpError::Drift {
+                won: 1,
+                assigned: 2,
+            },
+            "close-dump drift: the outcome replay's won set (1) does not equal the assignment (2)",
+        );
+        same(
+            CloseDumpError::RowJsonUnavailable {
+                prior: "f1".into(),
+                fresh: "f2".into(),
+            },
+            "close-dump: row JSON unavailable for f1 / f2",
+        );
+        same(
+            crate::matching::rules::Refusal {
+                profile: crate::matching::rules::Profile::Library,
+                rule: "callers",
+                why: "reads into edges".into(),
+            },
+            "Library profile refuses rule callers: reads into edges",
+        );
+        let side = SideParseError {
+            name: "input.js".into(),
+            count: 1,
+            first: "bad".into(),
+        };
+        same(
+            NamingError::Prior(PriorMatchError::Parse(side.clone())),
+            "oxc failed to parse input.js: 1 diagnostic(s) — bad",
+        );
+        same(
+            NamingError::Era(EraError::CloseNoSpan {
+                prior_id: "f1".into(),
+            }),
+            "close prior f1 has no span",
+        );
+        same(
+            NamingError::Census(ShippedParseError("bad".into())),
+            "shipped text does not parse: bad",
+        );
+        same(
+            EraError::Parse(side),
+            "oxc failed to parse input.js: 1 diagnostic(s) — bad",
+        );
+        same(
+            EraError::Carry(crate::libdetect::function_carry::CarryError::Missing),
+            "library regions reached the naming stage without a function classification — raw offsets cannot classify beautified functions (#32)",
+        );
+        same(
+            EraError::Transfer(TransferError::NoBabelBinding { name: "x".into() }),
+            "binding rename x: no babel binding",
+        );
+        same(
+            TransferError::Twins(crate::twins::fossil::FossilMapError {
+                hashes: 1,
+                statements: 2,
+            }),
+            "fossil map: 1 hashes for 2 statements",
+        );
+        same(
+            TransferError::RowJsonUnavailable {
+                prior: "f1".into(),
+                fresh: "f2".into(),
+            },
+            "matched pair f1 / f2: row JSON unavailable",
+        );
+        same(
+            PriorMatchError::CloseDump(CloseDumpError::Drift {
+                won: 1,
+                assigned: 2,
+            }),
+            "close-dump drift: the outcome replay's won set (1) does not equal the assignment (2)",
+        );
+        same(
+            PriorMatchError::Inventory(crate::twins::InventoryError::NoProgramBody),
+            "estree json program body missing",
+        );
+        same(
+            PermuteError::PriorParse("bad".into()),
+            "prior text does not parse: bad",
+        );
+        same(
+            PermuteError::Parse("bad".into()),
+            "text does not parse: bad",
+        );
+        same(
+            crate::naming::passes::sweep::SweepParseError("bad".into()),
+            "sweep input does not parse: bad",
+        );
+        same(DiffError("diff: exit 2".into()), "diff: exit 2");
+        same(
+            StepError::Diff(Box::new(DiffError("diff: exit 2".into()))),
+            "diff: exit 2",
+        );
+        same(
+            SplitBodiesError::Parse("bad".into()),
+            "the joined bodies do not parse: bad",
+        );
+        same(
+            SplitBodiesError::NotExpression,
+            "a joined body is not an expression statement",
+        );
+        same(
+            crate::rename::name_profile::UnknownProfile { name: "x".into() },
+            "No name profile named \"x\"",
+        );
+        use crate::rename::validated::ledger::LedgerError;
+        for (e, want) in [
+            (
+                LedgerError::SourceMismatch,
+                "rename ledger: source does not match the ledger's sourceSha256",
+            ),
+            (
+                LedgerError::Overlap,
+                "rename ledger: overlapping edits (internal)",
+            ),
+            (
+                LedgerError::OutOfRange,
+                "rename ledger: an edit leaves its text (internal)",
+            ),
+            (
+                LedgerError::OutputMismatch,
+                "rename ledger: the replay does not reach the ledger's outputSha256",
+            ),
+        ] {
+            same(e, want);
+        }
+    }
+
+    #[test]
+    fn prior_tree_and_inventory_errors() {
+        use crate::prior_tree::{PriorTreeError, vendor_manifest_path};
+        use crate::twins::InventoryError;
+        same(
+            PriorTreeError::VendorManifest { why: "bad".into() },
+            &format!(
+                "prior vendor manifest {} is not one this binary reads (bad); rebuild the prior release with this binary",
+                vendor_manifest_path()
+            ),
+        );
+        same(
+            PriorTreeError::VendorNamingNotText { why: "bad".into() },
+            "prior .humanify/vendor-humanified.js is not UTF-8 text (bad)",
+        );
+        same(
+            InventoryError::EstreeJson(crate::ingest::EstreeJsonError(json_error())),
+            &format!("estree json: {}", json_error()),
+        );
+    }
+
+    #[test]
+    fn unpack_errors() {
+        use crate::libindex::module_answers::AnswersError;
+        use crate::unpack::UnpackError;
+        use crate::unpack::bun::BunError;
+        use crate::unpack::chunk_link::{DecodeError, LinkError};
+        use crate::unpack::input::InputError;
+        use crate::unpack::webcrack::{UnpackerError, WebcrackError};
+        let p = || PathBuf::from("in/a.js");
+        same(UnpackError::Bun(BunError::Refused("refused")), "refused");
+        same(
+            UnpackError::Webcrack(WebcrackError::NoOutput),
+            "webcrack shim: no output",
+        );
+        same(
+            BunError::Answers(AnswersError::Io {
+                file: "f".into(),
+                source: io("gone"),
+            }),
+            "f: gone",
+        );
+        same(WebcrackError::Run(UnpackerError("exit 1".into())), "exit 1");
+        same(
+            WebcrackError::Json(json_error()),
+            &format!("webcrack shim output: {}", json_error()),
+        );
+        same(UnpackerError("exit 1".into()), "exit 1");
+        same(InputError::File(file_error()), "read in/a.js: gone");
+        same(
+            InputError::Link(LinkError::EmbeddedOutside {
+                rest: "../x".into(),
+            }),
+            "/$bunfs/root/../x leaves the embedded root; not linked",
+        );
+        let utf16 = char::decode_utf16([0xD800u16]).next().unwrap().unwrap_err();
+        same(
+            DecodeError::Utf16(utf16.clone()),
+            &format!("is neither UTF-8 nor UTF-16LE ({utf16})"),
+        );
+        let links = [
+            (
+                LinkError::File(file_error()),
+                "read in/a.js: gone".to_string(),
+            ),
+            (
+                LinkError::Parse {
+                    path: p(),
+                    diagnostic: "bad".into(),
+                },
+                "in/a.js does not parse as a module: bad".into(),
+            ),
+            (
+                LinkError::MetaProperty {
+                    path: p(),
+                    prop: "env".into(),
+                },
+                "in/a.js: `import.meta.env` is not linked".into(),
+            ),
+            (
+                LinkError::MetaShadowed {
+                    path: p(),
+                    prop: "dir".into(),
+                    name: "__dirname",
+                },
+                "in/a.js: `import.meta.dir` sits where `__dirname` is bound; not linked".into(),
+            ),
+            (
+                LinkError::NoExport {
+                    path: p(),
+                    name: "x".into(),
+                },
+                "in/a.js does not export `x`".into(),
+            ),
+            (
+                LinkError::OverlappingEdits { path: p(), at: 5 },
+                "in/a.js: overlapping edits at 5".into(),
+            ),
+            (
+                LinkError::EmbeddedMissing {
+                    rest: "a.md".into(),
+                    path: p(),
+                },
+                "/$bunfs/root/a.md is read but in/a.js does not exist".into(),
+            ),
+            (
+                LinkError::DirnameBound {
+                    path: p(),
+                    rest: "a.md".into(),
+                },
+                "in/a.js: /$bunfs/root/a.md sits where `__dirname` is bound; not linked".into(),
+            ),
+            (LinkError::Json(json_error()), json_error().to_string()),
+        ];
+        for (e, want) in links {
+            same(e, &want);
+        }
+    }
+}

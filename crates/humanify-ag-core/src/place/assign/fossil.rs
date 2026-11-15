@@ -738,41 +738,22 @@ impl Default for FossilOptions<'_> {
 }
 
 /// Why the fossil split could not place the bundle.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum FossilSplitError {
     /// The fossil map's inputs disagree.
-    Map(FossilMapError),
+    #[error(transparent)]
+    Map(#[from] FossilMapError),
     /// The bundle records no module fossils.
+    #[error(
+        "fossil split: the bundle records no module fossils (no __esm init definitions) — fix detection or run with --disable fossil-split"
+    )]
     NoFossils,
     /// A placed library module is not one of the bundle's fossils.
+    #[error("library placement: module {module} is outside this bundle's fossils")]
     LibraryOutside { module: usize },
     /// A module ended without a file.
+    #[error("fossil split: module {module} was never assigned a file")]
     Unassigned { module: usize },
-}
-
-impl std::fmt::Display for FossilSplitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Map(e) => e.fmt(f),
-            Self::NoFossils => f.write_str(
-                "fossil split: the bundle records no module fossils (no __esm init \
-definitions) — fix detection or run with --disable fossil-split",
-            ),
-            Self::LibraryOutside { module } => write!(
-                f,
-                "library placement: module {module} is outside this bundle's fossils"
-            ),
-            Self::Unassigned { module } => {
-                write!(f, "fossil split: module {module} was never assigned a file")
-            }
-        }
-    }
-}
-
-impl From<FossilMapError> for FossilSplitError {
-    fn from(e: FossilMapError) -> Self {
-        Self::Map(e)
-    }
 }
 
 /// `assignFossil`.

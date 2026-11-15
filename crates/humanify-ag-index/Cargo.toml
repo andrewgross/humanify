@@ -8,6 +8,7 @@ publish.workspace = true
 description = "The offline library fingerprint index builder (docs/design/library-index.md)"
 
 [dependencies]
+thiserror.workspace = true
 humanify-ag-core = { path = "../humanify-ag-core" }
 humanify-ag-io = { path = "../humanify-ag-io" }
 humanify-ag-model = { path = "../humanify-ag-model" }

@@ -26,8 +26,58 @@ use humanify_ag_core::libindex::format::Semver;
 
 use crate::asof::{Packument, Selected, grace_cutoff, normalize_time, select_versions};
 use crate::build::PackageSelection;
+use crate::error::{FileError, at, op_at};
 use crate::ranges::{Range, dep_spec};
-use crate::registry;
+use crate::registry::{self, RegistryError};
+
+/// Why a spec could not be resolved against the registry.
+#[derive(Debug, thiserror::Error)]
+pub enum PlanError {
+    #[error(transparent)]
+    Registry(#[from] RegistryError),
+    #[error(
+        "{0}: the packument snapshot has no per-version metadata \
+         (fetched with the time map since exp184); re-take the snapshot"
+    )]
+    NoMetadata(String),
+    #[error(
+        "{absent} of {total} list members came back absent — an outage, \
+         not a tail; first-check the fetcher (a mis-encoding bug 404s a \
+         whole class of names) first {first}"
+    )]
+    Outage {
+        absent: usize,
+        total: usize,
+        first: String,
+    },
+    #[error(transparent)]
+    List(#[from] ListError),
+    #[error(transparent)]
+    Spec(#[from] crate::spec::SpecError),
+}
+
+/// Why an `npm-high-impact` list file could not be had.
+#[derive(Debug, thiserror::Error)]
+pub enum ListError {
+    #[error(transparent)]
+    File(#[from] FileError),
+    /// npm could not run, or failed (its stderr).
+    #[error("npm pack npm-high-impact@{version}: {why}")]
+    Pack { version: String, why: String },
+    /// tar could not run, or failed (its stderr).
+    #[error("tar {file}: {why}")]
+    Tar { file: &'static str, why: String },
+    #[error(
+        "npm-high-impact@{version} {file}: sha256 {got} does not match the spec's {want} \
+         — the spec pins a list this tarball does not contain"
+    )]
+    Sha {
+        version: String,
+        file: &'static str,
+        got: String,
+        want: String,
+    },
+}
 use crate::shard::hex_sha256;
 use crate::spec::{
     HighImpactList, IndexSpec, RefusalMatch, Source, Strategy, name_matches, parse_high_impact_list,
@@ -49,15 +99,8 @@ pub const SKIP_ABSENT: &str = "absent-from-registry";
 /// was made (213 of 17,338 on the default spec's list, 1.2% — exp184).
 /// The rule: more than 2% of a list's names absent is an outage; at or
 /// under it, they are skipped and recorded.
-pub(crate) fn list_absence_outage(absent: usize, total: usize) -> Option<String> {
-    if absent * 50 < total {
-        return None;
-    }
-    Some(format!(
-        "{absent} of {total} list members came back absent — an outage, \
-         not a tail; first-check the fetcher (a mis-encoding bug 404s a \
-         whole class of names)"
-    ))
+pub(crate) fn list_absence_outage(absent: usize, total: usize) -> bool {
+    absent * 50 >= total
 }
 
 /// The package a dependency entry installs: an `npm:` alias's VALUE
@@ -81,7 +124,7 @@ pub struct Sources<'a> {
     /// list file's expected sha256) → the file's text. The real one
     /// fetches the package's tarball, extracts the file, and verifies
     /// the hash.
-    pub list: &'a dyn Fn(HighImpactList, &str, &str) -> Result<String, String>,
+    pub list: &'a dyn Fn(HighImpactList, &str, &str) -> Result<String, ListError>,
 }
 
 /// Where packuments come from: batched, so a real loader can fetch a
@@ -95,13 +138,13 @@ pub trait Loader {
     /// itself records NOTHING, or an offline replay of the same
     /// snapshot would record a different plan (a name the wave fetched
     /// may never be consulted — its edge may not even be a range).
-    fn prefetch(&mut self, names: &BTreeSet<String>) -> Result<(), String>;
+    fn prefetch(&mut self, names: &BTreeSet<String>) -> Result<(), RegistryError>;
     /// The memoised packument of `name`, if the loader holds one
     /// (never a fetch).
     fn peek(&self, name: &str) -> Option<Packument>;
     /// The recorded packument of `name` and its file's sha256 (fetches
     /// when the loader can).
-    fn get(&mut self, name: &str) -> Result<(Packument, String), String>;
+    fn get(&mut self, name: &str) -> Result<(Packument, String), RegistryError>;
 }
 
 /// A resolved plan: what the spec and the snapshot resolve to.
@@ -200,13 +243,10 @@ impl Resolution<'_, '_> {
 
     /// The packument of `name`, checking the snapshot carries per-version
     /// metadata when the spec's rules need it.
-    fn packument(&mut self, name: &str) -> Result<Packument, String> {
+    fn packument(&mut self, name: &str) -> Result<Packument, PlanError> {
         let (p, sha) = self.src.loader.get(name)?;
         if self.needs_deps && !p.has_deps() {
-            return Err(format!(
-                "{name}: the packument snapshot has no per-version metadata \
-                 (fetched with the time map since exp184); re-take the snapshot"
-            ));
+            return Err(PlanError::NoMetadata(name.to_string()));
         }
         self.note_fetch(&p, sha);
         Ok(p)
@@ -254,7 +294,7 @@ impl Resolution<'_, '_> {
         name: &str,
         pkg: UniversePkg,
         member_of: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> Result<(), PlanError> {
         if self.skip_if_refused(name) || self.skipped_seen.contains(name) {
             return Ok(());
         }
@@ -348,7 +388,7 @@ impl Resolution<'_, '_> {
     /// requester's own publish time is TALLIED (planned, capped, by
     /// `finish_dependents` once the walk ends; a dependent version's own
     /// dependencies are never walked, so the rule cannot cascade).
-    fn resolve_pending(&mut self, name: &str) -> Result<(), String> {
+    fn resolve_pending(&mut self, name: &str) -> Result<(), PlanError> {
         let Some(pendings) = self.pending.remove(name) else {
             return Ok(());
         };
@@ -377,7 +417,7 @@ impl Resolution<'_, '_> {
     /// The `dependents` rule's decision: per package, the `dependents`
     /// most-resolved versions not already planned or refused (ties: the
     /// higher version), each planned as a `dependent`.
-    fn finish_dependents(&mut self) -> Result<(), String> {
+    fn finish_dependents(&mut self) -> Result<(), PlanError> {
         let cap = self.spec.versions.dependents;
         let votes = std::mem::take(&mut self.votes);
         for (name, tally) in votes {
@@ -444,7 +484,7 @@ impl Resolution<'_, '_> {
     /// Walk one planned version's dependencies: every range is recorded
     /// for the `dependents` rule, and a closure member's dependencies
     /// join the universe.
-    fn process(&mut self, name: &str, version: &str) -> Result<(), String> {
+    fn process(&mut self, name: &str, version: &str) -> Result<(), PlanError> {
         if self.skipped_seen.contains(name) {
             return Ok(()); // absent or refused: nothing to walk
         }
@@ -539,7 +579,7 @@ impl Resolution<'_, '_> {
     /// the packuments it will need (the queued packages and the
     /// dependencies of their planned versions), then processes the queue
     /// in FIFO order.
-    fn drain(&mut self) -> Result<(), String> {
+    fn drain(&mut self) -> Result<(), PlanError> {
         while !self.queue.is_empty() {
             let mut want: BTreeSet<String> = self.queue.iter().map(|(n, _)| n.clone()).collect();
             for (name, version) in self.queue.iter() {
@@ -636,7 +676,7 @@ fn resolve_range(p: &Packument, range_text: &str, cutoff: &str) -> Option<String
 }
 
 /// Which packages a resolution plans, and by which rules.
-pub fn resolve(spec: &IndexSpec, src: &mut Sources) -> Result<ResolvedSpec, String> {
+pub fn resolve(spec: &IndexSpec, src: &mut Sources) -> Result<ResolvedSpec, PlanError> {
     let needs_deps = needs_deps(spec);
     let version_refusals: Vec<(String, &RefusalMatch)> = spec
         .refuse
@@ -711,9 +751,16 @@ pub fn resolve(spec: &IndexSpec, src: &mut Sources) -> Result<ResolvedSpec, Stri
             }
         }
     }
-    if let Some(outage) = list_absence_outage(res.absent_list.len(), res.list_total) {
-        let first = res.absent_list.first().map(String::as_str).unwrap_or("?");
-        return Err(format!("{outage} first {first}"));
+    if list_absence_outage(res.absent_list.len(), res.list_total) {
+        return Err(PlanError::Outage {
+            absent: res.absent_list.len(),
+            total: res.list_total,
+            first: res
+                .absent_list
+                .first()
+                .map_or("?", String::as_str)
+                .to_string(),
+        });
     }
     res.drain()?;
     res.finish_dependents()?;
@@ -795,7 +842,7 @@ pub fn fetch_high_impact_list(
     version: &str,
     sha256: &str,
     cache: &std::path::Path,
-) -> Result<String, String> {
+) -> Result<String, ListError> {
     let file = list.file();
     let dir = cache.join(format!("npm-high-impact@{version}"));
     let out = dir.join(format!("{}.list", list.const_name()));
@@ -804,7 +851,7 @@ pub fn fetch_high_impact_list(
     {
         return Ok(String::from_utf8_lossy(&bytes).into_owned());
     }
-    std::fs::create_dir_all(&dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+    std::fs::create_dir_all(&dir).map_err(op_at("mkdir ", &dir))?;
     const DEADLINE: std::time::Duration = std::time::Duration::from_secs(5 * 60);
     let packed = humanify_ag_io::subprocess::run(
         Command::new("npm")
@@ -816,12 +863,15 @@ pub fn fetch_high_impact_list(
         None,
         DEADLINE,
     )
-    .map_err(|e| format!("npm pack npm-high-impact@{version}: {e}"))?;
+    .map_err(|why| ListError::Pack {
+        version: version.to_string(),
+        why: why.to_string(),
+    })?;
     if !packed.status.success() {
-        return Err(format!(
-            "npm pack npm-high-impact@{version}: {}",
-            String::from_utf8_lossy(&packed.stderr).trim()
-        ));
+        return Err(ListError::Pack {
+            version: version.to_string(),
+            why: String::from_utf8_lossy(&packed.stderr).trim().to_string(),
+        });
     }
     let tgz = String::from_utf8_lossy(&packed.stdout)
         .lines()
@@ -840,23 +890,26 @@ pub fn fetch_high_impact_list(
         None,
         DEADLINE,
     )
-    .map_err(|e| format!("tar {file}: {e}"))?;
+    .map_err(|why| ListError::Tar {
+        file,
+        why: why.to_string(),
+    })?;
     if !untar.status.success() {
-        return Err(format!(
-            "tar {file}: {}",
-            String::from_utf8_lossy(&untar.stderr).trim()
-        ));
-    }
-    let bytes = std::fs::read(&extracted).map_err(|e| format!("{}: {e}", extracted.display()))?;
-    if hex_sha256(&bytes) != sha256 {
-        return Err(format!(
-            "npm-high-impact@{version} {}: sha256 {} does not match the spec's {sha256} \
-             — the spec pins a list this tarball does not contain",
+        return Err(ListError::Tar {
             file,
-            hex_sha256(&bytes)
-        ));
+            why: String::from_utf8_lossy(&untar.stderr).trim().to_string(),
+        });
     }
-    std::fs::write(&out, &bytes).map_err(|e| format!("{}: {e}", out.display()))?;
+    let bytes = std::fs::read(&extracted).map_err(at(&extracted))?;
+    if hex_sha256(&bytes) != sha256 {
+        return Err(ListError::Sha {
+            version: version.to_string(),
+            file,
+            got: hex_sha256(&bytes),
+            want: sha256.to_string(),
+        });
+    }
+    std::fs::write(&out, &bytes).map_err(at(&out))?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
@@ -888,7 +941,7 @@ impl SnapshotLoader {
 }
 
 impl Loader for SnapshotLoader {
-    fn prefetch(&mut self, names: &BTreeSet<String>) -> Result<(), String> {
+    fn prefetch(&mut self, names: &BTreeSet<String>) -> Result<(), RegistryError> {
         let todo: Vec<String> = names
             .iter()
             .filter(|n| !registry::packument_path(&self.dir, n).exists())
@@ -898,12 +951,10 @@ impl Loader for SnapshotLoader {
             return Ok(());
         }
         if self.offline {
-            return Err(format!(
-                "{} packages are missing from the registry snapshot (--offline), \
-                 e.g. {}; drop --offline or take the snapshot first",
-                todo.len(),
-                todo[0]
-            ));
+            return Err(RegistryError::OfflineWave {
+                count: todo.len(),
+                first: todo[0].clone(),
+            });
         }
         // curl fetches in parallel: the wave's fetch is IO-bound
         // subprocesses (concurrency: the builder's own fetch sweep,
@@ -933,8 +984,8 @@ impl Loader for SnapshotLoader {
             }
         });
         let errors = errors.into_inner().expect("lock");
-        if let Some((_, e)) = errors.first() {
-            return Err(e.clone());
+        if let Some((_, e)) = errors.into_iter().next() {
+            return Err(e);
         }
         Ok(())
     }
@@ -947,7 +998,7 @@ impl Loader for SnapshotLoader {
             .cloned()
     }
 
-    fn get(&mut self, name: &str) -> Result<(Packument, String), String> {
+    fn get(&mut self, name: &str) -> Result<(Packument, String), RegistryError> {
         if let Some(p) = self
             .memo
             .lock()
@@ -958,7 +1009,7 @@ impl Loader for SnapshotLoader {
             // the memo holds the PARSED packument; the recorded sha is the
             // FILE's — read the file for it
             let path = registry::packument_path(&self.dir, name);
-            let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let bytes = std::fs::read(&path).map_err(at(&path))?;
             return Ok((p, hex_sha256(&bytes)));
         }
         let (p, sha) = registry::load(&self.dir, name, self.offline)?;

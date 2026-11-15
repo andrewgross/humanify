@@ -89,33 +89,14 @@ pub struct InputBundle {
 }
 
 /// Why a run's input could not be read.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum InputError {
     /// The input file could not be read.
-    File(FileError),
+    #[error(transparent)]
+    File(#[from] FileError),
     /// Its layout could not be linked into one program.
-    Link(LinkError),
-}
-
-impl std::fmt::Display for InputError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::File(e) => e.fmt(f),
-            Self::Link(e) => e.fmt(f),
-        }
-    }
-}
-
-impl From<FileError> for InputError {
-    fn from(e: FileError) -> Self {
-        Self::File(e)
-    }
-}
-
-impl From<LinkError> for InputError {
-    fn from(e: LinkError) -> Self {
-        Self::Link(e)
-    }
+    #[error(transparent)]
+    Link(#[from] LinkError),
 }
 
 /// Read a run's input file (invalid UTF-8 becomes U+FFFD) through the

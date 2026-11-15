@@ -190,42 +190,23 @@ pub fn runnable_entry_file(keys: &[String]) -> String {
 }
 
 /// Why the finishing stage failed (the TS's "Post-split step failed").
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum FinishError {
     /// Reading, writing or making a file or directory failed.
-    File(FileError),
+    #[error(transparent)]
+    File(#[from] FileError),
     /// One file of the tree could not be re-linked.
+    #[error("{file}: {source}")]
     Relink { file: String, source: RelinkError },
     /// The `using` desugar failed.
-    Using(UsingTreeError),
+    #[error(transparent)]
+    Using(#[from] UsingTreeError),
     /// The split ledger is not valid JSON.
+    #[error("{}: {source}", path.display())]
     Ledger {
         path: PathBuf,
         source: serde_json::Error,
     },
-}
-
-impl std::fmt::Display for FinishError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::File(e) => e.fmt(f),
-            Self::Relink { file, source } => write!(f, "{file}: {source}"),
-            Self::Using(e) => e.fmt(f),
-            Self::Ledger { path, source } => write!(f, "{}: {source}", path.display()),
-        }
-    }
-}
-
-impl From<FileError> for FinishError {
-    fn from(e: FileError) -> Self {
-        Self::File(e)
-    }
-}
-
-impl From<UsingTreeError> for FinishError {
-    fn from(e: UsingTreeError) -> Self {
-        Self::Using(e)
-    }
 }
 
 /// What the stage did (the TS's progress lines, in order).

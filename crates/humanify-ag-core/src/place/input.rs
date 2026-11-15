@@ -34,27 +34,14 @@ pub struct SplitInput {
 }
 
 /// Why a text gives no split input.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum SplitInputError {
     /// The text does not parse, or its statements could not be listed.
-    Inventory(InventoryError),
+    #[error(transparent)]
+    Inventory(#[from] InventoryError),
     /// The text is not a bundle the split can cut.
+    #[error("{0}")]
     NotSplittable(&'static str),
-}
-
-impl std::fmt::Display for SplitInputError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Inventory(e) => e.fmt(f),
-            Self::NotSplittable(why) => f.write_str(why),
-        }
-    }
-}
-
-impl From<InventoryError> for SplitInputError {
-    fn from(e: InventoryError) -> Self {
-        Self::Inventory(e)
-    }
 }
 
 /// The prior release's top-level statement TEXTS — prior-version.ts's

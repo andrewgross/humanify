@@ -359,41 +359,24 @@ pub fn statement_twins(
 pub use stage::{PreFreeze, library_freeze, pre_transfer_states};
 
 /// Why carrying the prior version's names failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum TransferError {
     /// The statement twins' fossil map failed.
-    Twins(crate::twins::fossil::FossilMapError),
+    #[error(transparent)]
+    Twins(#[from] crate::twins::fossil::FossilMapError),
     /// A matched binding has no Babel binding on the fresh side.
+    #[error("binding rename {name}: no babel binding")]
     NoBabelBinding { name: String },
     /// A matched function pair's row JSON is missing.
+    #[error("matched pair {prior} / {fresh}: row JSON unavailable")]
     RowJsonUnavailable { prior: String, fresh: String },
     /// A matched pair's placeholder maps differ.
+    #[error(
+        "placeholder maps misaligned for matched pair at {at}: prior has {prior} slots, new has {new} — equal hashes guarantee equal slot sets, so a mapping is stale or corrupt"
+    )]
     PlaceholdersMisaligned {
         at: String,
         prior: usize,
         new: usize,
     },
-}
-
-impl std::fmt::Display for TransferError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Twins(e) => e.fmt(f),
-            Self::NoBabelBinding { name } => write!(f, "binding rename {name}: no babel binding"),
-            Self::RowJsonUnavailable { prior, fresh } => {
-                write!(f, "matched pair {prior} / {fresh}: row JSON unavailable")
-            }
-            Self::PlaceholdersMisaligned { at, prior, new } => write!(
-                f,
-                "placeholder maps misaligned for matched pair at {at}: prior has {prior} slots, new has {new} — \
-             equal hashes guarantee equal slot sets, so a mapping is stale or corrupt"
-            ),
-        }
-    }
-}
-
-impl From<crate::twins::fossil::FossilMapError> for TransferError {
-    fn from(e: crate::twins::fossil::FossilMapError) -> Self {
-        Self::Twins(e)
-    }
 }

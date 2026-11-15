@@ -400,27 +400,14 @@ pub struct UnpackPlan {
 }
 
 /// Why the Bun (or esbuild) adapter could not unpack the bundle.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum BunError {
     /// The run asked for something this adapter cannot do.
+    #[error("{0}")]
     Refused(&'static str),
     /// The library index's module answers could not be read.
-    Answers(crate::libindex::module_answers::AnswersError),
-}
-
-impl std::fmt::Display for BunError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Refused(why) => f.write_str(why),
-            Self::Answers(e) => e.fmt(f),
-        }
-    }
-}
-
-impl From<crate::libindex::module_answers::AnswersError> for BunError {
-    fn from(e: crate::libindex::module_answers::AnswersError) -> Self {
-        Self::Answers(e)
-    }
+    #[error(transparent)]
+    Answers(#[from] crate::libindex::module_answers::AnswersError),
 }
 
 /// The Bun adapter (`BunUnpackAdapter.unpack`) — also the esbuild

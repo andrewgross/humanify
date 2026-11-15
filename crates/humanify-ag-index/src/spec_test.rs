@@ -152,14 +152,14 @@ fn ids_must_be_simple_and_unique() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("given twice")),
+            .is_some_and(|e| e.to_string().contains("given twice")),
         "two selections with one id"
     );
     let bad = VALID.replace("id = \"impact\"", "id = \"impact top!\"");
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("letters, digits")),
+            .is_some_and(|e| e.to_string().contains("letters, digits")),
         "id characters"
     );
 }
@@ -173,7 +173,7 @@ fn a_dependencies_selection_may_only_name_earlier_selections() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("not an earlier selection")),
+            .is_some_and(|e| e.to_string().contains("not an earlier selection")),
         "a forward reference"
     );
     // and the same rule for an override's `selection`
@@ -184,7 +184,7 @@ fn a_dependencies_selection_may_only_name_earlier_selections() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("not a selection id")),
+            .is_some_and(|e| e.to_string().contains("not a selection id")),
         "an override's selection must exist"
     );
 }
@@ -198,7 +198,7 @@ fn a_list_selection_needs_its_version_and_hash() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("`version`")),
+            .is_some_and(|e| e.to_string().contains("`version`")),
         "no version"
     );
     let bad = VALID.replace(
@@ -208,7 +208,7 @@ fn a_list_selection_needs_its_version_and_hash() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("64 hex")),
+            .is_some_and(|e| e.to_string().contains("64 hex")),
         "a short hash"
     );
     // a dependencies selection takes no list fields
@@ -219,7 +219,7 @@ fn a_list_selection_needs_its_version_and_hash() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("takes only `of`")),
+            .is_some_and(|e| e.to_string().contains("takes only `of`")),
         "a list field on a dependencies selection"
     );
 }
@@ -230,7 +230,7 @@ fn tools_must_cover_the_recipes_and_nothing_else() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("needs tools.bun")),
+            .is_some_and(|e| e.to_string().contains("needs tools.bun")),
         "a recipe without its tool"
     );
     let bad = VALID.replace(
@@ -240,21 +240,21 @@ fn tools_must_cover_the_recipes_and_nothing_else() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("no recipe uses")),
+            .is_some_and(|e| e.to_string().contains("no recipe uses")),
         "an unused tool"
     );
     let bad = VALID.replace("bun = \"1.4.0\"", "bun = \"not-a-version\"");
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("not a version")),
+            .is_some_and(|e| e.to_string().contains("not a version")),
         "a tool version that is not one"
     );
     let bad = VALID.replace("bun = \"1.4.0\"", "java = \"1.4.0\"");
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("not a recipe bundler")),
+            .is_some_and(|e| e.to_string().contains("not a recipe bundler")),
         "an unknown bundler"
     );
 }
@@ -269,7 +269,7 @@ fn overrides_and_refusals_must_match_something() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("matches every package")),
+            .is_some_and(|e| e.to_string().contains("matches every package")),
         "an override with no matcher"
     );
     let bad = VALID.replace(
@@ -279,7 +279,7 @@ fn overrides_and_refusals_must_match_something() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("rank_below needs `selection`")),
+            .is_some_and(|e| e.to_string().contains("rank_below needs `selection`")),
         "a rank without a selection"
     );
     let bad = VALID.replace(
@@ -289,7 +289,7 @@ fn overrides_and_refusals_must_match_something() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("exactly one")),
+            .is_some_and(|e| e.to_string().contains("exactly one")),
         "a refusal with no matcher"
     );
     let bad = VALID.replace(
@@ -299,21 +299,21 @@ fn overrides_and_refusals_must_match_something() {
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("needs a reason")),
+            .is_some_and(|e| e.to_string().contains("needs a reason")),
         "an empty reason"
     );
     let bad = VALID.replace("names = [\"@types/*\"]", "versions = [\"left-pad\"]");
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("not name@version")),
+            .is_some_and(|e| e.to_string().contains("not name@version")),
         "a refusal version without a version"
     );
     let bad = VALID.replace("names = [\"@types/*\"]", "platform = false");
     assert!(
         IndexSpec::parse(&bad)
             .err()
-            .is_some_and(|e| e.contains("matches nothing")),
+            .is_some_and(|e| e.to_string().contains("matches nothing")),
         "platform = false"
     );
 }

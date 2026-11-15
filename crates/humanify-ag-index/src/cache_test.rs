@@ -339,10 +339,10 @@ fn stub_bun(root: &Path) -> PathBuf {
 
 /// The error text of a result (its `Err`), without needing `Debug` on the
 /// success type.
-fn err_of<T>(r: Result<T, String>) -> String {
+fn err_of<T, E: std::fmt::Display>(r: Result<T, E>) -> String {
     match r {
         Ok(_) => panic!("the plan succeeded where the test refuses it"),
-        Err(e) => e,
+        Err(e) => e.to_string(),
     }
 }
 

@@ -39,60 +39,41 @@ use crate::naming::waves::processor::DispatchRecord;
 use crate::trail::Anchor;
 
 /// Why the artifact dump could not be written.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum DumpError {
     /// Making the dump directory or writing a section failed.
-    File(FileError),
+    #[error(transparent)]
+    File(#[from] FileError),
     /// A section's records could not be serialized.
+    #[error("serialize {name}: {source}")]
     Serialize {
         name: String,
         source: serde_json::Error,
     },
     /// The classification site's text does not parse.
-    Site(crate::modules::UnparsedSite),
+    #[error(transparent)]
+    Site(#[from] crate::modules::UnparsedSite),
     /// Re-creating the naming part file failed mid-run.
+    #[error(transparent)]
     Part(std::io::Error),
     /// The naming part writer was lost mid-run.
+    #[error("the naming part writer failed mid-run")]
     NamingPartLost,
     /// Writing or assembling prompts.jsonl failed (`op` names which).
+    #[error("{op} {PROMPTS}: {source}")]
     Prompts {
         op: &'static str,
         source: std::io::Error,
     },
     /// A part file could not be read back.
+    #[error("read {name}: {source}")]
     ReadPart {
         name: &'static str,
         source: std::io::Error,
     },
     /// An ask row could not be serialized.
+    #[error("ask row: {0}")]
     AskRow(serde_json::Error),
-}
-
-impl std::fmt::Display for DumpError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::File(e) => e.fmt(f),
-            Self::Serialize { name, source } => write!(f, "serialize {name}: {source}"),
-            Self::Site(e) => e.fmt(f),
-            Self::Part(e) => e.fmt(f),
-            Self::NamingPartLost => f.write_str("the naming part writer failed mid-run"),
-            Self::Prompts { op, source } => write!(f, "{op} {PROMPTS}: {source}"),
-            Self::ReadPart { name, source } => write!(f, "read {name}: {source}"),
-            Self::AskRow(e) => write!(f, "ask row: {e}"),
-        }
-    }
-}
-
-impl From<FileError> for DumpError {
-    fn from(e: FileError) -> Self {
-        Self::File(e)
-    }
-}
-
-impl From<crate::modules::UnparsedSite> for DumpError {
-    fn from(e: crate::modules::UnparsedSite) -> Self {
-        Self::Site(e)
-    }
 }
 
 /// The dump folder, made and owned by the shell: the files core names

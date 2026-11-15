@@ -463,7 +463,7 @@ impl Library {
 
     /// The index directory `index` names: a directory as given, else an id
     /// under `index_store`. Err: why it cannot be resolved.
-    pub fn index_dir(&self) -> Option<Result<std::path::PathBuf, String>> {
+    pub fn index_dir(&self) -> Option<Result<std::path::PathBuf, IndexDirError>> {
         let given = self.index.as_deref()?;
         let p = std::path::Path::new(given);
         if p.is_dir() {
@@ -476,17 +476,14 @@ impl Library {
                 if dir.is_dir() {
                     Ok(dir)
                 } else {
-                    Err(format!(
-                        "library index {given}: no such index under library.index_store \
-                         ({store})"
-                    ))
+                    Err(IndexDirError::NoSuchId {
+                        given: given.to_string(),
+                        store: store.clone(),
+                    })
                 }
             }
-            (None, true) => Err(format!(
-                "library index {given}: an index id needs library.index_store (or pass the \
-                 index directory)"
-            )),
-            _ => Err(format!("library index {given}: no such directory")),
+            (None, true) => Err(IndexDirError::NeedsStore(given.to_string())),
+            _ => Err(IndexDirError::NoSuchDir(given.to_string())),
         })
     }
 }
@@ -848,7 +845,7 @@ impl Config {
         errors.extend(cross_key_violations(&r));
         let list = |k: &str| r.list(k).unwrap_or_default();
         let switches = SwitchState::configure(&list("switches.disable"), &list("switches.probe"))
-            .map_err(|e| errors.push(e))
+            .map_err(|e| errors.push(e.to_string()))
             .ok();
         let api_key = env(API_KEY_VAR).filter(|k| !k.is_empty());
         if api_key.is_none() {
@@ -947,9 +944,9 @@ impl Config {
         // names when it holds none for the kind. Nothing to refuse here.
         let dir = match self.library.index_dir()? {
             Ok(d) => d,
-            Err(e) => return Some(e),
+            Err(e) => return Some(e.to_string()),
         };
-        library_index_stale(&dir).err()
+        library_index_stale(&dir).err().map(|e| e.to_string())
     }
 
     /// The run's record: the whole resolved config, the API key redacted.
@@ -987,21 +984,53 @@ impl Config {
 /// compatibility stamps, else why not (naming both versions and the
 /// rebuild). The stamps are compared by ONE owner,
 /// `libindex::format::Manifest::check_compatible` (the loader's too).
-pub fn library_index_stale(dir: &std::path::Path) -> Result<(), String> {
+pub fn library_index_stale(dir: &std::path::Path) -> Result<(), IndexStaleError> {
     use humanify_ag_core::libindex::format::{Manifest, check_manifest_stamps};
-    let shown = dir.display();
+    let at = |why| IndexStaleError {
+        dir: dir.display().to_string(),
+        why,
+    };
     let text = std::fs::read_to_string(dir.join("manifest.json"))
-        .map_err(|e| format!("library index {shown}: manifest.json unreadable: {e}"))?;
+        .map_err(|e| at(StaleWhy::Unreadable(e)))?;
     // an older era may not parse as this binary's manifest: its stamps
     // first, so the refusal names them
     if serde_json::from_str::<serde_json::Value>(&text).is_ok() {
-        check_manifest_stamps(&text).map_err(|e| format!("library index {shown}: {e}"))?;
+        check_manifest_stamps(&text).map_err(|e| at(StaleWhy::Stamps(e)))?;
     }
-    let m: Manifest = serde_json::from_str(&text).map_err(|e| {
-        format!("library index {shown}: manifest.json is not an index manifest: {e}")
-    })?;
-    m.check_compatible()
-        .map_err(|e| format!("library index {shown}: {e}"))
+    let m: Manifest = serde_json::from_str(&text).map_err(|e| at(StaleWhy::NotAManifest(e)))?;
+    m.check_compatible().map_err(|e| at(StaleWhy::Stamps(e)))
+}
+
+/// Why `library.index` names no index directory.
+#[derive(Debug, thiserror::Error)]
+pub enum IndexDirError {
+    #[error("library index {given}: no such index under library.index_store ({store})")]
+    NoSuchId { given: String, store: String },
+    #[error(
+        "library index {0}: an index id needs library.index_store (or pass the \
+         index directory)"
+    )]
+    NeedsStore(String),
+    #[error("library index {0}: no such directory")]
+    NoSuchDir(String),
+}
+
+/// Why the index at a directory is not one this binary reads.
+#[derive(Debug, thiserror::Error)]
+#[error("library index {dir}: {why}")]
+pub struct IndexStaleError {
+    pub(crate) dir: String,
+    pub(crate) why: StaleWhy,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum StaleWhy {
+    #[error("manifest.json unreadable: {0}")]
+    Unreadable(std::io::Error),
+    #[error("{0}")]
+    Stamps(humanify_ag_core::libindex::format::ManifestError),
+    #[error("manifest.json is not an index manifest: {0}")]
+    NotAManifest(serde_json::Error),
 }
 
 /// Every key the record carries, dotted (`llm.model`) — the setting names

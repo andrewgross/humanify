@@ -23,7 +23,6 @@
 //! something outside the group still holds a pipe after the kill, the
 //! threads end when it closes, and the run does not wait for them.
 
-use std::fmt;
 use std::io::{Read, Write};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::mpsc;
@@ -39,33 +38,25 @@ pub struct Finished {
 }
 
 /// Why a child did not finish.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SubprocessError {
     /// It did not start (not found, EAGAIN, ENOMEM, …).
+    #[error("cannot start: {0}")]
     Spawn(String),
     /// The deadline expired; `killed` says whether the group kill was
     /// delivered.
+    #[error("timed out after {}s ({})", after.as_secs_f64(), kill_outcome(*killed))]
     TimedOut { after: Duration, killed: bool },
     /// A pipe or the wait failed.
+    #[error("{0}")]
     Io(String),
 }
 
-impl fmt::Display for SubprocessError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SubprocessError::Spawn(e) => write!(f, "cannot start: {e}"),
-            SubprocessError::TimedOut { after, killed } => write!(
-                f,
-                "timed out after {}s ({})",
-                after.as_secs_f64(),
-                if *killed {
-                    "killed"
-                } else {
-                    "the kill FAILED — the child may still be running"
-                }
-            ),
-            SubprocessError::Io(e) => write!(f, "{e}"),
-        }
+fn kill_outcome(killed: bool) -> &'static str {
+    if killed {
+        "killed"
+    } else {
+        "the kill FAILED — the child may still be running"
     }
 }
 

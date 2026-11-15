@@ -41,7 +41,8 @@ impl FileOp {
 }
 
 /// A file operation that failed.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("{} {}: {source}", op.verb(), path.display())]
 pub struct FileError {
     pub op: FileOp,
     pub path: PathBuf,
@@ -56,17 +57,5 @@ impl FileError {
             path: path.to_path_buf(),
             source,
         }
-    }
-}
-
-impl std::fmt::Display for FileError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} {}: {}",
-            self.op.verb(),
-            self.path.display(),
-            self.source
-        )
     }
 }

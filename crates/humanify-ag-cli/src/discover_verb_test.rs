@@ -377,7 +377,8 @@ fn a_bundle_whose_recipe_the_index_lacks_fails_the_instrument() {
             work_dir: None,
         },
     )
-    .expect_err("no slice for bun:target=node");
+    .expect_err("no slice for bun:target=node")
+    .to_string();
     assert!(err.contains("no slice for recipe bun:target=node"), "{err}");
 }
 

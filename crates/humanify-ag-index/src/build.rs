@@ -24,12 +24,48 @@ use humanify_ag_core::libindex::recipe::Recipe;
 
 use crate::asof::{Selected, VersionPolicy, grace_cutoff, normalize_time, select_versions};
 use crate::confirm::{SourceWords, Verdict};
+use crate::error::{FileError, op_at};
 use crate::merge::{GIANT_SHARD_BYTES, MergeMeta, ShardFlow, finish_workers, stream_parallel};
 use crate::recipe::{
     MAX_SOURCE_BYTES, RECIPE_VERSION, RecipeBuild, bundler_package, entry_specifiers,
     is_source_file, is_sponge_file, unresolved_specifiers,
 };
-use crate::registry;
+use crate::registry::{self, RegistryError};
+
+/// Why the index build (its plan, a package's install, bundle and
+/// shards, or the merge) failed.
+#[derive(Debug, thiserror::Error)]
+pub enum BuildError {
+    #[error(transparent)]
+    Recipe(#[from] crate::recipe::RecipeRunError),
+    #[error(transparent)]
+    Registry(#[from] RegistryError),
+    #[error("--refuse {0}: expected name@version:reason")]
+    Refuse(String),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    File(#[from] FileError),
+    #[error("{0}")]
+    Encode(#[from] serde_json::Error),
+    #[error("{label}: {npm}")]
+    Install { label: String, npm: NpmError },
+    /// The first line of the bundler's last failure.
+    #[error("{0}")]
+    Bundle(String),
+    #[error(transparent)]
+    Map(#[from] crate::sourcemap::MapError),
+    #[error("no recipe for slice")]
+    NoRecipe,
+    #[error(transparent)]
+    Shard(#[from] crate::shard::ShardError),
+    #[error("the run stopped the build: its wait deadline (library.index.wait) expired")]
+    Stopped,
+    #[error("--merge-jobs 0: the merge takes at least one worker")]
+    MergeJobs,
+    #[error(transparent)]
+    Merge(#[from] crate::merge::MergeError),
+}
 use crate::shard::{
     Shard, ShardInputs, ShardKind, ShardLiteral, ShardModule, ShardNotes, ShardUnit, has_current,
     write_shard,
@@ -314,7 +350,7 @@ fn slice_records(
     cfg: &BuildConfig,
     snapshot: &mut RegistrySnapshot,
     trace: Trace<'_>,
-) -> Result<Vec<SliceRecord>, String> {
+) -> Result<Vec<SliceRecord>, BuildError> {
     let mut out = Vec::new();
     let mut seen_bundlers = BTreeSet::new();
     for build in &cfg.recipes {
@@ -418,18 +454,15 @@ pub(crate) fn shard_inputs(
 /// `--refuse` specs (`name@version:reason`): the version leaves the plan
 /// and the refusal is recorded like the plan's own (exp161: a package whose
 /// build OOMs workers solo gets one refusal entry, never a retry path).
-fn refusal_specs(specs: &[String]) -> Result<Vec<(String, String, String)>, String> {
+fn refusal_specs(specs: &[String]) -> Result<Vec<(String, String, String)>, BuildError> {
     specs
         .iter()
         .map(|s| {
-            let (nv, reason) = s
-                .split_once(':')
-                .ok_or_else(|| format!("--refuse {s}: expected name@version:reason"))?;
-            let (name, version) = nv
-                .split_once('@')
-                .ok_or_else(|| format!("--refuse {s}: expected name@version:reason"))?;
+            let refuse = || BuildError::Refuse(s.clone());
+            let (nv, reason) = s.split_once(':').ok_or_else(refuse)?;
+            let (name, version) = nv.split_once('@').ok_or_else(refuse)?;
             if name.is_empty() || version.is_empty() || reason.is_empty() {
-                return Err(format!("--refuse {s}: expected name@version:reason"));
+                return Err(refuse());
             }
             Ok((name.to_string(), version.to_string(), reason.to_string()))
         })
@@ -440,7 +473,7 @@ fn refusal_specs(specs: &[String]) -> Result<Vec<(String, String, String)>, Stri
 /// the spec's own (version, reason) refusals.
 type Planned = Vec<(String, Vec<Selected>, Vec<(String, String)>)>;
 
-pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, String> {
+pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, BuildError> {
     let mut snapshot = RegistrySnapshot::default();
     let slices = slice_records(cfg, &mut snapshot, trace)?;
     let mut tasks = Vec::new();
@@ -503,7 +536,7 @@ pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, String> {
                         .collect();
                     Ok((name, chosen.selected, refused))
                 })
-                .collect::<Result<Vec<_>, String>>()?
+                .collect::<Result<Vec<_>, BuildError>>()?
         }
     };
     for (name, selected, sel_refused) in selections {
@@ -614,13 +647,15 @@ pub fn describe(plan: &Plan) -> String {
 /// is for a registry that never answers).
 const INSTALL_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
-fn run_cmd(cmd: &mut Command) -> Result<(), String> {
+fn run_cmd(cmd: &mut Command) -> Result<(), NpmError> {
     let out =
-        humanify_ag_io::subprocess::run(cmd, None, INSTALL_DEADLINE).map_err(|e| e.to_string())?;
+        humanify_ag_io::subprocess::run(cmd, None, INSTALL_DEADLINE).map_err(NpmError::Run)?;
     if out.status.success() {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        Err(NpmError::from_stderr(
+            String::from_utf8_lossy(&out.stderr).trim(),
+        ))
     }
 }
 
@@ -686,15 +721,15 @@ fn package_files(root: &Path) -> Vec<String> {
 
 /// Write `text` to `path` as a NEW file (unlinked first: a work directory
 /// may be a hardlinked copy of another).
-fn write_fresh(path: &Path, text: &str) -> Result<(), String> {
+fn write_fresh(path: &Path, text: &str) -> Result<(), BuildError> {
     let _ = std::fs::remove_file(path);
-    std::fs::write(path, text).map_err(|e| e.to_string())
+    Ok(std::fs::write(path, text)?)
 }
 
 /// The two app entries: a `require()` and an `import()` of the package
 /// and of every subpath its `exports` map gives a Node app
 /// ([`entry_specifiers`]).
-fn write_entries(dir: &Path, name: &str) -> Result<(), String> {
+fn write_entries(dir: &Path, name: &str) -> Result<(), BuildError> {
     let root = dir.join("node_modules").join(name);
     let manifest: serde_json::Value = std::fs::read_to_string(root.join("package.json"))
         .ok()
@@ -703,7 +738,7 @@ fn write_entries(dir: &Path, name: &str) -> Result<(), String> {
     let specs = entry_specifiers(name, &manifest, &package_files(&root));
     let quoted: Vec<String> = specs
         .iter()
-        .map(|s| serde_json::to_string(s).map_err(|e| e.to_string()))
+        .map(serde_json::to_string)
         .collect::<Result<_, _>>()?;
     let app = |tag: &str| {
         format!(
@@ -711,7 +746,7 @@ fn write_entries(dir: &Path, name: &str) -> Result<(), String> {
         )
     };
     let entries = dir.join("entries");
-    std::fs::create_dir_all(&entries).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&entries)?;
     let requires: String = quoted
         .iter()
         .enumerate()
@@ -745,7 +780,7 @@ fn write_entries(dir: &Path, name: &str) -> Result<(), String> {
 /// version that old for a dependency, once more as of [`grace_cutoff`]
 /// (a sibling of the same release published moments later); the planner
 /// resolves ranges by the same two cutoffs.
-fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<(PathBuf, String), String> {
+fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<(PathBuf, String), BuildError> {
     let dir = work.join(format!("{}@{}", task.name.replace('/', "__"), task.version));
     if dir.join(".installed").exists() {
         return Ok((dir, "installed".into()));
@@ -755,32 +790,36 @@ fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<(PathBuf, Strin
         match restore(&dir, task, trace) {
             Ok(()) => {
                 strip_source_map_comments(&dir.join("node_modules"));
-                std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
+                std::fs::write(dir.join(".installed"), "")?;
                 return Ok((dir, "restored".into()));
             }
             Err(e) => {
                 path = format!(
                     "fresh (restore refused: {})",
-                    e.lines().next().unwrap_or("")
+                    e.to_string().lines().next().unwrap_or("")
                 )
             }
         }
     }
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir)?;
     let manifest = serde_json::json!({"private": true, "name": "ix-app", "dependencies": {&task.name: &task.version}});
-    std::fs::write(dir.join("package.json"), format!("{manifest}\n")).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("package.json"), format!("{manifest}\n"))?;
     let label = format!("npm install {}@{}", task.name, task.version);
     let exact = npm_install(&dir, &task.published, trace);
     if let Err(e) = exact {
-        let grace = grace_cutoff(&task.published).filter(|_| date_blocked(&e));
+        let grace = grace_cutoff(&task.published).filter(|_| e.date_blocked());
         let Some(grace) = grace else {
-            return Err(format!("{label}: {e}"));
+            return Err(BuildError::Install { label, npm: e });
         };
-        npm_install(&dir, &grace, trace).map_err(|e2| format!("{label}: {e} / grace: {e2}"))?;
+        let grace_try = npm_install(&dir, &grace, trace);
+        grace_try.map_err(|e2| BuildError::Install {
+            label,
+            npm: NpmError::Grace(Box::new(e), Box::new(e2)),
+        })?;
     }
     strip_source_map_comments(&dir.join("node_modules"));
-    std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
+    std::fs::write(dir.join(".installed"), "")?;
     Ok((dir, path))
 }
 
@@ -826,8 +865,8 @@ pub(crate) fn lock_complete(dir: &Path) -> bool {
 /// the date blocked it, as [`install`] does); the tree must hold the whole
 /// lock ([`lock_complete`]). An Err leaves no tree: the caller installs
 /// fresh.
-fn restore(dir: &Path, task: &Task, trace: Trace<'_>) -> Result<(), String> {
-    let lock = std::fs::read(dir.join("package-lock.json")).map_err(|e| e.to_string())?;
+fn restore(dir: &Path, task: &Task, trace: Trace<'_>) -> Result<(), NpmError> {
+    let lock = std::fs::read(dir.join("package-lock.json")).map_err(NpmError::Lock)?;
     let at = |before: &str| {
         npm_ci(dir, before, trace).or_else(|e| {
             // `npm ci` refuses a lock that lacks an optional platform
@@ -835,15 +874,17 @@ fn restore(dir: &Path, task: &Task, trace: Trace<'_>) -> Result<(), String> {
             // GUIDED by the lock keeps every locked version, and is
             // accepted only when it leaves the lock byte-identical
             let _ = std::fs::remove_dir_all(dir.join("node_modules"));
-            npm_install(dir, before, trace).map_err(|e2| format!("{e} / {e2}"))?;
+            if let Err(e2) = npm_install(dir, before, trace) {
+                return Err(NpmError::Both(Box::new(e), Box::new(e2)));
+            }
             match std::fs::read(dir.join("package-lock.json")) {
                 Ok(now) if now == lock => Ok(()),
-                _ => Err(format!("{e} / the lock-guided install changed the lock")),
+                _ => Err(NpmError::LockChanged(Box::new(e))),
             }
         })
     };
     let done = at(&task.published).or_else(|e| {
-        match grace_cutoff(&task.published).filter(|_| date_blocked(&e)) {
+        match grace_cutoff(&task.published).filter(|_| e.date_blocked()) {
             Some(grace) => at(&grace),
             None => Err(e),
         }
@@ -851,7 +892,7 @@ fn restore(dir: &Path, task: &Task, trace: Trace<'_>) -> Result<(), String> {
     let done = done.and_then(|()| {
         lock_complete(dir)
             .then_some(())
-            .ok_or_else(|| "the tree lacks a package its lock lists".to_string())
+            .ok_or(NpmError::LockIncomplete)
     });
     if done.is_err() {
         let _ = std::fs::remove_dir_all(dir.join("node_modules"));
@@ -863,7 +904,7 @@ fn restore(dir: &Path, task: &Task, trace: Trace<'_>) -> Result<(), String> {
 /// cache first): `--before` because npm validates the lock's peer ranges
 /// against the registry, which must be read as the original install read
 /// it. No `--legacy-peer-deps` retry: it drops the lock's peers.
-fn npm_ci(dir: &Path, before: &str, trace: Trace<'_>) -> Result<(), String> {
+fn npm_ci(dir: &Path, before: &str, trace: Trace<'_>) -> Result<(), NpmError> {
     let mut cmd = Command::new("npm");
     cmd.current_dir(dir)
         .args([
@@ -881,8 +922,8 @@ fn npm_ci(dir: &Path, before: &str, trace: Trace<'_>) -> Result<(), String> {
 
 /// `npm install` in `dir` as of `before`, retried with
 /// `--legacy-peer-deps` when the strict peer resolution fails.
-fn npm_install(dir: &Path, before: &str, trace: Trace<'_>) -> Result<(), String> {
-    let npm = |legacy: bool| -> Result<(), String> {
+fn npm_install(dir: &Path, before: &str, trace: Trace<'_>) -> Result<(), NpmError> {
+    let npm = |legacy: bool| -> Result<(), NpmError> {
         let mut cmd = Command::new("npm");
         cmd.current_dir(dir)
             .args([
@@ -899,13 +940,55 @@ fn npm_install(dir: &Path, before: &str, trace: Trace<'_>) -> Result<(), String>
         let _s = trace.stage("library.index.install");
         run_cmd(&mut cmd)
     };
-    npm(false).or_else(|e| npm(true).map_err(|e2| format!("{e} / {e2}")))
+    npm(false).or_else(|e| npm(true).map_err(|e2| NpmError::Both(Box::new(e), Box::new(e2))))
 }
 
-/// Whether an install failed only on its date: npm found no version of
-/// some dependency published before the cutoff.
-pub(crate) fn date_blocked(err: &str) -> bool {
-    err.contains("ETARGET") && err.contains("with a date before")
+/// Why an npm install (or a restore from a kept lock) failed.
+#[derive(Debug, thiserror::Error)]
+pub enum NpmError {
+    #[error("{0}")]
+    Run(humanify_ag_io::subprocess::SubprocessError),
+    /// npm found no version of some dependency published before the
+    /// cutoff (`ETARGET … with a date before`): its stderr.
+    #[error("{0}")]
+    DateBlocked(String),
+    /// Any other npm failure: its stderr.
+    #[error("{0}")]
+    Failed(String),
+    /// A first attempt's error, then the retry's.
+    #[error("{0} / {1}")]
+    Both(Box<NpmError>, Box<NpmError>),
+    /// The install at the publish time, then the one at the grace cutoff.
+    #[error("{0} / grace: {1}")]
+    Grace(Box<NpmError>, Box<NpmError>),
+    #[error("{0} / the lock-guided install changed the lock")]
+    LockChanged(Box<NpmError>),
+    #[error("the tree lacks a package its lock lists")]
+    LockIncomplete,
+    #[error("{0}")]
+    Lock(std::io::Error),
+}
+
+impl NpmError {
+    /// npm's stderr, classified: date-blocked or any other failure.
+    pub fn from_stderr(stderr: &str) -> NpmError {
+        if stderr.contains("ETARGET") && stderr.contains("with a date before") {
+            NpmError::DateBlocked(stderr.to_string())
+        } else {
+            NpmError::Failed(stderr.to_string())
+        }
+    }
+
+    /// Whether the install failed on its date: some attempt was
+    /// date-blocked.
+    pub fn date_blocked(&self) -> bool {
+        match self {
+            NpmError::DateBlocked(_) => true,
+            NpmError::Both(a, b) | NpmError::Grace(a, b) => a.date_blocked() || b.date_blocked(),
+            NpmError::LockChanged(e) => e.date_blocked(),
+            _ => false,
+        }
+    }
 }
 
 /// `path` with symlinks resolved (a bundler writes map sources relative to
@@ -997,13 +1080,18 @@ pub fn literal_shard(dir: &Path, inputs: &ShardInputs, slices: &[Recipe]) -> Sha
 
 /// Build one entry, retrying unresolvable specifiers as externals (up to
 /// 4 rounds) and top-level await as ESM.
-fn build_entry(recipe: &RecipeBuild, dir: &Path, entry: &str, out: &Path) -> Result<(), String> {
+fn build_entry(
+    recipe: &RecipeBuild,
+    dir: &Path,
+    entry: &str,
+    out: &Path,
+) -> Result<(), BuildError> {
     let (mut externals, mut esm) = (Vec::new(), false);
     let mut last = String::new();
     for _ in 0..6 {
         match recipe.build(dir, entry, out, &externals, esm) {
             Ok(()) => return Ok(()),
-            Err(e) => last = e,
+            Err(e) => last = e.to_string(),
         }
         let new: Vec<String> = unresolved_specifiers(&last)
             .into_iter()
@@ -1017,7 +1105,9 @@ fn build_entry(recipe: &RecipeBuild, dir: &Path, entry: &str, out: &Path) -> Res
             break;
         }
     }
-    Err(last.lines().next().unwrap_or("build failed").to_string())
+    Err(BuildError::Bundle(
+        last.lines().next().unwrap_or("build failed").to_string(),
+    ))
 }
 
 /// One bundle's module rows: the pipeline's module walk and content key,
@@ -1028,9 +1118,9 @@ pub(crate) fn fingerprint_bundle(
     shard: &mut Shard,
     regions: SpongeRegions,
     names: bool,
-) -> Result<(), String> {
-    let code = std::fs::read_to_string(out.join("out.js")).map_err(|e| e.to_string())?;
-    let map_text = std::fs::read_to_string(out.join("out.js.map")).map_err(|e| e.to_string())?;
+) -> Result<(), BuildError> {
+    let code = std::fs::read_to_string(out.join("out.js"))?;
+    let map_text = std::fs::read_to_string(out.join("out.js.map"))?;
     let mut map = SourceMap::parse(&map_text)?;
     map.relocate(out);
     let toolchain = humanify_ag_core::toolchain::resolve_toolchain(
@@ -1713,8 +1803,8 @@ fn ensure_build(
     entry: &str,
     out: &Path,
     trace: Trace<'_>,
-) -> Result<(), String> {
-    let text = std::fs::read_to_string(dir.join(entry)).map_err(|e| format!("{entry}: {e}"))?;
+) -> Result<(), BuildError> {
+    let text = std::fs::read_to_string(dir.join(entry)).map_err(op_at("", Path::new(entry)))?;
     let want = format!("{RECIPE_VERSION}\n{}\n{text}", recipe.recipe.spelling());
     let stamp = out.join(BUILD_STAMP);
     if std::fs::read_to_string(&stamp).is_ok_and(|s| s == want) {
@@ -1722,7 +1812,7 @@ fn ensure_build(
     }
     let _s = trace.stage("library.index.bundle");
     build_entry(recipe, dir, entry, out)?;
-    std::fs::write(&stamp, want).map_err(|e| e.to_string())
+    Ok(std::fs::write(&stamp, want)?)
 }
 
 /// The module shard of one slice: both entries built and fingerprinted.
@@ -1743,7 +1833,7 @@ fn module_shard(
         });
         let status = match result {
             Ok(()) => "ok".to_string(),
-            Err(e) => e,
+            Err(e) => e.to_string(),
         };
         shard.notes.builds.insert(tag.to_string(), status);
     }
@@ -1752,7 +1842,7 @@ fn module_shard(
 
 /// Build every missing shard of `task`: the module shards first, since the
 /// literal shard reads their builds (any build not yet made is made).
-pub(crate) fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), String> {
+pub(crate) fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), BuildError> {
     let (dir, path) = install(&cfg.work, task, trace)?;
     if !cfg.quiet {
         eprintln!("install {}@{}: {path}", task.name, task.version);
@@ -1783,7 +1873,7 @@ pub(crate) fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Resul
                     .recipes
                     .iter()
                     .find(|r| r.recipe == want)
-                    .ok_or("no recipe for slice")?;
+                    .ok_or(BuildError::NoRecipe)?;
                 module_shard(&dir, recipe, inputs, cfg.sponge_regions, cfg.names, trace)
             }
         };
@@ -1825,7 +1915,7 @@ fn execute_all(cfg: &BuildConfig, tasks: &[Task], trace: Trace<'_>) -> Vec<(Stri
                     }
                     if let Err(e) = execute(cfg, task, trace) {
                         let label = format!("{}@{}", task.name, task.version);
-                        errors.lock().expect("lock").push((label, e));
+                        errors.lock().expect("lock").push((label, e.to_string()));
                     }
                 }
             });
@@ -1888,7 +1978,7 @@ fn chunk_build(
     i: usize,
     n: usize,
     trace: Trace<'_>,
-) -> Result<BuildOutcome, String> {
+) -> Result<BuildOutcome, BuildError> {
     let names: Vec<String> = plan
         .tasks
         .iter()
@@ -1914,9 +2004,7 @@ fn chunk_build(
         eprintln!("FAILED {label}: {e}");
     }
     if trace.stopped() {
-        return Err("the run stopped the build: its wait deadline \
-             (library.index.wait) expired"
-            .to_string());
+        return Err(BuildError::Stopped);
     }
     let built = tasks.iter().filter(|t| !t.missing.is_empty()).count();
     Ok(BuildOutcome {
@@ -1930,7 +2018,7 @@ fn chunk_build(
     })
 }
 
-pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<BuildOutcome, String> {
+pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<BuildOutcome, BuildError> {
     build(cfg, dry_run, Trace::default())
 }
 
@@ -1939,7 +2027,11 @@ pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<BuildOutcome, String> {
 /// span when a profiler is given, a stop flag ends the package sweep at
 /// the next task boundary, and the counts come back for the caller's
 /// build sidecar.
-pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<BuildOutcome, String> {
+pub fn build(
+    cfg: &BuildConfig,
+    dry_run: bool,
+    trace: Trace<'_>,
+) -> Result<BuildOutcome, BuildError> {
     let mut plan = {
         let _s = trace.stage("library.index.plan");
         plan(cfg, trace)?
@@ -1960,9 +2052,7 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
             eprintln!("FAILED {label}: {e}");
         }
         if trace.stopped() {
-            return Err("the run stopped the build: its wait deadline \
-                 (library.index.wait) expired"
-                .to_string());
+            return Err(BuildError::Stopped);
         }
     }
     let mut inputs: Vec<(String, usize, ShardInputs)> = plan
@@ -1983,7 +2073,7 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
         .collect();
     inputs.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
     if cfg.merge_jobs == 0 {
-        return Err("--merge-jobs 0: the merge takes at least one worker".into());
+        return Err(BuildError::MergeJobs);
     }
     let found;
     let workers = {
@@ -2056,10 +2146,10 @@ pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<Build
     })
 }
 
-fn write_index(out: &Path, files: &BTreeMap<String, Vec<u8>>) -> Result<(), String> {
-    std::fs::create_dir_all(out).map_err(|e| format!("mkdir {}: {e}", out.display()))?;
+fn write_index(out: &Path, files: &BTreeMap<String, Vec<u8>>) -> Result<(), BuildError> {
+    std::fs::create_dir_all(out).map_err(op_at("mkdir ", out))?;
     for (name, bytes) in files {
-        std::fs::write(out.join(name), bytes).map_err(|e| format!("write {name}: {e}"))?;
+        std::fs::write(out.join(name), bytes).map_err(op_at("write ", Path::new(name)))?;
     }
     Ok(())
 }

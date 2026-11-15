@@ -102,24 +102,14 @@ pub fn try_parse_estree_json(text: &str) -> Result<serde_json::Value, EstreeJson
 }
 
 /// The program's ESTree JSON did not read back as JSON.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("estree json: {0}")]
 pub struct EstreeJsonError(pub serde_json::Error);
 
-impl std::fmt::Display for EstreeJsonError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "estree json: {}", self.0)
-    }
-}
-
 /// A parse that failed: the parser's first diagnostic, as it printed it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
 pub struct ParseError(pub String);
-
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
 
 /// oxc's spelling of an infinite number (`oxc_estree`'s `f64` impl).
 const ESTREE_INFINITY: &[u8] = b"1e+400";

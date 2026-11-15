@@ -153,17 +153,26 @@ pub struct SwitchState {
     applied: BTreeSet<Switch>,
 }
 
+/// A switch name that is unknown, or of the other kind.
+#[derive(Debug, thiserror::Error)]
+#[error("switches.{what}: unknown {what} switch \"{name}\" — valid: {valid}")]
+pub struct SwitchError {
+    pub(crate) what: &'static str,
+    pub(crate) name: String,
+    pub(crate) valid: String,
+}
+
 impl SwitchState {
     /// Apply the `switches.disable` / `switches.probe` lists. Called ONCE from the
     /// CLI action. An unknown or wrong-kind name is an error with the valid
     /// list — a switch that could not take effect must never look accepted
     /// (the exact failure the env generation allowed: an exported typo was
     /// silently nothing). Blank segments are skipped, as in TS.
-    pub fn configure(disable: &[String], probe: &[String]) -> Result<SwitchState, String> {
+    pub fn configure(disable: &[String], probe: &[String]) -> Result<SwitchState, SwitchError> {
         let apply = |names: &[String],
                      kind: SwitchKind,
                      out: &mut BTreeSet<Switch>|
-         -> Result<(), String> {
+         -> Result<(), SwitchError> {
             for raw in names {
                 let name = raw.trim();
                 if name.is_empty() {
@@ -176,18 +185,15 @@ impl SwitchState {
                     _ => true,
                 };
                 if entry.is_none() || wrong_kind {
-                    let flag = match kind {
-                        SwitchKind::Disable => "switches.disable",
-                        SwitchKind::Probe => "switches.probe",
+                    let what = match kind {
+                        SwitchKind::Disable => "disable",
+                        SwitchKind::Probe => "probe",
                     };
-                    return Err(format!(
-                        "{flag}: unknown {} switch \"{name}\" — valid: {}",
-                        match kind {
-                            SwitchKind::Disable => "disable",
-                            SwitchKind::Probe => "probe",
-                        },
-                        valid_names(kind).join(", ")
-                    ));
+                    return Err(SwitchError {
+                        what,
+                        name: name.to_string(),
+                        valid: valid_names(kind).join(", "),
+                    });
                 }
                 out.insert(entry.unwrap());
             }

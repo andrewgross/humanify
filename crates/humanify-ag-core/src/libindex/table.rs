@@ -199,52 +199,69 @@ fn owner_id(packages: &[String], owner: &str) -> u32 {
 }
 
 /// Why a lookup table could not be encoded or opened.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum TableError {
     /// A key column runs past the table's end.
+    #[error("a key column of {n} keys at byte {at} runs past the table's {len} bytes")]
     ColumnOverrun { n: u64, at: u64, len: u64 },
     /// The table's size disagrees with its header.
+    #[error(
+        "{what} is {len} bytes, its header says {want} bytes: a damaged or partly written table"
+    )]
     SizeMismatch {
         what: &'static str,
         len: u64,
         want: u64,
     },
     /// The file does not start with the table's magic.
+    #[error("{what}: not a {} table", String::from_utf8_lossy(&magic[..]))]
     NotATable {
         what: &'static str,
         magic: &'static [u8; 8],
     },
     /// A unit or callee hash that is not 16 lowercase hex digits.
+    #[error("{what} {hash:?} is not 16 lowercase hex digits")]
     BadHash { what: &'static str, hash: String },
     /// An edge row names no unit row.
+    #[error("edge row {hash} {owner} {file} has no unit row")]
     EdgeWithoutUnit {
         hash: String,
         owner: String,
         file: String,
     },
     /// Two edge rows for one unit row.
+    #[error("two edge rows for one unit row")]
     TwoEdgeRows,
     /// A name row names no unit row.
+    #[error("name row {hash:?}/{owner}/{file:?}: no unit row holds it")]
     NameRowWithoutUnit {
         hash: String,
         owner: String,
         file: String,
     },
     /// Names rows for a slice that has no unit rows.
+    #[error("names rows for slice {slice}: the slice has no unit rows")]
     NamesWithoutSlice { slice: String },
     /// Names rows out of row-id order.
+    #[error("names row {row} follows {prev} — the rows must be in row-id order, one per row")]
     NamesOutOfOrder { row: u32, prev: u32 },
     /// A names entry range past the table's entries.
+    #[error("names entries {from}..{to} run past the table's {n}")]
     EntriesOverrun { from: u64, to: u64, n: u64 },
     /// A names entry's name id past the strings.
+    #[error("names entry's name id {name} past the {strings} strings")]
     NameIdPast { name: usize, strings: usize },
     /// A names entry's kind ordinal that is no kind.
+    #[error("names entry's kind ordinal {kind} is no kind")]
     NoKind { kind: u32 },
     /// The literal table's package count does not fit.
+    #[error("literal table: package count")]
     PackageCount,
     /// The literal table is shorter than its header says.
+    #[error("literal table is {len} bytes, shorter than its header says")]
     LiteralShort { len: u64 },
     /// A JSON side file could not be serialized.
+    #[error(transparent)]
     Json(serde_json::Error),
 }
 
@@ -257,74 +274,14 @@ impl TableError {
     }
 }
 
-impl std::fmt::Display for TableError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::ColumnOverrun { n, at, len } => write!(
-                f,
-                "a key column of {n} keys at byte {at} runs past the table's {len} bytes"
-            ),
-            Self::SizeMismatch { what, len, want } => write!(
-                f,
-                "{what} is {len} bytes, its header says {want} bytes: a damaged or partly written table"
-            ),
-            Self::NotATable { what, magic } => write!(
-                f,
-                "{what}: not a {} table",
-                String::from_utf8_lossy(&magic[..])
-            ),
-            Self::BadHash { what, hash } => {
-                write!(f, "{what} {hash:?} is not 16 lowercase hex digits")
-            }
-            Self::EdgeWithoutUnit { hash, owner, file } => {
-                write!(f, "edge row {hash} {owner} {file} has no unit row")
-            }
-            Self::TwoEdgeRows => f.write_str("two edge rows for one unit row"),
-            Self::NameRowWithoutUnit { hash, owner, file } => {
-                write!(
-                    f,
-                    "name row {hash:?}/{owner}/{file:?}: no unit row holds it"
-                )
-            }
-            Self::NamesWithoutSlice { slice } => {
-                write!(
-                    f,
-                    "names rows for slice {slice}: the slice has no unit rows"
-                )
-            }
-            Self::NamesOutOfOrder { row, prev } => write!(
-                f,
-                "names row {row} follows {prev} — the rows must be in row-id order, one per row"
-            ),
-            Self::EntriesOverrun { from, to, n } => {
-                write!(f, "names entries {from}..{to} run past the table's {n}")
-            }
-            Self::NameIdPast { name, strings } => {
-                write!(f, "names entry's name id {name} past the {strings} strings")
-            }
-            Self::NoKind { kind } => write!(f, "names entry's kind ordinal {kind} is no kind"),
-            Self::PackageCount => f.write_str("literal table: package count"),
-            Self::LiteralShort { len } => write!(
-                f,
-                "literal table is {len} bytes, shorter than its header says"
-            ),
-            Self::Json(e) => e.fmt(f),
-        }
-    }
-}
-
 /// Why a streaming table write stopped: a table failed, or the writer
 /// handed in (`put`) refused its bytes.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum TableWriteError<E> {
-    Table(TableError),
+    #[error(transparent)]
+    Table(#[from] TableError),
+    #[error("{0}")]
     Sink(E),
-}
-
-impl<E> From<TableError> for TableWriteError<E> {
-    fn from(e: TableError) -> Self {
-        Self::Table(e)
-    }
 }
 
 impl TableWriteError<std::convert::Infallible> {
@@ -333,15 +290,6 @@ impl TableWriteError<std::convert::Infallible> {
         match self {
             Self::Table(e) => e,
             Self::Sink(never) => match never {},
-        }
-    }
-}
-
-impl<E: std::fmt::Display> std::fmt::Display for TableWriteError<E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Table(e) => e.fmt(f),
-            Self::Sink(e) => e.fmt(f),
         }
     }
 }

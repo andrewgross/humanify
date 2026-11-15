@@ -68,6 +68,8 @@ mod config_test;
 #[cfg(test)]
 mod discover_verb_test;
 #[cfg(test)]
+mod error_text_pin_test;
+#[cfg(test)]
 mod kill_switches_test;
 #[cfg(test)]
 mod launch_parity_test;

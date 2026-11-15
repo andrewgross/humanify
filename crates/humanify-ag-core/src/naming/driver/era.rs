@@ -348,39 +348,20 @@ struct WaveStart {
 }
 
 /// Why a naming era could not be built.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum EraError {
     /// The fresh text does not parse.
+    #[error(transparent)]
     Parse(crate::prior::SideParseError),
     /// The library classification failed.
-    Carry(CarryError),
+    #[error(transparent)]
+    Carry(#[from] CarryError),
     /// Carrying the prior version's names failed.
-    Transfer(TransferError),
+    #[error(transparent)]
+    Transfer(#[from] TransferError),
     /// A close-matched prior function has no recorded span.
+    #[error("close prior {prior_id} has no span")]
     CloseNoSpan { prior_id: String },
-}
-
-impl std::fmt::Display for EraError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Parse(e) => e.fmt(f),
-            Self::Carry(e) => e.fmt(f),
-            Self::Transfer(e) => e.fmt(f),
-            Self::CloseNoSpan { prior_id } => write!(f, "close prior {prior_id} has no span"),
-        }
-    }
-}
-
-impl From<CarryError> for EraError {
-    fn from(e: CarryError) -> Self {
-        Self::Carry(e)
-    }
-}
-
-impl From<TransferError> for EraError {
-    fn from(e: TransferError) -> Self {
-        Self::Transfer(e)
-    }
 }
 
 /// The era over a prior-version match stage.

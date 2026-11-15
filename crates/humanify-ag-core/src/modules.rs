@@ -1000,15 +1000,10 @@ pub struct ClassificationSite {
 }
 
 /// The text handed to [`classify_site`] does not parse.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("oxc: {diagnostics} diagnostic(s)")]
 pub struct UnparsedSite {
     pub diagnostics: usize,
-}
-
-impl std::fmt::Display for UnparsedSite {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "oxc: {} diagnostic(s)", self.diagnostics)
-    }
 }
 
 /// Classify `text` as the unpack does: None when the run's grammar finds

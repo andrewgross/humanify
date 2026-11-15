@@ -9,7 +9,48 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::asof::Packument;
+use crate::asof::{Packument, PackumentError};
+use crate::error::{FileError, at};
+
+/// Why a package's registry document could not be had.
+#[derive(Debug, thiserror::Error)]
+pub enum RegistryError {
+    #[error("{name}: no recorded packument at {} (--offline)", .path.display())]
+    Offline { name: String, path: PathBuf },
+    #[error(
+        "{count} packages are missing from the registry snapshot (--offline), \
+         e.g. {first}; drop --offline or take the snapshot first"
+    )]
+    OfflineWave { count: usize, first: String },
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("{0}")]
+    Encode(serde_json::Error),
+    #[error(transparent)]
+    File(#[from] FileError),
+    #[error(transparent)]
+    Packument(#[from] PackumentError),
+    #[error("curl {url}: {why}")]
+    Curl {
+        url: String,
+        why: humanify_ag_io::subprocess::SubprocessError,
+    },
+    #[error("curl {url}: {stderr}")]
+    CurlFailed { url: String, stderr: String },
+    #[error("curl {url}: registry answered HTTP {code}")]
+    Http { url: String, code: String },
+    #[error("curl {url}: {source}")]
+    Doc {
+        url: String,
+        source: serde_json::Error,
+    },
+    #[error("{site}: {first}; retry: {second}")]
+    Retried {
+        site: String,
+        first: Box<RegistryError>,
+        second: Box<RegistryError>,
+    },
+}
 use crate::shard::hex_sha256;
 
 pub fn packument_path(dir: &Path, name: &str) -> PathBuf {
@@ -18,22 +59,22 @@ pub fn packument_path(dir: &Path, name: &str) -> PathBuf {
 
 /// The recorded packument of `name` and its file's sha256; fetched first
 /// unless `offline` (then a missing snapshot is an error).
-pub fn load(dir: &Path, name: &str, offline: bool) -> Result<(Packument, String), String> {
+pub fn load(dir: &Path, name: &str, offline: bool) -> Result<(Packument, String), RegistryError> {
     let path = packument_path(dir, name);
     if !path.exists() {
         if offline {
-            return Err(format!(
-                "{name}: no recorded packument at {} (--offline)",
-                path.display()
-            ));
+            return Err(RegistryError::Offline {
+                name: name.to_string(),
+                path,
+            });
         }
         let p = fetch(name)?;
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        let mut bytes = serde_json::to_vec_pretty(&p).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(dir)?;
+        let mut bytes = serde_json::to_vec_pretty(&p).map_err(RegistryError::Encode)?;
         bytes.push(b'\n');
-        std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+        std::fs::write(&path, bytes).map_err(at(&path))?;
     }
-    let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let bytes = std::fs::read(&path).map_err(at(&path))?;
     let text = String::from_utf8_lossy(&bytes);
     Ok((Packument::from_json(&text)?, hex_sha256(&bytes)))
 }
@@ -44,12 +85,6 @@ const FETCH_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5 * 6
 
 /// The registry base every packument comes from (the public npm registry).
 pub const REGISTRY_BASE: &str = "https://registry.npmjs.org";
-
-/// The error text a NOT-FOUND fetch carries; `fetch` matches it to
-/// return an ABSENT packument (absence is data — the planner's own
-/// decision points decide what it means); any other error fails loud
-/// (after the one retry).
-pub const NOT_FOUND: &str = "registry says 404 (E404)";
 
 /// The registry URL of a package name: a scoped name's `/` is escaped,
 /// because the registry routes `/@scope/name` as ONE path segment.
@@ -64,15 +99,16 @@ pub fn registry_url(name: &str) -> String {
 /// network blip in a wave that runs for hours) is retried once; a
 /// persistent one fails after the second attempt, naming the site.
 pub(crate) fn with_retry<T>(
-    mut op: impl FnMut() -> Result<T, String>,
+    mut op: impl FnMut() -> Result<T, RegistryError>,
     site: &str,
-) -> Result<T, String> {
+) -> Result<T, RegistryError> {
     match op() {
         Ok(t) => Ok(t),
-        Err(first) => match op() {
-            Ok(t) => Ok(t),
-            Err(second) => Err(format!("{site}: {first}; retry: {second}")),
-        },
+        Err(first) => op().map_err(|second| RegistryError::Retried {
+            site: site.to_string(),
+            first: Box::new(first),
+            second: Box::new(second),
+        }),
     }
 }
 
@@ -86,7 +122,7 @@ pub(crate) fn with_retry<T>(
 /// an unpublished tombstone reads as an ABSENT packument (recorded in
 /// the snapshot; the planner skips it); a transport failure or another
 /// HTTP error is retried once and then fails loud.
-fn fetch(name: &str) -> Result<Packument, String> {
+fn fetch(name: &str) -> Result<Packument, RegistryError> {
     let url = registry_url(name);
     let (code, body) = with_retry(
         || {
@@ -95,12 +131,15 @@ fn fetch(name: &str) -> Result<Packument, String> {
                 None,
                 FETCH_DEADLINE,
             )
-            .map_err(|e| format!("curl {url}: {e}"))?;
+            .map_err(|why| RegistryError::Curl {
+                url: url.clone(),
+                why,
+            })?;
             if !out.status.success() {
-                return Err(format!(
-                    "curl {url}: {}",
-                    String::from_utf8_lossy(&out.stderr).trim()
-                ));
+                return Err(RegistryError::CurlFailed {
+                    url: url.clone(),
+                    stderr: String::from_utf8_lossy(&out.stderr).trim().to_string(),
+                });
             }
             let text = String::from_utf8_lossy(&out.stdout);
             match text.rsplit_once('\n') {
@@ -115,15 +154,15 @@ fn fetch(name: &str) -> Result<Packument, String> {
         // absence is data, not an error: an absent packument is WRITTEN
         // into the snapshot, so the offline replay skips it too
         "404" => return Ok(absent_packument(name)),
-        other => return Err(format!("curl {url}: registry answered HTTP {other}")),
+        _ => return Err(RegistryError::Http { url, code }),
     }
     let doc: serde_json::Value =
-        serde_json::from_str(&body).map_err(|e| format!("curl {url}: {e}"))?;
+        serde_json::from_str(&body).map_err(|source| RegistryError::Doc { url, source })?;
     match Packument::from_doc(&doc, Some(now_utc())) {
         Ok(p) => Ok(p),
-        // the tombstone is absence (its error carries the marker)
-        Err(e) if e.contains(NOT_FOUND) => Ok(absent_packument(name)),
-        Err(e) => Err(e),
+        // the tombstone is absence
+        Err(PackumentError::Unpublished(_)) => Ok(absent_packument(name)),
+        Err(e) => Err(e.into()),
     }
 }
 

@@ -181,7 +181,7 @@ pub fn parse_pipeline(argv: &[String]) -> PipelineParse {
                     flags,
                 }),
             },
-            Err(e) => usage_error(e),
+            Err(e) => usage_error(e.to_string()),
         },
         Err(e) => {
             use clap::error::ErrorKind;

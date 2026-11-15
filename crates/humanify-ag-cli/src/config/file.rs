@@ -46,17 +46,39 @@ pub struct ConfigFile {
     pub problems: Vec<String>,
 }
 
-/// `Val` from a TOML value, or a message naming the key and what it got.
-fn typed(key: &Key, v: &toml::Value) -> Result<Val, String> {
-    let got = || format!("{} must be {}, got {v}", key.dotted(), key.kind.describe());
+/// A TOML value that is not of its key's kind.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum TomlValueError {
+    #[error("{key} must be {kind}, got {got}")]
+    Kind {
+        key: String,
+        kind: &'static str,
+        got: String,
+    },
+    #[error("{key} = {n} is negative")]
+    Negative { key: String, n: i64 },
+}
+
+/// `Val` from a TOML value, or why not, naming the key and what it got.
+pub(crate) fn typed(key: &Key, v: &toml::Value) -> Result<Val, TomlValueError> {
+    let got = || TomlValueError::Kind {
+        key: key.dotted(),
+        kind: key.kind.describe(),
+        got: v.to_string(),
+    };
     match (&key.kind, v) {
         (Kind::Text | Kind::Url | Kind::Choice(_), toml::Value::String(s)) => {
             Ok(Val::Text(s.clone()))
         }
         (Kind::Bool, toml::Value::Boolean(b)) => Ok(Val::Bool(*b)),
-        (Kind::Int { .. }, toml::Value::Integer(n)) => u64::try_from(*n)
-            .map(Val::Int)
-            .map_err(|_| format!("{} = {n} is negative", key.dotted())),
+        (Kind::Int { .. }, toml::Value::Integer(n)) => {
+            u64::try_from(*n)
+                .map(Val::Int)
+                .map_err(|_| TomlValueError::Negative {
+                    key: key.dotted(),
+                    n: *n,
+                })
+        }
         (Kind::Float { .. }, toml::Value::Float(x)) => Ok(Val::Float(*x)),
         (Kind::Float { .. }, toml::Value::Integer(n)) => Ok(Val::Float(*n as f64)),
         (Kind::List(_), toml::Value::Array(items)) => items

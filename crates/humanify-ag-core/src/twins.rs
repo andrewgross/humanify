@@ -123,54 +123,33 @@ impl SideInventory {
 /// bundles, where the row assignment is verified on the fixtures).
 ///
 /// Why a side's statement inventory could not be built.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum InventoryError {
     /// The side's text does not parse.
+    #[error("oxc failed to parse the {anchor} text: {diagnostics} diagnostic(s)")]
     Parse {
         anchor: &'static str,
         diagnostics: usize,
     },
     /// The program's ESTree JSON did not read back.
-    EstreeJson(crate::ingest::EstreeJsonError),
+    #[error(transparent)]
+    EstreeJson(#[from] crate::ingest::EstreeJsonError),
     /// The program JSON handed in is `Null` (text that did not read).
+    #[error("the estree json did not parse (read as null)")]
     NullJson,
     /// The wrapper's body block is not in the JSON.
+    #[error(
+        "wrapper detected (body span {}..{}) but that block is absent from the estree json",
+        .0.start,
+        .0.end
+    )]
     WrapperBlockAbsent(Span),
     /// The JSON has no program body.
+    #[error("estree json program body missing")]
     NoProgramBody,
     /// A statement lacks its `start` or `end`.
+    #[error("statement {0} missing from the estree json")]
     NoStatementBound(&'static str),
-}
-
-impl std::fmt::Display for InventoryError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Parse {
-                anchor,
-                diagnostics,
-            } => write!(
-                f,
-                "oxc failed to parse the {anchor} text: {diagnostics} diagnostic(s)"
-            ),
-            Self::EstreeJson(e) => e.fmt(f),
-            Self::NullJson => f.write_str("the estree json did not parse (read as null)"),
-            Self::WrapperBlockAbsent(span) => write!(
-                f,
-                "wrapper detected (body span {}..{}) but that block is absent from the estree json",
-                span.start, span.end
-            ),
-            Self::NoProgramBody => f.write_str("estree json program body missing"),
-            Self::NoStatementBound(which) => {
-                write!(f, "statement {which} missing from the estree json")
-            }
-        }
-    }
-}
-
-impl From<crate::ingest::EstreeJsonError> for InventoryError {
-    fn from(e: crate::ingest::EstreeJsonError) -> Self {
-        Self::EstreeJson(e)
-    }
 }
 
 /// Statement SELECTION is the TS `topLevelStatements` semantics: the

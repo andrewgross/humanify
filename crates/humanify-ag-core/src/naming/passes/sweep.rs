@@ -1221,14 +1221,9 @@ pub struct DeferredSweepOutcome {
 
 /// The deferred sweep's input does not parse: the parser's first
 /// diagnostic.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("sweep input does not parse: {0}")]
 pub struct SweepParseError(pub String);
-
-impl std::fmt::Display for SweepParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "sweep input does not parse: {}", self.0)
-    }
-}
 
 /// `runDeferredSweep(code)`: the prior-aware sweep over its OWN parse of
 /// the shipping text (`anchor` = reconciled when the reconcile produced

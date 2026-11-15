@@ -290,36 +290,17 @@ pub fn discover_without_vendor_record(
 }
 
 /// Why the selected adapter could not unpack the bundle.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum UnpackError {
     /// The Bun or esbuild adapter failed.
-    Bun(bun::BunError),
+    #[error(transparent)]
+    Bun(#[from] bun::BunError),
     /// The webcrack adapter failed.
-    Webcrack(webcrack::WebcrackError),
+    #[error(transparent)]
+    Webcrack(#[from] webcrack::WebcrackError),
     /// The webcrack adapter was selected without its shim.
+    #[error("the webcrack adapter needs its subprocess shim")]
     NoShim,
-}
-
-impl std::fmt::Display for UnpackError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Bun(e) => e.fmt(f),
-            Self::Webcrack(e) => e.fmt(f),
-            Self::NoShim => f.write_str("the webcrack adapter needs its subprocess shim"),
-        }
-    }
-}
-
-impl From<bun::BunError> for UnpackError {
-    fn from(e: bun::BunError) -> Self {
-        Self::Bun(e)
-    }
-}
-
-impl From<webcrack::WebcrackError> for UnpackError {
-    fn from(e: webcrack::WebcrackError) -> Self {
-        Self::Webcrack(e)
-    }
 }
 
 /// Run the selected adapter (`adapter.unpack(code, outputDir, options)`) —

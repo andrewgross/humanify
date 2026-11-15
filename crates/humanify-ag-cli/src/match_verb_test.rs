@@ -249,7 +249,8 @@ fn a_missing_prior_file_is_a_loud_error() {
         work_dir: None,
         keep_work_dir: false,
     })
-    .expect_err("a missing prior fails loudly");
+    .expect_err("a missing prior fails loudly")
+    .to_string();
     assert!(err.contains("nope.js"), "the error names the file: {err}");
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -430,7 +431,11 @@ fn factory_fixture(n: usize) -> (String, String) {
 }
 
 /// Run the verb over a bundle/prior pair under `tag`.
-fn raw_bundle_dump(dir: &std::path::Path, bundle: &str, prior_text: &str) -> Result<Value, String> {
+fn raw_bundle_dump(
+    dir: &std::path::Path,
+    bundle: &str,
+    prior_text: &str,
+) -> Result<Value, crate::match_verb::VerbError> {
     let prior = formatted_file(dir, "prior.js", prior_text);
     let input_file = dir.join("input.js");
     std::fs::write(&input_file, bundle).expect("write the raw bundle");
@@ -537,7 +542,8 @@ fn a_multi_file_dump_with_a_wrong_prior_fails_the_same_program_check() {
         ));
     }
     let err = raw_bundle_dump(&dir, &bundle, &wrong)
-        .expect_err("a wrong prior fails, never scores a wrong-program match");
+        .expect_err("a wrong prior fails, never scores a wrong-program match")
+        .to_string();
     assert!(
         err.contains("does not appear to be the same program"),
         "the guard's message, at the dump's granularity: {err}"

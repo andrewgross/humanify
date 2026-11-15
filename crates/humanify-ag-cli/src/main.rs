@@ -31,6 +31,7 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use clap::Parser;
+use humanify_ag_cli::match_verb::VerbError;
 
 #[derive(Parser)]
 #[command(
@@ -383,7 +384,7 @@ struct UnpackArgs {
 
 /// `humanify-ag unpack`: detect, select the adapter, write its tree, print a
 /// summary line (+ the LLM cache counts when replaying).
-fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String> {
+fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), VerbError> {
     use humanify_ag_core::modules::vendor_names::{ProviderVendorNamer, VendorNamer};
     use humanify_ag_core::unpack::{AdapterOutcome, AdapterRun, gate, run_adapter};
     use std::path::Path;
@@ -392,7 +393,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         Path::new(input),
         &humanify_ag_cli::output_tree::Disk,
     )
-    .map_err(|e| e.to_string())?
+    .map_err(VerbError::Input)?
     .text;
     let out = Path::new(out_dir);
     let toolchain = humanify_ag_core::toolchain::resolve_toolchain(
@@ -447,9 +448,9 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
     );
     // What the adapter put in the tree is written whether or not it
     // finished, as it was when the adapter wrote as it went.
-    humanify_ag_cli::output_tree::write_tree(&tree).map_err(|e| e.to_string())?;
+    humanify_ag_cli::output_tree::write_tree(&tree)?;
     drop(tree);
-    let outcome = match outcome.map_err(|e| e.to_string())? {
+    let outcome = match outcome? {
         AdapterOutcome::VendorRecord(outcome) => outcome,
         AdapterOutcome::Files { result, .. } => {
             println!(
@@ -523,7 +524,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
             path,
             serde_json::to_string_pretty(&json).expect("json") + "\n",
         )
-        .map_err(|e| format!("write {path}: {e}"))?;
+        .map_err(|e| VerbError::Write(path.clone(), e))?;
     }
     if let Some(path) = &args.bundle_order {
         let json = serde_json::to_string_pretty(&outcome.bundle_order).expect("json");
@@ -532,7 +533,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
             json + "
 ",
         )
-        .map_err(|e| format!("write {path}: {e}"))?;
+        .map_err(|e| VerbError::Write(path.clone(), e))?;
     }
     let batches = recording.map(|r| r.batches).unwrap_or_default();
     let stats = provider_namer.map(|n| n.stats).unwrap_or_default();
@@ -558,7 +559,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
             path,
             serde_json::to_string_pretty(&log).expect("json") + "\n",
         )
-        .map_err(|e| format!("write {path}: {e}"))?;
+        .map_err(|e| VerbError::Write(path.clone(), e))?;
     }
     Ok(())
 }

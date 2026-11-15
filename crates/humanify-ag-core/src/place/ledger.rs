@@ -118,57 +118,32 @@ pub struct Rederived {
 }
 
 /// Why a stale-era ledger's hashes could not be re-derived.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum RederiveError {
     /// The ledger is already on this hash function.
+    #[error("hashVersion {version} is current — nothing to re-derive")]
     Current { version: u64 },
     /// The ledger records no hash per statement.
+    #[error("the ledger records no per-statement hashes")]
     NoHashes,
     /// The prior text gives no split input.
-    Input(super::input::SplitInputError),
+    #[error(transparent)]
+    Input(#[from] super::input::SplitInputError),
     /// The prior text and the ledger hold different statement counts.
+    #[error("the prior text has {prior} wrapper statements, the ledger {ledger}")]
     CountMismatch { prior: usize, ledger: usize },
     /// The two eras' hash partitions differ at `statement`.
+    #[error(
+        "statement {statement}: the recorded (hashVersion {recorded_version}) and current (hashVersion {}) hash partitions differ (not a bijection)",
+        STATEMENT.version
+    )]
     NotBijection {
         statement: usize,
         recorded_version: u64,
     },
     /// A hash the ledger lists is none of its statements'.
+    #[error("hash {hash} is not among the ledger's statements")]
     UnknownHash { hash: String },
-}
-
-impl std::fmt::Display for RederiveError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Current { version } => {
-                write!(f, "hashVersion {version} is current — nothing to re-derive")
-            }
-            Self::NoHashes => f.write_str("the ledger records no per-statement hashes"),
-            Self::Input(e) => e.fmt(f),
-            Self::CountMismatch { prior, ledger } => write!(
-                f,
-                "the prior text has {prior} wrapper statements, the ledger {ledger}"
-            ),
-            Self::NotBijection {
-                statement,
-                recorded_version,
-            } => write!(
-                f,
-                "statement {statement}: the recorded (hashVersion {recorded_version}) and current \
-(hashVersion {}) hash partitions differ (not a bijection)",
-                STATEMENT.version
-            ),
-            Self::UnknownHash { hash } => {
-                write!(f, "hash {hash} is not among the ledger's statements")
-            }
-        }
-    }
-}
-
-impl From<super::input::SplitInputError> for RederiveError {
-    fn from(e: super::input::SplitInputError) -> Self {
-        Self::Input(e)
-    }
 }
 
 /// A prior ledger's statement hashes, as this run will read them.
@@ -331,24 +306,15 @@ pub fn rederive_stale_era_hashes(
 }
 
 /// Why a split ledger's text was refused.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum LedgerParseError {
     /// Not a ledger this binary reads (bad JSON, a missing field).
+    #[error("{0}")]
     Json(String),
     /// A ledger `version` other than 1.
+    #[error("Unsupported split ledger version")]
     UnsupportedVersion,
 }
-
-impl std::fmt::Display for LedgerParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LedgerParseError::Json(why) => f.write_str(why),
-            LedgerParseError::UnsupportedVersion => f.write_str("Unsupported split ledger version"),
-        }
-    }
-}
-
-impl std::error::Error for LedgerParseError {}
 
 /// Parse a ledger's text (`loadPriorSplitLedger`'s parse); the shell reads
 /// the file.

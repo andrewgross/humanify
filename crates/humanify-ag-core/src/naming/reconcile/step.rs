@@ -73,22 +73,15 @@ pub struct StepRules<'r> {
 }
 
 /// Why the prior-diff reconcile did not run.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum StepError {
     /// The generated text does not parse: the parser's first diagnostic.
+    #[error("generated text does not parse: {0}")]
     Parse(String),
     /// The shell's `diff` gave no diff (boxed: the error rides beside the
     /// trail, which is already large).
+    #[error(transparent)]
     Diff(Box<super::hunks::DiffError>),
-}
-
-impl std::fmt::Display for StepError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Parse(e) => write!(f, "generated text does not parse: {e}"),
-            Self::Diff(e) => e.fmt(f),
-        }
-    }
 }
 
 /// `runPriorDiffReconciliation(code, prior)`. Err when the step could not
