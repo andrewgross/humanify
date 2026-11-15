@@ -65,7 +65,7 @@ fn ledger_module(file: &str, hashes: &[&str], declared: &[&str]) -> FossilLedger
     FossilLedgerModule {
         file: file.to_string(),
         hashes: hashes.iter().map(|h| h.to_string()).collect(),
-        declared: Some(declared.iter().map(|d| d.to_string()).collect()),
+        declared: declared.iter().map(|d| d.to_string()).collect(),
         ..Default::default()
     }
 }
@@ -73,7 +73,7 @@ fn ledger_module(file: &str, hashes: &[&str], declared: &[&str]) -> FossilLedger
 #[test]
 fn the_ledger_lends_each_modules_last_declared_name_as_its_init() {
     let ledger = StableSplitLedger {
-        hash_version: Some(crate::hash::forms::STATEMENT.version),
+        hash_version: crate::hash::forms::STATEMENT.version,
         fossil_modules: Some(vec![
             ledger_module("src/color.js", &["h2", "h1"], &["round", "initColorUtils"]),
             ledger_module("vendor/ms/index.js", &["h3"], &["parse", "initMs"]),
@@ -106,7 +106,7 @@ fn the_ledger_lends_each_modules_last_declared_name_as_its_init() {
 #[test]
 fn a_stale_era_ledger_lends_nothing() {
     let ledger = StableSplitLedger {
-        hash_version: Some(1),
+        hash_version: 1,
         fossil_modules: Some(vec![ledger_module("src/a.js", &["h1"], &["initA"])]),
         ..Default::default()
     };

@@ -464,10 +464,8 @@ pub struct ManifestEntry {
     pub identity: Option<super::identity::DeclaredIdentity>,
     /// This entry's position within its structuralHash group, in BUNDLE
     /// order — the tie-break `priorNameFor` indexes with. Absent for a
-    /// singleton group (the ordinal is always 0 there) and from every
-    /// manifest written before exp047. LAST: the TS stamps it with
-    /// `{ ...e, hashOrdinal: n }`, which appends the key after every key the
-    /// entry literal declared (a present-but-undefined key keeps its slot).
+    /// singleton group (the ordinal is always 0 there). LAST: after every
+    /// other key the entry declares.
     #[serde(rename = "hashOrdinal", skip_serializing_if = "Option::is_none")]
     pub hash_ordinal: Option<usize>,
     /// This body's app-scope READS, as the finish bridges them through the
@@ -500,9 +498,9 @@ pub struct BunModulesManifest {
     /// wrote.
     pub adapter: &'static str,
     /// Which function wrote the `structuralHash` bytes
-    /// (`hash::forms::MATCH_KEY`'s version). Absent from every TS-written
-    /// manifest: those are re-keyed by content, never joined by hash
-    /// (`unpack::bun::load_prior_vendor`, WP5.6e).
+    /// (`hash::forms::MATCH_KEY`'s version). A prior stamped with another
+    /// version is re-keyed by content, not joined by hash; a prior with no
+    /// stamp is refused (`unpack::bun::load_prior_vendor`).
     #[serde(rename = "hashVersion")]
     pub hash_version: u64,
     /// Filename for the leftover runtime code, if any.
@@ -674,10 +672,48 @@ fn claim_from(
 
 // ---------------------------------------------------------------------------
 // Prior-manifest readers (adapters/bun.ts loadPriorVendorNames /
-// loadPriorManifestFactories). The TS resolves the manifest FILE from the
-// prior tree root (`findPriorTreeRoot`); the CLI here takes the manifest
-// path directly — the caller owns the tree-root resolution.
+// loadPriorManifestFactories). The caller (`unpack::bun::load_prior_vendor`)
+// resolves the manifest file from the prior tree root and parses it once.
 // ---------------------------------------------------------------------------
+
+/// The prior release's vendor manifest as this binary reads it back. Every
+/// field the writer ([`BunModulesManifest`]) always writes is required, so a
+/// manifest from another writer — no `hashVersion` (the TypeScript
+/// pipeline's), an entry without its name or structural hash — is refused
+/// at the parse, not translated.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PriorManifest {
+    /// Which function wrote the `structuralHash` bytes.
+    #[serde(rename = "hashVersion")]
+    pub hash_version: u64,
+    pub factories: Vec<PriorManifestRow>,
+}
+
+/// One prior manifest entry ([`ManifestEntry`] as written).
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PriorManifestRow {
+    #[serde(rename = "fileName")]
+    pub file_name: String,
+    pub name: String,
+    #[serde(rename = "nameSource")]
+    pub name_source: String,
+    #[serde(rename = "structuralHash")]
+    pub structural_hash: String,
+    #[serde(rename = "runtimeIdentifier")]
+    pub runtime_identifier: Option<String>,
+    pub identity: Option<super::identity::DeclaredIdentity>,
+    /// Absent for a singleton group, and from every entry of a manifest
+    /// written under `--disable manifest-prior-order`.
+    #[serde(rename = "hashOrdinal")]
+    pub hash_ordinal: Option<usize>,
+}
+
+impl PriorManifest {
+    /// Parse a manifest's text; Err names what is missing or malformed.
+    pub fn parse(text: &str) -> Result<PriorManifest, String> {
+        serde_json::from_str(text).map_err(|e| e.to_string())
+    }
+}
 
 /// Cross-release vendor names to carry over, read from the prior tree's
 /// manifest: structuralHash → the names its factories carried, IN BUNDLE
@@ -688,43 +724,31 @@ fn claim_from(
 /// distinct names. The tie-break is a factory's position within its hash
 /// group in BUNDLE order — but the manifest is written in the PRIOR
 /// release's order (exp047), so array position no longer supplies it and
-/// each group is re-sorted by the `hashOrdinal` field. A manifest written
-/// before exp047 has no such field, and there array order IS bundle order,
-/// so the fallback reproduces the old behaviour exactly: entries without
-/// the field keep their array order and sort after those with one.
-pub fn load_prior_vendor_names(manifest_text: &str) -> Option<HashMap<String, Vec<CarriedName>>> {
-    let manifest: serde_json::Value = serde_json::from_str(manifest_text).ok()?;
-    let factories = manifest.get("factories")?.as_array()?;
+/// each group is re-sorted by the `hashOrdinal` field. Entries without the
+/// field (`--disable manifest-prior-order` writes none) keep their array
+/// order and sort after those with one.
+pub fn load_prior_vendor_names(
+    factories: &[PriorManifestRow],
+) -> Option<HashMap<String, Vec<CarriedName>>> {
     let mut groups: BTreeMap<String, Vec<(CarriedName, usize, usize)>> = BTreeMap::new();
     for (idx, entry) in factories.iter().enumerate() {
-        // `if (!entry.structuralHash || !entry.name) continue;` — a missing,
-        // non-string or empty field skips the ENTRY, not the manifest.
-        let (Some(hash), Some(name)) = (
-            entry.get("structuralHash").and_then(|v| v.as_str()),
-            entry.get("name").and_then(|v| v.as_str()),
-        ) else {
-            continue;
-        };
-        if hash.is_empty() || name.is_empty() {
+        // An empty name or hash carries nothing (skips the entry).
+        if entry.structural_hash.is_empty() || entry.name.is_empty() {
             continue;
         }
-        let ordinal = entry
-            .get("hashOrdinal")
-            .and_then(|v| v.as_u64())
-            .map(|v| v as usize)
-            .unwrap_or(usize::MAX);
-        let field = |k: &str| entry.get(k).and_then(|v| v.as_str());
-        groups.entry(hash.to_string()).or_default().push((
-            CarriedName::new(name, field("nameSource")).with_identity(
-                super::vendor_pairing::prior_identity(
-                    field("fileName"),
-                    field("runtimeIdentifier"),
-                    VENDOR_DIR,
-                ),
-            ),
-            ordinal,
-            idx,
-        ));
+        groups
+            .entry(entry.structural_hash.clone())
+            .or_default()
+            .push((
+                CarriedName::new(entry.name.as_str(), Some(entry.name_source.as_str()))
+                    .with_identity(super::vendor_pairing::prior_identity(
+                        Some(entry.file_name.as_str()),
+                        entry.runtime_identifier.as_deref(),
+                        VENDOR_DIR,
+                    )),
+                entry.hash_ordinal.unwrap_or(usize::MAX),
+                idx,
+            ));
     }
     if groups.is_empty() {
         return None;
@@ -739,27 +763,19 @@ pub fn load_prior_vendor_names(manifest_text: &str) -> Option<HashMap<String, Ve
 }
 
 /// The prior release's manifest entries in the order that release emitted
-/// them, for `order_by_prior_manifest`. None when the manifest does not
-/// parse or carries no factories — callers then emit in bundle order.
-pub fn load_prior_manifest_factories(manifest_text: &str) -> Option<Vec<PriorManifestEntry>> {
-    let manifest: serde_json::Value = serde_json::from_str(manifest_text).ok()?;
-    let factories = manifest.get("factories")?.as_array()?;
+/// them, for `order_by_prior_manifest`. None when it carries no factories —
+/// callers then emit in bundle order.
+pub fn load_prior_manifest_factories(
+    factories: &[PriorManifestRow],
+) -> Option<Vec<PriorManifestEntry>> {
     let entries: Vec<PriorManifestEntry> = factories
         .iter()
-        .filter_map(|entry| {
-            let name = entry.get("name")?.as_str()?.to_string();
-            let structural_hash = entry.get("structuralHash")?.as_str()?.to_string();
-            Some(PriorManifestEntry {
-                name,
-                structural_hash,
-            })
+        .map(|entry| PriorManifestEntry {
+            name: entry.name.clone(),
+            structural_hash: entry.structural_hash.clone(),
         })
         .collect();
-    if entries.is_empty() {
-        None
-    } else {
-        Some(entries)
-    }
+    (!entries.is_empty()).then_some(entries)
 }
 
 // ---------------------------------------------------------------------------

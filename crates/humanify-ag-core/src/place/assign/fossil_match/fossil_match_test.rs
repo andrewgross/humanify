@@ -25,9 +25,14 @@ fn side(v: &Value) -> Vec<FossilSignature> {
                 .iter()
                 .map(|i| i.as_u64().unwrap() as usize)
                 .collect(),
-            stem: m.get("stem").and_then(Value::as_str).map(str::to_string),
-            tokens: strings(m.get("tokens")),
-            declared: strings(m.get("declared")),
+            // The TS capture leaves a field out where the module has none.
+            stem: m
+                .get("stem")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            tokens: strings(m.get("tokens")).unwrap_or_default(),
+            declared: strings(m.get("declared")).unwrap_or_default(),
         })
         .collect()
 }
@@ -83,9 +88,9 @@ fn sig(hashes: &[&str], declared: &[&str]) -> FossilSignature {
     FossilSignature {
         hashes,
         imports: Vec::new(),
-        stem: None,
-        tokens: None,
-        declared: Some(declared.iter().map(|d| d.to_string()).collect()),
+        stem: String::new(),
+        tokens: Vec::new(),
+        declared: declared.iter().map(|d| d.to_string()).collect(),
     }
 }
 

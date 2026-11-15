@@ -1,8 +1,9 @@
 //! The persisted split ledger — TS `StableSplitLedger` / `FossilLedgerModule`
 //! (src/split/stable-split.ts) — the cross-release memory the placement
-//! strategies READ. Every optional field is optional for the TS's reason:
-//! a ledger written before the field existed simply turns the tier that
-//! reads it off for that hop, never a wrong answer.
+//! strategies READ. A field this binary always writes is required: a ledger
+//! without one was written by another pipeline and is refused at the read.
+//! The optional fields are the ones a run legitimately leaves out (a regime
+//! without fossil modules, `--disable emit-align`).
 //!
 //! Read side only: `nameToFiles` is looked up, never iterated, so a hash
 //! map is safe for it (the writer — WP5.3's `buildLedger` — owns the key
@@ -19,27 +20,19 @@ pub struct FossilLedgerModule {
     pub file: String,
     pub hashes: Vec<String>,
     pub imports: Vec<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub declared: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tokens: Option<Vec<String>>,
+    pub declared: Vec<String>,
+    pub tokens: Vec<String>,
     /// The module's original source path, when the bundler kept it
     /// (esbuild's unminified form — exp075). Recorded metadata ONLY:
-    /// no placement or matching tier reads it, and a ledger written
-    /// before it existed simply reads as None.
+    /// no placement or matching tier reads it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_path: Option<String>,
     /// The module's MECHANICAL stem (`module_stem`: its first function,
     /// else its first declaration) — what the next hop's same-file-name
     /// match tier compares, since the file itself carries the module's
-    /// name (docs/design/module-naming.md). A ledger written before it
-    /// existed reads as None, and the tier falls back to the file stem.
-    #[serde(
-        default,
-        rename = "mechanicalStem",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub mechanical_stem: Option<String>,
+    /// name (docs/design/module-naming.md).
+    #[serde(rename = "mechanicalStem")]
+    pub mechanical_stem: String,
 }
 
 /// `StableSplitLedger`.
@@ -58,8 +51,7 @@ pub struct StableSplitLedger {
     pub emit_names: Option<Vec<Option<String>>>,
     #[serde(default)]
     pub emit_indexes: Option<Vec<u64>>,
-    #[serde(default)]
-    pub hash_version: Option<u64>,
+    pub hash_version: u64,
     #[serde(default)]
     pub fossil_modules: Option<Vec<FossilLedgerModule>>,
 }
@@ -74,7 +66,7 @@ impl StableSplitLedger {
     /// (WP5.6e; every era since, re-keyed via
     /// [`rederive_stale_era_hashes`] or refused loudly).
     pub fn hashes_current(&self) -> bool {
-        self.hash_version == Some(STATEMENT.version)
+        self.hash_version == STATEMENT.version
     }
 }
 
@@ -142,10 +134,7 @@ pub fn settle_prior_hashes(
     let Some(text) = prior_text else {
         return PriorHashes::Refused(format!(
             "hashVersion {} is not {} and no prior text to re-derive from",
-            ledger
-                .hash_version
-                .map_or("(absent)".to_string(), |v| v.to_string()),
-            STATEMENT.version
+            ledger.hash_version, STATEMENT.version
         ));
     };
     match rederive_stale_era_hashes(ledger, text, layout) {
@@ -182,9 +171,7 @@ pub fn rederive_stale_era_hashes(
     prior_text: &str,
     layout: crate::toolchain::BundleLayout,
 ) -> Result<Rederived, String> {
-    let Some(recorded_version) = ledger.hash_version else {
-        return Err("the ledger records no hashVersion (pre-WP5.6e): no era to re-derive".into());
-    };
+    let recorded_version = ledger.hash_version;
     if recorded_version == STATEMENT.version {
         return Err(format!(
             "hashVersion {recorded_version} is current — nothing to re-derive"
@@ -247,7 +234,7 @@ pub fn rederive_stale_era_hashes(
     ledger.hashes = Some(current);
     ledger.emit_hashes = emit_hashes;
     ledger.fossil_modules = fossil_modules;
-    ledger.hash_version = Some(STATEMENT.version);
+    ledger.hash_version = STATEMENT.version;
     Ok(Rederived {
         recorded_version,
         statements: ledger.order.len(),

@@ -4,7 +4,9 @@
 
 use std::collections::HashMap;
 
-use super::{FossilLedgerModule, Rederived, StableSplitLedger, rederive_stale_era_hashes};
+use super::{
+    FossilLedgerModule, Rederived, StableSplitLedger, read_ledger, rederive_stale_era_hashes,
+};
 use crate::hash::forms::STATEMENT;
 use crate::place::input::split_input;
 
@@ -53,7 +55,7 @@ fn ts_ledger() -> (StableSplitLedger, Vec<String>) {
             ts[4].clone(),
             ts[3].clone(),
         ]),
-        hash_version: Some(1),
+        hash_version: 1,
         fossil_modules: Some(vec![FossilLedgerModule {
             file: "src/c.js".into(),
             hashes: {
@@ -86,7 +88,7 @@ fn a_ts_era_ledger_is_rekeyed_class_for_class() {
         }
     );
     assert!(ledger.hashes_current());
-    assert_eq!(ledger.hash_version, Some(STATEMENT.version));
+    assert_eq!(ledger.hash_version, STATEMENT.version);
     assert_eq!(ledger.hashes.as_ref(), Some(&rust));
     assert_eq!(
         ledger.emit_hashes,
@@ -145,18 +147,6 @@ fn a_failed_rederivation_leaves_the_ledger_untouched_and_refused() {
         .is_err()
     );
     assert!(!ledger.hashes_current());
-
-    // No recorded era (pre-WP5.6e): nothing to re-derive from.
-    let (mut ledger, _) = ts_ledger();
-    ledger.hash_version = None;
-    assert!(
-        rederive_stale_era_hashes(
-            &mut ledger,
-            &prior(),
-            crate::toolchain::BundleLayout::SingleWrapperFunction
-        )
-        .is_err()
-    );
 }
 
 #[test]
@@ -170,7 +160,7 @@ fn an_older_rust_era_ledger_is_rekeyed_from_the_prior_text() {
     // half-inherited split, the mirror of exp093's factory-manifest
     // lesson).
     let (mut ledger, rust) = ts_ledger();
-    ledger.hash_version = Some(2);
+    ledger.hash_version = 2;
     let report = rederive_stale_era_hashes(
         &mut ledger,
         &prior(),
@@ -186,6 +176,54 @@ fn an_older_rust_era_ledger_is_rekeyed_from_the_prior_text() {
         }
     );
     assert!(ledger.hashes_current());
-    assert_eq!(ledger.hash_version, Some(STATEMENT.version));
+    assert_eq!(ledger.hash_version, STATEMENT.version);
     assert_eq!(ledger.hashes.as_ref(), Some(&rust));
+}
+
+/// A ledger as this binary writes it, with `fossil` as its one fossil module.
+fn written_ledger(fossil: &str) -> String {
+    format!(
+        r#"{{"version":1,"files":["src/a.js"],"nameToFiles":{{}},"order":["src/a.js"],"hashes":["h"],"emitHashes":["h"],"emitNames":[null],"hashVersion":{},"fossilModules":[{fossil}]}}"#,
+        STATEMENT.version
+    )
+}
+
+const FOSSIL: &str = r#"{"file":"src/a.js","hashes":["h"],"imports":[],"declared":["a"],"tokens":["a"],"mechanicalStem":"a"}"#;
+
+fn read_text(tag: &str, text: &str) -> Result<StableSplitLedger, String> {
+    let dir = humanify_ag_testkit::ScratchDir::new(tag);
+    let path = dir.path().join("split-ledger.json");
+    std::fs::write(&path, text).unwrap();
+    read_ledger(&path)
+}
+
+#[test]
+fn a_ledger_this_binary_writes_reads_back() {
+    let ledger = read_text("ledger-current", &written_ledger(FOSSIL)).expect("current ledger");
+    assert!(ledger.hashes_current());
+    assert_eq!(ledger.fossil_modules.unwrap()[0].mechanical_stem, "a");
+}
+
+#[test]
+fn a_ledger_without_a_hash_version_is_refused_at_read() {
+    let text =
+        written_ledger(FOSSIL).replace(&format!(r#","hashVersion":{}"#, STATEMENT.version), "");
+    let err = read_text("ledger-no-version", &text).expect_err("refused");
+    assert!(err.contains("`hashVersion`"), "{err}");
+}
+
+#[test]
+fn a_fossil_module_without_its_recorded_fields_is_refused_at_read() {
+    for field in [
+        r#","mechanicalStem":"a""#,
+        r#","declared":["a"]"#,
+        r#","tokens":["a"]"#,
+    ] {
+        let err = read_text(
+            "ledger-no-field",
+            &written_ledger(&FOSSIL.replace(field, "")),
+        )
+        .expect_err("refused");
+        assert!(err.contains("missing field"), "{field}: {err}");
+    }
 }

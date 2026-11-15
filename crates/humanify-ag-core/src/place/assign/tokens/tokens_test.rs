@@ -38,9 +38,7 @@ fn every_module_token_list_equals_the_ts() {
             .iter()
             .map(|t| t.as_str().unwrap().to_string())
             .collect();
-        if got.file != want["file"].as_str().unwrap()
-            || got.tokens.as_deref() != Some(want_tokens.as_slice())
-        {
+        if got.file != want["file"].as_str().unwrap() || got.tokens != want_tokens {
             failures.push(format!(
                 "{}: ts {} tokens {:?}\n  rust {} {:?}",
                 want["file"],

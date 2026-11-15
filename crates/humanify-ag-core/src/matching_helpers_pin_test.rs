@@ -235,9 +235,9 @@ fn fossil_signature(chunk: &str) -> crate::place::assign::fossil_match::FossilSi
     crate::place::assign::fossil_match::FossilSignature {
         hashes,
         imports: Vec::new(),
-        stem: None,
-        tokens: Some(tokens),
-        declared: Some(declared),
+        stem: String::new(),
+        tokens,
+        declared,
     }
 }
 

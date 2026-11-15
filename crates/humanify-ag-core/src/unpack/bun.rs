@@ -33,7 +33,7 @@ use crate::modules::vendor_content::{
     rekey_prior_by_content,
 };
 use crate::modules::vendor_names::{
-    BunModulesManifest, FileNameChooser, ManifestCapture, ManifestEntry, NameLookup,
+    BunModulesManifest, FileNameChooser, ManifestCapture, ManifestEntry, NameLookup, PriorManifest,
     PriorManifestEntry, VendorNamer, annotate_hash_ordinals, load_prior_manifest_factories,
     load_prior_vendor_names, name_fallback_factories_with_llm, order_by_prior_manifest,
     stable_stem,
@@ -103,7 +103,7 @@ pub struct PriorVendor {
     /// emitted them (the ordering pass).
     pub factories: Option<Vec<PriorManifestEntry>>,
     /// A stale-era manifest (a `hashVersion` other than
-    /// [`MATCH_KEY`]'s version — TS-written or an older Rust hash era): its
+    /// [`MATCH_KEY`]'s version — an older hash era): its
     /// entries with their vendor files' content keys, for the unpack to
     /// re-key against the fresh classification. `names` / `factories` are
     /// then None — that era's bytes never join this run's.
@@ -137,95 +137,73 @@ impl PriorVendor {
 
 /// Load the prior release's vendor manifest (`loadPriorVendorNames` +
 /// `loadPriorManifestFactories`), era-aware: a manifest stamped with this
-/// run's `hashVersion` is read by hash; any other (no stamp, or an older
-/// version) is stale-era and every entry's vendor file is read for its
-/// content key instead ([`crate::modules::vendor_content`]). None without a
-/// prior tree or a parseable manifest.
-pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
-    let root = find_prior_tree_root(prior_file)?;
-    let text = fs::read_to_string(bun_manifest_path(&root)).ok()?;
-    let manifest: serde_json::Value = serde_json::from_str(&text).ok()?;
-    let rows = manifest.get("factories")?.as_array()?;
-    let str_of =
-        |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).map(String::from);
-    // The content carry's view, in the SAME row filter as the stale-era
-    // entries below (name and structural hash present), so a stale-era
-    // re-key's hashes line up with it by position.
+/// run's `hashVersion` is read by hash; one stamped with another version is
+/// stale-era and every entry's vendor file is read for its content key
+/// instead ([`crate::modules::vendor_content`]). `Ok(None)` without a prior
+/// tree holding a manifest; Err for a manifest this binary does not read
+/// (unparseable, no `hashVersion`, an entry missing a field it always
+/// writes) — refused here, at the edge, not half-read.
+pub fn load_prior_vendor(prior_file: &Path) -> Result<Option<PriorVendor>, String> {
+    let Some(root) = find_prior_tree_root(prior_file) else {
+        return Ok(None);
+    };
+    let path = bun_manifest_path(&root);
+    let refuse = |why: String| {
+        format!(
+            "prior vendor manifest {} is not one this binary reads ({why}); \
+             rebuild the prior release with this binary",
+            path.display()
+        )
+    };
+    let text = fs::read_to_string(&path).map_err(|e| refuse(e.to_string()))?;
+    let manifest = PriorManifest::parse(&text).map_err(refuse)?;
+    let rows = &manifest.factories;
     let modules: Vec<PriorModule> = rows
         .iter()
-        .filter_map(|r| {
-            Some(PriorModule {
-                name: str_of(r, "name")?,
-                structural_hash: str_of(r, "structuralHash")?,
-                file_name: str_of(r, "fileName").unwrap_or_default(),
-                origin: NameSource::of_prior_label(r.get("nameSource").and_then(|x| x.as_str())),
-                runtime_identifier: str_of(r, "runtimeIdentifier"),
-                identity: r
-                    .get("identity")
-                    .and_then(|v| serde_json::from_value(v.clone()).ok()),
-            })
+        .map(|r| PriorModule {
+            name: r.name.clone(),
+            structural_hash: r.structural_hash.clone(),
+            file_name: r.file_name.clone(),
+            origin: NameSource::of_prior_label(Some(r.name_source.as_str())),
+            runtime_identifier: r.runtime_identifier.clone(),
+            identity: r.identity.clone(),
         })
         .collect();
-    if manifest
-        .get("hashVersion")
-        .and_then(serde_json::Value::as_u64)
-        == Some(MATCH_KEY.version)
-    {
-        return Some(PriorVendor {
-            names: load_prior_vendor_names(&text),
-            factories: load_prior_manifest_factories(&text),
+    if manifest.hash_version == MATCH_KEY.version {
+        return Ok(Some(PriorVendor {
+            names: load_prior_vendor_names(rows),
+            factories: load_prior_manifest_factories(rows),
             stale_era: None,
             modules,
             root: Some(root),
-        });
+        }));
     }
-    let entries: Vec<(StaleEraEntry, Option<String>)> = rows
-        .iter()
-        .filter_map(|r| {
-            Some((
-                StaleEraEntry {
-                    name: str_of(r, "name")?,
-                    origin: NameSource::of_prior_label(
-                        r.get("nameSource").and_then(|x| x.as_str()),
-                    ),
-                    era_hash: str_of(r, "structuralHash")?,
-                    ordinal: r
-                        .get("hashOrdinal")
-                        .and_then(serde_json::Value::as_u64)
-                        .map_or(usize::MAX, |v| v as usize),
-                    key: None,
-                    // exp200: the entry's file and identifier ride with its
-                    // name through the re-key, as the exact carry's do.
-                    identity: crate::modules::vendor_pairing::prior_identity(
-                        r.get("fileName").and_then(|x| x.as_str()),
-                        r.get("runtimeIdentifier").and_then(|x| x.as_str()),
-                        VENDOR_DIR,
-                    ),
-                },
-                str_of(r, "fileName"),
-            ))
-        })
-        .collect();
-    if entries.is_empty() {
-        return None;
+    if rows.is_empty() {
+        return Ok(None);
     }
-    let keyed = crate::par::map_ordered(&entries, |(entry, file)| {
-        let key = file
-            .as_deref()
-            .and_then(|f| fs::read_to_string(root.join(f)).ok())
-            .and_then(|t| prior_file_content_key(&t));
-        StaleEraEntry {
-            key,
-            ..entry.clone()
-        }
+    let keyed = crate::par::map_ordered(rows, |r| StaleEraEntry {
+        name: r.name.clone(),
+        origin: NameSource::of_prior_label(Some(r.name_source.as_str())),
+        era_hash: r.structural_hash.clone(),
+        ordinal: r.hash_ordinal.unwrap_or(usize::MAX),
+        key: fs::read_to_string(root.join(&r.file_name))
+            .ok()
+            .and_then(|t| prior_file_content_key(&t)),
+        // The entry's file and identifier ride with its name through the
+        // re-key, as the exact carry's do.
+        identity: crate::modules::vendor_pairing::prior_identity(
+            Some(r.file_name.as_str()),
+            r.runtime_identifier.as_deref(),
+            VENDOR_DIR,
+        ),
     });
-    Some(PriorVendor {
+    Ok(Some(PriorVendor {
         names: None,
         factories: None,
         stale_era: Some(keyed),
         modules,
         root: Some(root),
-    })
+    }))
 }
 
 /// The unpack options (`UnpackOptions`) — shared by the Bun and esbuild
@@ -556,7 +534,7 @@ pub fn unpack_bun(
             }),
         );
         if let Some(entries) = &prior.stale_era {
-            // A stale-era prior (TS or an older hashVersion): re-key its
+            // A stale-era prior (an older hashVersion): re-key its
             // names and order by CONTENT onto this run's structural hashes
             // (modules::vendor_content).
             let declared = scope::statement_level_names(&ingest, &c.container);

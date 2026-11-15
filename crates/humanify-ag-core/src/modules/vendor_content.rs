@@ -5,11 +5,8 @@
 //! the carry-over (`name_cjs_factories`) and of the manifest order
 //! (`order_by_prior_manifest`). A prior manifest stamped with any
 //! `hashVersion` other than this run's (`hash::forms::MATCH_KEY`'s version) —
-//! a TS-written one (no stamp; its bytes are `bun-module-classification.ts`
-//! 's own function's, which never equal the Rust's) or one from an older
-//! Rust hash era (exp093 bumped the version: the pre-exp093 blur-era bytes
-//! are a different era's) — joins NOTHING by hash, and every carried name
-//! would mint again. The version gate is all-or-nothing by design: a
+//! one from an older hash era — joins NOTHING by hash, and every carried
+//! name would mint again. The version gate is all-or-nothing by design: a
 //! number-free factory's bytes coincide across the era, so a hash join of a
 //! mismatched manifest would silently half-carry.
 //!

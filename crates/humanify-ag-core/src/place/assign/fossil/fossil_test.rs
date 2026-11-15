@@ -64,7 +64,7 @@ fn assign(b: &Body, prior: Option<&StableSplitLedger>) -> FossilAssignment {
 fn ledger(modules: Vec<FossilLedgerModule>) -> StableSplitLedger {
     StableSplitLedger {
         version: 1,
-        hash_version: Some(STATEMENT.version),
+        hash_version: STATEMENT.version,
         fossil_modules: Some(modules),
         ..StableSplitLedger::default()
     }
@@ -393,12 +393,12 @@ fn a_module_named_wrapper_names_its_file_and_its_folder() {
 #[test]
 fn the_ledger_records_each_modules_mechanical_stem() {
     let out = assign(&module_named_bundle(), None);
-    let stems: Vec<Option<&str>> = out
+    let stems: Vec<&str> = out
         .fossil_modules
         .iter()
-        .map(|m| m.mechanical_stem.as_deref())
+        .map(|m| m.mechanical_stem.as_str())
         .collect();
-    assert_eq!(stems, vec![Some("round-to-nearest"), Some("theme-render")]);
+    assert_eq!(stems, vec!["round-to-nearest", "theme-render"]);
 }
 
 #[test]
@@ -427,10 +427,10 @@ fn the_same_stem_match_reads_the_priors_recorded_mechanical_stem() {
     let first = assign(&b, None);
     let mut prior = first.fossil_modules[1].clone();
     prior.file = "src/rendering/beta-view.js".into();
-    prior.mechanical_stem = Some("beta-render".into());
+    prior.mechanical_stem = "beta-render".into();
     prior.hashes.push("0000extra".into());
-    prior.declared = None;
-    prior.tokens = None;
+    prior.declared = Vec::new();
+    prior.tokens = Vec::new();
     let out = assign(&b, Some(&ledger(vec![prior])));
     assert_eq!(out.assignment[4], "src/rendering/beta-view.js");
     assert!(
@@ -453,7 +453,7 @@ fn a_ts_era_ledgers_fossil_modules_are_refused() {
     let mut kept = first.fossil_modules[0].clone();
     kept.file = "src/legacy/kept-name.js".into();
     let mut prior = ledger(vec![kept, first.fossil_modules[1].clone()]);
-    prior.hash_version = Some(1);
+    prior.hash_version = 1;
     let second = assign(&b, Some(&prior));
     assert_ne!(second.assignment[1], "src/legacy/kept-name.js");
     assert_eq!(second.assignment, first.assignment);

@@ -50,7 +50,7 @@ fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
         emit_hashes: None,
         emit_names: None,
         emit_indexes: None,
-        hash_version: None,
+        hash_version: 0,
         fossil_modules: None,
     };
     let outcome = stable_split(

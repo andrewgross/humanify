@@ -410,7 +410,12 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         inner: n as &mut dyn VendorNamer,
         batches: Vec::new(),
     });
-    let prior = args.prior_version.as_deref().map(Path::new);
+    let prior = args
+        .prior_version
+        .as_deref()
+        .map(|p| bun::load_prior_vendor(Path::new(p)))
+        .transpose()?
+        .flatten();
     // The one dispatch site (`unpack::run_adapter`): every adapter gets
     // the namer, the prior and the shim, and takes what it uses.
     let outcome = match run_adapter(
@@ -423,7 +428,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
             module_wrappers: toolchain.module_wrappers.piece,
             module_identity: toolchain.module_identity.piece,
             namer: recording.as_mut().map(|n| n as &mut dyn VendorNamer),
-            prior: prior.and_then(bun::load_prior_vendor),
+            prior,
             manifest_prior_order_disabled: false,
             webcrack_shim: shim.as_ref(),
             library_discovery: None,

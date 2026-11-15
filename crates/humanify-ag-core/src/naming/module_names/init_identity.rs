@@ -94,7 +94,7 @@ pub fn prior_module_inits(ledger: &StableSplitLedger) -> Vec<PriorModuleInit> {
         .filter_map(|m| {
             // The init statement closes the segment, so its name is the
             // last one the module declares.
-            let init_name = m.declared.as_ref()?.last()?.clone();
+            let init_name = m.declared.last()?.clone();
             let mut hashes = m.hashes.clone();
             hashes.sort();
             Some(PriorModuleInit {

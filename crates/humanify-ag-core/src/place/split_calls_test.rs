@@ -25,6 +25,31 @@ use super::trail::PlacementTrail;
 
 const CALLS: &str = include_str!("../../../../test/parity/wp51-split-calls.jsonl");
 
+/// A captured TS ledger in the shape this binary writes: the reader refuses
+/// a ledger without `hashVersion` or a fossil module without its
+/// `mechanicalStem`, so the capture's are filled in with what the reader
+/// used to assume — a version that is not current, and the file's stem.
+fn as_written(prior: &Value) -> Value {
+    let mut prior = prior.clone();
+    let ledger = prior.as_object_mut().unwrap();
+    ledger.entry("hashVersion").or_insert(json!(0));
+    for m in ledger
+        .get_mut("fossilModules")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
+        let file = m["file"].as_str().unwrap();
+        let base = &file[file.rfind('/').map_or(0, |c| c + 1)..];
+        let stem = base.strip_suffix(".js").unwrap_or(base).to_string();
+        m.as_object_mut()
+            .unwrap()
+            .entry("mechanicalStem")
+            .or_insert(json!(stem));
+    }
+    prior
+}
+
 /// The TS request object (`undefined` fields omitted, as JSON.stringify).
 fn request_json(r: &SplitNameRequest) -> Value {
     let mut m = Map::new();
@@ -216,14 +241,14 @@ fn run(row: &Value, replay: &Replay) -> Result<(Vec<String>, Vec<Value>), String
         .collect();
     assert_eq!(ts_hashes.len(), input.hashes.len(), "statement count");
     input.hashes = ts_hashes;
-    let mut prior: Option<StableSplitLedger> =
-        (!row["prior"].is_null()).then(|| serde_json::from_value(row["prior"].clone()).unwrap());
+    let mut prior: Option<StableSplitLedger> = (!row["prior"].is_null())
+        .then(|| serde_json::from_value(as_written(&row["prior"])).unwrap());
     // The capture is ONE hash universe: the fresh side replays the TS bytes
     // too, so a TS ledger's `hashVersion: 1` names the bytes this call
     // really uses — stamp it current. (Other versions stay: a capture that
     // exercises a stale ledger keeps exercising it.)
-    if let Some(p) = prior.as_mut().filter(|p| p.hash_version == Some(1)) {
-        p.hash_version = Some(crate::hash::forms::STATEMENT.version);
+    if let Some(p) = prior.as_mut().filter(|p| p.hash_version == 1) {
+        p.hash_version = crate::hash::forms::STATEMENT.version;
     }
     let mut trail = PlacementTrail::default();
     let assignment = if row["fossil"] == true {
