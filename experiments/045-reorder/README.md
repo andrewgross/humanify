@@ -16,7 +16,7 @@
 > With this axis at its floor, **all three axes are at their floors**: ~3,700
 > reducible lines in a 154,668-line diff (~2.4%).
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.
 

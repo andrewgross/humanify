@@ -1,8 +1,7 @@
 # bun-text-assets — app text modules and a vendored module that changes length
 
 A real, unminified Bun 1.3.14 build (`bun build --target=bun --format=cjs`,
-Claude Code's own layout) of a small app, built for finding #90
-(`docs/rust-port/16-findings-queue.md`).
+the layout of large Bun-built CLIs) of a small app, built for finding #90.
 
 ## What it holds
 

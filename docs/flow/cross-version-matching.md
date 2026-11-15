@@ -248,13 +248,9 @@ hash bucket would have had one candidate, the singleton guard would have
 accepted, and tier 2 would have applied the entire slot table with no LLM ask
 at all.
 
-## Supersedes / relationship
+## Matching rules and where they live
 
-This file supersedes the DIAGRAM in
-[`docs/matching-cascades.md`](../matching-cascades.md) for the matching flow;
-that document predates the Rust cutover and cites files that no longer exist.
-
-Still true there, and re-verified in the current code:
+The matching rules this flow relies on, with where the code holds them:
 
 - The "every tier abstains rather than guesses" rule, and the three guards:
   singleton rejection, contradiction (an emptied filter stops the search), and
@@ -273,37 +269,3 @@ Still true there, and re-verified in the current code:
 - Statement twins as whole-statement identity outranking weaker evidence, and
   close matches corroborated by alignment or shingles —
   `crates/humanify-ag-core/src/twins/gates.rs`, `.../matching/close.rs:389`.
-
-Stale there, changed by the port or by later work:
-
-- **Every file path.** `src/analysis/fingerprint-index.ts`,
-  `src/split/stable-split.ts`, `placement-trail.ts`, `strategy-trail.ts` were
-  deleted at the cutover (2026-09-26; `docs/rust-port/19-cutover.md`, tag
-  `m4`). The cascade is `crates/humanify-ag-core/src/matching/cascade.rs`; the
-  placement cascade is `crates/humanify-ag-core/src/place/tiers.rs`
-  (`PLACEMENT_TIERS`, run by the split stage); the strategy trail is
-  `crates/humanify-ag-core/src/trail.rs`.
-- **The "three hashes" picture.** `structuralSignature` as a third family
-  ended: the exemption closed 2026-09-25 and the Rust hashes are the only
-  hashes (`crates/humanify-ag-core/src/hash/statement_hash.rs:26-31`,
-  `hashVersion 2`). Vendor body reuse survives as
-  `crates/humanify-ag-core/src/finish/vendor_inherit.rs`, no longer pictured as a
-  fourth join key in this flow.
-- **Propagation is no longer a stub-like "p1" afterthought**: it is a ported
-  five-rung post-pass that runs with every FUNCTION-cascade call — the initial
-  one and each alternation round (`crates/humanify-ag-core/src/propagation.rs:1-28`;
-  enabled at `crates/humanify-ag-core/src/prior.rs:227` and
-  `crates/humanify-ag-core/src/matching/alternation.rs:692-701`; the binding
-  rounds substitute their reference-identity resolver, `alternation.rs:277`).
-- **Order inside the tail**: the old diagram showed ordinal then
-  interchangeable pools then nothing; the code runs alternation first, then
-  ordinal, then pools, then the close tier over everything still unmatched —
-  including the still-ambiguous, which the old diagram sent straight to the
-  LLM (`crates/humanify-ag-core/src/prior.rs:233-286`;
-  `crates/humanify-ag-core/src/matching/close_dump.rs:113-130`).
-- **The transfer half is new to this diagram**: the old file stopped at "matched
-  or not"; the seven-tier evidence-ordered transfer pipeline, the vote/pin
-  ladders, and the post-generation reconcile (with the exp088 skeleton-vote
-  tier, ON in the shipped options —
-  `crates/humanify-ag-core/src/naming/reconcile/step.rs:51`) are all real,
-  citable pipeline stages the old picture did not have.

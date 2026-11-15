@@ -25,15 +25,6 @@ node_modules/
 .idea/
 .claude/
 
-experiments/fixtures/*/
-!experiments/fixtures/app-zod-hono/
-experiments/fixtures/app-zod-hono/bundle.*
-experiments/fixtures/app-zod-hono/source-manifest.json
-experiments/fixtures/app-zod-hono/ground-truth.json
-experiments/fixtures/app-zod-hono/repo/node_modules/
-!experiments/fixtures/app-cjs-bun/
-experiments/fixtures/app-cjs-bun/repo/node_modules/
-experiments/results/
 split-output/
 
 # Eval run logs. The per-run JSON summaries under
@@ -45,12 +36,6 @@ split-output/
 dev/eval/results/*/*.log
 dev/eval/results/*/*.stdout
 
-# exp092 match ground-truth: the corpus cache (npm tarballs + extracted
-# builds, re-downloadable from the pinned versions) and the per-pair raw
-# match dumps. The committed scorecards under results/ are the reference.
-experiments/092-match-ground-truth/.corpus/
-experiments/092-match-ground-truth/.runs/
-
 # Local dev environment and host-specific planning notes: not project
 # infrastructure, not usable by anyone cloning this repo, and this repo is
 # public. Both were committed incidentally in an unrelated experiment commit
@@ -60,11 +45,18 @@ docs/plan-server-migration.md
 # The LLM server's address (`cargo dev` reads it: committed::local). Per-machine,
 # and private: the `no-private-addresses` gate stage fails on one in a tracked file.
 .humanify.local.json
-experiments/*/results/*
-# The harness's labels: committed references are force-added; every other
-# run label stays local (the same rule experiments/*/results/* had).
+# The harness's labels stay local. Library labels are never committed;
+# the few committed eval references are force-added.
 dev/eval/results/*
-dev/library/results/*
+dev/library/results/
+
+# experiments/: only the write-ups (proposal and conclusions, Markdown) are
+# committed. Raw outputs, scripts, data, fixtures and generated tables stay
+# local, so a run's output can never be committed by accident.
+/experiments/**
+!/experiments/**/
+!/experiments/**/*.md
+/experiments/*/tables/
 
 # Rust workspace build output (rust-port migration)
 /target/

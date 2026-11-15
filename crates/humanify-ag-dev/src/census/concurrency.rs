@@ -32,7 +32,7 @@
 //! them, their allow comments. A list with no `.rs` path is a full run.
 
 mod rules;
-mod scan;
+pub(crate) mod scan;
 
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};

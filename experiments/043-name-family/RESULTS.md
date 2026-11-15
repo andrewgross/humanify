@@ -1,6 +1,6 @@
 # 043 — Corroborated content: results
 
-Brief: [README.md](README.md). Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
+Brief: [README.md](README.md). Jargon: [034 vocabulary](../../docs/vocabulary.md).
 
 **Status: SHIPPED. Gate PASSED on every non-negotiable — relocation down on the
 two hops the ceiling targeted and BYTE-IDENTICAL on the two it did not, real

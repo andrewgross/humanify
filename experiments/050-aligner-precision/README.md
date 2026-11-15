@@ -40,7 +40,7 @@ pbkdf2IterationCount`, the draw-unstable `p2c`/`p2s` family exp036 documented.
 > **The alias cascade is the successor question**, seeded by this experiment's own
 > canary data.
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.
 

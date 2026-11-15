@@ -17,7 +17,7 @@
 > file; the transferable lessons are rules 3, 5 and 6 of
 > [docs/measurement-pitfalls.md](../../docs/measurement-pitfalls.md).
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.
 

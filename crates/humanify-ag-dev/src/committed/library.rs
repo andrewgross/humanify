@@ -10,13 +10,13 @@
 //! scorer that reads them (lane L2b).
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{Loaded, load_json};
-use crate::paths::{LIBRARY_CORPORA, LIBRARY_DIR};
+use super::{Loaded, load_json, load_text};
+use crate::paths::{BUNDEV_LIST, LIBRARY_CORPORA, LIBRARY_DIR};
 
 /// One corpus: its name and the suffix of its files. Where its data
 /// lives on this host is per-host data ([`data_roots`]), not code.
@@ -74,6 +74,36 @@ pub fn data_roots(repo: &Path) -> Result<Loaded<DataRoots>, String> {
         ));
     }
     Ok(loaded)
+}
+
+/// Load the bun-dev list: one `<entry id>\t<bundle path>[\t...]` row per
+/// line, blank lines skipped. A row without a bundle path fails the load.
+pub fn bundev_list(repo: &Path) -> Result<Loaded<Vec<(String, PathBuf)>>, String> {
+    let text = load_text(&repo.join(BUNDEV_LIST))?;
+    let mut rows = Vec::new();
+    for (i, line) in text.value.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let mut f = line.split('\t');
+        match (f.next(), f.next()) {
+            (Some(id), Some(bundle)) if !id.is_empty() && !bundle.is_empty() => {
+                rows.push((id.to_string(), PathBuf::from(bundle)));
+            }
+            _ => {
+                return Err(format!(
+                    "{}: line {}: want <entry id>\\t<bundle path>",
+                    text.path.display(),
+                    i + 1
+                ));
+            }
+        }
+    }
+    Ok(Loaded {
+        value: rows,
+        path: text.path,
+        sha256: text.sha256,
+    })
 }
 
 /// The corpus named `name`.

@@ -10,7 +10,7 @@
 > Superseded by [044](../044-naming-correspondence/) and
 > [045](../045-reorder/).
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 every hop judged **on its own**.
 

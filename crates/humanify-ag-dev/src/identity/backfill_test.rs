@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use super::*;
 use crate::identity::{Purpose, comparable, label_cards};
-use crate::paths::{EVAL_RESULTS, LIBRARY_RESULTS, repo_root};
+use crate::paths::{EVAL_RESULTS, LIBRARY_LABEL_FIXTURES, repo_root};
 
 fn labels(tree: &str) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = std::fs::read_dir(repo_root().join(tree))
@@ -120,12 +120,12 @@ fn the_frozen_names_references_backfill_comparably() {
     );
 }
 
-/// Every committed library label backfills from its summary: scorer
+/// Every fixture library label backfills from its summary: scorer
 /// version, corpus identity, layer identities, index, binary.
 #[test]
-fn every_committed_library_label_backfills() {
+fn every_fixture_library_label_backfills() {
     let mut cards = 0;
-    for dir in labels(LIBRARY_RESULTS) {
+    for dir in labels(LIBRARY_LABEL_FIXTURES) {
         let ids = library_label(&dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
         if let Some(id) = ids.first() {
             assert_eq!(id.scorer.name, "exp096-score");
@@ -142,14 +142,20 @@ fn every_committed_library_label_backfills() {
         }
         cards += ids.len();
     }
-    assert!(cards > 26_000, "{cards} cards");
+    // No `cards/` in a fixture: its one identity stands for the corpus.
+    assert_eq!(cards, 3, "{cards} cards");
 }
 
 /// A library label's identity uses the SAME corpus identity the loader
 /// computes, so a new run and a legacy label compare on the corpus.
 #[test]
 fn a_library_label_matches_its_corpus_as_loaded_today() {
-    let ids = library_label(&repo_root().join(LIBRARY_RESULTS).join("apps-exp127-off")).unwrap();
+    let ids = library_label(
+        &repo_root()
+            .join(LIBRARY_LABEL_FIXTURES)
+            .join("apps-exp127-off"),
+    )
+    .unwrap();
     let corpus = crate::committed::library::load_corpus(&repo_root(), "apps").unwrap();
     assert_eq!(
         ids[0].corpus.manifest_sha256.known(),

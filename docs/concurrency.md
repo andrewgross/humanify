@@ -1,13 +1,14 @@
 # Concurrency in the Rust pipeline
 
 How the pipeline (`crates/`) is allowed to do more than one thing at a time,
-and how that is checked. Written 2026-10-12 from the concurrency audit
-([`docs/audits/rust-concurrency-2026-10.md`](./audits/rust-concurrency-2026-10.md),
-28 sites, findings W1–W2, R1–R6, O1–O20) and the blog post it was based on,
+and how that is checked. Written 2026-10-12 from a concurrency audit of
+28 sites (findings W1–W2, R1–R6, O1–O20;
+`git show 6c4b4d13f:docs/audits/rust-concurrency-2026-10.md`) and the blog
+post it was based on,
 [_"I am sorry, but you still have to think"_](https://itsallaboutthebit.com/i-am-sorry-but-you-still-have-to-think/).
 
 **Amended 2026-10-30 by the ordering audit**
-([`docs/audits/ordering-2026-10.md`](./audits/ordering-2026-10.md), exp163):
+(`git show 6c4b4d13f:docs/audits/ordering-2026-10.md`, exp163):
 rules 1 and 6 were originally justified by TS-parity comparability; the TS
 pipeline was deleted at the cutover, so they are now justified by the live
 gates that enforce them (neutrality, e2e's run-twice, the warm self-hop).
@@ -304,8 +305,7 @@ two.
 property. A default run (`run.order = "throughput"`, every regular run and
 the shipped default) works through items as fast as the pool and the
 semaphore allow and puts results back in canonical order where they are
-consumed — see the ordering audit's classification
-([`docs/audits/ordering-2026-10.md`](./audits/ordering-2026-10.md), §2): the
+consumed — see the ordering audit's classification (its §2): the
 parallel-era fan-outs are all reorder-buffers, free. `run.order =
 "ordered"` is what determinism-sensitive tests and debugging opt into:
 

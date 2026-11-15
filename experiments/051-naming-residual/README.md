@@ -40,7 +40,7 @@
 > not a failure, and it is worth more than a lever built on a number nobody
 > checked.
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.
 

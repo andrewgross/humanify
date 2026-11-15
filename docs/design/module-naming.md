@@ -80,7 +80,7 @@ Instead of naming files and lazy-init wrappers by a fixed rule (the file's
 first function, or the one variable the wrapper sets up), "assess a better
 way to name files using an LLM initially based on some contents or some of
 the functional code in there as opposed to the first reference." The
-slash-command rule from `docs/design/lazy-init-naming.md` is dropped.
+slash-command rule from the lazy-init naming design (`git show 6c4b4d13f:docs/design/lazy-init-naming.md`) is dropped.
 
 This document replaces that design's recommendation (derive the wrapper
 name from the first function). Its measurements of the wrappers still stand
@@ -368,7 +368,7 @@ the call. Nearly all the changes are synonyms or refinements
 `aws-client-options`/`sso-client-options`); the ones that changed meaning
 were barrels. It matters less than it looks, because the step only ever
 asks a module ONCE — a matched module carries its path and wrapper name
-(the wrapper carry is 99–100% per hop today, `lazy-init-naming.md`), so the
+(the wrapper carry is 99–100% per hop today, the lazy-init study), so the
 draw never repeats across versions. It does mean: keep the batching a pure
 function of the module order (the existing `split_namer_batches` already
 is), so a replayed run asks the same questions.
@@ -379,12 +379,12 @@ is), so a replayed run asks the same questions.
 
 |                                                                                                       |                                   today |                 proposed |
 | ----------------------------------------------------------------------------------------------------- | --------------------------------------: | -----------------------: |
-| fresh run (2.1.215 base, 77,434 calls) — calls that asked only about wrappers (`lazy-init-naming.md`) |                                   5,952 |                        0 |
+| fresh run (2.1.215 base, 77,434 calls) — calls that asked only about wrappers (the lazy-init study) |                                   5,952 |                        0 |
 | fresh run — module-name calls (4,657 non-barrel modules, 8 per call)                                  |                                       0 |                     ~583 |
 | **fresh run, net**                                                                                    |                                         | **≈ −5,370 calls (−7%)** |
 | warm hop — mint-namer calls                                                                           |                                       1 |                        0 |
 | warm hop — new modules to name                                                                        | 27–94 per hop (the mint namer's counts) |               4–12 calls |
-| warm hop — wrapper asks for new modules                                                               |            ~100 (`lazy-init-naming.md`) |                        0 |
+| warm hop — wrapper asks for new modules                                                               |            ~100 (the lazy-init study) |                        0 |
 
 Per module the prompt costs ~470 tokens in and ~26 out (measured: 28,180 /
 1,568 tokens for 60 modules). Entry size over the whole 2.1.216 population:
@@ -488,7 +488,7 @@ and checked with the placement trail counts.
 
 Cost of the order: while the waves run, the few prompts that show a
 wrapper call (dynamic-import sites, usage lines of the bindings it sets)
-show it under its minified name — the same cost `lazy-init-naming.md`
+show it under its minified name — the same cost the lazy-init study
 accepted, already guarded by the borrowed-stem refusal.
 
 ## Recommendation

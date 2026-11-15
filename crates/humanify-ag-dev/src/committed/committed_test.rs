@@ -145,13 +145,13 @@ fn a_layer_with_a_block_its_kind_does_not_have_fails_the_load() {
 }
 
 /// The loader's identities are the ones the library scorer recorded: a
-/// committed scorer-14 summary's corpus and layer shas.
+/// scorer-14 summary's corpus and layer shas (a test fixture).
 #[test]
 fn corpus_and_layer_ids_equal_the_recorded_summary_shas() {
     let c = library::load_corpus(&repo_root(), "apps").unwrap();
     let summary = std::fs::read_to_string(
         repo_root()
-            .join(crate::paths::LIBRARY_RESULTS)
+            .join(crate::paths::LIBRARY_LABEL_FIXTURES)
             .join("apps-exp127-off/summary.json"),
     )
     .unwrap();
@@ -171,6 +171,29 @@ fn corpus_and_layer_ids_equal_the_recorded_summary_shas() {
     ] {
         assert_eq!(c.layer_ids[key], recorded(key), "{key}");
     }
+}
+
+/// The bun-dev list parses to (entry id, bundle path) rows, blank lines
+/// skipped; a row without a path fails the load, naming the line.
+#[test]
+fn the_bundev_list_is_entry_id_and_bundle_path_per_line() {
+    let repo = std::env::temp_dir().join(format!("dev-bundev-{}", std::process::id()));
+    let dir = repo.join(crate::paths::LIBRARY_DIR);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("bun-dev-list.tsv");
+    std::fs::write(&file, "a\t/x/a.js\tbun\n\nb\t/x/b.js\tbun\n").unwrap();
+    let rows = library::bundev_list(&repo).unwrap().value;
+    assert_eq!(
+        rows,
+        [
+            ("a".to_string(), std::path::PathBuf::from("/x/a.js")),
+            ("b".to_string(), std::path::PathBuf::from("/x/b.js")),
+        ]
+    );
+    std::fs::write(&file, "a\t/x/a.js\tbun\nb\n").unwrap();
+    let err = library::bundev_list(&repo).unwrap_err();
+    assert!(err.contains("line 2"), "{err}");
+    std::fs::remove_dir_all(&repo).unwrap();
 }
 
 #[test]
@@ -227,6 +250,7 @@ fn every_committed_dev_file_is_read_by_its_loader() {
     }
     note(&library::data_roots(&repo).unwrap().path);
     note(&library::bands(&repo).unwrap().path);
+    note(&library::bundev_list(&repo).unwrap().path);
     for c in library::CORPORA {
         let loaded = library::load_corpus(&repo, c.name).unwrap();
         note(&loaded.manifest.path);
@@ -236,6 +260,7 @@ fn every_committed_dev_file_is_read_by_its_loader() {
     }
     note(&census::concurrency_allowlist(&repo).unwrap().path);
     note(&census::clone_allowlist(&repo).unwrap().path);
+    note(&census::docs_allowlist(&repo).unwrap().path);
 
     let mut on_disk = BTreeSet::new();
     let mut stack = vec![repo.join("dev")];

@@ -12,7 +12,7 @@
 > Not a coin flip at all — exp043 shipped exactly that case for −1,807 lines on
 > that hop. A brief's caution is a hypothesis, not a constraint.
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 research-log entries read _Idea → Evidence (table) → Conclusion_; outcomes are
 **landed** or **failed** with numbers; totals-first tables; **ceilings measured
 before builds**; every hop judged **on its own**.

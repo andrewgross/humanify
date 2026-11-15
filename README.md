@@ -78,8 +78,8 @@ more time and be less accurate.
 
 The pipeline is a single native binary, `humanify-ag`, built from the Rust
 workspace in `crates/`. (Up to tag `m4` it was a TypeScript program; it was
-ported, proven output-equivalent on the eval corpus, and replaced — see
-`docs/rust-port/19-cutover.md`.)
+ported, proven output-equivalent on the eval corpus, and replaced; the
+cutover ledger is `git show 6c4b4d13f:docs/rust-port/19-cutover.md`.)
 
 ### Build
 

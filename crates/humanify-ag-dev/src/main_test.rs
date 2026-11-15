@@ -50,6 +50,7 @@ fn the_table_holds_the_whole_subcommand_map() {
         "census clones",
         "census concurrency",
         "census slop",
+        "census comments",
         "ask-trace",
         "diff-asks",
         "match-truth",

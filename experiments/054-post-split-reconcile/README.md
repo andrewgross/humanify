@@ -25,9 +25,9 @@
 >   given first — post-emit, pre-write — was WRONG by 922 git lines, because
 >   `finishSplitOutput` rewrites the tree afterwards. The pass runs after it.
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md).
+Jargon: [034 vocabulary](../../docs/vocabulary.md).
 **Read first:** [`docs/measurement-pitfalls.md`](../../docs/measurement-pitfalls.md)
-(eleven rules), [`docs/matching-cascades.md`](../../docs/matching-cascades.md)
+(eleven rules), `docs/matching-cascades.md` (removed; `git show 6c4b4d13f:docs/matching-cascades.md`)
 (what every tier compares), [`docs/naming-pipeline.md`](../../docs/naming-pipeline.md)
 (execution order).
 

@@ -11,7 +11,7 @@
 > which regressed the 118→119 canary — do not revive it. The gate script
 > (`gate-verdict.sh`) and `replay-lib.ts` here are still the current tools.
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 research-log entries read _Idea → Evidence (table) → Conclusion_; outcomes are
 **landed** or **failed** with numbers; totals-first tables; **ceilings measured
 before builds**; every hop judged **on its own** — a big hop masks a regression

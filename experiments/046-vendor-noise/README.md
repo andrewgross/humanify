@@ -33,7 +33,7 @@
 >   predicates written FOR this experiment confirmed hypotheses that reading the
 >   same data refuted; all three are in RESULTS.md §A2/A4.
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 _Idea → Evidence (table) → Conclusion_; **ceilings measured before builds**;
 totals-first; every hop judged **on its own**.
 

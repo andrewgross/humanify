@@ -8,7 +8,7 @@
 > booting, every ON/OFF pair a proven pure reorder, and naming untouched. The
 > brief below is kept as written.
 
-Jargon: [034 vocabulary](../034-eval-harness/VOCABULARY.md). Conventions:
+Jargon: [034 vocabulary](../../docs/vocabulary.md). Conventions:
 research-log entries read _Idea → Evidence (table) → Conclusion_; outcomes are
 **landed** or **failed** with numbers; totals-first tables; **ceilings measured
 before builds**; every hop judged **on its own** (no cross-pair aggregates — a

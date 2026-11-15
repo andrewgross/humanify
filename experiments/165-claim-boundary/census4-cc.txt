@@ -1,2 +1,0 @@
-corpus cc
-  ('nogroup', 'factories'): 1094

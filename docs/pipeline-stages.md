@@ -132,11 +132,10 @@ report-only: nothing is named, moved or renamed by it. `--library-index
 lookup of the queue (`libindex::lookup`); `--library-discovery-units`
 lists every unit (the default is totals and one row per package).
 
-Since the cutover (docs/rust-port/19-cutover.md) the pipeline is the Rust
-binary; the TypeScript names used below (`stableSplitFromCode`,
-`PLACEMENT_TIERS`, …) are the historical names of the same stages, kept
-because the experiment records use them — `docs/rust-port/01-current-architecture.md`
-maps each to its Rust module.
+Since the cutover the pipeline is the Rust binary; the TypeScript names used
+below (`stableSplitFromCode`, `PLACEMENT_TIERS`, …) are the historical names
+of the same stages, kept because the experiment records use them; the
+porting ledger (`git show 6c4b4d13f:PORTING.md`) maps each to its Rust module.
 
 Four stages sit _after_ placement and are easy to forget when reasoning about
 output, because they run once the tree looks finished:

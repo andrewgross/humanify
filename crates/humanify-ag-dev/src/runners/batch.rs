@@ -1,5 +1,5 @@
-//! The stub-run BATCHES over the bun-dev corpus (experiments/165's
-//! `bun-dev-list.tsv`), on `run stub` and the library instruments:
+//! The stub-run BATCHES over the bun-dev corpus (`dev/library/bun-dev-list.tsv`,
+//! loaded by `committed::library::bundev_list`), on `run stub` and the library instruments:
 //!
 //! - `eval vendor-precision bun-dev <bin> <label>` — the port of
 //!   experiments/166 `bundev-precision.sh`: per bundle a names-mode stub
@@ -20,20 +20,6 @@
 use std::path::{Path, PathBuf};
 
 use super::Ctx;
-
-/// experiments/165's bun-dev list: (entry id, bundle path) per line.
-pub fn bundev_list(repo: &Path) -> Result<Vec<(String, PathBuf)>, String> {
-    let p = repo.join("experiments/165-claim-boundary/bun-dev-list.tsv");
-    let text = std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?;
-    Ok(text
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .filter_map(|l| {
-            let mut f = l.split('\t');
-            Some((f.next()?.to_string(), PathBuf::from(f.next()?)))
-        })
-        .collect())
-}
 
 fn nonempty(p: &Path) -> bool {
     std::fs::metadata(p).is_ok_and(|m| m.len() > 0)
@@ -68,7 +54,7 @@ pub fn vendor_precision_bundev(
 ) -> Result<String, String> {
     use crate::library::{families::Families, vendor_precision as vp};
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
-    let list = bundev_list(&ctx.repo)?;
+    let list = crate::committed::library::bundev_list(&ctx.repo)?.value;
     let fam = Families::shipped();
     let lines = {
         let _claim = super::claim::claim_folder(out, "eval vendor-precision bun-dev")?;
@@ -156,7 +142,7 @@ pub fn cjs_runs(
     index: Option<&str>,
 ) -> Result<String, String> {
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
-    let list = bundev_list(&ctx.repo)?;
+    let list = crate::committed::library::bundev_list(&ctx.repo)?.value;
     let lines = {
         let _claim = super::claim::claim_folder(out, "eval cjs-placement runs")?;
         super::each(&list, jobs, |(id, bundle)| -> String {

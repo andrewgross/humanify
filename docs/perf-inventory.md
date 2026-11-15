@@ -11,7 +11,7 @@ RSS-vs-phase aligner, `run{1,2a,2b,3,4}*/` per-run profile.json + rss.csv
 - stderr.log).
 
 The core lesson of the fast-mode study
-([`docs/rust-port/20-fast-mode.md`](./rust-port/20-fast-mode.md)) frames
+(`git show 6c4b4d13f:docs/rust-port/20-fast-mode.md`) frames
 everything below: **a real cold run is SERVER-bound** (naming is ~97%
 prefill; vLLM's throughput is the wall), so client-CPU wins only pay
 where the client is the wall — warm/cache-replay runs, stub runs, faster

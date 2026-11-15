@@ -1,16 +1,15 @@
 /**
  * The webcrack subprocess shim (WPB.2): the Rust unpack stage's webcrack
  * adapter runs webpack/browserify bundles through THIS script rather than
- * porting webcrack (docs/rust-port/10-work-breakdown.md, WPB.2).
+ * porting webcrack.
  *
  *   <code on stdin> | npx tsx tools/webcrack-shim.ts <output-dir>
  *
  * Unpacks with `webcrack` and prints one JSON line:
  * `{"files":[{"path","metadata"?}],"bundleType"?}`, which
  * `humanify_ag_core::unpack::webcrack` parses. Self-contained since the cutover
- * absorbed the TS pipeline's src/plugins/webcrack.ts into it
- * (docs/rust-port/19-cutover.md): this is the binary's one Node dependency
- * at run time, and only for webpack/browserify inputs.
+ * absorbed the TS pipeline's webcrack plugin into it: this is the binary's
+ * one Node dependency at run time, and only for webpack/browserify inputs.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
