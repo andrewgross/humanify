@@ -29,9 +29,9 @@ use super::{
 use crate::modules::NameSource;
 use crate::modules::vendor_names::{BunModulesManifest, ManifestEntry};
 
-/// One scratch tree: (fresh output tree, prior tree) with the fixture's
-/// files materialized where the drivers read them.
-struct Scratch(PathBuf, PathBuf);
+/// One scratch output tree with the fixture's files materialized where
+/// the driver reads them (the prior side is in memory).
+struct Scratch(PathBuf);
 impl Scratch {
     fn new(tag: &str) -> Scratch {
         let root = std::env::temp_dir().join(format!(
@@ -40,10 +40,8 @@ impl Scratch {
         ));
         let _ = std::fs::remove_dir_all(&root);
         let out = root.join("out");
-        let prior = root.join("prior");
         std::fs::create_dir_all(out.join(".humanify")).unwrap();
-        std::fs::create_dir_all(prior.join(".humanify")).unwrap();
-        Scratch(out, prior)
+        Scratch(out)
     }
     fn write(&self, root: &std::path::Path, rel: &str, text: &str) {
         let p = root.join(rel);
@@ -77,17 +75,20 @@ fn the_finish_reconcile_records_its_constituent_spans() {
     for (file, text) in fx["fresh"].as_object().unwrap() {
         s.write(&s.0, file, text.as_str().unwrap());
     }
-    for (file, text) in fx["prior"].as_object().unwrap() {
-        s.write(&s.1, file, text.as_str().unwrap());
-    }
-    let prior_bundle = s.1.join(".humanify/humanified.js");
-    std::fs::write(&prior_bundle, fx["bundle"].as_str().unwrap()).unwrap();
+    let prior = crate::prior_tree::PriorFiles::new(
+        fx["prior"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(file, text)| (file.clone(), text.as_str().unwrap().as_bytes().to_vec()))
+            .collect(),
+    );
     let profiler = crate::profiling::Profiler::new(true);
     profiler.install_global();
     let mut report = FinishReport::default();
     let result = reconcile_post_split(
         &s.0,
-        Some(&prior_bundle),
+        Some(&prior),
         FinishSwitches::default(),
         super::PostSplitRules {
             name_profile: crate::rename::name_profile::NameProfile::Bun,

@@ -128,34 +128,6 @@
       "reason": "THE seam (audit O14): one scoped thread runs pure work beside the AST-holding main thread; scope joins on every path and re-raises a panic"
     },
     {
-      "file": "crates/humanify-ag-core/src/prior.rs",
-      "scope": "static PRIOR_PARSES",
-      "construct": "atomic",
-      "pattern": "stats-counter",
-      "reason": "prior-parse counter: observation only, no decision reads it (audit \"also checked\")"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/prior.rs",
-      "scope": "prior_parse_count",
-      "construct": "atomic-relaxed",
-      "pattern": "stats-counter",
-      "reason": "prior-parse counter: a count read by tests and diagnostics; no ordering with other memory is needed"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/prior.rs",
-      "scope": "reset_prior_parse_count",
-      "construct": "atomic-relaxed",
-      "pattern": "stats-counter",
-      "reason": "prior-parse counter: a count read by tests and diagnostics; no ordering with other memory is needed"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/prior.rs",
-      "scope": "parse_prior",
-      "construct": "atomic-relaxed",
-      "pattern": "stats-counter",
-      "reason": "prior-parse counter: a count read by tests and diagnostics; no ordering with other memory is needed"
-    },
-    {
       "file": "crates/humanify-ag-core/src/profiling.rs",
       "scope": "struct Sampler",
       "construct": "channel",

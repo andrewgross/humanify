@@ -79,20 +79,6 @@ pub fn bun_manifest_path(output_dir: &Path) -> PathBuf {
     output_dir.join(VENDOR_DIR).join(BUN_MODULES_MANIFEST)
 }
 
-/// The prior release's TREE ROOT — the directory holding `vendor/` —
-/// resolved from whatever `--prior-version` points at
-/// (`findPriorTreeRoot`): normally a prior tree's `.humanify/humanified.js`,
-/// so try that file's own directory first, then its parent.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub fn find_prior_tree_root(prior_file: &Path) -> Option<PathBuf> {
-    let dir = prior_file.parent().unwrap_or(Path::new(""));
-    let parent = dir.parent().unwrap_or(Path::new(""));
-    [dir.to_path_buf(), parent.to_path_buf()]
-        .into_iter()
-        .find(|root| bun_manifest_path(root).exists())
-}
-
 /// What the prior release's vendor manifest offers this run.
 #[derive(Clone, Debug, Default)]
 pub struct PriorVendor {
@@ -111,11 +97,24 @@ pub struct PriorVendor {
     /// then None — that era's bytes never join this run's.
     pub stale_era: Option<Vec<StaleEraEntry>>,
     /// Every prior manifest entry with its file and identifier, for the
-    /// content carry (finding #90) — whose files are read from `root`
-    /// only when this run has a module to pair.
+    /// content carry.
     pub modules: Vec<PriorModule>,
-    /// The prior tree's root (the directory holding `vendor/`).
-    pub root: Option<PathBuf>,
+    /// The prior tree's module files, when the record was read from a
+    /// tree (None for a record built from names alone).
+    pub tree: Option<PriorVendorFiles>,
+}
+
+/// The prior tree's side of a vendor record: each manifest entry's file
+/// text, and whether the tree's vendored bodies were named.
+#[derive(Clone, Debug, Default)]
+pub struct PriorVendorFiles {
+    /// Per [`PriorVendor::modules`] entry, in order: its file's text, None
+    /// when the tree does not hold the file or it is not UTF-8.
+    pub texts: Vec<Option<String>>,
+    /// The tree holds the named vendor bodies' joined source
+    /// (`naming::vendor_bodies::VENDOR_NAMING_SOURCE`): the content carry
+    /// then pairs blind to binding spellings.
+    pub bodies_named: bool,
 }
 
 impl PriorVendor {
@@ -137,78 +136,81 @@ impl PriorVendor {
     }
 }
 
-/// Load the prior release's vendor manifest (`loadPriorVendorNames` +
-/// `loadPriorManifestFactories`), era-aware: a manifest stamped with this
-/// run's `hashVersion` is read by hash; one stamped with another version is
-/// stale-era and every entry's vendor file is read for its content key
-/// instead ([`crate::modules::vendor_content`]). `Ok(None)` without a prior
-/// tree holding a manifest; Err for a manifest this binary does not read
-/// (unparseable, no `hashVersion`, an entry missing a field it always
-/// writes) — refused here, at the edge, not half-read.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods)]
-pub fn load_prior_vendor(prior_file: &Path) -> Result<Option<PriorVendor>, String> {
-    let Some(root) = find_prior_tree_root(prior_file) else {
-        return Ok(None);
-    };
-    let path = bun_manifest_path(&root);
-    let refuse = |why: String| {
-        format!(
-            "prior vendor manifest {} is not one this binary reads ({why}); \
-             rebuild the prior release with this binary",
-            path.display()
-        )
-    };
-    let text = fs::read_to_string(&path).map_err(|e| refuse(e.to_string()))?;
-    let manifest = PriorManifest::parse(&text).map_err(refuse)?;
-    let rows = &manifest.factories;
-    let modules: Vec<PriorModule> = rows
-        .iter()
-        .map(|r| PriorModule {
-            name: r.name.clone(),
-            structural_hash: r.structural_hash.clone(),
-            file_name: r.file_name.clone(),
-            origin: NameSource::of_prior_label(Some(r.name_source.as_str())),
-            runtime_identifier: r.runtime_identifier.clone(),
-            identity: r.identity.clone(),
-        })
-        .collect();
-    if manifest.hash_version == MATCH_KEY.version {
-        return Ok(Some(PriorVendor {
-            names: load_prior_vendor_names(rows),
-            factories: load_prior_manifest_factories(rows),
-            stale_era: None,
+impl PriorVendor {
+    /// Read the prior release's vendor manifest (`loadPriorVendorNames` +
+    /// `loadPriorManifestFactories`), era-aware: a manifest stamped with
+    /// this run's `hashVersion` is read by hash; one stamped with another
+    /// version is stale-era and every entry's vendor file (from `files`)
+    /// is keyed by content instead ([`crate::modules::vendor_content`]).
+    /// `Ok(None)` for a stale-era manifest without entries; Err for a
+    /// manifest this binary does not read (not UTF-8, unparseable, no
+    /// `hashVersion`, an entry missing a field it always writes) — refused
+    /// here, at the edge, not half-read.
+    pub fn parse(
+        manifest: &[u8],
+        files: &crate::prior_tree::PriorFiles,
+        bodies_named: bool,
+    ) -> Result<Option<PriorVendor>, crate::prior_tree::PriorTreeError> {
+        let refuse = |why: String| crate::prior_tree::PriorTreeError::VendorManifest { why };
+        let text = std::str::from_utf8(manifest).map_err(|e| refuse(e.to_string()))?;
+        let manifest = PriorManifest::parse(text).map_err(refuse)?;
+        let rows = &manifest.factories;
+        let modules: Vec<PriorModule> = rows
+            .iter()
+            .map(|r| PriorModule {
+                name: r.name.clone(),
+                structural_hash: r.structural_hash.clone(),
+                file_name: r.file_name.clone(),
+                origin: NameSource::of_prior_label(Some(r.name_source.as_str())),
+                runtime_identifier: r.runtime_identifier.clone(),
+                identity: r.identity.clone(),
+            })
+            .collect();
+        let tree = PriorVendorFiles {
+            texts: rows
+                .iter()
+                .map(|r| files.text(&r.file_name).map(str::to_string))
+                .collect(),
+            bodies_named,
+        };
+        if manifest.hash_version == MATCH_KEY.version {
+            return Ok(Some(PriorVendor {
+                names: load_prior_vendor_names(rows),
+                factories: load_prior_manifest_factories(rows),
+                stale_era: None,
+                modules,
+                tree: Some(tree),
+            }));
+        }
+        if rows.is_empty() {
+            return Ok(None);
+        }
+        let indexed: Vec<usize> = (0..rows.len()).collect();
+        let keyed = crate::par::map_ordered(&indexed, |&i| {
+            let r = &rows[i];
+            StaleEraEntry {
+                name: r.name.clone(),
+                origin: NameSource::of_prior_label(Some(r.name_source.as_str())),
+                era_hash: r.structural_hash.clone(),
+                ordinal: r.hash_ordinal.unwrap_or(usize::MAX),
+                key: tree.texts[i].as_deref().and_then(prior_file_content_key),
+                // The entry's file and identifier ride with its name through
+                // the re-key, as the exact carry's do.
+                identity: crate::modules::vendor_pairing::prior_identity(
+                    Some(r.file_name.as_str()),
+                    r.runtime_identifier.as_deref(),
+                    VENDOR_DIR,
+                ),
+            }
+        });
+        Ok(Some(PriorVendor {
+            names: None,
+            factories: None,
+            stale_era: Some(keyed),
             modules,
-            root: Some(root),
-        }));
+            tree: Some(tree),
+        }))
     }
-    if rows.is_empty() {
-        return Ok(None);
-    }
-    let keyed = crate::par::map_ordered(rows, |r| StaleEraEntry {
-        name: r.name.clone(),
-        origin: NameSource::of_prior_label(Some(r.name_source.as_str())),
-        era_hash: r.structural_hash.clone(),
-        ordinal: r.hash_ordinal.unwrap_or(usize::MAX),
-        key: fs::read_to_string(root.join(&r.file_name))
-            .ok()
-            .and_then(|t| prior_file_content_key(&t)),
-        // The entry's file and identifier ride with its name through the
-        // re-key, as the exact carry's do.
-        identity: crate::modules::vendor_pairing::prior_identity(
-            Some(r.file_name.as_str()),
-            r.runtime_identifier.as_deref(),
-            VENDOR_DIR,
-        ),
-    });
-    Ok(Some(PriorVendor {
-        names: None,
-        factories: None,
-        stale_era: Some(keyed),
-        modules,
-        root: Some(root),
-    }))
 }
 
 /// The unpack options (`UnpackOptions`) — shared by the Bun and esbuild
@@ -218,7 +220,7 @@ pub struct BunUnpackOptions<'n> {
     /// The LLM namer for hash-named factories — None skips the pass, as the
     /// TS does when no `vendorNamer` is wired.
     pub namer: Option<&'n mut dyn VendorNamer>,
-    /// The prior release's vendor manifest ([`load_prior_vendor`]).
+    /// The prior release's vendor manifest ([`PriorVendor::parse`]).
     pub prior: Option<PriorVendor>,
     /// `--disable manifest-prior-order` (exp047's kill switch): no
     /// `hashOrdinal` stamps and no prior-order reorder — the manifest in
@@ -572,7 +574,7 @@ pub fn unpack_bun(
         let mut counts = name_cjs_factories(c, prior.names.as_ref());
         // Finding #95: what the exact-hash carry missed, paired by an
         // equal, unique declared identity with what it left in the prior.
-        let carries = prior.root.as_ref().map(|_| {
+        let carries = prior.tree.as_ref().map(|_| {
             let leftovers = leftover_priors(&prior.modules, &c.factories);
             carry_by_declared_identity(&mut c.factories, &leftovers, VENDOR_DIR)
         });
@@ -1381,18 +1383,14 @@ fn mark_text_assets(
 /// modules this run would otherwise ask the model about (and the app text
 /// assets, for their identifier), paired with the prior modules nothing
 /// carried into (`taken`: the prior files a declared pair already took).
-/// Reads the prior tree's files only when there is something on both
-/// sides. None without a prior tree.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-// default: legacy, untriaged: a Result error becomes a value here
-#[allow(clippy::disallowed_methods)]
+/// None without a prior tree.
 fn carry_by_content(
     factories: &mut [FactoryRecord],
     prior: &PriorVendor,
     taken: &HashSet<&str>,
     fresh_text: impl Fn(&FactoryRecord) -> String + Sync + Send,
 ) -> Option<ContentCarryReport> {
-    let root = prior.root.as_ref()?;
+    let tree = prior.tree.as_ref()?;
     let candidates: Vec<usize> = (0..factories.len())
         .filter(|&i| is_content_candidate(&factories[i]) && factories[i].carried.is_none())
         .collect();
@@ -1410,20 +1408,17 @@ fn carry_by_content(
     // is read blind to binding spellings on BOTH sides (exp173): its own
     // names would otherwise hide a changed module's twin. Any other prior
     // is read as written, as before.
-    let features: fn(&str) -> ModuleFeatures =
-        if crate::naming::vendor_bodies::prior_bodies_named(root) {
-            blind_module_features
-        } else {
-            module_features
-        };
+    let features: fn(&str) -> ModuleFeatures = if tree.bodies_named {
+        blind_module_features
+    } else {
+        module_features
+    };
     // Every prior module's features: the IDF is over the WHOLE prior tree.
-    let prior_features: Vec<Option<ModuleFeatures>> =
-        crate::par::map_ordered(&prior.modules, |m| {
-            fs::read_to_string(root.join(&m.file_name))
-                .ok()
-                .and_then(|t| prior_factory_text(&t))
-                .map(|t| features(&t))
-        });
+    let prior_features: Vec<Option<ModuleFeatures>> = crate::par::map_ordered(&tree.texts, |t| {
+        t.as_deref()
+            .and_then(prior_factory_text)
+            .map(|t| features(&t))
+    });
     let idf = literal_idf(prior_features.iter().flatten());
     let by_file: HashMap<&str, usize> = prior
         .modules

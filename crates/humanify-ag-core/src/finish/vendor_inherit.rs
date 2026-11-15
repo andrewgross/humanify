@@ -15,15 +15,14 @@
 //! inherited.
 //!
 //! Kill switch: `--disable vendor-inherit` (the caller passes no prior
-//! root).
-
-use std::path::{Path, PathBuf};
+//! tree).
 
 use oxc_allocator::Allocator;
 
 use crate::hash::forms::IDENTITY_KEY;
 use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use crate::ingest::{Ingest, program_estree_json};
+use crate::prior_tree::PriorFiles;
 
 /// The kill-switch name (`VENDOR_INHERIT_SWITCH`).
 pub const VENDOR_INHERIT_SWITCH: &str = "vendor-inherit";
@@ -90,31 +89,29 @@ pub fn same_program(prior: &str, fresh: &str) -> bool {
     }
 }
 
-/// `createVendorBodyInheritor(priorRoot)` — the prior release's TREE ROOT
-/// (the directory holding `vendor/`).
-pub struct VendorBodyInheritor {
-    prior_root: PathBuf,
+/// `createVendorBodyInheritor(priorRoot)` — over the prior release's
+/// tree (the one holding `vendor/`).
+pub struct VendorBodyInheritor<'p> {
+    prior: &'p PriorFiles,
     stats: VendorInheritStats,
 }
 
-impl VendorBodyInheritor {
-    pub fn new(prior_root: &Path) -> VendorBodyInheritor {
+impl<'p> VendorBodyInheritor<'p> {
+    pub fn new(prior: &'p PriorFiles) -> VendorBodyInheritor<'p> {
         VendorBodyInheritor {
-            prior_root: prior_root.to_path_buf(),
+            prior,
             stats: VendorInheritStats::default(),
         }
     }
 
     /// `bytesFor(relPath, fresh)`: the prior bytes when the prior tree holds
     /// the same program at the same path, else `fresh`.
-    // io: legacy effect site, listed in dev/census/effects-allowlist.json
-    #[allow(clippy::disallowed_methods)]
     pub fn bytes_for(&mut self, rel_path: &str, fresh: String) -> String {
-        let Ok(bytes) = std::fs::read(self.prior_root.join(rel_path)) else {
+        // readFileSync(…, "utf-8"): invalid sequences become U+FFFD.
+        let Some(prior) = self.prior.text_lossy(rel_path) else {
             return fresh;
         };
-        // readFileSync(…, "utf-8"): invalid sequences become U+FFFD.
-        let prior = String::from_utf8_lossy(&bytes).into_owned();
+        let prior = prior.into_owned();
         self.stats.considered += 1;
         if prior == fresh {
             return fresh;

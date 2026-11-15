@@ -11,7 +11,6 @@
 //! iterated, so a hash map is safe for it.
 
 use std::collections::HashMap;
-use std::path::Path;
 
 use crate::hash::forms::STATEMENT;
 
@@ -279,18 +278,33 @@ pub fn rederive_stale_era_hashes(
     })
 }
 
-/// Read a ledger file (`loadPriorSplitLedger`'s parse).
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub fn read_ledger(path: &Path) -> Result<StableSplitLedger, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+/// Why a split ledger's text was refused.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LedgerParseError {
+    /// Not a ledger this binary reads (bad JSON, a missing field).
+    Json(String),
+    /// A ledger `version` other than 1.
+    UnsupportedVersion,
+}
+
+impl std::fmt::Display for LedgerParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LedgerParseError::Json(why) => f.write_str(why),
+            LedgerParseError::UnsupportedVersion => f.write_str("Unsupported split ledger version"),
+        }
+    }
+}
+
+impl std::error::Error for LedgerParseError {}
+
+/// Parse a ledger's text (`loadPriorSplitLedger`'s parse); the shell reads
+/// the file.
+pub fn parse_ledger(text: &str) -> Result<StableSplitLedger, LedgerParseError> {
     let ledger: StableSplitLedger =
-        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        serde_json::from_str(text).map_err(|e| LedgerParseError::Json(e.to_string()))?;
     if ledger.version != 1 {
-        return Err(format!(
-            "Unsupported split ledger version in {}",
-            path.display()
-        ));
+        return Err(LedgerParseError::UnsupportedVersion);
     }
     Ok(ledger)
 }

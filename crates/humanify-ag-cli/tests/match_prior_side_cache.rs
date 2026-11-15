@@ -1,10 +1,11 @@
-//! The prior-side cache's two pins, in ONE test (the parse counter is a
-//! process global, so the pin must not race a sibling test on another
-//! thread — a single #[test] in its own integration binary cannot):
+//! The prior-side cache's two pins, in ONE test (the parse count is read
+//! from the process's one installed profiler, so a sibling test on another
+//! thread would race the pin — a single #[test] in its own integration
+//! binary has no sibling):
 //!
 //! 1. **The parse-count pin**: `humanify-ag match` builds the prior side
-//!    ONCE per run — one parse of the prior text, however many files the
-//!    work dir holds. The single-call design the verb grew from (the
+//!    ONCE per run — one parse of the prior text (one `prior:parse`
+//!    phase span), however many files the work dir holds. The single-call design the verb grew from (the
 //!    pipeline's per-file `match_prior_version`) reparsed the whole prior
 //!    per file — twice per file — which on a
 //!    raw bun-bundle tree (a runtime plus hundreds of vendor files,
@@ -24,7 +25,7 @@
 use serde_json::Value;
 
 use humanify_ag_cli::match_verb::{MatchVerbArgs, match_dump};
-use humanify_ag_core::prior::{prior_parse_count, reset_prior_parse_count};
+use humanify_ag_core::profiling::Profiler;
 
 /// A bundle of four old-shape factories (`function (…) {…}` at statement
 /// level — the shape the raw unpack tree does not parse standalone) over
@@ -102,6 +103,22 @@ fn dump(dir: &std::path::Path, input: &str, prior: &str) -> Value {
     .expect("the match verb runs")
 }
 
+/// Run `f` under a profiler and count the prior parses it made (every
+/// prior parse is one `prior:parse` phase span).
+fn prior_parses<T>(f: impl FnOnce() -> T) -> (T, usize) {
+    let profiler = Profiler::new(true);
+    profiler.install_global();
+    let out = f();
+    let report = profiler.finalize(None);
+    Profiler::uninstall_global();
+    let parses = report
+        .spans
+        .iter()
+        .filter(|s| s.name == "prior:parse")
+        .count();
+    (out, parses)
+}
+
 /// The dump with the two PATH fields replaced by placeholders — the only
 /// bytes that vary run to run (they embed the scratch dir).
 fn normalized(dump: &Value) -> String {
@@ -125,12 +142,10 @@ fn the_prior_side_is_built_once_and_the_dump_bytes_hold() {
     let dir = temp_dir("single");
     let input = write(&dir, "input.js", SINGLE_FILE);
     let prior = formatted(&dir, "prior.js", SINGLE_PRIOR);
-    reset_prior_parse_count();
-    let single = dump(&dir, &input, &prior);
+    let (single, parses) = prior_parses(|| dump(&dir, &input, &prior));
     assert_eq!(single["schemaVersion"], 1, "the single-file shape");
     assert_eq!(
-        prior_parse_count(),
-        1,
+        parses, 1,
         "one fresh file means ONE parse of the prior text"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -141,11 +156,9 @@ fn the_prior_side_is_built_once_and_the_dump_bytes_hold() {
     let dir = temp_dir("multi");
     let input = write(&dir, "input.js", BUNDLE);
     let prior = formatted(&dir, "prior.js", PRIOR);
-    reset_prior_parse_count();
-    let multi = dump(&dir, &input, &prior);
+    let (multi, parses) = prior_parses(|| dump(&dir, &input, &prior));
     assert_eq!(
-        prior_parse_count(),
-        1,
+        parses, 1,
         "the prior side is built once per run, not per file"
     );
     assert_eq!(

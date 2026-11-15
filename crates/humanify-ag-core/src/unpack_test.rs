@@ -16,12 +16,25 @@ use crate::modules::CarriedName;
 use crate::modules::vendor_names::{VendorNameRequest, VendorNamer};
 use crate::toolchain::Reason;
 use crate::unpack::bun::{
-    BunUnpackOptions, ExtractedModule, PriorVendor, extract_factory_bodies, find_prior_tree_root,
-    identify_bun_require, load_prior_vendor, rewrite_require_calls, unpack_bun,
+    BunUnpackOptions, ExtractedModule, PriorVendor, extract_factory_bodies, identify_bun_require,
+    rewrite_require_calls, unpack_bun,
 };
 use crate::unpack::webcrack::parse_shim_output;
 use crate::unpack::{UnpackAdapter, choose_adapter};
 use humanify_ag_model::detection::BundlerType;
+
+/// The prior tree's vendor record, read as the shell reads a prior: the
+/// whole tree into memory, then `PriorTree::parse` (the prior file itself
+/// is not needed for the vendor record).
+fn load_prior_vendor(
+    prior_file: &Path,
+) -> Result<Option<PriorVendor>, crate::prior_tree::PriorTreeError> {
+    let root = crate::place::layout::split_tree_root_of(prior_file);
+    let files = humanify_ag_io::tree::read_tree(&root, &crate::prior_tree::enters_folder)
+        .expect("the prior tree reads");
+    crate::prior_tree::PriorTree::parse(String::new(), crate::prior_tree::PriorFiles::new(files))
+        .map(|t| t.vendor)
+}
 
 const BUN_BUNDLE: &str = concat!(
     "import{createRequire as Glq}from\"node:module\";\n",
@@ -937,7 +950,6 @@ fn loads_prior_vendor_names_from_a_prior_tree() {
             CarriedName::new("js-yaml", Some("llm")).with_identity(Some(identity))
         ])
     );
-    assert_eq!(find_prior_tree_root(&prior_file), Some(t.0.clone()));
 }
 
 #[test]
@@ -1124,7 +1136,9 @@ fn a_prior_manifest_without_a_hash_version_is_refused() {
     let (_prior, prior_file) = edited_prior("no-hash-version", |m| {
         m.as_object_mut().unwrap().remove("hashVersion");
     });
-    let err = load_prior_vendor(&prior_file).expect_err("an unstamped manifest is refused");
+    let err = load_prior_vendor(&prior_file)
+        .expect_err("an unstamped manifest is refused")
+        .to_string();
     assert!(err.contains("hashVersion"), "{err}");
     assert!(err.contains("_bun-modules.json"), "{err}");
 }
@@ -1134,7 +1148,9 @@ fn a_prior_manifest_entry_missing_its_name_is_refused() {
     let (_prior, prior_file) = edited_prior("no-entry-name", |m| {
         m["factories"][0].as_object_mut().unwrap().remove("name");
     });
-    let err = load_prior_vendor(&prior_file).expect_err("a nameless entry is refused");
+    let err = load_prior_vendor(&prior_file)
+        .expect_err("a nameless entry is refused")
+        .to_string();
     assert!(err.contains("`name`"), "{err}");
 }
 

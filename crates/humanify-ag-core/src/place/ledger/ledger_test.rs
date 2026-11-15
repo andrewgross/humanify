@@ -1,13 +1,12 @@
 //! `rederive_stale_era_hashes`: a stale-era ledger (the TS's, or an older
 //! Rust hash era's) re-keyed onto this run's own statement hashes through a
 //! PROVEN bijection, or left untouched.
-// io: test code reads fixtures and writes scratch trees; it is not the pipeline
-#![allow(clippy::disallowed_methods)]
 
 use std::collections::HashMap;
 
 use super::{
-    FossilLedgerModule, Rederived, StableSplitLedger, read_ledger, rederive_stale_era_hashes,
+    FossilLedgerModule, LedgerParseError, Rederived, StableSplitLedger, parse_ledger,
+    rederive_stale_era_hashes,
 };
 use crate::hash::forms::STATEMENT;
 use crate::place::input::split_input;
@@ -192,16 +191,22 @@ fn written_ledger(fossil: &str) -> String {
 
 const FOSSIL: &str = r#"{"file":"src/a.js","hashes":["h"],"imports":[],"declared":["a"],"tokens":["a"],"mechanicalStem":"a"}"#;
 
-fn read_text(tag: &str, text: &str) -> Result<StableSplitLedger, String> {
-    let dir = humanify_ag_testkit::ScratchDir::new(tag);
-    let path = dir.path().join("split-ledger.json");
-    std::fs::write(&path, text).unwrap();
-    read_ledger(&path)
+fn read_text(text: &str) -> Result<StableSplitLedger, String> {
+    parse_ledger(text).map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_ledger_of_another_format_version_is_refused() {
+    let text = written_ledger(FOSSIL).replace(r#""version":1"#, r#""version":2"#);
+    assert_eq!(
+        parse_ledger(&text).expect_err("refused"),
+        LedgerParseError::UnsupportedVersion
+    );
 }
 
 #[test]
 fn a_ledger_this_binary_writes_reads_back() {
-    let ledger = read_text("ledger-current", &written_ledger(FOSSIL)).expect("current ledger");
+    let ledger = read_text(&written_ledger(FOSSIL)).expect("current ledger");
     assert!(ledger.hashes_current());
     assert_eq!(ledger.fossil_modules.unwrap()[0].mechanical_stem, "a");
 }
@@ -210,7 +215,7 @@ fn a_ledger_this_binary_writes_reads_back() {
 fn a_ledger_without_a_hash_version_is_refused_at_read() {
     let text =
         written_ledger(FOSSIL).replace(&format!(r#","hashVersion":{}"#, STATEMENT.version), "");
-    let err = read_text("ledger-no-version", &text).expect_err("refused");
+    let err = read_text(&text).expect_err("refused");
     assert!(err.contains("`hashVersion`"), "{err}");
 }
 
@@ -221,11 +226,7 @@ fn a_fossil_module_without_its_recorded_fields_is_refused_at_read() {
         r#","declared":["a"]"#,
         r#","tokens":["a"]"#,
     ] {
-        let err = read_text(
-            "ledger-no-field",
-            &written_ledger(&FOSSIL.replace(field, "")),
-        )
-        .expect_err("refused");
+        let err = read_text(&written_ledger(&FOSSIL.replace(field, ""))).expect_err("refused");
         assert!(err.contains("missing field"), "{field}: {err}");
     }
 }

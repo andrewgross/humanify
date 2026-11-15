@@ -2,14 +2,10 @@
 //! [`assign_regime`] runs the fossil / prior-tiers / fresh-cluster
 //! placement for the split stage ([`crate::emit::stable_split`]).
 
-use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use super::assign::cluster::{ClusterNamers, ClusterSizing, assign_clustered};
 use super::assign::fossil::{FossilOptions, MIN_FOLDER_FILES, assign_fossil};
 use super::assign::namer::{SplitNamer, TreeReviser};
-use super::input::{SplitInput, top_level_statement_texts};
+use super::input::SplitInput;
 use super::ledger::FossilLedgerModule;
 use super::ledger::StableSplitLedger;
 use super::tiers::{
@@ -33,18 +29,7 @@ pub enum Regime {
 /// split's borrowed data with them.
 pub struct PlacementGate<'a, 'n> {
     pub regime: Regime,
-    /// The prior release's `split-ledger.json` (the oracle run's
-    /// `--prior-version` sibling).
-    pub prior_ledger: Option<PathBuf>,
-    /// The prior release's humanified text (the tiers' content-anchor
-    /// carry: its top-level statement texts).
-    pub prior_text: Option<PathBuf>,
-    /// The rename matcher's final-name → prior-name map (the tiers'
-    /// binding-identity carry; the TS debug-writes it as
-    /// `.humanify/prior-match-map.json`).
-    pub match_map: Option<PathBuf>,
-    /// The carry handed over in-process (the pipeline's: the naming
-    /// stage's `PriorCarry`); wins over `prior_text` / `match_map`.
+    /// The tiers' carry (the naming stage's `PriorCarry`, in-process).
     pub carry: Option<PriorCarry>,
     pub switches: PlacementSwitches,
     /// The cluster regime's file+folder namer (the fossil regime names
@@ -52,8 +37,6 @@ pub struct PlacementGate<'a, 'n> {
     pub namer: Option<&'n mut dyn SplitNamer>,
     /// The cluster regime's holistic top-level reviser.
     pub reviser: Option<&'n mut dyn TreeReviser>,
-    /// The run's bundle layout (`prior_text`'s top-level statements).
-    pub layout: crate::toolchain::BundleLayout,
     /// The run's module wrapper grammar (P3): the module helper the
     /// cluster regime's vendor bucket takes (review R7).
     pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
@@ -72,13 +55,6 @@ pub struct PlacementGate<'a, 'n> {
     pub app_factories: std::collections::HashSet<usize>,
 }
 
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
-    let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
-}
-
 /// What one placement regime decided.
 #[derive(Debug, Default)]
 pub struct Placed {
@@ -95,17 +71,13 @@ pub struct Placed {
 }
 
 /// Run one `stableSplitFromCode` placement regime over the split input:
-/// the per-statement file assignment and the regime's summary line. With
-/// `out_dir`, the fossil regime also writes its `fossil-modules.json`.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
+/// the per-statement file assignment and the regime's summary line.
 pub fn assign_regime(
     input: &SplitInput,
     shipped: &str,
     gate: PlacementGate<'_, '_>,
     prior: Option<&StableSplitLedger>,
     trail: &mut PlacementTrail,
-    out_dir: Option<&Path>,
 ) -> Result<Placed, String> {
     let summary;
     let mut fossil_modules = None;
@@ -134,15 +106,6 @@ pub fn assign_regime(
                 s.kept_statements,
                 s.eager_statements
             );
-            // The next hop's match targets (tokens included) — diffable
-            // against the TS ledger's `fossilModules`.
-            if let Some(out_dir) = out_dir {
-                fs::write(
-                    out_dir.join("fossil-modules.json"),
-                    serde_json::to_string(&assigned.fossil_modules).expect("json"),
-                )
-                .map_err(|e| format!("write fossil modules: {e}"))?;
-            }
             fossil_modules = Some(assigned.fossil_modules);
             assigned.assignment
         }
@@ -180,14 +143,7 @@ pub fn assign_regime(
         }
         Regime::Tiers => {
             let prior = prior.ok_or("the tiers regime needs --prior-ledger")?;
-            let carry = match gate.carry {
-                Some(c) => Some(c),
-                None => read_carry(
-                    gate.prior_text.as_deref(),
-                    gate.match_map.as_deref(),
-                    gate.layout,
-                )?,
-            };
+            let carry = gate.carry;
             let (assignment, stats) = assign_with_prior(
                 &TierInput {
                     body: &input.body,
@@ -216,28 +172,4 @@ pub fn assign_regime(
         fossil_modules,
         tier_stats,
     })
-}
-
-/// The tiers' `PriorCarry` from the prior text + the match-map JSON (a
-/// JSON object of final name → prior name); absent when neither is given.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-fn read_carry(
-    prior_text: Option<&Path>,
-    match_map: Option<&Path>,
-    layout: crate::toolchain::BundleLayout,
-) -> Result<Option<PriorCarry>, String> {
-    let Some(prior_text) = prior_text else {
-        return Ok(None);
-    };
-    let text = fs::read_to_string(prior_text).map_err(|e| format!("prior text: {e}"))?;
-    let statement_texts = top_level_statement_texts(&text, layout)?;
-    let match_map: HashMap<String, String> = match match_map {
-        Some(path) => read_json(path)?,
-        None => HashMap::new(),
-    };
-    Ok(Some(PriorCarry {
-        statement_texts,
-        match_map,
-    }))
 }

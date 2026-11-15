@@ -88,7 +88,7 @@ name.
 | `deadline`       | a timeout that bounds a whole operation, and the HTTP client it applies to                                                        | `client.rs`                                                                          |
 | `subprocess`     | a child process: drained pipes, deadline, loud failure                                                                            | io `subprocess.rs` (the owner); cli `webcrack.rs`, io `diff.rs`, `unified.rs` `git_short_sha` |
 | `short-lock`     | a std `Mutex`/`RwLock` held for a few field updates, never across slow work                                                       | `metrics.rs`, `llm_sim.rs`                                                           |
-| `stats-counter`  | an atomic used as a counter or a unique-name sequence; nothing decides on it                                                      | `cache.rs` counters, `PRIOR_PARSES`, io `scratch.rs` temp-dir `SEQ`                     |
+| `stats-counter`  | an atomic used as a counter or a unique-name sequence; nothing decides on it                                                      | `cache.rs` counters, io `scratch.rs` temp-dir `SEQ`                     |
 | `observer`       | a side thread or lock that only watches (progress, profiling, logging)                                                            | `progress.rs`, `profiling.rs`, `log.rs`, `unified.rs` log file                       |
 | `test-support`   | a construct in the test-only crate `humanify-ag-testkit` (a dev-dependency, never linked into a product binary): the stub server  | `humanify-ag-testkit/src/stub_server.rs`; the census refuses it in any other crate   |
 

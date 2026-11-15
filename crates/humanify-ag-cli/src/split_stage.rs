@@ -20,8 +20,7 @@ use humanify_ag_core::finish::driver::{FinishInput, FinishReport, FinishSwitches
 use humanify_ag_core::place::assign::namer::{
     ProviderSplitNamer, ProviderTreeReviser, SplitNamer, SplitNamerBudget, TreeReviser,
 };
-use humanify_ag_core::place::layout::find_split_ledger_path;
-use humanify_ag_core::place::ledger::{StableSplitLedger, read_ledger, settle_prior_hashes};
+use humanify_ag_core::place::ledger::{StableSplitLedger, settle_prior_hashes};
 use humanify_ag_core::place::method::{MarkerOffer, method_name, method_record, not_split_record};
 use humanify_ag_core::place::tiers::{PLACEMENT_TIERS, PlacementSwitches, placement_summary};
 use humanify_ag_core::place::trail::PlacementTrail;
@@ -52,9 +51,12 @@ pub struct SplitStageInput<'a> {
     /// The unpacked file the naming stage processed (removed once the tree
     /// supersedes it).
     pub processed_source: Option<&'a Path>,
-    pub prior_version: Option<&'a Path>,
-    /// `--split-ledger`.
-    pub split_ledger: Option<&'a str>,
+    /// The prior release's tree (`--prior-version`), read once by the
+    /// shell (`crate::prior_tree`).
+    pub prior: Option<&'a humanify_ag_core::prior_tree::PriorTree>,
+    /// The prior split ledger in force (`--split-ledger`, else the one
+    /// beside the prior), read once with the tree.
+    pub ledger: Option<&'a crate::prior_tree::PriorLedger>,
     pub split_pure: bool,
     /// Whether the toolchain offers the module markers (decided once at
     /// detection); the split itself picks the method from the bundle.
@@ -98,49 +100,32 @@ pub struct SplitStageInput<'a> {
     pub library: &'a [(usize, String)],
 }
 
-/// Which prior split ledger the run reads: `--split-ledger` wins, else the
-/// ledger beside `--prior-version`. The ONE resolution — the split stage
-/// and the names-mode placement carry (exp211) both ask it.
-pub fn prior_split_ledger_path(
-    prior_version: Option<&Path>,
-    split_ledger: Option<&str>,
-) -> Option<std::path::PathBuf> {
-    match split_ledger {
-        Some(p) => Some(std::path::PathBuf::from(p)),
-        None => prior_version.and_then(find_split_ledger_path),
-    }
-}
-
-/// `loadPriorSplitLedger`: `--split-ledger` wins, else the ledger beside
-/// `--prior-version`.
+/// `loadPriorSplitLedger`: the ledger the shell read (`--split-ledger`
+/// wins, else the ledger beside `--prior-version`), settled onto this
+/// binary's statement hashes.
 fn load_prior_split_ledger(
     input: &mut SplitStageInput<'_>,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<Option<StableSplitLedger>, String> {
-    let Some(path) = prior_split_ledger_path(input.prior_version, input.split_ledger) else {
-        return Ok(None);
-    };
-    let mut ledger = read_ledger(&path)?;
+) -> Option<StableSplitLedger> {
+    let prior = input.ledger?;
+    let mut ledger = prior.ledger.clone();
     renderer.message(&format!(
         "Split ledger: inheriting assignments from {}",
-        path.display()
+        prior.path.display()
     ));
     // A stale-era ledger's statement hashes are not this binary's (an older
     // `hashVersion`): re-key them from the
     // prior text they were written from, or refuse them LOUDLY (WP5.6e) —
     // never a silent mis-join.
-    let prior_text = input
-        .prior_version
-        .and_then(|p| std::fs::read_to_string(p).ok());
     renderer.message(
         &settle_prior_hashes(
             &mut ledger,
-            prior_text.as_deref(),
+            input.prior.map(|t| t.code.as_str()),
             input.toolchain.layout.piece,
         )
         .describe(),
     );
-    Ok(Some(ledger))
+    Some(ledger)
 }
 
 /// `removeConsumedSourceFile`: never outside the output dir, never the
@@ -367,7 +352,7 @@ fn split_before_commit(
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<(SplitOutcome, bool, SplitFailedCalls), String> {
     let ph = humanify_ag_core::profiling::phase("split:load-prior-ledger");
-    let prior = load_prior_split_ledger(input, renderer)?;
+    let prior = load_prior_split_ledger(input, renderer);
     drop(ph);
     // The fresh grouping LLM-names its folders/files; the module markers
     // name files by the module names the naming stage gave the wrappers
@@ -379,15 +364,12 @@ fn split_before_commit(
     let mut reviser = ProviderTreeReviser::retaining(input.provider);
     let switches = input.switches;
     let vendor_captures = humanify_ag_core::unpack::bun::vendor_captures(input.vendor_record);
-    let prior_tree = input
-        .prior_version
-        .map(humanify_ag_core::place::layout::split_tree_root_of);
     let outcome = stable_split(
         code,
         SplitOptions {
             markers: input.markers,
             prior: prior.as_ref(),
-            prior_tree: prior_tree.as_deref(),
+            prior_tree: input.prior.map(|t| &t.files),
             carry: tiers_carry(prior_carry),
             namer: Some(&mut namer as &mut dyn SplitNamer),
             reviser: Some(&mut reviser as &mut dyn TreeReviser),
@@ -503,7 +485,7 @@ fn commit_and_finish(
     let finish_input = FinishInput {
         output_dir: out,
         runnable: outcome.runnable.as_deref(),
-        prior_version: input.prior_version,
+        prior: input.prior,
         input_file: input.input_file,
         working_dir: input.working_dir,
         switches: finish_switches,

@@ -84,7 +84,7 @@ pub fn unpack_bundle(
     toolchain: &humanify_ag_core::toolchain::Toolchain,
     provider: &dyn NameProvider,
     log: &mut humanify_ag_core::artifact_dump::DispatchLog,
-    prior_version: Option<&Path>,
+    prior: Option<&humanify_ag_core::prior_tree::PriorTree>,
     manifest_prior_order_disabled: bool,
     library_discovery: Option<humanify_ag_core::libdetect::discovery::DiscoveryRequest<'_>>,
     profiler: &Profiler,
@@ -92,10 +92,7 @@ pub fn unpack_bundle(
 ) -> Result<Unpacked, String> {
     // unified.ts loads both before unminify runs, whichever adapter is
     // selected — the carry-over line prints for any prior with a manifest.
-    let prior_vendor = prior_version
-        .map(bun::load_prior_vendor)
-        .transpose()?
-        .flatten();
+    let prior_vendor = prior.and_then(|t| t.vendor.clone());
     if let Some(p) = &prior_vendor {
         if let Some(names) = &p.names {
             renderer.message(&format!(

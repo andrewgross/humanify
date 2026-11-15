@@ -6,6 +6,18 @@
 
 use std::path::Path;
 
+/// A Node `fs` error's message (`ENOENT: no such file or directory, open
+/// '<path>'`), the headline the TS crash prints for a failed read.
+pub fn node_fs_error(e: &std::io::Error, syscall: &str, path: &str) -> String {
+    use std::io::ErrorKind;
+    match e.kind() {
+        ErrorKind::NotFound => format!("ENOENT: no such file or directory, {syscall} '{path}'"),
+        ErrorKind::PermissionDenied => format!("EACCES: permission denied, {syscall} '{path}'"),
+        ErrorKind::IsADirectory => "EISDIR: illegal operation on a directory, read".to_string(),
+        _ => format!("{e}, {syscall} '{path}'"),
+    }
+}
+
 /// Crash loudly with a red message on stderr (cli-error.ts:1-4).
 pub fn err(message: &str) -> ! {
     eprintln!("\x1b[31m{message}\x1b[0m");

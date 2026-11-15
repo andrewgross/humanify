@@ -1,10 +1,6 @@
 //! Ported from src/split/vendor-body-inherit.test.ts.
-// io: test code reads fixtures and writes scratch trees; it is not the pipeline
-#![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
-
-use std::fs;
-
 use super::{VendorBodyInheritor, same_program, skeleton};
+use crate::prior_tree::PriorFiles;
 
 const PRIOR_RENAMED: &str = "const { __commonJS } = require(\"../.humanify/__bun-runtime.js\");
 exports.f = __commonJS(function(iet, aQ) { var cX = iet.x + 1; return cX * aQ; });
@@ -13,51 +9,19 @@ const FRESH_RENAMED: &str = "const { __commonJS } = require(\"../.humanify/__bun
 exports.f = __commonJS(function(Jet, Kp) { var Lm = Jet.x + 1; return Lm * Kp; });
 ";
 
-fn tree(files: &[(&str, &str)]) -> tempdir::Dir {
-    let dir = tempdir::Dir::new();
-    for (rel, body) in files {
-        let p = dir.path().join(rel);
-        fs::create_dir_all(p.parent().unwrap()).unwrap();
-        fs::write(p, body).unwrap();
-    }
-    dir
-}
-
-/// A self-deleting scratch directory (no tempfile dependency in core).
-mod tempdir {
-    use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
-
-    pub struct Dir(PathBuf);
-
-    impl Dir {
-        pub fn new() -> Dir {
-            let p = std::env::temp_dir().join(format!(
-                "humanify-vendor-inherit-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::SeqCst)
-            ));
-            std::fs::create_dir_all(&p).unwrap();
-            Dir(p)
-        }
-        pub fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for Dir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
+fn tree(files: &[(&str, &str)]) -> PriorFiles {
+    PriorFiles::new(
+        files
+            .iter()
+            .map(|(rel, body)| (rel.to_string(), body.as_bytes().to_vec()))
+            .collect(),
+    )
 }
 
 #[test]
 fn reuses_the_prior_body_when_only_local_names_rerolled() {
     let prior = tree(&[("vendor/a.js", PRIOR_RENAMED)]);
-    let mut inherit = VendorBodyInheritor::new(prior.path());
+    let mut inherit = VendorBodyInheritor::new(&prior);
     assert_eq!(
         inherit.bytes_for("vendor/a.js", FRESH_RENAMED.into()),
         PRIOR_RENAMED
@@ -102,7 +66,7 @@ fn a_changed_property_name_is_not_the_same_program() {
 #[test]
 fn a_file_with_no_prior_counterpart_is_left_alone() {
     let prior = tree(&[]);
-    let mut inherit = VendorBodyInheritor::new(prior.path());
+    let mut inherit = VendorBodyInheritor::new(&prior);
     assert_eq!(
         inherit.bytes_for("vendor/new.js", FRESH_RENAMED.into()),
         FRESH_RENAMED
@@ -113,7 +77,7 @@ fn a_file_with_no_prior_counterpart_is_left_alone() {
 #[test]
 fn a_byte_identical_prior_is_a_no_op() {
     let prior = tree(&[("vendor/a.js", PRIOR_RENAMED)]);
-    let mut inherit = VendorBodyInheritor::new(prior.path());
+    let mut inherit = VendorBodyInheritor::new(&prior);
     assert_eq!(
         inherit.bytes_for("vendor/a.js", PRIOR_RENAMED.into()),
         PRIOR_RENAMED
@@ -125,7 +89,7 @@ fn a_byte_identical_prior_is_a_no_op() {
 #[test]
 fn a_prior_that_fails_to_parse_is_never_inherited() {
     let prior = tree(&[("vendor/a.js", "this is ( not javascript\n")]);
-    let mut inherit = VendorBodyInheritor::new(prior.path());
+    let mut inherit = VendorBodyInheritor::new(&prior);
     assert_eq!(
         inherit.bytes_for("vendor/a.js", FRESH_RENAMED.into()),
         FRESH_RENAMED
