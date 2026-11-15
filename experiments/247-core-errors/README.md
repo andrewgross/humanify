@@ -57,14 +57,30 @@ Raw diff lines against origin/main `a78ab2ef3` (comments included):
 
 | | added | removed |
 | --- | ---: | ---: |
-| product code (core, cli, index, dev) | CODE_ADDED | CODE_REMOVED |
-| tests (incl. the new pin test) | TEST_ADDED | TEST_REMOVED |
-| `dev/census/effects-allowlist.json` | ALLOW_ADDED | ALLOW_REMOVED |
-| docs (responsibility.md, this README) | DOC_ADDED | DOC_REMOVED |
+| product code (core, cli, index, dev) | 2,992 | 917 |
+| tests (incl. the new pin test) | 611 | 79 |
+| `dev/census/effects-allowlist.json` | 44 | 746 |
+| docs (responsibility.md, this README) | 126 (incl. this README; numbers from the first commit) | 0 |
 
 ## Gate
 
-GATE_TABLE
+`cargo dev check` on the committed tree: ALL 13 STAGES PASSED.
+
+| stage | result |
+| --- | --- |
+| shims, no-private-addresses, rust:fmt, rust:clippy | PASS |
+| census:clones | REVIEW (advisory; no new twin from this lane) |
+| census:concurrency | PASS |
+| census:effects | PASS (296 sites, 296 entries) |
+| census:slop | PASS |
+| census:comments | REVIEW (advisory; 0 new findings after two comment rewrites) |
+| rust:unit | PASS |
+| rust:build | PASS |
+| format-golden | PASS |
+| e2e | PASS (22 fixture pairs, 88 launches equal to the golden) |
+
+The allowlist JSON diff shows 44 "added" lines: git's alignment of the
+remaining entries, not new entries (413 → 296, nothing added).
 
 ## Neutrality
 
