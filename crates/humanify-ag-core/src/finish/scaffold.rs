@@ -12,9 +12,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use humanify_ag_model::js::{
-    JsObject, JsValue, cmp_utf16, is_js_whitespace, node_path_resolve, stringify, stringify_pretty,
-};
+use humanify_ag_model::js::{cmp_utf16, is_js_whitespace, node_path_resolve};
 
 use crate::place::layout::METADATA_DIR;
 
@@ -263,8 +261,8 @@ fn installed_version(pkg: &str, from_dir: &Path) -> Option<String> {
     loop {
         let manifest = dir.join("node_modules").join(pkg).join("package.json");
         if let Ok(text) = fs::read_to_string(&manifest)
-            && let Ok(JsValue::Object(obj)) = JsValue::parse(&text)
-            && let Some(JsValue::String(v)) = obj.get("version")
+            && let Ok(serde_json::Value::Object(obj)) = serde_json::from_str(&text)
+            && let Some(serde_json::Value::String(v)) = obj.get("version")
         {
             return Some(v.clone());
         }
@@ -294,28 +292,38 @@ pub fn resolve_external_versions(
 pub fn runner_source(entry_file: &str) -> String {
     include_str!("scaffold/run.cjs.template").replace(
         "{ENTRY_JSON}",
-        &stringify(&JsValue::String(entry_file.to_string())),
+        &serde_json::to_string(entry_file).expect("a string serializes"),
     )
 }
 
-/// `packageJsonSource(dependencies)`: `JSON.stringify(…, null, 2)` + "\n".
+/// `packageJsonSource(dependencies)`: pretty JSON (indent 2) and a
+/// trailing newline; dependencies in JS record order.
 pub fn package_json_source(dependencies: &[(String, String)]) -> String {
-    let mut deps = JsObject::new();
-    for (name, range) in dependencies {
-        deps.insert(name.clone(), JsValue::String(range.clone()));
+    #[derive(serde::Serialize)]
+    struct Scripts {
+        start: String,
     }
-    let mut scripts = JsObject::new();
-    scripts.insert("start", JsValue::String(format!("node {RUNNER_FILENAME}")));
-    let mut root = JsObject::new();
-    root.insert("name", JsValue::String("humanified-runnable".into()));
-    root.insert("private", JsValue::Bool(true));
-    root.insert(
-        "description",
-        JsValue::String("Unpacked, humanified, split bundle — runnable under Node.".into()),
-    );
-    root.insert("scripts", JsValue::Object(scripts));
-    root.insert("dependencies", JsValue::Object(deps));
-    format!("{}\n", stringify_pretty(&JsValue::Object(root), 2))
+    #[derive(serde::Serialize)]
+    struct PackageJson {
+        name: &'static str,
+        private: bool,
+        description: &'static str,
+        scripts: Scripts,
+        dependencies: humanify_ag_model::llm::JsRecord<String>,
+    }
+    let doc = PackageJson {
+        name: "humanified-runnable",
+        private: true,
+        description: "Unpacked, humanified, split bundle — runnable under Node.",
+        scripts: Scripts {
+            start: format!("node {RUNNER_FILENAME}"),
+        },
+        dependencies: dependencies.iter().cloned().collect(),
+    };
+    format!(
+        "{}\n",
+        serde_json::to_string_pretty(&doc).expect("package.json serializes")
+    )
 }
 
 /// `readmeSource(entryFile, dependencies)`.

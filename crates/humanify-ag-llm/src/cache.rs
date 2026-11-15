@@ -13,8 +13,8 @@
 //!
 //! Entry format (unchanged from the TS, 02 §7):
 //! - path: `<dir>/<key[0..2]>/<key[2..]>.json`;
-//! - entry: `JSON.stringify({v: 1, renames, finishReason, originalUsage})`
-//!   — undefined fields absent, compact, no trailing newline;
+//! - entry: compact `{v: 1, renames, finishReason, originalUsage}` —
+//!   absent fields left out, no trailing newline;
 //! - a read accepts `v === 1` and an object-typed `renames`; anything else
 //!   (missing, unparsable, other version) is a miss;
 //! - writes are atomic (`<target>.<pid>.tmp` + rename);
@@ -40,7 +40,6 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use humanify_ag_model::js::{JsObject, JsValue, stringify};
 use humanify_ag_model::llm::{
     BatchRenameResponse, CacheKeyParams, LlmCall, LlmError, Renames, Usage,
 };
@@ -61,56 +60,95 @@ pub struct CacheEntry {
 }
 
 impl CacheEntry {
-    /// The entry file's bytes, exactly as the TS `JSON.stringify` writes them.
+    /// The entry file's bytes: compact `{v: 1, renames, finishReason,
+    /// originalUsage}`, absent fields left out, no trailing newline.
     pub fn to_json(&self) -> String {
-        let mut obj = JsObject::new();
-        obj.insert("v", JsValue::Number(1.0));
-        obj.insert("renames", self.renames.to_js());
-        obj.insert_opt(
-            "finishReason",
-            self.finish_reason.as_deref().map(JsValue::str),
-        );
-        obj.insert_opt(
-            "originalUsage",
-            self.original_usage.as_ref().map(Usage::to_js),
-        );
-        stringify(&JsValue::Object(obj))
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Out<'a> {
+            v: u32,
+            renames: &'a Renames,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            finish_reason: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            original_usage: Option<&'a Usage>,
+        }
+        serde_json::to_string(&Out {
+            v: 1,
+            renames: &self.renames,
+            finish_reason: self.finish_reason.as_deref(),
+            original_usage: self.original_usage.as_ref(),
+        })
+        .expect("a cache entry serializes")
     }
 
     /// Parse an entry file with the TS read's acceptance rule: `v === 1`
     /// and `typeof renames === "object"`. `renames: null` passes that check
     /// in JS (typeof null is "object") and spreads to `{}`; an array spreads
     /// to its index keys. A rename value that is neither a string nor null
-    /// is treated as corrupt (a miss) — never observed (0 of 188,720 values
-    /// in the standing cache, 2026-09-24).
+    /// is treated as corrupt (a miss).
     pub fn from_json(text: &str) -> Option<CacheEntry> {
-        let value = JsValue::parse(text).ok()?;
-        let obj = value.as_object()?;
-        if obj.get("v") != Some(&JsValue::Number(1.0)) {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct In {
+            v: serde_json::Value,
+            renames: EntryRenames,
+            #[serde(default)]
+            finish_reason: serde_json::Value,
+            #[serde(default)]
+            original_usage: serde_json::Value,
+        }
+        let entry: In = serde_json::from_str(text).ok()?;
+        if entry.v.as_f64() != Some(1.0) {
             return None;
         }
-        let renames = match obj.get("renames")? {
-            JsValue::Null => Renames::default(),
-            JsValue::Object(map) => Renames::from_js(map)?,
-            JsValue::Array(items) => Renames::from_js(
-                &items
-                    .iter()
-                    .enumerate()
-                    .map(|(i, v)| (i.to_string(), v.clone()))
-                    .collect(),
-            )?,
-            _ => return None,
-        };
-        let finish_reason = match obj.get("finishReason") {
-            Some(JsValue::String(s)) => Some(s.clone()),
-            _ => None,
-        };
-        let original_usage = obj.get("originalUsage").and_then(Usage::from_js);
         Some(CacheEntry {
-            renames,
-            finish_reason,
-            original_usage,
+            renames: entry.renames.0,
+            finish_reason: entry.finish_reason.as_str().map(str::to_string),
+            original_usage: Usage::from_value(
+                &entry.original_usage,
+                ["totalTokens", "inputTokens", "outputTokens"],
+            ),
         })
+    }
+}
+
+/// An entry's `renames`: an object of strings/nulls in JS record order,
+/// `null` (no renames), or an array (keyed by index).
+struct EntryRenames(Renames);
+
+impl<'de> serde::Deserialize<'de> for EntryRenames {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = EntryRenames;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("an object, an array or null")
+            }
+            fn visit_unit<E>(self) -> Result<EntryRenames, E> {
+                Ok(EntryRenames(Renames::default()))
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                map: A,
+            ) -> Result<EntryRenames, A::Error> {
+                let record = <humanify_ag_model::llm::JsRecord<Option<String>> as serde::Deserialize>::deserialize(
+                    serde::de::value::MapAccessDeserializer::new(map),
+                )?;
+                Ok(EntryRenames(Renames::from_entries(record.0)))
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<EntryRenames, A::Error> {
+                let mut entries = Vec::new();
+                while let Some(v) = seq.next_element::<Option<String>>()? {
+                    entries.push((entries.len().to_string(), v));
+                }
+                Ok(EntryRenames(Renames::from_entries(entries)))
+            }
+        }
+        deserializer.deserialize_any(Visitor)
     }
 }
 

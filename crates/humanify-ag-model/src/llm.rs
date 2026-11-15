@@ -14,39 +14,128 @@
 //! over it and never sees tokio; humanify-ag-llm implements it by
 //! `block_on`-ing a bounded fan-out.
 
-use crate::js::{JsObject, JsValue, canonical, stringify};
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
+
+use crate::js::array_index;
+
+/// `record[key] = value` on a JS object: an existing key keeps its slot
+/// and takes the new value; a new array-index key slots in ascending
+/// ahead of every ordinary key; a new ordinary key appends.
+pub fn js_assign<V>(entries: &mut Vec<(String, V)>, key: String, value: V) {
+    if let Some(slot) = entries.iter_mut().find(|(k, _)| *k == key) {
+        slot.1 = value;
+        return;
+    }
+    let pos = match array_index(&key) {
+        Some(index) => entries
+            .iter()
+            .position(|(k, _)| array_index(k).is_none_or(|other| other > index))
+            .unwrap_or(entries.len()),
+        None => entries.len(),
+    };
+    entries.insert(pos, (key, value));
+}
+
+/// A JSON object in JS record order: read with [`js_assign`] per entry (so
+/// `JSON.parse`'s order and duplicate-key rule), written in entry order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct JsRecord<V>(pub Vec<(String, V)>);
+
+impl<V> Default for JsRecord<V> {
+    fn default() -> Self {
+        JsRecord(Vec::new())
+    }
+}
+
+impl<V> FromIterator<(String, V)> for JsRecord<V> {
+    fn from_iter<I: IntoIterator<Item = (String, V)>>(iter: I) -> Self {
+        let mut entries = Vec::new();
+        for (k, v) in iter {
+            js_assign(&mut entries, k, v);
+        }
+        JsRecord(entries)
+    }
+}
+
+impl<V: Serialize> Serialize for JsRecord<V> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        serialize_entries(&self.0, s)
+    }
+}
+
+/// Write `(key, value)` pairs as one JSON object, in their order.
+pub fn serialize_entries<V: Serialize, S: Serializer>(
+    entries: &[(String, V)],
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    let mut map = s.serialize_map(Some(entries.len()))?;
+    for (k, v) in entries {
+        map.serialize_entry(k, v)?;
+    }
+    map.end()
+}
+
+impl<'de, V: Deserialize<'de>> Deserialize<'de> for JsRecord<V> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor<V>(std::marker::PhantomData<V>);
+        impl<'de, V: Deserialize<'de>> serde::de::Visitor<'de> for Visitor<V> {
+            type Value = JsRecord<V>;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a JSON object")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut entries = Vec::new();
+                while let Some((k, v)) = map.next_entry::<String, V>()? {
+                    js_assign(&mut entries, k, v);
+                }
+                Ok(JsRecord(entries))
+            }
+        }
+        deserializer.deserialize_map(Visitor(std::marker::PhantomData))
+    }
+}
+
+/// A number as JavaScript's `String(x)` writes it in JSON: an integral
+/// value has no fraction (`0`, not `0.0`; `-0` is `0`), a non-finite one
+/// is `null`. Every value from 1e-5 up prints as `String(x)` does
+/// (enforced: llm_test js_numbers_print_as_javascript_does); smaller
+/// non-integral values take serde's exponent form.
+pub fn serialize_js_number<S: Serializer>(x: &f64, s: S) -> Result<S::Ok, S::Error> {
+    if !x.is_finite() {
+        s.serialize_unit()
+    } else if x.fract() == 0.0 && x.abs() < 9.0e15 {
+        s.serialize_i64(*x as i64)
+    } else {
+        s.serialize_f64(*x)
+    }
+}
+
+fn serialize_opt_js_number<S: Serializer>(x: &Option<f64>, s: S) -> Result<S::Ok, S::Error> {
+    match x {
+        Some(x) => serialize_js_number(x, s),
+        None => s.serialize_none(),
+    }
+}
 
 /// An insertion-ordered `Record<string, string>` with JS object semantics
 /// (a repeated key keeps its first position, index-like keys lead).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StrMap(pub Vec<(String, String)>);
 
-impl StrMap {
-    pub fn to_js(&self) -> JsValue {
-        JsValue::Object(
-            self.0
-                .iter()
-                .map(|(k, v)| (k.clone(), JsValue::str(v)))
-                .collect(),
-        )
+impl Serialize for StrMap {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        serialize_entries(&self.0, s)
     }
 }
 
-impl<'de> serde::Deserialize<'de> for StrMap {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = JsValue::deserialize(deserializer)?;
-        let JsValue::Object(obj) = value else {
-            return Err(serde::de::Error::custom("expected an object of strings"));
-        };
-        obj.entries()
-            .iter()
-            .map(|(k, v)| match v {
-                JsValue::String(s) => Ok((k.clone(), s.clone())),
-                _ => Err(serde::de::Error::custom(format!("{k}: expected a string"))),
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(StrMap)
+impl<'de> Deserialize<'de> for StrMap {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        JsRecord::<String>::deserialize(deserializer).map(|r| StrMap(r.0))
     }
 }
 
@@ -83,20 +172,22 @@ pub struct RenameFailures {
 /// ACCUMULATED disclosure a collision re-ask carries, 2026-09-29): the
 /// suggestion, and whether it was rejected as an invalid target rather
 /// than a name collision — each disclosed with its own reason.
-#[derive(Clone, Debug, Default, PartialEq, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PriorReject {
     pub name: String,
+    #[serde(default)]
     pub invalid: bool,
     /// The program's minified name this suggestion borrowed as a word
     /// (`H6t` in `H6tClass`) when it was refused for that — the re-ask
     /// names the stem. Absent from the key material when None, so every
     /// other re-ask keys exactly as before.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub borrowed: Option<String>,
     /// WHO holds the rejected name, as the re-ask words it ("an inner
     /// function's parameter") — set by the wave barrier when the scopes
     /// know (2026-10-04). Absent from the key material when None.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub held_by: Option<String>,
 }
 
@@ -104,7 +195,7 @@ pub struct PriorReject {
 /// sibling): every failed suggestion per identifier, oldest first. The
 /// retry prompt renders one diagnostic line per entry and flattens the
 /// names into the do-not-suggest block; [`BatchRenameRequest::prior_rejects`]
-/// carries it as cache-key + prompt material.
+/// carries it as prompt material.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PriorRejects(pub Vec<(String, Vec<PriorReject>)>);
 
@@ -116,94 +207,17 @@ impl PriorRejects {
             .find(|(k, _)| k == id)
             .map(|(_, v)| v.as_slice())
     }
+}
 
-    pub fn to_js(&self) -> JsValue {
-        JsValue::Object(
-            self.0
-                .iter()
-                .map(|(k, list)| {
-                    (
-                        k.clone(),
-                        JsValue::Array(
-                            list.iter()
-                                .map(|r| {
-                                    let mut o = JsObject::new();
-                                    o.insert("name", JsValue::str(&r.name));
-                                    o.insert("invalid", JsValue::Bool(r.invalid));
-                                    if let Some(stem) = &r.borrowed {
-                                        o.insert("borrowed", JsValue::str(stem));
-                                    }
-                                    if let Some(holder) = &r.held_by {
-                                        o.insert("heldBy", JsValue::str(holder));
-                                    }
-                                    JsValue::Object(o)
-                                })
-                                .collect(),
-                        ),
-                    )
-                })
-                .collect(),
-        )
+impl Serialize for PriorRejects {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        serialize_entries(&self.0, s)
     }
 }
 
-impl<'de> serde::Deserialize<'de> for PriorRejects {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = JsValue::deserialize(deserializer)?;
-        let JsValue::Object(obj) = value else {
-            return Err(serde::de::Error::custom(
-                "expected an object of prior-reject lists",
-            ));
-        };
-        let one = |v: &JsValue| -> Result<Vec<PriorReject>, D::Error> {
-            let JsValue::Array(items) = v else {
-                return Err(serde::de::Error::custom("expected an array of rejects"));
-            };
-            items
-                .iter()
-                .map(|r| match r {
-                    JsValue::Object(fields) => {
-                        let name = fields
-                            .entries()
-                            .iter()
-                            .find(|(k, _)| k == "name")
-                            .and_then(|(_, v)| v.as_str().map(str::to_string))
-                            .ok_or_else(|| serde::de::Error::custom("a reject needs a name"))?;
-                        let invalid = fields
-                            .entries()
-                            .iter()
-                            .find(|(k, _)| k == "invalid")
-                            .and_then(|(_, v)| match v {
-                                JsValue::Bool(b) => Some(*b),
-                                _ => None,
-                            })
-                            .unwrap_or(false);
-                        let borrowed = fields
-                            .entries()
-                            .iter()
-                            .find(|(k, _)| k == "borrowed")
-                            .and_then(|(_, v)| v.as_str().map(str::to_string));
-                        let held_by = fields
-                            .entries()
-                            .iter()
-                            .find(|(k, _)| k == "heldBy")
-                            .and_then(|(_, v)| v.as_str().map(str::to_string));
-                        Ok(PriorReject {
-                            name,
-                            invalid,
-                            borrowed,
-                            held_by,
-                        })
-                    }
-                    _ => Err(serde::de::Error::custom("a reject must be an object")),
-                })
-                .collect()
-        };
-        obj.entries()
-            .iter()
-            .map(|(k, v)| one(v).map(|list| (k.clone(), list)))
-            .collect::<Result<Vec<_>, _>>()
-            .map(PriorRejects)
+impl<'de> Deserialize<'de> for PriorRejects {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        JsRecord::<Vec<PriorReject>>::deserialize(deserializer).map(|r| PriorRejects(r.0))
     }
 }
 
@@ -254,33 +268,20 @@ pub struct BatchRenameRequest {
 /// The model parameters that shape a response (`CacheKeyParams`) — part of
 /// the key. `temperature` is a JS number: 0 and 0.0 are the same key
 /// ("temperature":0), -0 too.
-#[derive(Clone, Debug, Default, PartialEq, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheKeyParams {
     pub model: String,
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_opt_js_number"
+    )]
     pub temperature: Option<f64>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u64>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
-}
-
-impl CacheKeyParams {
-    fn to_js(&self) -> JsValue {
-        let mut obj = JsObject::new();
-        obj.insert("model", JsValue::str(&self.model));
-        obj.insert_opt("temperature", self.temperature.map(JsValue::Number));
-        obj.insert_opt(
-            "maxTokens",
-            self.max_tokens.map(|n| JsValue::Number(n as f64)),
-        );
-        obj.insert_opt(
-            "reasoningEffort",
-            self.reasoning_effort.as_deref().map(JsValue::str),
-        );
-        JsValue::Object(obj)
-    }
 }
 
 /// The cache key's version. 1 keyed every request field (the TS
@@ -296,26 +297,44 @@ pub const CACHE_KEY_VERSION: u32 = 2;
 /// (the client's) and so of the key (this module's) — one constant.
 pub const RESPONSE_FORMAT_TYPE: &str = "json_object";
 
+/// One message of the `messages` array every request sends.
+#[derive(Clone, Copy, Debug, Serialize)]
+pub struct WireMessage<'a> {
+    pub role: &'static str,
+    pub content: &'a str,
+}
+
 /// The `messages` array every request sends — the system prompt, then the
 /// user prompt. One builder for the wire body (the client's) and the key
 /// (this module's), so the two cannot disagree on what the model sees.
-pub fn wire_messages(system_prompt: &str, user_prompt: &str) -> JsValue {
-    let message = |role: &str, content: &str| {
-        let mut m = JsObject::new();
-        m.insert("role", JsValue::str(role));
-        m.insert("content", JsValue::str(content));
-        JsValue::Object(m)
-    };
-    JsValue::Array(vec![
-        message("system", system_prompt),
-        message("user", user_prompt),
-    ])
+pub fn wire_messages<'a>(system_prompt: &'a str, user_prompt: &'a str) -> [WireMessage<'a>; 2] {
+    [
+        WireMessage {
+            role: "system",
+            content: system_prompt,
+        },
+        WireMessage {
+            role: "user",
+            content: user_prompt,
+        },
+    ]
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyMaterial<'a> {
+    cache_version: u32,
+    messages: [WireMessage<'a>; 2],
+    params: &'a CacheKeyParams,
+    response_format: &'static str,
 }
 
 /// The canonical JSON the key hashes: the cache key version, the model
 /// parameters, the response format and the two messages — everything the
-/// endpoint receives that can shape the answer, and nothing else
-/// (`canonicalJson({cacheVersion: 2, messages, params, responseFormat})`).
+/// endpoint receives that can shape the answer, and nothing else. Every
+/// object's keys are sorted: the material goes through `serde_json::Value`,
+/// whose maps sort by bytes, which for these ASCII keys is the order the
+/// key was first defined in (enforced: llm_test pins the material).
 /// Whatever the answer is checked against afterwards (used names,
 /// identifiers, scopes) is applied by the caller to the recorded RAW
 /// answer, after the lookup, so a replay re-runs that check on the live
@@ -325,15 +344,14 @@ pub fn cache_key_material(
     user_prompt: &str,
     params: &CacheKeyParams,
 ) -> String {
-    let mut obj = JsObject::new();
-    obj.insert(
-        "cacheVersion",
-        JsValue::Number(f64::from(CACHE_KEY_VERSION)),
-    );
-    obj.insert("messages", wire_messages(system_prompt, user_prompt));
-    obj.insert("params", params.to_js());
-    obj.insert("responseFormat", JsValue::str(RESPONSE_FORMAT_TYPE));
-    canonical(&JsValue::Object(obj))
+    let material = KeyMaterial {
+        cache_version: CACHE_KEY_VERSION,
+        messages: wire_messages(system_prompt, user_prompt),
+        params,
+        response_format: RESPONSE_FORMAT_TYPE,
+    };
+    let sorted = serde_json::to_value(&material).expect("the key material serializes");
+    serde_json::to_string(&sorted).expect("a JSON value serializes")
 }
 
 /// The disk cache key: lowercase-hex sha256 over the UTF-8 bytes of
@@ -352,40 +370,7 @@ pub struct Renames(Vec<(String, Option<String>)>);
 impl Renames {
     /// Build with JS assignment semantics (`renames[k] = v` in order).
     pub fn from_entries(entries: impl IntoIterator<Item = (String, Option<String>)>) -> Self {
-        let obj: JsObject = entries
-            .into_iter()
-            .map(|(k, v)| (k, v.map_or(JsValue::Null, JsValue::String)))
-            .collect();
-        Renames(
-            obj.entries()
-                .iter()
-                .map(|(k, v)| (k.clone(), v.as_str().map(str::to_string)))
-                .collect(),
-        )
-    }
-
-    /// From a parsed JSON object; None when a value is neither a string nor
-    /// null (never seen: 0 of 188,720 values across the standing cache's
-    /// 61,812 entries, 2026-09-24).
-    pub fn from_js(obj: &JsObject) -> Option<Self> {
-        let mut out = Vec::with_capacity(obj.len());
-        for (k, v) in obj.entries() {
-            match v {
-                JsValue::String(s) => out.push((k.clone(), Some(s.clone()))),
-                JsValue::Null => out.push((k.clone(), None)),
-                _ => return None,
-            }
-        }
-        Some(Renames(out))
-    }
-
-    pub fn to_js(&self) -> JsValue {
-        JsValue::Object(
-            self.0
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone().map_or(JsValue::Null, JsValue::String)))
-                .collect(),
-        )
+        Renames(entries.into_iter().collect::<JsRecord<_>>().0)
     }
 
     /// `renames[key]` when it is a string.
@@ -409,11 +394,29 @@ impl Renames {
     }
 }
 
+impl Serialize for Renames {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        serialize_entries(&self.0, s)
+    }
+}
+
+/// An object whose every value is a string or null; any other value fails
+/// the read.
+impl<'de> Deserialize<'de> for Renames {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        JsRecord::<Option<String>>::deserialize(deserializer).map(|r| Renames(r.0))
+    }
+}
+
 /// Token usage as the pipeline records it (`BatchRenameResponse.usage`).
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Usage {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub total_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub input_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub output_tokens: Option<u64>,
 }
 
@@ -426,49 +429,40 @@ impl Usage {
         }
     }
 
-    pub fn to_js(&self) -> JsValue {
-        let num = |n: Option<u64>| n.map(|n| JsValue::Number(n as f64));
-        let mut obj = JsObject::new();
-        obj.insert_opt("totalTokens", num(self.total_tokens));
-        obj.insert_opt("inputTokens", num(self.input_tokens));
-        obj.insert_opt("outputTokens", num(self.output_tokens));
-        JsValue::Object(obj)
-    }
-
-    pub fn from_js(value: &JsValue) -> Option<Self> {
+    /// From a JSON object of token counts named by `keys` (total, input,
+    /// output); a count that is not a number is absent. None when `value`
+    /// is not an object.
+    pub fn from_value(value: &serde_json::Value, keys: [&str; 3]) -> Option<Self> {
         let obj = value.as_object()?;
-        let num = |key: &str| match obj.get(key) {
-            Some(JsValue::Number(n)) => Some(*n as u64),
-            _ => None,
+        let num = |key: &str| {
+            obj.get(key)
+                .and_then(serde_json::Value::as_f64)
+                .map(|n| n as u64)
         };
         Some(Usage {
-            total_tokens: num("totalTokens"),
-            input_tokens: num("inputTokens"),
-            output_tokens: num("outputTokens"),
+            total_tokens: num(keys[0]),
+            input_tokens: num(keys[1]),
+            output_tokens: num(keys[2]),
         })
     }
 }
 
 /// One batch rename response (types.ts `BatchRenameResponse`).
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BatchRenameResponse {
     pub renames: Renames,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
 
 impl BatchRenameResponse {
-    /// `JSON.stringify(response)` — field order renames, finishReason,
-    /// usage; undefined fields absent.
+    /// The response as compact JSON — field order renames, finishReason,
+    /// usage; absent fields left out.
     pub fn to_json(&self) -> String {
-        let mut obj = JsObject::new();
-        obj.insert("renames", self.renames.to_js());
-        obj.insert_opt(
-            "finishReason",
-            self.finish_reason.as_deref().map(JsValue::str),
-        );
-        obj.insert_opt("usage", self.usage.as_ref().map(Usage::to_js));
-        stringify(&JsValue::Object(obj))
+        serde_json::to_string(self).expect("a response serializes")
     }
 }
 

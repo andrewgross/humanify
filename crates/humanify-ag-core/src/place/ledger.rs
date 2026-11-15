@@ -5,9 +5,10 @@
 //! The optional fields are the ones a run legitimately leaves out (a regime
 //! without fossil modules, `--disable emit-align`).
 //!
-//! Read side only: `nameToFiles` is looked up, never iterated, so a hash
-//! map is safe for it (the writer — WP5.3's `buildLedger` — owns the key
-//! order of what it writes).
+//! Two shapes: [`SplitLedger`] is what this run writes and patches (key
+//! order fixed, `nameToFiles` in declaration order); [`StableSplitLedger`]
+//! is the prior's, read only — its `nameToFiles` is looked up, never
+//! iterated, so a hash map is safe for it.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -25,7 +26,11 @@ pub struct FossilLedgerModule {
     /// The module's original source path, when the bundler kept it
     /// (esbuild's unminified form — exp075). Recorded metadata ONLY:
     /// no placement or matching tier reads it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "sourcePath",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub source_path: Option<String>,
     /// The module's MECHANICAL stem (`module_stem`: its first function,
     /// else its first declaration) — what the next hop's same-file-name
@@ -33,6 +38,38 @@ pub struct FossilLedgerModule {
     /// name (docs/design/module-naming.md).
     #[serde(rename = "mechanicalStem")]
     pub mechanical_stem: String,
+}
+
+/// The ledger this run writes to `.humanify/split-ledger.json` (compact,
+/// no trailing newline) and the post-split reconcile patches. Field order
+/// is the key order written; `nameToFiles` keeps the order names were
+/// first declared in the bundle. Every field but the last two is always
+/// written.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SplitLedger {
+    pub version: u64,
+    pub files: Vec<String>,
+    pub name_to_files: humanify_ag_model::llm::JsRecord<Vec<String>>,
+    pub order: Vec<String>,
+    pub hashes: Vec<String>,
+    pub emit_hashes: Vec<String>,
+    pub emit_names: Vec<Option<String>>,
+    pub hash_version: u64,
+    /// Only the module regime records fossil modules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fossil_modules: Option<Vec<FossilLedgerModule>>,
+    /// The runnable emit's statement layout; absent for a review tree and
+    /// under `--disable emit-align`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emit_indexes: Option<Vec<usize>>,
+}
+
+impl SplitLedger {
+    /// The written bytes.
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).expect("a split ledger serializes")
+    }
 }
 
 /// `StableSplitLedger`.

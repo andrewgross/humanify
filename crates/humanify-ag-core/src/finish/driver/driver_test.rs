@@ -20,8 +20,6 @@
 use std::fs;
 use std::path::PathBuf;
 
-use humanify_ag_model::js::{JsValue, stringify};
-
 use super::{
     FinishReport, FinishSwitches, leftover_vendor_files, reconcile_post_split, this_runs_manifest,
 };
@@ -62,14 +60,12 @@ fn the_finish_reconcile_records_its_constituent_spans() {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test/parity/wp54-postsplit.json");
     let raw = std::fs::read_to_string(&path).unwrap();
     let fx: serde_json::Value = serde_json::from_str(&raw).unwrap();
-    // The ledger comes through the order-preserving JS value (serde_json
-    // alphabetizes its maps — the ledger's key order is the output's).
-    let ledger = match JsValue::parse(&raw).unwrap() {
-        JsValue::Object(o) => o.get("ledgerIn").unwrap().clone(),
-        _ => unreachable!("the fixture's top level is an object"),
-    };
+    // The probe's ledger with the `hashVersion` this binary always writes
+    // (the spans recorded here do not depend on the ledger's key order).
+    let mut ledger = fx["ledgerIn"].clone();
+    ledger["hashVersion"] = serde_json::json!(3);
     let s = Scratch::new("wp54");
-    s.write(&s.0, ".humanify/split-ledger.json", &stringify(&ledger));
+    s.write(&s.0, ".humanify/split-ledger.json", &ledger.to_string());
     s.write(
         &s.0,
         ".humanify/humanified.js",

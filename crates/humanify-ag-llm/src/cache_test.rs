@@ -284,3 +284,39 @@ fn read_only_cache_refuses_writes() {
     assert!(cache.write("abcdef", &entry).is_err());
     assert!(!dir.exists(), "a read-only open creates nothing");
 }
+
+/// An entry on disk reads back in JS record order: index keys first, a
+/// repeated key in its first slot with its last value; an array renames
+/// keys by index; `v` is compared as a number (1.0 is 1); a usage value
+/// that is not a number is absent.
+#[test]
+fn entries_read_in_js_record_order() {
+    let e = CacheEntry::from_json(
+        r#"{"v":1.0,"renames":{"b":"x","10":"ten","k":null,"2":"two","b":"w"},"finishReason":"stop","originalUsage":{"totalTokens":15,"inputTokens":"x"}}"#,
+    )
+    .unwrap();
+    let keys: Vec<&str> = e
+        .renames
+        .entries()
+        .iter()
+        .map(|(k, _)| k.as_str())
+        .collect();
+    assert_eq!(keys, ["2", "10", "b", "k"]);
+    assert_eq!(e.renames.get("b"), Some("w"));
+    assert_eq!(e.finish_reason.as_deref(), Some("stop"));
+    let usage = e.original_usage.unwrap();
+    assert_eq!((usage.total_tokens, usage.input_tokens), (Some(15), None));
+    let arr = CacheEntry::from_json(r#"{"v":1,"renames":["p",null]}"#).unwrap();
+    assert_eq!(arr.renames.get("0"), Some("p"));
+    assert_eq!(arr.renames.len(), 2);
+    assert!(CacheEntry::from_json(r#"{"v":1,"renames":{"a":1}}"#).is_none());
+    let entry = CacheEntry {
+        renames: e.renames.clone(),
+        finish_reason: None,
+        original_usage: None,
+    };
+    assert_eq!(
+        entry.to_json(),
+        r#"{"v":1,"renames":{"2":"two","10":"ten","b":"w","k":null}}"#
+    );
+}

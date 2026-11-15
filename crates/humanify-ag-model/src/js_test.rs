@@ -1,11 +1,9 @@
 //! The JS-JSON rules, pinned to vectors recorded from the real TS
 //! functions: test/parity/wp41-js-vectors.json (generator
-//! test/parity/wp41-js-probe.ts). The cache key's TS vectors (`keys`,
-//! cache-key-vectors.jsonl) were retired by exp233: the key is no longer
-//! the TS `cacheKeyOf` but what the endpoint receives.
+//! test/parity/wp41-js-probe.ts). The cache key's pins live in
+//! `llm_test.rs`.
 
 use crate::js::{JsValue, canonical, math_round, number_to_string, stringify, to_fixed};
-use crate::llm::{CacheKeyParams, cache_key_material, cache_key_of};
 
 fn parity_file(name: &str) -> String {
     let path = format!("{}/../../test/parity/{name}", env!("CARGO_MANIFEST_DIR"));
@@ -40,81 +38,6 @@ fn canonical_matches_the_ts_on_every_probe_case() {
             case["name"]
         );
     }
-}
-
-/// The cache key (version 2, exp233) is the canonical JSON of what the
-/// endpoint receives: key version, both messages, the model parameters,
-/// the response format. Pinned byte for byte, so a change to the key is a
-/// deliberate act (it invalidates every standing cache).
-#[test]
-fn cache_key_material_is_the_wire_content_and_nothing_else() {
-    let params = CacheKeyParams {
-        model: "m".to_string(),
-        temperature: Some(-0.0),
-        max_tokens: None,
-        reasoning_effort: Some("low".to_string()),
-    };
-    assert_eq!(
-        cache_key_material("sys", "user: f(a, b)", &params),
-        "{\"cacheVersion\":2,\"messages\":[{\"content\":\"sys\",\"role\":\"system\"},\
-         {\"content\":\"user: f(a, b)\",\"role\":\"user\"}],\
-         \"params\":{\"model\":\"m\",\"reasoningEffort\":\"low\",\"temperature\":0},\
-         \"responseFormat\":\"json_object\"}"
-    );
-    let key = cache_key_of("sys", "user: f(a, b)", &params);
-    assert_eq!(key.len(), 64);
-    assert!(
-        key.bytes()
-            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
-    );
-}
-
-/// Every input the endpoint receives moves the key: each prompt, and each
-/// model parameter (an absent temperature differs from 0; 0 and -0 agree,
-/// as JS numbers do).
-#[test]
-fn every_wire_input_moves_the_key() {
-    let base = CacheKeyParams {
-        model: "m".to_string(),
-        temperature: Some(0.0),
-        max_tokens: None,
-        reasoning_effort: None,
-    };
-    let key = |s: &str, u: &str, p: &CacheKeyParams| cache_key_of(s, u, p);
-    let k0 = key("s", "u", &base);
-    assert_ne!(k0, key("s2", "u", &base));
-    assert_ne!(k0, key("s", "u2", &base));
-    assert_ne!(k0, key("u", "s", &base), "the roles are part of the key");
-    let variants = [
-        CacheKeyParams {
-            model: "m2".to_string(),
-            ..base.clone()
-        },
-        CacheKeyParams {
-            temperature: None,
-            ..base.clone()
-        },
-        CacheKeyParams {
-            temperature: Some(0.7),
-            ..base.clone()
-        },
-        CacheKeyParams {
-            max_tokens: Some(6000),
-            ..base.clone()
-        },
-        CacheKeyParams {
-            reasoning_effort: Some("low".to_string()),
-            ..base.clone()
-        },
-    ];
-    for p in &variants {
-        assert_ne!(k0, key("s", "u", p), "{p:?}");
-    }
-    let neg_zero = CacheKeyParams {
-        temperature: Some(-0.0),
-        ..base.clone()
-    };
-    assert_eq!(k0, key("s", "u", &neg_zero));
 }
 
 /// `JSON.stringify(JSON.parse(raw))` — the cache write path's byte shape:

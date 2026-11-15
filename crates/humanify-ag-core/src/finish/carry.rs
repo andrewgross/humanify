@@ -16,7 +16,7 @@ use oxc_allocator::Allocator;
 use oxc_semantic::Semantic;
 use oxc_span::GetSpan;
 
-use humanify_ag_model::js::JsValue;
+use crate::place::ledger::SplitLedger;
 
 use crate::babel_view::DiffLines;
 use crate::emit::substitutions::{Substitution, apply_substitutions};
@@ -56,16 +56,6 @@ fn set(abstained: &mut Vec<(String, usize)>, reason: &str, n: usize) {
     match abstained.iter_mut().find(|(r, _)| r == reason) {
         Some((_, v)) => *v = n,
         None => abstained.push((reason.to_string(), n)),
-    }
-}
-
-fn strings(v: Option<&JsValue>) -> Vec<String> {
-    match v {
-        Some(JsValue::Array(items)) => items
-            .iter()
-            .filter_map(|i| i.as_str().map(str::to_string))
-            .collect(),
-        _ => Vec::new(),
     }
 }
 
@@ -113,31 +103,16 @@ struct Target<'r> {
 
 fn resolve_targets<'r>(
     renames: &'r [PostSplitRename],
-    ledger: &JsValue,
+    ledger: &SplitLedger,
     body_len: usize,
     abstained: &mut Vec<(String, usize)>,
 ) -> Vec<Target<'r>> {
-    let obj = match ledger {
-        JsValue::Object(o) => o,
-        _ => return Vec::new(),
-    };
-    let order = strings(obj.get("order"));
+    let order = &ledger.order;
     let mut slots: HashMap<&str, Vec<usize>> = HashMap::new();
     for (slot, file) in order.iter().enumerate() {
         slots.entry(file.as_str()).or_default().push(slot);
     }
-    let indexes: Option<Vec<usize>> = match obj.get("emitIndexes") {
-        Some(JsValue::Array(items)) => Some(
-            items
-                .iter()
-                .map(|v| match v {
-                    JsValue::Number(n) => *n as usize,
-                    _ => usize::MAX,
-                })
-                .collect(),
-        ),
-        _ => None,
-    };
+    let indexes = ledger.emit_indexes.as_ref();
     let mut targets = Vec::new();
     for rename in renames {
         if rename.top_level {
@@ -152,7 +127,7 @@ fn resolve_targets<'r>(
             .get(rename.file.as_str())
             .and_then(|s| s.get(body_ordinal))
             .copied();
-        let (Some(slot), Some(indexes)) = (slot, indexes.as_ref()) else {
+        let (Some(slot), Some(indexes)) = (slot, indexes) else {
             bump(
                 abstained,
                 if indexes.is_some() {
@@ -237,7 +212,7 @@ fn occurrences_of(
 /// bundle's top-level statements are.
 pub fn carry_renames_into_bundle(
     bundle: &str,
-    ledger: &JsValue,
+    ledger: &SplitLedger,
     renames: &[PostSplitRename],
     layout: crate::toolchain::BundleLayout,
 ) -> Result<CarryResult, String> {
@@ -247,10 +222,7 @@ pub fn carry_renames_into_bundle(
     }
     let allocator = Allocator::default();
     let ingest = parse_or_err(&allocator, bundle)?;
-    let order_len = match ledger {
-        JsValue::Object(o) => strings(o.get("order")).len(),
-        _ => 0,
-    };
+    let order_len = ledger.order.len();
     let body = match wrapper_body(layout, ingest.program, ingest.semantic(), order_len) {
         Ok(body) => body,
         Err(reason) => {
