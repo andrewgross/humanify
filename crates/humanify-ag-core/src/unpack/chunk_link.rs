@@ -68,6 +68,8 @@ use std::path::Path;
 
 use analyse::{Chunk, Imported, Loader, Spec};
 
+use crate::output_tree::FolderReader;
+
 /// Bun's virtual filesystem root, as a compiled app's chunks name each
 /// other.
 const ROOT: &str = "/$bunfs/root/";
@@ -126,9 +128,7 @@ impl LinkReport {
 /// (`// @bun`, not the CommonJS `@bun-cjs`) that imports at least one
 /// `/$bunfs/root/` sibling present beside it? The pragma and specifier
 /// checks are text scans, so a single-file bundle is never parsed here.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub fn is_chunked_entry(path: &Path, text: &str) -> bool {
+pub fn is_chunked_entry(path: &Path, text: &str, disk: &dyn FolderReader) -> bool {
     let first = text.lines().next().unwrap_or("");
     if !first.starts_with("// @bun") || first.contains("@bun-cjs") || !text.contains(ROOT) {
         return false;
@@ -136,7 +136,7 @@ pub fn is_chunked_entry(path: &Path, text: &str) -> bool {
     let dir = path.parent().unwrap_or(Path::new("."));
     sibling_specifiers(text)
         .iter()
-        .any(|rest| rest.ends_with(".js") && dir.join(rest).is_file())
+        .any(|rest| rest.ends_with(".js") && disk.has_file(&dir.join(rest)))
 }
 
 /// Every `"/$bunfs/root/<rest>"` string in the text, as `<rest>`.
@@ -150,9 +150,10 @@ fn sibling_specifiers(text: &str) -> Vec<&str> {
         .collect()
 }
 
-/// Link the layout whose entry is `entry` (see the module doc).
-pub fn link(entry: &Path) -> Result<(String, LinkReport), LinkError> {
-    let mut loader = Loader::new(entry);
+/// Link the layout whose entry is `entry` (see the module doc), its
+/// files read through `disk`.
+pub fn link(entry: &Path, disk: &dyn FolderReader) -> Result<(String, LinkReport), LinkError> {
+    let mut loader = Loader::new(entry, disk);
     let mut chunks: Vec<Chunk> = Vec::new();
     while let Some(path) = loader.queue.get(chunks.len()).cloned() {
         chunks.push(analyse::analyse(&path, &mut loader)?);
@@ -162,7 +163,7 @@ pub fn link(entry: &Path) -> Result<(String, LinkReport), LinkError> {
     let needs_init = graph::needs_init(&chunks, &order, &placement.moved);
     let needs_ns = namespaces_needed(&chunks);
     let names = names::assign(&chunks, &order, &needs_init, &needs_ns)?;
-    let embedded = embedded::resolve(&chunks, &loader.dir)?;
+    let embedded = embedded::resolve(&chunks, &loader.dir, disk)?;
     let text = emit::program(&emit::Plan {
         chunks: &chunks,
         order: &order,
@@ -213,16 +214,17 @@ fn namespaces_needed(chunks: &[Chunk]) -> Vec<bool> {
     out
 }
 
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
 // default: legacy, untriaged: a Result error becomes a value here
 #[allow(clippy::disallowed_methods)]
 fn unreached_js(loader: &Loader) -> usize {
-    std::fs::read_dir(&loader.dir)
+    loader
+        .disk
+        .list(&loader.dir)
         .map(|entries| {
             entries
-                .filter_map(Result::ok)
-                .map(|e| e.path())
-                .filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "js"))
+                .iter()
+                .map(|e| loader.dir.join(&e.name))
+                .filter(|p| p.extension().is_some_and(|x| x == "js") && loader.disk.has_file(p))
                 .filter(|p| !loader.index.contains_key(p))
                 .count()
         })

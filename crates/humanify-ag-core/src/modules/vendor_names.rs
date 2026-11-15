@@ -710,8 +710,8 @@ pub struct PriorManifestRow {
 
 impl PriorManifest {
     /// Parse a manifest's text; Err names what is missing or malformed.
-    pub fn parse(text: &str) -> Result<PriorManifest, String> {
-        serde_json::from_str(text).map_err(|e| e.to_string())
+    pub fn parse(text: &str) -> Result<PriorManifest, serde_json::Error> {
+        serde_json::from_str(text)
     }
 }
 

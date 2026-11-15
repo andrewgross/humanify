@@ -138,8 +138,11 @@ fn node_run_args(file: &Path, base: &str) -> Vec<String> {
     let text = read_text(file);
     let mut args: Vec<String> = if is_bun_cjs(file) {
         vec!["-e".into(), BUN_CJS_LOADER.into()]
-    } else if humanify_ag_core::unpack::input::choose_input_layout(file, &text)
-        == humanify_ag_core::unpack::input::InputLayout::BunChunks
+    } else if humanify_ag_core::unpack::input::choose_input_layout(
+        file,
+        &text,
+        &humanify_ag_cli::output_tree::Disk,
+    ) == humanify_ag_core::unpack::input::InputLayout::BunChunks
     {
         vec!["--import".into(), BUNFS_RESOLVE_HOOK.into()]
     } else {

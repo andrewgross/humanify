@@ -24,21 +24,88 @@ pub const SAME_PROGRAM_PRESENCE_FLOOR: f64 = 0.05;
 pub fn assert_prior_looks_like_same_program(
     prior_function_count: usize,
     unmatched: usize,
-) -> Result<(), String> {
+) -> Result<(), PriorMatchError> {
     if prior_function_count < SAME_PROGRAM_FLOOR_MIN_FUNCTIONS {
         return Ok(());
     }
     let present = prior_function_count.saturating_sub(unmatched);
     let fraction = present as f64 / prior_function_count as f64;
     if fraction < SAME_PROGRAM_PRESENCE_FLOOR {
-        return Err(format!(
-            "prior version does not appear to be the same program: only {present} of \
-             {prior_function_count} prior functions have a matching structural hash in \
-             the new version. Check the --prior-version file; drop the flag to run \
-             without transfer."
-        ));
+        return Err(PriorMatchError::NotSameProgram {
+            present,
+            prior_functions: prior_function_count,
+        });
     }
     Ok(())
+}
+
+/// A side's text that does not parse: `name` (`input.js` / `prior.js`),
+/// how many diagnostics, the first one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SideParseError {
+    pub name: String,
+    pub count: usize,
+    pub first: String,
+}
+
+impl std::fmt::Display for SideParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "oxc failed to parse {}: {} diagnostic(s) — {}",
+            self.name, self.count, self.first
+        )
+    }
+}
+
+/// Why the match stage stopped before its consumer ran.
+#[derive(Debug)]
+pub enum PriorMatchError {
+    /// A side's text does not parse.
+    Parse(SideParseError),
+    /// The prior shares (nearly) no structural hashes with the new version
+    /// ([`assert_prior_looks_like_same_program`]).
+    NotSameProgram {
+        present: usize,
+        prior_functions: usize,
+    },
+    /// The close tier's dump could not be built.
+    CloseDump(crate::matching::close_dump::CloseDumpError),
+    /// A side's statement inventory could not be built.
+    Inventory(crate::twins::InventoryError),
+}
+
+impl std::fmt::Display for PriorMatchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse(e) => e.fmt(f),
+            Self::NotSameProgram {
+                present,
+                prior_functions,
+            } => write!(
+                f,
+                "prior version does not appear to be the same program: only {present} of \
+                 {prior_functions} prior functions have a matching structural hash in \
+                 the new version. Check the --prior-version file; drop the flag to run \
+                 without transfer."
+            ),
+            Self::CloseDump(e) => e.fmt(f),
+            Self::Inventory(e) => e.fmt(f),
+        }
+    }
+}
+
+impl From<SideParseError> for PriorMatchError {
+    fn from(e: SideParseError) -> Self {
+        Self::Parse(e)
+    }
+}
+
+/// For a consumer whose own errors are still text (the match verb).
+impl From<PriorMatchError> for String {
+    fn from(e: PriorMatchError) -> Self {
+        e.to_string()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,10 +202,10 @@ pub struct MatchStage<'a, 's> {
 /// multi-file dumps) build the prior side once instead —
 /// [`with_prior_match_side`] + [`match_stage_with_prior`] — which is
 /// byte-identical per call (a parse is deterministic).
-pub fn match_prior_version<T>(
+pub fn match_prior_version<T, E: From<PriorMatchError>>(
     input: PriorMatchInput<'_>,
-    consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, String>,
-) -> Result<T, String> {
+    consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, E>,
+) -> Result<T, E> {
     let PriorMatchInput {
         fresh,
         prior,
@@ -164,7 +231,7 @@ pub fn match_prior_version<T>(
         // for the AST the later stages walk.
         let (prior_side, fresh_side) = crate::par::beside(
             || prior_side_owned(prior, layout),
-            || -> Result<_, String> {
+            || -> Result<_, PriorMatchError> {
                 let fresh_ingest = parse_side(&fresh_allocator, fresh, "input.js")?;
                 let fresh_json = crate::ingest::program_estree_json(fresh_ingest.program);
                 let fresh_parts = build_side_parts(
@@ -178,7 +245,7 @@ pub fn match_prior_version<T>(
                 Ok((fresh_ingest, fresh_json, fresh_parts, prior_ingest))
             },
         );
-        let (prior_json, prior_parts) = prior_side?;
+        let (prior_json, prior_parts) = prior_side.map_err(PriorMatchError::from)?;
         let (fresh_ingest, fresh_json, fresh_parts, prior_ingest) = fresh_side?;
         (
             fresh_ingest,
@@ -238,15 +305,15 @@ pub fn match_prior_version<T>(
 /// [`FingerprintIndex`](crate::matching::FingerprintIndex) borrows the
 /// graph), so the side cannot be a self-contained struct that outlives
 /// this function — `run` is the frame.
-pub fn with_prior_match_side<T>(
+pub fn with_prior_match_side<T, E: From<PriorMatchError>>(
     prior: &str,
     layout: BundleLayout,
-    run: impl FnOnce(&StageSide<'_, '_>) -> Result<T, String>,
-) -> Result<T, String> {
+    run: impl FnOnce(&StageSide<'_, '_>) -> Result<T, E>,
+) -> Result<T, E> {
     use crate::profiling::phase;
     let ph = phase("prior:build-prior-side");
     let allocator = Allocator::default();
-    let ingest = parse_prior(&allocator, prior)?;
+    let ingest = parse_prior(&allocator, prior).map_err(PriorMatchError::from)?;
     let json = crate::ingest::program_estree_json(ingest.program);
     // The prior side's eligibility is ALL bindings (prior-version.ts:284-288).
     let parts = build_side_parts(&ingest, &json, "prior.js", Eligibility::All, layout);
@@ -262,18 +329,18 @@ pub fn with_prior_match_side<T>(
 /// keeps its per-call semantics (callers amortizing the check across
 /// files against one prior — the match verb's multi-file dumps — pass
 /// false and run the identical assert over the union of their pairs).
-pub fn match_stage_with_prior<T>(
+pub fn match_stage_with_prior<T, E: From<PriorMatchError>>(
     fresh: &str,
     never_rename: NeverRename,
     layout: BundleLayout,
     prior: StageSide<'_, '_>,
     same_program_check: bool,
-    consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, String>,
-) -> Result<T, String> {
+    consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, E>,
+) -> Result<T, E> {
     use crate::profiling::phase;
     let ph = phase("prior:build-fresh-side");
     let allocator = Allocator::default();
-    let ingest = parse_side(&allocator, fresh, "input.js")?;
+    let ingest = parse_side(&allocator, fresh, "input.js").map_err(PriorMatchError::from)?;
     let json = crate::ingest::program_estree_json(ingest.program);
     let parts = build_side_parts(
         &ingest,
@@ -298,12 +365,12 @@ pub fn match_stage_with_prior<T>(
 /// the initial function cascade with propagation, the alternation with
 /// the prepared binding setup, the tail tiers on the FUNCTION result
 /// only, the close tier, the same-program sanity check.
-fn run_match_stage<T>(
+fn run_match_stage<T, E: From<PriorMatchError>>(
     fresh: StageSide<'_, '_>,
     prior: StageSide<'_, '_>,
     same_program_check: bool,
-    consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, String>,
-) -> Result<T, String> {
+    consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, E>,
+) -> Result<T, E> {
     // ── matchAndApplyFunctions (prior-version.ts:524-596) ────────────────
     // The initial function cascade (propagation on), the alternation with
     // the prepared binding setup, then the tail tiers on the FUNCTION
@@ -378,7 +445,7 @@ fn run_match_stage<T>(
         prior.json,
         fresh.json,
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(PriorMatchError::CloseDump)?;
     // The TS's same-program sanity check (:624) — a prior sharing nearly no
     // structural hashes with the new version is a wrong file, not an
     // aggressive refactor. Fails the dump loudly instead of transferring
@@ -431,13 +498,14 @@ pub fn parse_side<'a>(
     allocator: &'a Allocator,
     text: &'a str,
     name: &str,
-) -> Result<Ingest<'a>, String> {
+) -> Result<Ingest<'a>, SideParseError> {
     let ingest = Ingest::parse_unambiguous(allocator, text);
     if let Some(first) = ingest.errors.first() {
-        return Err(format!(
-            "oxc failed to parse {name}: {} diagnostic(s) — {first}",
-            ingest.errors.len()
-        ));
+        return Err(SideParseError {
+            name: name.to_string(),
+            count: ingest.errors.len(),
+            first: first.clone(),
+        });
     }
     Ok(ingest)
 }
@@ -445,14 +513,17 @@ pub fn parse_side<'a>(
 /// Parse the PRIOR side's text — every prior parse routes here, under one
 /// `prior:parse` phase span, so a profile counts them all (the match
 /// verb's pin holds it at ONE per run). The name in errors is `prior.js`.
-fn parse_prior<'a>(allocator: &'a Allocator, prior: &'a str) -> Result<Ingest<'a>, String> {
+fn parse_prior<'a>(allocator: &'a Allocator, prior: &'a str) -> Result<Ingest<'a>, SideParseError> {
     let _ph = crate::profiling::phase("prior:parse");
     parse_side(allocator, prior, "prior.js")
 }
 
 /// The prior side's program JSON and built parts from a parse of its own
 /// (everything returned is plain data: the parse dies here).
-fn prior_side_owned(prior: &str, layout: BundleLayout) -> Result<(Value, SideParts), String> {
+fn prior_side_owned(
+    prior: &str,
+    layout: BundleLayout,
+) -> Result<(Value, SideParts), SideParseError> {
     let allocator = Allocator::default();
     let ingest = parse_prior(&allocator, prior)?;
     let json = crate::ingest::program_estree_json(ingest.program);
@@ -496,7 +567,7 @@ fn build_side_dependents<'g>(
     tables: &SymbolTables,
     anchor: &'static str,
     layout: BundleLayout,
-) -> Result<SideDependents<'g>, String> {
+) -> Result<SideDependents<'g>, PriorMatchError> {
     let index = crate::matching::build_fingerprint_index(graph, ingest.semantic(), tables);
     let graph_side = GraphSide::build(graph, ingest.semantic());
     let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
@@ -507,7 +578,7 @@ fn build_side_dependents<'g>(
         Some(graph),
         true,
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(PriorMatchError::Inventory)?;
     Ok(SideDependents {
         index,
         graph_side,

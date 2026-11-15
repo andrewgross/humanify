@@ -5,7 +5,7 @@
 use humanify_ag_model::llm::CacheKeyParams;
 use serde_json::{Value, json};
 
-use super::{Dispatch, DumpSink, dispatch_rows};
+use super::{Dispatch, dispatch_rows, write_section};
 
 /// A section is its records exactly as serde writes them, in `<name>.json`.
 #[test]
@@ -16,8 +16,9 @@ fn a_section_is_written_as_its_records() {
         count: u32,
     }
     let dir = humanify_ag_testkit::ScratchDir::new("dump-sink");
-    let sink = DumpSink::create(&dir.path().join("dump")).expect("the sink");
-    sink.section(
+    let folder = crate::output_tree::disk_test::DumpDisk::create(&dir.path().join("dump"));
+    write_section(
+        &folder,
         "rows",
         &[Row {
             tier: "hash",

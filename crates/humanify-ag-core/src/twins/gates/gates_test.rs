@@ -297,7 +297,7 @@ fn with_twin_sides_classified(
             claimed: &claimed,
             fn_matches: &fn_matches,
         });
-        Ok(())
+        Ok::<_, String>(())
     })
     .expect("the match stage and the twins must run");
 }

@@ -252,11 +252,10 @@ pub struct NamingOutcome {
 }
 
 /// Why the naming stage failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum NamingError {
-    /// Matching against the prior version failed (its message, as the
-    /// prior side gave it).
-    Prior(String),
+    /// Matching against the prior version failed.
+    Prior(crate::prior::PriorMatchError),
     /// The naming era failed.
     Era(era::EraError),
     /// The shipped text does not parse for the end-of-run census.
@@ -266,7 +265,7 @@ pub enum NamingError {
 impl std::fmt::Display for NamingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Prior(e) => f.write_str(e),
+            Self::Prior(e) => e.fmt(f),
             Self::Era(e) => e.fmt(f),
             Self::Census(e) => e.fmt(f),
         }

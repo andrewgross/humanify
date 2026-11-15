@@ -468,3 +468,31 @@ fn unpack_errors_keep_their_words() {
         "bun manifest without a factories array",
     );
 }
+
+#[test]
+fn prior_match_errors_keep_their_words() {
+    use crate::prior::{PriorMatchError, SideParseError};
+    same(
+        PriorMatchError::NotSameProgram {
+            present: 1,
+            prior_functions: 100,
+        },
+        "prior version does not appear to be the same program: only 1 of 100 prior functions \
+         have a matching structural hash in the new version. Check the --prior-version file; \
+         drop the flag to run without transfer.",
+    );
+    same(
+        PriorMatchError::Parse(SideParseError {
+            name: "prior.js".into(),
+            count: 2,
+            first: "Unexpected token".into(),
+        }),
+        "oxc failed to parse prior.js: 2 diagnostic(s) — Unexpected token",
+    );
+    same(
+        crate::modules::vendor_names::PriorManifest::parse("{").unwrap_err(),
+        &serde_json::from_str::<serde_json::Value>("{")
+            .unwrap_err()
+            .to_string(),
+    );
+}

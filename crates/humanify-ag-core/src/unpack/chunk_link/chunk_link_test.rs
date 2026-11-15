@@ -5,6 +5,7 @@
 // io: test code reads fixtures and writes scratch trees; it is not the pipeline
 #![allow(clippy::disallowed_methods)]
 
+use crate::output_tree::disk_test::Disk;
 use std::path::{Path, PathBuf};
 
 use super::{LinkReport, link};
@@ -44,7 +45,7 @@ fn run(text: &str) -> String {
 }
 
 fn linked(entry: &Path) -> (String, LinkReport) {
-    let bundle = read_input(entry).unwrap();
+    let bundle = read_input(entry, &Disk).unwrap();
     let report = bundle.link.expect("the layout is linked");
     (bundle.text, report)
 }
@@ -55,7 +56,7 @@ const HEAD: &str = "// @bun\n";
 fn a_single_file_bundle_is_read_unchanged() {
     let text = "// @bun @bun-cjs\n(function(exports, require, module, __filename, __dirname) {console.log(1)})\n";
     let entry = layout(&[("index.js", text)]);
-    let bundle = read_input(&entry).unwrap();
+    let bundle = read_input(&entry, &Disk).unwrap();
     assert!(bundle.link.is_none());
     assert_eq!(bundle.text, text);
 }
@@ -68,7 +69,7 @@ fn an_esm_file_without_bunfs_siblings_is_read_unchanged() {
         "{HEAD}import{{a as b}}from\"/$bunfs/root/chunk-missing.js\";import\"./chunk-x.js\";b();\n"
     );
     let entry = layout(&[("index.js", &text), ("chunk-x.js", "export{};")]);
-    let bundle = read_input(&entry).unwrap();
+    let bundle = read_input(&entry, &Disk).unwrap();
     assert!(bundle.link.is_none());
     assert_eq!(bundle.text, text);
 }
@@ -304,9 +305,9 @@ fn external_imports_become_requires() {
         ),
     )]);
     // A lone entry with only externals is not a chunked layout ...
-    assert!(read_input(&entry).unwrap().link.is_none());
+    assert!(read_input(&entry, &Disk).unwrap().link.is_none());
     // ... but the linker still maps its externals when it links one.
-    let (text, _) = link(&entry).unwrap();
+    let (text, _) = link(&entry, &Disk).unwrap();
     assert_eq!(run(&text), "/ a/b /\n");
 }
 
@@ -371,7 +372,7 @@ fn top_level_await_in_a_chunk_is_refused() {
             &format!("{HEAD}var a=await Promise.resolve(1);function v(){{return a}}export{{v}};\n"),
         ),
     ]);
-    let err = read_input(&entry).unwrap_err();
+    let err = read_input(&entry, &Disk).unwrap_err();
     assert!(err.to_string().contains("top-level await"), "{err}");
 }
 
@@ -387,7 +388,7 @@ fn an_import_of_a_name_the_chunk_does_not_export_is_refused() {
             &format!("{HEAD}function v(){{}}export{{v}};\n"),
         ),
     ]);
-    let err = read_input(&entry).unwrap_err();
+    let err = read_input(&entry, &Disk).unwrap_err();
     assert!(err.to_string().contains("nope"), "{err}");
 }
 
@@ -654,7 +655,7 @@ fn a_lazy_chunks_var_declared_in_a_nested_block_is_refused() {
             &format!("{HEAD}if(globalThis){{var y=1}}function g(){{return y}}export{{g}};\n"),
         ),
     ]);
-    let err = link(&entry).unwrap_err();
+    let err = link(&entry, &Disk).unwrap_err();
     assert!(err.to_string().contains("nested block"), "{err}");
 }
 

@@ -17,8 +17,10 @@ pub const PRODUCT_CRATES: &[&str] = &[
 ];
 
 /// The pure crates, each with the normal dependencies it may have: the
-/// functional core. An effect site in one is a `legacy` entry (to migrate
-/// to the shell) or an `observation` (the profiling clock).
+/// functional core. They are strict: an effect site or a
+/// `Result<_, String>` in one has no role it may be listed under, so it
+/// fails until it moves to the shell (or becomes a typed error). The one
+/// exception is an `observation` (the profiling clock).
 pub const PURE_CRATES: &[(&str, &[&str])] = &[
     (
         "crates/humanify-ag-core/",
@@ -45,11 +47,6 @@ pub const PURE_CRATES: &[(&str, &[&str])] = &[
     ),
 ];
 
-/// The pure crates whose migration is finished: an effect site or a
-/// `Result<_, String>` in one has no role it may be listed under, so it
-/// fails until it moves to the shell (or becomes a typed error).
-pub const STRICT_CRATES: &[&str] = &["crates/humanify-ag-model/"];
-
 /// The files whose effect sites may be `observation`s: the profiling
 /// clock, its sampler thread and its global recorder, which only feed the
 /// `--perf-trace` report.
@@ -67,7 +64,7 @@ pub const PURE_LIB_DENY: &str = "#![deny(clippy::map_err_ignore, clippy::let_und
 pub const ROLES: &[(&str, &str)] = &[
     (
         "legacy",
-        "an effect in a pure crate, or a `Result<_, String>` signature, that a migration step removes",
+        "a `Result<_, String>` signature in a shell crate, that a migration step removes",
     ),
     (
         "observation",

@@ -39,6 +39,11 @@ pub trait FolderReader: Send + Sync {
     fn read(&self, path: &Path) -> std::io::Result<Vec<u8>>;
     /// The folder's entries, in any order.
     fn list(&self, dir: &Path) -> std::io::Result<Vec<FolderEntry>>;
+    /// Is there a file (or a link to one) at `path`? Without reading it,
+    /// for a reader that can ask the disk.
+    fn has_file(&self, path: &Path) -> bool {
+        self.read(path).is_ok()
+    }
 }
 
 /// Nothing on disk: an output folder that does not exist yet (the unit

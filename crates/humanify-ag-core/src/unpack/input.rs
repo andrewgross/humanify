@@ -22,6 +22,7 @@ use std::path::Path;
 
 use super::chunk_link::{self, LinkError, LinkReport};
 use crate::error::{FileError, FileOp};
+use crate::output_tree::FolderReader;
 
 /// The registered input layouts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,19 +46,25 @@ impl InputLayout {
     }
 
     /// Does this layout read the file at `path`, whose text is `text`?
-    pub fn supports(self, path: &Path, text: &str) -> bool {
+    /// The files beside it are read through `disk`.
+    pub fn supports(self, path: &Path, text: &str, disk: &dyn FolderReader) -> bool {
         match self {
-            InputLayout::BunChunks => chunk_link::is_chunked_entry(path, text),
+            InputLayout::BunChunks => chunk_link::is_chunked_entry(path, text, disk),
             InputLayout::SingleFile => true,
         }
     }
 
     /// The program text this layout makes of the file, and the link
     /// report when it linked anything.
-    fn read(self, path: &Path, text: String) -> Result<(String, Option<LinkReport>), LinkError> {
+    fn read(
+        self,
+        path: &Path,
+        text: String,
+        disk: &dyn FolderReader,
+    ) -> Result<(String, Option<LinkReport>), LinkError> {
         match self {
             InputLayout::BunChunks => {
-                chunk_link::link(path).map(|(text, report)| (text, Some(report)))
+                chunk_link::link(path, disk).map(|(text, report)| (text, Some(report)))
             }
             InputLayout::SingleFile => Ok((text, None)),
         }
@@ -65,10 +72,10 @@ impl InputLayout {
 }
 
 /// The first registered layout that supports the file.
-pub fn choose_input_layout(path: &Path, text: &str) -> InputLayout {
+pub fn choose_input_layout(path: &Path, text: &str, disk: &dyn FolderReader) -> InputLayout {
     INPUT_LAYOUTS
         .into_iter()
-        .find(|l| l.supports(path, text))
+        .find(|l| l.supports(path, text, disk))
         .unwrap_or(InputLayout::SingleFile)
 }
 
@@ -112,19 +119,24 @@ impl From<LinkError> for InputError {
 }
 
 /// Read a run's input file (invalid UTF-8 becomes U+FFFD) through the
-/// layout registry.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub fn read_input(path: &Path) -> Result<InputBundle, InputError> {
-    let bytes = std::fs::read(path).map_err(FileError::at(FileOp::CannotRead, path))?;
-    input_from_text(path, String::from_utf8_lossy(&bytes).into_owned())
+/// layout registry. Every file (the input, its chunks, its embedded
+/// files) is read through `disk`, the shell's reader.
+pub fn read_input(path: &Path, disk: &dyn FolderReader) -> Result<InputBundle, InputError> {
+    let bytes = disk
+        .read(path)
+        .map_err(FileError::at(FileOp::CannotRead, path))?;
+    input_from_text(path, String::from_utf8_lossy(&bytes).into_owned(), disk)
 }
 
 /// [`read_input`] for a caller that read the file itself (and reports a
 /// failed read its own way): `text` is the file at `path`.
-pub fn input_from_text(path: &Path, text: String) -> Result<InputBundle, InputError> {
-    let layout = choose_input_layout(path, &text);
-    let (text, link) = layout.read(path, text)?;
+pub fn input_from_text(
+    path: &Path,
+    text: String,
+    disk: &dyn FolderReader,
+) -> Result<InputBundle, InputError> {
+    let layout = choose_input_layout(path, &text, disk);
+    let (text, link) = layout.read(path, text, disk)?;
     Ok(InputBundle { text, layout, link })
 }
 

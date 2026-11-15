@@ -469,7 +469,11 @@ fn a_dump_streaming_run_replays_the_prepared_records_bytes() {
     let dir = std::env::temp_dir().join(format!("humanify-dump65-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("mkdir");
-    let mut log = crate::artifact_dump::DispatchLog::dump(params, &dir).expect("open parts");
+    let mut log = crate::artifact_dump::DispatchLog::dump(
+        params,
+        Box::new(crate::output_tree::disk_test::DumpDisk::create(&dir)),
+    )
+    .expect("open parts");
     let streamed = run_naming(
         &NamingInput {
             fresh: &fresh,

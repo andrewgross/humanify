@@ -153,7 +153,7 @@ impl PriorVendor {
     ) -> Result<Option<PriorVendor>, crate::prior_tree::PriorTreeError> {
         let refuse = |why: String| crate::prior_tree::PriorTreeError::VendorManifest { why };
         let text = std::str::from_utf8(manifest).map_err(|e| refuse(e.to_string()))?;
-        let manifest = PriorManifest::parse(text).map_err(refuse)?;
+        let manifest = PriorManifest::parse(text).map_err(|e| refuse(e.to_string()))?;
         let rows = &manifest.factories;
         let modules: Vec<PriorModule> = rows
             .iter()

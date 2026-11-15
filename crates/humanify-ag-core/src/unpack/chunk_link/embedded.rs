@@ -42,7 +42,6 @@
 //! does not decode.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use oxc_span::Span;
@@ -52,6 +51,7 @@ use super::analyse::{Chunk, Edit, StmtKind};
 use super::error::{DecodeError, LinkError};
 use super::graph::{Target, resolve_sym};
 use crate::error::{FileError, FileOp};
+use crate::output_tree::FolderReader;
 
 /// The output tree's folder for the embedded files a program reads by
 /// path (beside `src/`, `vendor/` and `run.cjs`).
@@ -103,23 +103,14 @@ pub(super) struct Resolved {
 
 /// Is the file at `path` a module Bun built (a `.js` file whose first
 /// line is Bun's pragma) — a chunk or an entry, not an embedded file?
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub(super) fn is_bun_module(path: &Path) -> bool {
-    if path.extension().is_none_or(|x| x != "js") {
-        return false;
-    }
-    let mut head = [0u8; 7];
-    std::fs::File::open(path)
-        .and_then(|mut f| f.read_exact(&mut head))
-        .is_ok_and(|()| &head == b"// @bun")
+pub(super) fn is_bun_module(disk: &dyn FolderReader, path: &Path) -> bool {
+    path.extension().is_some_and(|x| x == "js")
+        && disk.read(path).is_ok_and(|b| b.starts_with(b"// @bun"))
 }
 
 /// The file `rest` names under the root `dir`, refusing a name that
 /// leaves it.
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-fn file_of(dir: &Path, rest: &str) -> Result<PathBuf, LinkError> {
+fn file_of(disk: &dyn FolderReader, dir: &Path, rest: &str) -> Result<PathBuf, LinkError> {
     let inside = Path::new(rest)
         .components()
         .all(|c| matches!(c, Component::Normal(_)));
@@ -129,7 +120,7 @@ fn file_of(dir: &Path, rest: &str) -> Result<PathBuf, LinkError> {
         });
     }
     let path = dir.join(rest);
-    if !path.is_file() {
+    if !disk.has_file(&path) {
         return Err(LinkError::EmbeddedMissing {
             rest: rest.to_string(),
             path,
@@ -242,17 +233,20 @@ fn is_require(
     })
 }
 
-/// Decide every chunk's embedded-file uses (see the module doc).
-// io: legacy effect site, listed in dev/census/effects-allowlist.json
-#[allow(clippy::disallowed_methods)]
-pub(super) fn resolve(chunks: &[Chunk], dir: &Path) -> Result<Resolved, LinkError> {
+/// Decide every chunk's embedded-file uses (see the module doc), the
+/// files read through `disk`.
+pub(super) fn resolve(
+    chunks: &[Chunk],
+    dir: &Path,
+    disk: &dyn FolderReader,
+) -> Result<Resolved, LinkError> {
     let aliases = require_aliases(chunks);
     let mut out = Resolved::default();
     let mut files: BTreeMap<String, PathBuf> = BTreeMap::new();
     for (c, chunk) in chunks.iter().enumerate() {
         let mut edits = Vec::new();
         for r in &chunk.file_refs {
-            let path = file_of(dir, &r.rest)?;
+            let path = file_of(disk, dir, &r.rest)?;
             let required = match r.call {
                 Some((_, callee)) => is_require(chunks, c, callee, &aliases)?,
                 None => false,
@@ -263,13 +257,14 @@ pub(super) fn resolve(chunks: &[Chunk], dir: &Path) -> Result<Resolved, LinkErro
                     rest: r.rest.clone(),
                 });
             }
-            if is_bun_module(&path) {
+            if is_bun_module(disk, &path) {
                 out.bun_module_paths += usize::from(!required);
                 continue;
             }
             if let Some((call, _)) = r.call.filter(|_| required && !r.rest.ends_with(".node")) {
-                let bytes =
-                    std::fs::read(&path).map_err(FileError::at(FileOp::CannotRead, &path))?;
+                let bytes = disk
+                    .read(&path)
+                    .map_err(FileError::at(FileOp::CannotRead, &path))?;
                 let text = decode_text(&bytes).map_err(|why| LinkError::EmbeddedText {
                     rest: r.rest.clone(),
                     why,

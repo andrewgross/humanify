@@ -20,7 +20,7 @@ fn passes_when_presence_clears_the_floor() {
 #[test]
 fn fails_when_presence_misses_the_floor() {
     let result = assert_prior_looks_like_same_program(100, 99);
-    let message = result.unwrap_err();
+    let message = result.unwrap_err().to_string();
     assert!(
         message.contains("does not appear to be the same program"),
         "wrong message: {message}"

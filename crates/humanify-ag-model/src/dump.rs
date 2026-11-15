@@ -1,7 +1,7 @@
 //! The decision records the stages share with the artifact dump: the
 //! close tier's file, the strategy trail's transfer rows and the
 //! placement trail's rows. Each derives `Serialize`; the dump writes them
-//! as they are (`humanify_ag_core::artifact_dump::DumpSink`).
+//! as they are (`humanify_ag_core::artifact_dump::write_section`).
 
 /// A span key: which anchored text a span indexes into,
 /// half-open, in UTF-8 byte offsets.

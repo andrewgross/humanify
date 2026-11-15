@@ -320,6 +320,12 @@
       "role": "shell"
     },
     {
+      "file": "crates/humanify-ag-cli/src/output_tree.rs",
+      "scope": "Disk::has_file",
+      "construct": "fs",
+      "role": "shell"
+    },
+    {
       "file": "crates/humanify-ag-cli/src/progress.rs",
       "scope": "create_progress_renderer",
       "construct": "clock",
@@ -512,94 +518,34 @@
       "role": "shell"
     },
     {
-      "file": "crates/humanify-ag-cli/src/prior_tree.rs",
-      "scope": "load_prior",
+      "file": "crates/humanify-ag-cli/src/writers.rs",
+      "scope": "DumpDir::create",
       "construct": "fs",
       "role": "shell"
     },
     {
-      "file": "crates/humanify-ag-core/src/artifact_dump.rs",
-      "scope": "DispatchLog::dump",
+      "file": "crates/humanify-ag-cli/src/writers.rs",
+      "scope": "DumpDir::open",
       "construct": "fs",
-      "role": "legacy"
+      "role": "shell"
     },
     {
-      "file": "crates/humanify-ag-core/src/artifact_dump.rs",
-      "scope": "DumpSink::create",
+      "file": "crates/humanify-ag-cli/src/writers.rs",
+      "scope": "DumpDir::remove",
       "construct": "fs",
-      "role": "legacy"
+      "role": "shell"
     },
     {
-      "file": "crates/humanify-ag-core/src/artifact_dump.rs",
-      "scope": "DumpSink::section",
+      "file": "crates/humanify-ag-cli/src/writers.rs",
+      "scope": "write_ask_log",
       "construct": "fs",
-      "role": "legacy"
+      "role": "shell"
     },
     {
-      "file": "crates/humanify-ag-core/src/artifact_dump.rs",
-      "scope": "LogFiles::close",
+      "file": "crates/humanify-ag-cli/src/prior_tree.rs",
+      "scope": "load_prior",
       "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/artifact_dump.rs",
-      "scope": "LogFiles::discard",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/artifact_dump.rs",
-      "scope": "part",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/artifact_dump.rs",
-      "scope": "struct LogFiles",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/artifact_dump.rs",
-      "scope": "write_ask_rows",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/modules/vendor_names.rs",
-      "scope": "PriorManifest::parse",
-      "construct": "result-string",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/prior.rs",
-      "scope": "assert_prior_looks_like_same_program",
-      "construct": "result-string",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/prior.rs",
-      "scope": "match_prior_version",
-      "construct": "result-string",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/prior.rs",
-      "scope": "match_stage_with_prior",
-      "construct": "result-string",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/prior.rs",
-      "scope": "parse_side",
-      "construct": "result-string",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/prior.rs",
-      "scope": "with_prior_match_side",
-      "construct": "result-string",
-      "role": "legacy"
+      "role": "shell"
     },
     {
       "file": "crates/humanify-ag-core/src/profiling.rs",
@@ -624,54 +570,6 @@
       "scope": "Profiler::start_concurrency_sampling",
       "construct": "thread",
       "role": "observation"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/unpack/chunk_link.rs",
-      "scope": "is_chunked_entry",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/unpack/chunk_link.rs",
-      "scope": "unreached_js",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/unpack/chunk_link/analyse.rs",
-      "scope": "Loader::spec",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/unpack/chunk_link/analyse.rs",
-      "scope": "analyse",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/unpack/chunk_link/embedded.rs",
-      "scope": "file_of",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/unpack/chunk_link/embedded.rs",
-      "scope": "is_bun_module",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/unpack/chunk_link/embedded.rs",
-      "scope": "resolve",
-      "construct": "fs",
-      "role": "legacy"
-    },
-    {
-      "file": "crates/humanify-ag-core/src/unpack/input.rs",
-      "scope": "read_input",
-      "construct": "fs",
-      "role": "legacy"
     },
     {
       "file": "crates/humanify-ag-index/src/asof.rs",

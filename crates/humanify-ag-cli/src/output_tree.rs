@@ -36,6 +36,10 @@ impl FolderReader for Disk {
         }
         Ok(out)
     }
+
+    fn has_file(&self, path: &Path) -> bool {
+        path.is_file()
+    }
 }
 
 /// An empty tree for the output folder `root`, over the disk.
