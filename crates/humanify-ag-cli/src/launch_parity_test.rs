@@ -207,7 +207,7 @@ fn recorded_corpus() -> Vec<(String, Launch)> {
         .unwrap_or_else(|e| panic!("{dir}: {e}"))
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .filter(|n| n.ends_with(".golden.txt"))
-        // the run-launch golden shares the directory but are run.sh's
+        // the run-launch golden shares the directory but is run.sh's
         // format, read through GOLDENS above
         .filter(|n| !GOLDENS.iter().any(|g| g.ends_with(n.as_str())))
         .collect();
