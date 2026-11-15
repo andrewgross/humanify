@@ -40,7 +40,7 @@ pub mod report;
 
 use std::path::{Path, PathBuf};
 
-use humanify_ag_model::js::JsValue;
+use crate::json::js::JsValue;
 
 use super::leg::{self, LabelBin, LegSpec};
 use super::records::{js_pretty, num, obj};
@@ -219,7 +219,7 @@ fn freeze(ctx: &Ctx, cfg: &WalkConfig) -> Result<(PathBuf, JsValue), String> {
         ))?;
         write(
             &record_path,
-            &format!("{}\n", humanify_ag_model::js::stringify(&rec.to_js())),
+            &format!("{}\n", crate::json::js::stringify(&rec.to_js())),
         )?;
     }
     let record = std::fs::read_to_string(&record_path)
@@ -345,8 +345,7 @@ fn record_manifest(w: &Walk, fresh: JsValue) -> Result<(), String> {
         &["libraryIndex"],
     ] {
         if get(&old, k) != get(&fresh, k) {
-            let show =
-                |v: Option<&JsValue>| v.map_or("null".into(), humanify_ag_model::js::stringify);
+            let show = |v: Option<&JsValue>| v.map_or("null".into(), crate::json::js::stringify);
             return Err(format!(
                 "eval walk: --resume refused: .{} differs ({} vs {})",
                 k.join("."),
@@ -675,7 +674,7 @@ fn finished_hop(w: &Walk, v: &str, tree: &Path, hop_path: &Path) -> Result<(), S
         }
         write(hop_path, &format!("{}\n", js_pretty(&hop)))?;
     }
-    let show = |p: &[&str]| get(&hop, p).map_or("null".into(), humanify_ag_model::js::stringify);
+    let show = |p: &[&str]| get(&hop, p).map_or("null".into(), crate::json::js::stringify);
     w.ctx.say(format!(
         "=== {v}: done (exit {}, {}s, boot {}) — skipped",
         show(&["exitCode"]),

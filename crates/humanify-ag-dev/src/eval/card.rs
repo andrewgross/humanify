@@ -2,7 +2,8 @@
 //! `humanify_ag_model::js`): small builders for writing a card and a path
 //! reader for reading one back.
 
-use humanify_ag_model::js::{JsObject, JsValue, to_fixed};
+use crate::json::js::{JsObject, JsValue};
+use humanify_ag_model::js::to_fixed;
 
 /// The scorer version every card this scorer writes carries
 /// (`scorerVersion`). Version 2 (exp196) was the KPI statement form over oxc

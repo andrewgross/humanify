@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use humanify_ag_model::js::JsValue;
+use crate::json::js::JsValue;
 
 use super::*;
 use crate::proc::{Spawn, run_ok};

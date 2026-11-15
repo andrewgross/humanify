@@ -13,11 +13,11 @@ pub mod keys;
 
 use std::sync::LazyLock;
 
+use crate::json::js::{JsObject, JsValue};
 use clap::{Arg, ArgAction};
 use humanify_ag_cli::config::keys::PIPELINE;
 use humanify_ag_cli::registry::flags::{FlagSpec, add_flags, flag_values, specs};
 use humanify_ag_cli::registry::{Registry, Resolved, Val, check_range, resolve};
-use humanify_ag_model::js::{JsObject, JsValue};
 
 pub use keys::HARNESS;
 

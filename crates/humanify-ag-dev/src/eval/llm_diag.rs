@@ -20,7 +20,8 @@
 
 use std::path::Path;
 
-use humanify_ag_model::js::{JsObject, JsValue, number_to_string};
+use crate::json::js::{JsObject, JsValue};
+use humanify_ag_model::js::number_to_string;
 
 use super::card::{at, number_at};
 

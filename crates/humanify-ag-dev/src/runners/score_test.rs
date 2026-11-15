@@ -204,10 +204,10 @@ fn with(extra: &[&'static str]) -> Vec<&'static str> {
 fn assert_scored_launches_match_runcfgs(h: &Harness) {
     assert_eq!(h.scored.len(), h.runcfgs.len(), "{}", h.said);
     for cfg in &h.runcfgs {
-        let v = humanify_ag_model::js::JsValue::parse(cfg).unwrap();
+        let v = crate::json::js::JsValue::parse(cfg).unwrap();
         let o = v.as_object().unwrap();
         let args: Vec<String> = match o.get("args").unwrap() {
-            humanify_ag_model::js::JsValue::Array(a) => {
+            crate::json::js::JsValue::Array(a) => {
                 a.iter().map(|x| x.as_str().unwrap().to_string()).collect()
             }
             _ => panic!("args"),
@@ -341,21 +341,17 @@ fn pipeline_sets_reach_all_three_sites_once_each_in_order() {
     );
 }
 
-fn self_hop(h: &Harness) -> humanify_ag_model::js::JsValue {
+fn self_hop(h: &Harness) -> crate::json::js::JsValue {
     let f = std::fs::read_dir(&h.results)
         .unwrap()
         .filter_map(|e| e.ok())
         .find(|e| e.file_name().to_string_lossy().ends_with("-self-hop.json"))
         .unwrap_or_else(|| panic!("no self-hop verdict:\n{}", h.said));
-    let v =
-        humanify_ag_model::js::JsValue::parse(&std::fs::read_to_string(f.path()).unwrap()).unwrap();
+    let v = crate::json::js::JsValue::parse(&std::fs::read_to_string(f.path()).unwrap()).unwrap();
     v.as_object().unwrap().get("selfHop").unwrap().clone()
 }
 
-fn get<'a>(
-    v: &'a humanify_ag_model::js::JsValue,
-    path: &[&str],
-) -> &'a humanify_ag_model::js::JsValue {
+fn get<'a>(v: &'a crate::json::js::JsValue, path: &[&str]) -> &'a crate::json::js::JsValue {
     let mut c = v;
     for k in path {
         c = c.as_object().unwrap().get(k).unwrap();
@@ -367,7 +363,7 @@ fn get<'a>(
 fn the_warm_self_hop_replays_a_copy_identical_with_zero_writes() {
     let h = run_score(&bin_flags(), |_| {}).unwrap();
     let hop = self_hop(&h);
-    use humanify_ag_model::js::JsValue;
+    use crate::json::js::JsValue;
     assert_eq!(get(&hop, &["warm", "ran"]), &JsValue::Bool(true));
     assert_eq!(get(&hop, &["warm", "identical"]), &JsValue::Bool(true));
     assert_eq!(get(&hop, &["warm", "cacheWrites"]), &JsValue::Number(0.0));
@@ -392,7 +388,7 @@ fn the_warm_self_hop_fails_on_a_cache_write_and_on_a_byte_difference() {
         })
         .unwrap();
         let hop = self_hop(&h);
-        use humanify_ag_model::js::JsValue;
+        use crate::json::js::JsValue;
         assert_eq!(
             get(&hop, &["warm", "ok"]),
             &JsValue::Bool(false),
@@ -407,7 +403,7 @@ fn the_warm_self_hop_fails_on_a_cache_write_and_on_a_byte_difference() {
 fn a_pairs_subset_self_hops_the_last_scored_pair() {
     let h = run_score(&with(&["--pairs", "85->86"]), |_| {}).unwrap();
     assert_ran(&h);
-    use humanify_ag_model::js::JsValue;
+    use crate::json::js::JsValue;
     assert_eq!(get(&self_hop(&h), &["version"]), &JsValue::str("2.1.86"));
 }
 
@@ -593,7 +589,7 @@ fn completion_order_never_reaches_the_transcript_or_the_label() {
     };
     assert_eq!(lanes(&serial), lanes(&parallel));
     // the self-hop still runs on the last pair's tree, after its scored leg
-    use humanify_ag_model::js::JsValue;
+    use crate::json::js::JsValue;
     assert_eq!(
         get(&self_hop(&parallel), &["version"]),
         &JsValue::str(pairs().last().unwrap().1.as_str())

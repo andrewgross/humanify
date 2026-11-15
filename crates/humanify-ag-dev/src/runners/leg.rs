@@ -14,7 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use humanify_ag_model::js::{JsObject, JsValue};
+use crate::json::js::{JsObject, JsValue};
 
 use super::records::{js_pretty, manifest_warnings, num, obj};
 use super::{Ctx, count_files, text, write};

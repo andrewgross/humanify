@@ -29,7 +29,7 @@
 
 use std::path::{Path, PathBuf};
 
-use humanify_ag_model::js::JsValue;
+use crate::json::js::JsValue;
 
 use super::tree_diff::{changed_lines_in_trees, differing_files, differing_sidecars};
 use super::{Ctx, count_files, remove, text, write};

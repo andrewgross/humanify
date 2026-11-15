@@ -1,5 +1,5 @@
 use super::*;
-use humanify_ag_model::js::JsValue;
+use crate::json::js::JsValue;
 
 /// A library record is plain serde JSON: two-space indent, keys sorted,
 /// non-ASCII as is, a float as serde writes it, one trailing newline.

@@ -11,7 +11,7 @@
 
 use std::path::Path;
 
-use humanify_ag_model::js::{JsValue, stringify};
+use crate::json::js::{JsValue, stringify};
 
 /// One `--config` setting: a dotted key and its value (a string, a
 /// number, a boolean or a list of strings).

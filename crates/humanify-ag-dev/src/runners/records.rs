@@ -14,7 +14,7 @@
 
 use std::path::Path;
 
-use humanify_ag_model::js::{JsObject, JsValue};
+use crate::json::js::{JsObject, JsValue};
 
 use super::write;
 use crate::bin_build::same_commit;
@@ -27,7 +27,7 @@ pub fn js_pretty(v: &JsValue) -> String {
 
 /// `JSON.stringify(x)` + newline (run.sh's `jq -c` records).
 pub fn js_compact_line(v: &JsValue) -> String {
-    format!("{}\n", humanify_ag_model::js::stringify(v))
+    format!("{}\n", crate::json::js::stringify(v))
 }
 
 pub fn num(n: impl Into<f64>) -> JsValue {

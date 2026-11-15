@@ -15,7 +15,7 @@
 //! refused: two layers of the harness disagreeing about one setting is
 //! the conflict the binary refuses between a flag and its file.
 
-use humanify_ag_model::js::{JsValue, stringify};
+use crate::json::js::{JsValue, stringify};
 
 /// One `section.key=value` setting, typed the way pipeline-config.ts
 /// types it.

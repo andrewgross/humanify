@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use humanify_ag_model::js::JsValue;
+use crate::json::js::JsValue;
 
 use super::neutrality::{NeutralityConfig, config_from, resolved_record, run};
 use crate::runners::recording_test::{Commit, Rec, cargo_toml, committed, golden, sandbox_repo};
@@ -157,12 +157,12 @@ fn check(
             .as_object()
             .unwrap()
             .get(key)
-            .map(|v| rec.normalise(&humanify_ag_model::js::stringify(v), repo));
+            .map(|v| rec.normalise(&crate::json::js::stringify(v), repo));
         let b = gcfg
             .as_object()
             .unwrap()
             .get(key)
-            .map(humanify_ag_model::js::stringify);
+            .map(crate::json::js::stringify);
         assert_eq!(a, b, "{name}: run config {key}");
     }
 }

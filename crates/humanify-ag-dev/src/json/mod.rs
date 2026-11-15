@@ -2,15 +2,14 @@
 //!
 //! - [`text`]: plain serde JSON (two-space indent, a trailing newline): every
 //!   record the library scorer writes.
-//! - JS: `JSON.stringify(x, null, 2)` — the eval's cards, summaries, run
-//!   manifests and pipeline records. The workspace already owns JS JSON
-//!   (`humanify_ag_model::js`: object order, `String(number)`, escapes),
-//!   so this module calls it rather than copying it.
+//! - [`js`]: `JSON.stringify(x, null, 2)` — the eval's cards, summaries, run
+//!   manifests and pipeline records.
 //! - [`frozen`]: the identity spelling a recorded library sha is taken over.
 
 pub mod frozen;
+pub mod js;
 
-use humanify_ag_model::js::{JsValue, stringify_pretty};
+use crate::json::js::{JsValue, stringify_pretty};
 use serde::Serialize;
 
 /// A record's bytes: serde's pretty JSON and a trailing newline.
