@@ -109,7 +109,7 @@ pub fn config_from(parsed: &Parsed, pairs: &Pairs) -> Result<NeutralityConfig, S
             .map_or_else(|| workdir.join("neutrality-cache"), PathBuf::from),
         priors: s
             .text("neutrality.priors")
-            .map_or_else(|| workdir.join("exp050-cold"), PathBuf::from),
+            .map_or_else(|| workdir.join("neutrality-priors"), PathBuf::from),
         inputs_base: s
             .text("eval.inputs_base")
             .unwrap_or_else(|| pairs.inputs_base.clone()),
@@ -323,7 +323,7 @@ fn prior_of(cfg: &NeutralityConfig) -> Result<String, String> {
         msg.push_str(&format!(
             "\n       {} does not exist at all.\n       The workdir is also the default prior root. To use a separate\n       \
              workdir, keep the priors (and the warm cache) where they are:\n         \
-             cargo dev eval neutrality {} {}:{} --workdir {} --priors /work/exp050-cold --cache /work/neutrality-cache",
+             cargo dev eval neutrality {} {}:{} --workdir {} --priors /work/neutrality-priors --cache /work/neutrality-cache",
             text(&cfg.priors),
             cfg.baseline,
             cfg.from,

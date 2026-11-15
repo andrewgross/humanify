@@ -264,7 +264,7 @@ pub static HARNESS_KEYS: &[Key] = &[
         "neutrality",
         "priors",
         Some("--priors"),
-        "<workdir>/exp050-cold",
+        "<workdir>/neutrality-priors, the standing priors written by the current binary",
         "Where the pair's prior trees are.",
     ),
     // [libscore]

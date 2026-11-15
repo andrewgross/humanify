@@ -152,7 +152,7 @@ fn neutrality_defaults_ride_on_the_workdir_and_explicit_paths_survive_it() {
     let c = super::neutrality::config_from(&parsed, &p).unwrap();
     assert_eq!((c.from.as_str(), c.to.as_str()), ("2.1.85", "2.1.86"));
     assert_eq!(c.cache, PathBuf::from("/work/neutrality-cache"));
-    assert_eq!(c.priors, PathBuf::from("/work/exp050-cold"));
+    assert_eq!(c.priors, PathBuf::from("/work/neutrality-priors"));
     let parsed = parse(
         "eval neutrality",
         NEUT,
