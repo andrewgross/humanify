@@ -9,8 +9,8 @@
 //! flag is a key; the clap command is built from the table
 //! (`registry::flags`). This module owns what does not depend on WHICH
 //! table it reads: typed values, range checks, "did you mean", resolving
-//! flag / file / default with the conflict rule, the rendered example, and
-//! the refusal of retired or renamed spellings. Extracted 2026-11-07 from
+//! flag / file / default with the conflict rule and the rendered example.
+//! Extracted 2026-11-07 from
 //! `config/file.rs` and `surface.rs` without changing a byte of the
 //! pipeline's help, example file or resolution (the goldens and
 //! config_file_test.rs hold that).
@@ -145,12 +145,6 @@ impl Key {
 pub struct Registry {
     /// Every setting, in the order help and the example list them.
     pub keys: &'static [Key],
-    /// Keys renamed or never valid: `(dotted key, what to do instead)`.
-    /// Refused by name, never aliased.
-    pub retired_keys: &'static [(&'static str, &'static str)],
-    /// Flags renamed or retired: `(old spelling, the refusal's note)`.
-    /// Refused by name before the parser runs, never aliased.
-    pub retired_flags: &'static [(&'static str, &'static str)],
     /// Single-letter aliases: `(dotted key, letter)`.
     pub short_flags: &'static [(&'static str, char)],
     /// The one counted flag (`-vv`), if any.
@@ -219,12 +213,6 @@ impl Registry {
             .filter(|f| distance(f, flag) <= 3)
     }
 
-    /// The refusal of a retired or renamed flag in `args`, if any.
-    /// `--flag=value` counts too; nothing after `--` is a flag.
-    pub fn retired_flag(&self, args: &[String]) -> Option<String> {
-        retired_in(self.retired_flags, args)
-    }
-
     /// The typed value of the key's text (a flag's argument, or the value
     /// of a `section.key=value` setting); the range is checked by
     /// [`check_range`]. `who` names it as written.
@@ -254,17 +242,6 @@ impl Registry {
             _ => Ok(Val::Text(raw.to_string())),
         }
     }
-}
-
-/// The refusal of the first `args` entry named in `table`, if any.
-pub fn retired_in(table: &[(&str, &str)], args: &[String]) -> Option<String> {
-    args.iter().take_while(|a| *a != "--").find_map(|arg| {
-        let name = arg.split_once('=').map_or(arg.as_str(), |(n, _)| n);
-        table
-            .iter()
-            .find(|(flag, _)| *flag == name)
-            .map(|(flag, note)| format!("error: unexpected argument '{flag}' ({note})\n"))
-    })
 }
 
 /// Where a resolved value came from.

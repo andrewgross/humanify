@@ -19,6 +19,7 @@
 use std::path::{Path, PathBuf};
 
 use humanify_ag_model::js::{JsValue, stringify};
+use humanify_ag_model::numfmt::group_digits;
 
 use super::super::scoring::{self, PairInputs};
 use super::super::{Ctx, text, tree_diff, write};
@@ -302,21 +303,10 @@ pub fn fmt(n: Option<f64>) -> String {
         let (int, frac) = s.split_once('.').map_or((s, ""), |(a, b)| (a, b));
         let sign = if n < 0.0 { "-" } else { "" };
         let dot = if frac.is_empty() { "" } else { "." };
-        return format!("{sign}{}{dot}{frac}", group(int));
+        return format!("{sign}{}{dot}{frac}", group_digits(int));
     }
     let sign = if n < 0.0 { "-" } else { "" };
-    format!("{sign}{}", group(&format!("{}", n.abs() as u64)))
-}
-
-fn group(digits: &str) -> String {
-    let mut out = String::new();
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
+    format!("{sign}{}", group_digits(&format!("{}", n.abs() as u64)))
 }
 
 fn sum(xs: &[Option<f64>]) -> Option<f64> {

@@ -10,13 +10,6 @@ fn st(hash: &str, text: &str) -> Stmt {
 }
 
 #[test]
-fn locale_numbers() {
-    assert_eq!(fmt_int(0), "0");
-    assert_eq!(fmt_int(1234567), "1,234,567");
-    assert_eq!(fmt_int(-1000), "-1,000");
-}
-
-#[test]
 fn noise_shapes() {
     assert_eq!(
         noise_shape("var a = b.c;", "var x = b.c;"),

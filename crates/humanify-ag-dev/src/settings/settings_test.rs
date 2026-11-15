@@ -133,18 +133,15 @@ fn pipeline_sets_are_checked_against_the_pipelines_registry() {
             "--pipeline-set",
             "library.index=/x",
             "--pipeline-set",
-            "perf.profile=true",
-            "--pipeline-set",
             "noequals",
         ]),
     )
     .expect_err("all refused");
-    assert_eq!(e.len(), 5, "{e:#?}");
+    assert_eq!(e.len(), 4, "{e:#?}");
     assert!(e[0].contains("did you mean naming.schedule"), "{}", e[0]);
     assert!(e[1].contains("off, report, names"), "{}", e[1]);
     assert!(e[2].contains("set by the harness"), "{}", e[2]);
-    assert!(e[3].contains("retired"), "{}", e[3]);
-    assert!(e[4].contains("section.key=value"), "{}", e[4]);
+    assert!(e[3].contains("section.key=value"), "{}", e[3]);
 }
 
 #[test]

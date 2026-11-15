@@ -14,18 +14,7 @@ use super::analyze::PairInputs;
 use super::stmts::{Stmt, bundle_statements};
 use super::text::{EditPairer, edited_line_counts, words};
 
-/// `n.toLocaleString("en-US")` for an integer.
-pub fn fmt_int(n: i64) -> String {
-    let digits = n.unsigned_abs().to_string();
-    let mut out = String::new();
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    if n < 0 { format!("-{out}") } else { out }
-}
+use humanify_ag_model::numfmt::thousands;
 
 fn pct(n: i64, total: i64) -> String {
     if total > 0 {
@@ -423,7 +412,7 @@ fn terminal_state(ts: &Value, total: i64, orders: &KeyOrders) -> String {
         .map(|(t, n)| {
             format!(
                 "<tr><td>named-by {t}</td><td class=n>{}</td><td class=n>{}</td></tr>",
-                fmt_int(*n),
+                thousands(*n),
                 pct(*n, total)
             )
         })
@@ -438,17 +427,17 @@ fn terminal_state(ts: &Value, total: i64, orders: &KeyOrders) -> String {
     } else {
         format!(
             "<p><b>{} unaccounted minted names</b> (no recorded decision): {}</p>",
-            fmt_int(unaccounted.len() as i64),
+            thousands(unaccounted.len() as i64),
             unaccounted.join(" ")
         )
     };
     format!(
         "<h2>Terminal state (ground truth)</h2>\n<table><tr><th>end state</th><th>bindings</th><th>of total</th></tr>\n<tr><td><b>TOTAL bindings</b></td><td class=n><b>{}</b></td><td class=n>100%</td></tr>{rows}\n<tr><td>llm</td><td class=n>{}</td><td class=n>{}</td></tr>\n<tr><td><b>minted, accounted</b></td><td class=n><b>{}</b></td><td class=n></td></tr>\n<tr><td><b>REMAINING unaccounted</b></td><td class=n><b>{}</b></td><td class=n></td></tr></table>\n{residue}",
-        fmt_int(total),
-        fmt_int(num(&ts["llmNamed"])),
+        thousands(total),
+        thousands(num(&ts["llmNamed"])),
         pct(num(&ts["llmNamed"]), total),
-        fmt_int(num(&ts["mintedAccounted"])),
-        fmt_int(unaccounted.len() as i64),
+        thousands(num(&ts["mintedAccounted"])),
+        thousands(unaccounted.len() as i64),
     )
 }
 
@@ -461,9 +450,9 @@ fn diff_section(l: &DiffLedger) -> String {
             format!(
                 "<tr><td>noise: {}</td><td class=n><b>~{}</b></td><td class=n>{}</td><td class=n>{}</td><td class=n>{}</td></tr>",
                 s.shape,
-                fmt_int(s.edited_ln),
-                fmt_int(s.ln),
-                fmt_int(s.st),
+                thousands(s.edited_ln),
+                thousands(s.ln),
+                thousands(s.st),
                 share(s.edited_ln)
             )
         })
@@ -487,30 +476,30 @@ fn diff_section(l: &DiffLedger) -> String {
 <tr><td>noise: family-bucket</td><td class=n><b>~{fe}</b></td><td class=n>{fl}</td><td class=n>{fs}</td><td class=n>{fes}</td></tr>
 <tr><td>file moves</td><td class=n>—</td><td class=n>—</td><td class=n>{mv}</td><td class=n></td></tr></table>
 <p style=\"color:#888\">\"Diff-visible\" approximates what `diff` prints (per-pair set-based line comparison); unchanged context inside touched statements counts as CLEAN. Statement mass is kept as context — it is what the hash-level eval KPIs measure. Honest real change ~{hr} ln.</p>",
-        fresh = fmt_int(l.fresh_total_ln),
-        cv = fmt_int(l.clean_visible_ln),
+        fresh = thousands(l.fresh_total_ln),
+        cv = thousands(l.clean_visible_ln),
         cvp = pct(l.clean_visible_ln, l.fresh_total_ln),
-        dvf = fmt_int(l.diff_visible_fresh_ln),
-        dvp = fmt_int(l.diff_visible_prior_ln),
-        ne = fmt_int(l.noise_edited_ln),
+        dvf = thousands(l.diff_visible_fresh_ln),
+        dvp = thousands(l.diff_visible_prior_ln),
+        ne = thousands(l.noise_edited_ln),
         nes = share(l.noise_edited_ln),
-        clean = fmt_int(l.clean_ln),
-        ctx = fmt_int(l.clean_visible_ln - l.clean_ln),
-        mp = fmt_int(l.modified_pairs),
-        me = fmt_int(l.modified_edited_ln),
-        mf = fmt_int(l.modified_fresh_ln),
+        clean = thousands(l.clean_ln),
+        ctx = thousands(l.clean_visible_ln - l.clean_ln),
+        mp = thousands(l.modified_pairs),
+        me = thousands(l.modified_edited_ln),
+        mf = thousands(l.modified_fresh_ln),
         mes = share(l.modified_edited_ln),
-        pa = fmt_int(l.pure_added_ln),
-        pas = fmt_int(l.pure_added_st),
+        pa = thousands(l.pure_added_ln),
+        pas = thousands(l.pure_added_st),
         pash = share(l.pure_added_ln),
-        pr = fmt_int(l.pure_removed_ln),
-        prs = fmt_int(l.pure_removed_st),
-        fe = fmt_int(l.family_edited_ln),
-        fl = fmt_int(l.family_ln),
-        fs = fmt_int(l.family_st),
+        pr = thousands(l.pure_removed_ln),
+        prs = thousands(l.pure_removed_st),
+        fe = thousands(l.family_edited_ln),
+        fl = thousands(l.family_ln),
+        fs = thousands(l.family_st),
         fes = share(l.family_edited_ln),
-        mv = fmt_int(l.moved_st),
-        hr = fmt_int(l.honest_real_ln),
+        mv = thousands(l.moved_st),
+        hr = thousands(l.honest_real_ln),
     )
 }
 
@@ -551,7 +540,7 @@ pub fn render_html(
         .map(|(s, n)| {
             format!(
                 "<tr><td>{s}</td><td class=n>{}</td><td class=n>{}</td></tr>",
-                fmt_int(*n),
+                thousands(*n),
                 pct(*n, total)
             )
         })
@@ -561,10 +550,10 @@ pub fn render_html(
         .map(|(s, c, r)| {
             format!(
                 "<tr><td>{s}</td><td class=n>{}</td><td class=n>{}</td><td class=n>{}</td><td class=n>{}</td><td class=reasons>{r}</td></tr>",
-                fmt_int(c[0]),
-                fmt_int(c[1]),
-                fmt_int(c[2]),
-                fmt_int(c[3])
+                thousands(c[0]),
+                thousands(c[1]),
+                thousands(c[2]),
+                thousands(c[3])
             )
         })
         .collect();
@@ -587,7 +576,7 @@ pub fn render_html(
         .collect();
     let llm = num(&l["llmNamed"]);
     let remaining = num(&l["remainingMinted"]);
-    let len = |v: &Value| fmt_int(v.as_array().map_or(0, Vec::len) as i64);
+    let len = |v: &Value| thousands(v.as_array().map_or(0, Vec::len) as i64);
     let un = &diag["unrenamed"];
     Ok(format!(
         "<!doctype html>
@@ -616,14 +605,14 @@ pub fn render_html(
 <p>renamed {renamed} · unchanged {u1} · missing {u2} · duplicate {u3} · invalid {u4}</p>
 ",
         ts = diag["timestamp"].as_str().unwrap_or_default(),
-        total_s = fmt_int(total),
-        transfer_s = fmt_int(transfer),
+        total_s = thousands(total),
+        transfer_s = thousands(transfer),
         transfer_p = pct(transfer, total),
-        llm_s = fmt_int(llm),
+        llm_s = thousands(llm),
         llm_p = pct(llm, total),
-        rem_s = fmt_int(remaining),
+        rem_s = thousands(remaining),
         rem_p = pct(remaining, total),
-        unren = fmt_int(num(&l["notRenamed"])),
+        unren = thousands(num(&l["notRenamed"])),
         terminal = terminal_state(&l["terminalState"], total, orders),
         diff = ledger.map(diff_section).unwrap_or_default(),
         nclob = clobbers.len(),

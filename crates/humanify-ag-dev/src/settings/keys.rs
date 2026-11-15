@@ -643,8 +643,6 @@ const SECTION_TITLES: &[(&str, &str)] = &[
 /// The harness's registry.
 pub static HARNESS: Registry = Registry {
     keys: HARNESS_KEYS,
-    retired_keys: &[],
-    retired_flags: &[],
     short_flags: &[],
     counted_flag: None,
     repeatable: &["run.pipeline_set"],
