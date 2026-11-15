@@ -71,6 +71,17 @@ humanify-config| [split]
 humanify-config| enabled = true
 humanify-config| [library]
 humanify-config| index = "/work/library-index/4736dcfadff79ee2dd921d1d778fd7d92f604a708f3ad5b652c146ed89d67c84"
+humanify NODE_OPTIONS= HUMANIFY_API_KEY=local :: <TMP>/inputs/claude-code-2.1.260/binary-decompiled/index.js --config <TMP>/work/<LABEL>/2.1.260-rebased.toml --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b -o <TMP>/work/<LABEL>/2.1.260-rebased -vv 
+humanify-config| [llm]
+humanify-config| reasoning_effort = "low"
+humanify-config| concurrency = 472
+humanify-config| [split]
+humanify-config| enabled = true
+humanify-config| [diagnostics]
+humanify-config| stats_json = "<REPO>/dev/eval/results/<LABEL>/2.1.260-rebase.stats.json"
+humanify-config| log_file = "<REPO>/dev/eval/results/<LABEL>/2.1.260-rebase.log"
+humanify-config| [library]
+humanify-config| index = "/work/library-index/4736dcfadff79ee2dd921d1d778fd7d92f604a708f3ad5b652c146ed89d67c84"
 runcfg-2.1.119.json: {
   "pair": "2.1.118->2.1.119",
   "version": "2.1.119",
@@ -246,6 +257,53 @@ runcfg-2.1.216.json: {
     "<TMP>/work/<LABEL>/2.1.216/.humanify/humanified.js",
     "<TMP>/work/<LABEL>/2.1.216/.humanify/split-ledger.json",
     "<REPO>/dev/eval/results/<LABEL>/2.1.216.stats.json"
+  ],
+  "command": [
+    "<TMP>/shims/humanify"
+  ],
+  "bin": {
+    "path": "<TMP>/shims/humanify",
+    "sha256": "8185c30f4b3038a8b3dced851c0e8ce3ab6c600aaf2f442907c798778bccf348",
+    "commit": "",
+    "dirty": false,
+    "built": false
+  }
+}
+
+runcfg-2.1.261.json: {
+  "pair": "2.1.260->2.1.261",
+  "version": "2.1.261",
+  "label": "<LABEL>",
+  "resultsDir": "<REPO>/dev/eval/results/<LABEL>",
+  "input": "<TMP>/inputs/claude-code-2.1.261/binary-decompiled/index.js",
+  "prior": "<TMP>/work/<LABEL>/2.1.260-rebased/.humanify/humanified.js",
+  "baseMode": "scratch",
+  "outputDir": "<TMP>/work/<LABEL>/2.1.261",
+  "repo": "<REPO>",
+  "args": [
+    "<TMP>/inputs/claude-code-2.1.261/binary-decompiled/index.js",
+    "--config",
+    "<TMP>/work/<LABEL>/2.1.261.toml",
+    "--endpoint",
+    "http://127.0.0.1:9/v1",
+    "--model",
+    "openai/gpt-oss-20b",
+    "-o",
+    "<TMP>/work/<LABEL>/2.1.261",
+    "--prior-version",
+    "<TMP>/work/<LABEL>/2.1.260-rebased/.humanify/humanified.js",
+    "-vv"
+  ],
+  "configToml": "[llm]\nreasoning_effort = \"low\"\nconcurrency = 472\n[split]\nenabled = true\n[diagnostics]\nstats_json = \"<REPO>/dev/eval/results/<LABEL>/2.1.261.stats.json\"\nlog_file = \"<REPO>/dev/eval/results/<LABEL>/2.1.261.log\"\ndiagnostics_file = \"<TMP>/work/<LABEL>/2.1.261.diag.json\"\n[library]\nindex = \"/work/library-index/4736dcfadff79ee2dd921d1d778fd7d92f604a708f3ad5b652c146ed89d67c84\"\n",
+  "stdoutPath": "<REPO>/dev/eval/results/<LABEL>/2.1.261.stdout",
+  "endpoint": "http://127.0.0.1:9/v1",
+  "model": "openai/gpt-oss-20b",
+  "reasoningEffort": "low",
+  "concurrency": 472,
+  "artifacts": [
+    "<TMP>/work/<LABEL>/2.1.261/.humanify/humanified.js",
+    "<TMP>/work/<LABEL>/2.1.261/.humanify/split-ledger.json",
+    "<REPO>/dev/eval/results/<LABEL>/2.1.261.stats.json"
   ],
   "command": [
     "<TMP>/shims/humanify"

@@ -181,7 +181,7 @@ pub static HARNESS_KEYS: &[Key] = &[
         default: || Some(Val::Int(5)),
         unset: "",
         doc: "How many pairs run at once, each in its own lane (rebase, scored leg, \
-              scoring, boot; the self-hop in the last pair's lane). 1 is the serial run. \
+              scoring, boot; the self-hop in its pair's lane). 1 is the serial run. \
               Every launch keeps pairs.json's llm.concurrency, so the LLM server sees up \
               to N times it in flight (exp207).",
     },

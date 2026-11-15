@@ -40,14 +40,46 @@ struct Harness {
     label: String,
 }
 
+/// The pair whose `to` the self-hop runs on in a full run (pairs.json
+/// `selfHop`).
+fn self_hop_to() -> String {
+    crate::committed::eval::pairs(&crate::paths::repo_root())
+        .expect("pairs.json")
+        .value
+        .pairs
+        .into_iter()
+        .find(|p| p.self_hop)
+        .expect("a selfHop pair")
+        .to
+}
+
+/// Whether a release ships the code-split layout (its entry at the root
+/// of `binary-decompiled/`, chunks beside it): 2.1.242 and later.
+fn code_split(version: &str) -> bool {
+    version
+        .rsplit('.')
+        .next()
+        .and_then(|p| p.parse::<u32>().ok())
+        .is_some_and(|patch| patch >= 242)
+}
+
+/// Every pair's inputs, in the layout the host's corpus has: a single
+/// file under `src/entrypoints/` before the code split, the root entry
+/// and a chunk beside it after.
 fn fake_corpus(root: &Path) {
     for (from, to) in pairs() {
         for v in [&from, &to] {
-            let dir = root.join(format!(
-                "inputs/claude-code-{v}/binary-decompiled/src/entrypoints"
-            ));
+            let decompiled = root.join(format!("inputs/claude-code-{v}/binary-decompiled"));
+            let dir = if code_split(v) {
+                decompiled.clone()
+            } else {
+                decompiled.join("src/entrypoints")
+            };
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("index.js"), "input\n").unwrap();
+            if code_split(v) {
+                std::fs::write(decompiled.join("chunk-0000.js"), "chunk\n").unwrap();
+            }
         }
     }
 }
@@ -398,6 +430,34 @@ fn the_warm_self_hop_fails_on_a_cache_write_and_on_a_byte_difference() {
 }
 
 #[test]
+fn a_full_run_self_hops_the_marked_pair_not_the_last_one() {
+    let h = run_score(&bin_flags(), |_| {}).unwrap();
+    assert_ran(&h);
+    use crate::json::js::JsValue;
+    let last = pairs().last().unwrap().1.clone();
+    assert_ne!(self_hop_to(), last, "the marked pair is not the last one");
+    assert_eq!(
+        get(&self_hop(&h), &["version"]),
+        &JsValue::str(self_hop_to().as_str())
+    );
+}
+
+#[test]
+fn a_code_split_pair_launches_its_root_entry() {
+    let h = run_score(&with(&["--pairs", "260->261"]), |_| {}).unwrap();
+    assert_ran(&h);
+    assert!(
+        h.launches
+            .contains("/inputs/claude-code-2.1.261/binary-decompiled/index.js --config"),
+        "{}",
+        h.launches
+    );
+    use crate::json::js::JsValue;
+    // the marked pair is not selected: the self-hop runs on the last scored pair
+    assert_eq!(get(&self_hop(&h), &["version"]), &JsValue::str("2.1.261"));
+}
+
+#[test]
 fn a_pairs_subset_self_hops_the_last_scored_pair() {
     let h = run_score(&with(&["--pairs", "85->86"]), |_| {}).unwrap();
     assert_ran(&h);
@@ -586,11 +646,11 @@ fn completion_order_never_reaches_the_transcript_or_the_label() {
             .collect::<Vec<_>>()
     };
     assert_eq!(lanes(&serial), lanes(&parallel));
-    // the self-hop still runs on the last pair's tree, after its scored leg
+    // the self-hop still runs on the selfHop pair's tree, after its scored leg
     use crate::json::js::JsValue;
     assert_eq!(
         get(&self_hop(&parallel), &["version"]),
-        &JsValue::str(pairs().last().unwrap().1.as_str())
+        &JsValue::str(self_hop_to().as_str())
     );
     let names = |h: &Harness| {
         let mut n: Vec<String> = std::fs::read_dir(&h.results)
@@ -790,8 +850,17 @@ fn one_rebase_runs_at_a_time_self_hop_pair_first_and_each_lane_says_its_wait() {
         .filter(|l| l.ends_with("-rebased"))
         .collect();
     let p = pairs();
-    let mut want_order = vec![p.last().unwrap().0.clone()];
-    want_order.extend(p[..p.len() - 1].iter().map(|(f, _)| f.clone()));
+    let hop = self_hop_to();
+    let mut want_order: Vec<String> = p
+        .iter()
+        .filter(|(_, to)| *to == hop)
+        .map(|(f, _)| f.clone())
+        .collect();
+    want_order.extend(
+        p.iter()
+            .filter(|(_, to)| *to != hop)
+            .map(|(f, _)| f.clone()),
+    );
     let mut want = Vec::new();
     for f in &want_order {
         want.push(format!("start {f}-rebased"));
@@ -811,8 +880,10 @@ fn one_rebase_runs_at_a_time_self_hop_pair_first_and_each_lane_says_its_wait() {
 
 #[test]
 fn parallel_rebases_lets_that_many_overlap() {
+    let n = pairs().len().to_string();
+    let n: &'static str = Box::leak(n.into_boxed_str());
     let h = run_score(
-        &with(&["--parallel-rebases", "5"]),
+        &with(&["--parallel-pairs", n, "--parallel-rebases", n]),
         // EVERY rebase is slow (~2 s): an instant one could end before the
         // last one starts and make the overlap a race (seen once in a
         // clean-checkout gate)
@@ -828,6 +899,6 @@ fn parallel_rebases_lets_that_many_overlap() {
             .filter(|l| l.ends_with("-rebased"))
             .count(),
         pairs().len(),
-        "all five rebases started before any launch ended: {s:?}"
+        "every rebase started before any launch ended: {s:?}"
     );
 }

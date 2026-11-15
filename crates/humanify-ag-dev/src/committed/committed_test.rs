@@ -22,15 +22,54 @@ fn pairs_json_loads_typed() {
             "2.1.118->2.1.119",
             "2.1.179->2.1.181",
             "2.1.197->2.1.198",
-            "2.1.215->2.1.216"
+            "2.1.215->2.1.216",
+            "2.1.260->2.1.261"
         ],
-        "version order: the self-hop runs on the LAST pair's `to`, and the \
-         self-hop reference is 2.1.216's (exp201 added 179->181 mid-list)"
+        "version order; the five single-file pairs come first, unchanged, \
+         and the code-split pair after them"
     );
     assert_eq!(
         p.value.llm.concurrency, 472,
         "the string count is typed once"
     );
+}
+
+#[test]
+fn the_self_hop_pair_is_the_one_the_self_hop_reference_was_measured_on() {
+    let p = eval::pairs(&repo_root()).expect("pairs.json").value;
+    let marked: Vec<&eval::Pair> = p.pairs.iter().filter(|p| p.self_hop).collect();
+    let [pair] = marked.as_slice() else {
+        panic!("exactly one pair carries selfHop: {marked:?}")
+    };
+    let reference = eval::self_hop_reference(&repo_root()).unwrap().value;
+    assert_eq!(pair.to, reference.version);
+    for mode in reference.by_mode.values() {
+        assert_eq!(pair.to, mode.version);
+    }
+}
+
+#[test]
+fn a_pairs_file_with_no_self_hop_pair_or_two_is_refused() {
+    let dir = std::env::temp_dir().join(format!("dev-pairs-hop-{}", std::process::id()));
+    let eval_dir = dir.join(crate::paths::EVAL_DIR);
+    std::fs::create_dir_all(&eval_dir).unwrap();
+    let committed = std::fs::read_to_string(repo_root().join("dev/eval/pairs.json")).unwrap();
+    let none = committed.replace(",\n      \"selfHop\": true", "");
+    assert_ne!(
+        none, committed,
+        "the committed file marks its self-hop pair"
+    );
+    std::fs::write(eval_dir.join("pairs.json"), &none).unwrap();
+    let err = eval::pairs(&dir).unwrap_err();
+    assert!(err.contains("selfHop"), "{err}");
+    let two = committed.replace(
+        "\"kind\": \"quiet-80s (small base, control)\"",
+        "\"kind\": \"quiet-80s (small base, control)\",\n      \"selfHop\": true",
+    );
+    std::fs::write(eval_dir.join("pairs.json"), &two).unwrap();
+    let err = eval::pairs(&dir).unwrap_err();
+    assert!(err.contains("selfHop"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

@@ -45,6 +45,9 @@ pub struct Pair {
     pub from: String,
     pub to: String,
     pub kind: String,
+    /// The pair a full run self-hops on: exactly one carries it.
+    #[serde(default, rename = "selfHop")]
+    pub self_hop: bool,
 }
 
 fn u32_from_string<'de, D: Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
@@ -58,6 +61,13 @@ pub fn pairs(repo: &Path) -> Result<Loaded<Pairs>, String> {
     let loaded: Loaded<Pairs> = load_json(&repo.join(EVAL_DIR).join("pairs.json"))?;
     if loaded.value.pairs.is_empty() {
         return Err(format!("{}: no pairs", loaded.path.display()));
+    }
+    let marked = loaded.value.pairs.iter().filter(|p| p.self_hop).count();
+    if marked != 1 {
+        return Err(format!(
+            "{}: {marked} pairs carry selfHop; exactly one must (the pair a full run self-hops on)",
+            loaded.path.display()
+        ));
     }
     Ok(loaded)
 }
