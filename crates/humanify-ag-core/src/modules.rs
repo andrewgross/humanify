@@ -999,20 +999,34 @@ pub struct ClassificationSite {
     pub wrapper: Option<wrapper::WrapperFunction>,
 }
 
+/// The text handed to [`classify_site`] does not parse.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UnparsedSite {
+    pub diagnostics: usize,
+}
+
+impl std::fmt::Display for UnparsedSite {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "oxc: {} diagnostic(s)", self.diagnostics)
+    }
+}
+
 /// Classify `text` as the unpack does: None when the run's grammar finds
 /// no factory helper in it, or nothing classifies.
 pub fn classify_site(
     text: &str,
     layout: crate::toolchain::BundleLayout,
     grammar: crate::toolchain::ModuleWrapperGrammar,
-) -> Result<Option<ClassificationSite>, String> {
+) -> Result<Option<ClassificationSite>, UnparsedSite> {
     if grammar.identify_factory_helper(text).is_none() {
         return Ok(None);
     }
     let allocator = oxc_allocator::Allocator::default();
     let ingest = crate::ingest::Ingest::parse_unambiguous(&allocator, text);
     if !ingest.errors.is_empty() {
-        return Err(format!("oxc: {} diagnostic(s)", ingest.errors.len()));
+        return Err(UnparsedSite {
+            diagnostics: ingest.errors.len(),
+        });
     }
     let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
     let tables = crate::hash::serialize::SymbolTables::build(ingest.semantic());

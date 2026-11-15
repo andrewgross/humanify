@@ -117,7 +117,7 @@ fn a_names_row_whose_unit_key_is_absent_is_refused_at_encoding() {
         Ok(_) => panic!("an orphan names row must be refused"),
         Err(err) => err,
     };
-    assert!(err.contains("no unit row"), "{err}");
+    assert!(err.to_string().contains("no unit row"), "{err}");
 }
 
 #[test]
@@ -237,7 +237,7 @@ fn a_unit_row_whose_hash_is_not_a_unit_key_is_refused_at_encoding() {
     let mut bad = unit(1, "zod", 1);
     bad.hash = "zz".into();
     let err = UnitTable::encode(&[bad], &["zod".to_string()]).unwrap_err();
-    assert!(err.contains("zz"), "{err}");
+    assert!(err.to_string().contains("zz"), "{err}");
 }
 
 #[test]
@@ -322,7 +322,7 @@ fn a_paged_table_reads_the_same_as_memory_and_a_truncated_table_is_refused() {
     let err = UnitTable::open(Source::paged(Box::new(short)))
         .err()
         .expect("a short table is refused");
-    assert!(err.contains("bytes"), "{err}");
+    assert!(err.to_string().contains("bytes"), "{err}");
 }
 
 #[test]

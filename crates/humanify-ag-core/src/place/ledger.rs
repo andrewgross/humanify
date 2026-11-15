@@ -117,6 +117,60 @@ pub struct Rederived {
     pub classes: usize,
 }
 
+/// Why a stale-era ledger's hashes could not be re-derived.
+#[derive(Debug)]
+pub enum RederiveError {
+    /// The ledger is already on this hash function.
+    Current { version: u64 },
+    /// The ledger records no hash per statement.
+    NoHashes,
+    /// The prior text gives no split input.
+    Input(super::input::SplitInputError),
+    /// The prior text and the ledger hold different statement counts.
+    CountMismatch { prior: usize, ledger: usize },
+    /// The two eras' hash partitions differ at `statement`.
+    NotBijection {
+        statement: usize,
+        recorded_version: u64,
+    },
+    /// A hash the ledger lists is none of its statements'.
+    UnknownHash { hash: String },
+}
+
+impl std::fmt::Display for RederiveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Current { version } => {
+                write!(f, "hashVersion {version} is current — nothing to re-derive")
+            }
+            Self::NoHashes => f.write_str("the ledger records no per-statement hashes"),
+            Self::Input(e) => e.fmt(f),
+            Self::CountMismatch { prior, ledger } => write!(
+                f,
+                "the prior text has {prior} wrapper statements, the ledger {ledger}"
+            ),
+            Self::NotBijection {
+                statement,
+                recorded_version,
+            } => write!(
+                f,
+                "statement {statement}: the recorded (hashVersion {recorded_version}) and current \
+(hashVersion {}) hash partitions differ (not a bijection)",
+                STATEMENT.version
+            ),
+            Self::UnknownHash { hash } => {
+                write!(f, "hash {hash} is not among the ledger's statements")
+            }
+        }
+    }
+}
+
+impl From<super::input::SplitInputError> for RederiveError {
+    fn from(e: super::input::SplitInputError) -> Self {
+        Self::Input(e)
+    }
+}
+
 /// A prior ledger's statement hashes, as this run will read them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PriorHashes {
@@ -175,7 +229,7 @@ pub fn settle_prior_hashes(
     };
     match rederive_stale_era_hashes(ledger, text, layout) {
         Ok(r) => PriorHashes::Rederived(r),
-        Err(e) => PriorHashes::Refused(e),
+        Err(e) => PriorHashes::Refused(e.to_string()),
     }
 }
 
@@ -206,25 +260,24 @@ pub fn rederive_stale_era_hashes(
     ledger: &mut StableSplitLedger,
     prior_text: &str,
     layout: crate::toolchain::BundleLayout,
-) -> Result<Rederived, String> {
+) -> Result<Rederived, RederiveError> {
     let recorded_version = ledger.hash_version;
     if recorded_version == STATEMENT.version {
-        return Err(format!(
-            "hashVersion {recorded_version} is current — nothing to re-derive"
-        ));
+        return Err(RederiveError::Current {
+            version: recorded_version,
+        });
     }
     let recorded = ledger
         .hashes
         .as_ref()
         .filter(|h| h.len() == ledger.order.len())
-        .ok_or("the ledger records no per-statement hashes")?;
+        .ok_or(RederiveError::NoHashes)?;
     let current = super::input::split_input(prior_text, layout)?.hashes;
     if current.len() != recorded.len() {
-        return Err(format!(
-            "the prior text has {} wrapper statements, the ledger {}",
-            current.len(),
-            recorded.len()
-        ));
+        return Err(RederiveError::CountMismatch {
+            prior: current.len(),
+            ledger: recorded.len(),
+        });
     }
     let mut recorded_to_current: HashMap<&str, &str> = HashMap::new();
     let mut current_to_recorded: HashMap<&str, &str> = HashMap::new();
@@ -232,20 +285,19 @@ pub fn rederive_stale_era_hashes(
         if *recorded_to_current.entry(t).or_insert(r) != r
             || *current_to_recorded.entry(r).or_insert(t) != t
         {
-            return Err(format!(
-                "statement {i}: the recorded (hashVersion {recorded_version}) and current \
-(hashVersion {}) hash partitions differ (not a bijection)",
-                STATEMENT.version
-            ));
+            return Err(RederiveError::NotBijection {
+                statement: i,
+                recorded_version,
+            });
         }
     }
-    let translate = |list: &[String]| -> Result<Vec<String>, String> {
+    let translate = |list: &[String]| -> Result<Vec<String>, RederiveError> {
         list.iter()
             .map(|h| {
                 recorded_to_current
                     .get(h.as_str())
                     .map(|r| r.to_string())
-                    .ok_or_else(|| format!("hash {h} is not among the ledger's statements"))
+                    .ok_or_else(|| RederiveError::UnknownHash { hash: h.clone() })
             })
             .collect()
     };
@@ -262,7 +314,7 @@ pub fn rederive_stale_era_hashes(
                         ..m.clone()
                     })
                 })
-                .collect::<Result<Vec<_>, String>>()?,
+                .collect::<Result<Vec<_>, RederiveError>>()?,
         ),
         None => None,
     };

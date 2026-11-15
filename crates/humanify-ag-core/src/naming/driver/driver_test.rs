@@ -1363,7 +1363,7 @@ fn a_reconcile_that_could_not_run_keeps_its_error_for_a_warning() {
         &[],
     );
     let error = done.err().expect("the pass reports why it did not run");
-    assert!(error.contains("does not parse"), "{error}");
+    assert!(error.to_string().contains("does not parse"), "{error}");
     let warning = super::reconcile_skipped_warning(&error);
     assert!(
         warning.starts_with("WARNING: the prior-diff reconcile did not run ("),

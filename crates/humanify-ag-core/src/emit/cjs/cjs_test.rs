@@ -60,7 +60,8 @@ fn replay(v: &Value) -> Result<(), String> {
     let input = crate::place::input::split_input(
         code,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
-    )?;
+    )
+    .map_err(|e| e.to_string())?;
     let lazy = crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild.lazy_init_helpers(&input.body);
     let facts = bundle_load_order_facts(&view.body.statements, &lazy, false);
     let names = vec![None; order.len()];
@@ -83,7 +84,7 @@ fn replay(v: &Value) -> Result<(), String> {
         forced_exports: &[],
     });
     match (got, v["declined"].as_str()) {
-        (Err(rust), Some(ts)) if rust.reason == ts => {
+        (Err(rust), Some(ts)) if rust.reason.to_string() == ts => {
             // Finding #40: what the decline leaves on the persisted ledger
             // — the emitted layout once the tree is being assembled. (The
             // TS's `aliases` are no longer recorded: finding #88.)

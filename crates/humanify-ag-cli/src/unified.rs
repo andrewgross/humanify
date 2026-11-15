@@ -644,7 +644,7 @@ fn pipeline_body(
             // invalid output writes no dump files at all — the parts are
             // discarded).
             if outcome.coverage.is_some() {
-                dispatch_log.close().map_err(Crash)?;
+                dispatch_log.close().map_err(|e| Crash(e.to_string()))?;
             } else {
                 dispatch_log.discard();
             }
@@ -751,7 +751,7 @@ its init name, {} renamed to it, {} refused",
                 Path::new(dest),
                 dispatch_log.ask_rows(),
             )
-            .map_err(Crash)?;
+            .map_err(|e| Crash(e.to_string()))?;
             renderer.message(&format!("Ask log: {n} ask(s) → {dest}"));
         }
         reports.write_rename_ledger(renderer)?;
@@ -1118,7 +1118,7 @@ impl RunReports<'_> {
                 extra_trail: &self.post_split.trail,
             },
         )
-        .map_err(Crash)?;
+        .map_err(|e| Crash(e.to_string()))?;
         renderer.message(&format!("Artifact dump written to {}", ctx.dir));
         Ok(())
     }
@@ -1231,7 +1231,7 @@ fn name_vendor_bodies_stage(
 ) -> Result<usize, Crash> {
     use humanify_ag_core::naming::vendor_bodies as vb;
     let started = std::time::Instant::now();
-    let bodies = vb::bodies_of_bridge(out_dir, bridge).map_err(Crash)?;
+    let bodies = vb::bodies_of_bridge(out_dir, bridge).map_err(|e| Crash(e.to_string()))?;
     // No module step: the bodies are not the bundle's module markers.
     let mut config = config.clone();
     config.module_naming = None;
@@ -1244,11 +1244,12 @@ fn name_vendor_bodies_stage(
         &humanify_ag_io::diff::compute_normal_diff,
         &mut log,
     )
-    .map_err(Crash)?
+    .map_err(|e| Crash(e.to_string()))?
     else {
         return Ok(0);
     };
-    let written = vb::write_vendor_naming(out_dir, &bodies, &named).map_err(Crash)?;
+    let written =
+        vb::write_vendor_naming(out_dir, &bodies, &named).map_err(|e| Crash(e.to_string()))?;
     let held: usize = bodies.iter().map(|b| b.restored.len()).sum();
     let mut skipped: std::collections::BTreeMap<&str, usize> = Default::default();
     for (_, why) in &named.skipped {
@@ -1409,7 +1410,8 @@ impl NamingRun<'_> {
             code,
             &humanify_ag_core::format::FormatOptions::default(),
             regions,
-        )?;
+        )
+        .map_err(|e| e.to_string())?;
         span.end(None);
         Ok(formatted)
     }
@@ -1439,7 +1441,8 @@ impl NamingRun<'_> {
             &self.provider,
             &humanify_ag_io::diff::compute_normal_diff,
             self.log,
-        )?;
+        )
+        .map_err(|e| e.to_string())?;
         // buildRenameLedgerBundle's self-check (non-fatal: the ledger is a
         // diagnostic artifact): replayed, it must reproduce the shipped code.
         if let Some(bundle) = &outcome.rename_ledger {

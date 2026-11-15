@@ -22,6 +22,7 @@ use oxc_ast::AstKind;
 use oxc_semantic::{NodeId, Semantic, SymbolId};
 use serde_json::Value;
 
+use super::TransferError;
 use crate::graph::UnifiedGraph;
 use crate::hash::serialize::SymbolTables;
 use crate::matching::statement_align::{
@@ -170,7 +171,7 @@ pub fn collect_evidence(
     prior: &SideRows<'_, '_>,
     fresh_state: &RenameState,
     prior_state: &RenameState,
-) -> Result<TransferEvidence, String> {
+) -> Result<TransferEvidence, TransferError> {
     let function_result = stage.function_result;
     let exact = exact_transfers(stage, fresh, prior, fresh_state)?;
     let close = close_infos(stage, fresh, prior, fresh_state, prior_state);
@@ -211,7 +212,7 @@ fn exact_transfers(
     fresh: &SideRows<'_, '_>,
     prior: &SideRows<'_, '_>,
     fresh_state: &RenameState,
-) -> Result<Vec<ExactTransfer>, String> {
+) -> Result<Vec<ExactTransfer>, TransferError> {
     let matches = &stage.function_result.matches;
     let mut exact = Vec::with_capacity(matches.len());
     for (prior_id, new_id) in matches.iter_ordered() {
@@ -277,7 +278,7 @@ fn binding_renames(
     prior: &SideRows<'_, '_>,
     fresh_state: &RenameState,
     close: &[CloseInfo],
-) -> Result<(Vec<BindingRename>, usize, HashSet<String>), String> {
+) -> Result<(Vec<BindingRename>, usize, HashSet<String>), TransferError> {
     let mut renames: Vec<BindingRename> = Vec::new();
     let mut matched_prior_ids: HashSet<String> = HashSet::new();
     if let (Some(result), Some(setup)) = (stage.binding_result, stage.binding_setup) {
@@ -291,7 +292,9 @@ fn binding_renames(
             let binding = fresh_state
                 .view()
                 .binding_of_symbol(next_b.symbol)
-                .ok_or_else(|| format!("binding rename {}: no babel binding", next_b.name))?;
+                .ok_or_else(|| TransferError::NoBabelBinding {
+                    name: next_b.name.clone(),
+                })?;
             let scope = fresh_state.scope_of_binding(binding);
             renames.push(BindingRename {
                 old_name: next_b.name.clone(),
@@ -381,13 +384,13 @@ fn translate_prior_names(
     fresh: &SideRows<'_, '_>,
     new_fn: usize,
     fresh_state: &RenameState,
-) -> Result<Option<Vec<TransferPair>>, String> {
+) -> Result<Option<Vec<TransferPair>>, TransferError> {
     let (Some(prior_json), Some(new_json)) = (prior.row_json(prior_fn), fresh.row_json(new_fn))
     else {
-        return Err(format!(
-            "matched pair {} / {}: row JSON unavailable",
-            prior.graph.functions[prior_fn].session_id, fresh.graph.functions[new_fn].session_id
-        ));
+        return Err(TransferError::RowJsonUnavailable {
+            prior: prior.graph.functions[prior_fn].session_id.clone(),
+            fresh: fresh.graph.functions[new_fn].session_id.clone(),
+        });
     };
     let prior_table = placeholder_table(prior_json, prior.tables);
     let new_table = placeholder_table(new_json, fresh.tables);
@@ -400,13 +403,11 @@ fn translate_prior_names(
             .iter()
             .all(|(slot, _, _)| new_by_slot.contains_key(slot.as_str()));
     if !aligned {
-        return Err(format!(
-            "placeholder maps misaligned for matched pair at {}: prior has {} slots, new has {} — \
-             equal hashes guarantee equal slot sets, so a mapping is stale or corrupt",
-            fresh.graph.functions[new_fn].session_id,
-            prior_table.len(),
-            new_table.len()
-        ));
+        return Err(TransferError::PlaceholdersMisaligned {
+            at: fresh.graph.functions[new_fn].session_id.clone(),
+            prior: prior_table.len(),
+            new: new_table.len(),
+        });
     }
     let mut pairs = Vec::new();
     for (slot, _, prior_name) in &prior_table {

@@ -24,6 +24,7 @@ use oxc_span::GetSpan;
 use oxc_syntax::reference::ReferenceFlags;
 
 use crate::detect::js_text::{is_js_space, is_word_boundary, skip_js_space};
+use crate::error::{FileError, FileOp};
 use crate::hash::forms::{CARRY_CONTENT, MATCH_KEY, VENDOR_CONTENT};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
@@ -399,6 +400,45 @@ pub struct UnpackPlan {
     pub ref_edits: Vec<TextEdit>,
 }
 
+/// Why the Bun (or esbuild) adapter could not unpack the bundle.
+#[derive(Debug)]
+pub enum BunError {
+    /// Making a directory or writing a file failed.
+    File(FileError),
+    /// Writing one of the adapter's own files failed (`what` names it).
+    Write {
+        what: &'static str,
+        source: std::io::Error,
+    },
+    /// The run asked for something this adapter cannot do.
+    Refused(&'static str),
+    /// The library index's module answers could not be read.
+    Answers(crate::libindex::module_answers::AnswersError),
+}
+
+impl std::fmt::Display for BunError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::File(e) => e.fmt(f),
+            Self::Write { what, source } => write!(f, "{what}: {source}"),
+            Self::Refused(why) => f.write_str(why),
+            Self::Answers(e) => e.fmt(f),
+        }
+    }
+}
+
+impl From<FileError> for BunError {
+    fn from(e: FileError) -> Self {
+        Self::File(e)
+    }
+}
+
+impl From<crate::libindex::module_answers::AnswersError> for BunError {
+    fn from(e: crate::libindex::module_answers::AnswersError) -> Self {
+        Self::Answers(e)
+    }
+}
+
 /// The Bun adapter (`BunUnpackAdapter.unpack`) — also the esbuild
 /// adapter's flow: the two readers share the whole vendor-extraction
 /// pipeline, differing only in the wrapper shapes the classification
@@ -410,8 +450,8 @@ pub fn unpack_bun(
     code: &str,
     out_dir: &Path,
     mut options: BunUnpackOptions<'_>,
-) -> Result<BunUnpackOutcome, String> {
-    fs::create_dir_all(out_dir).map_err(|e| format!("mkdir {}: {e}", out_dir.display()))?;
+) -> Result<BunUnpackOutcome, BunError> {
+    fs::create_dir_all(out_dir).map_err(FileError::at(FileOp::Mkdir, out_dir))?;
     // The one-file floor still runs library discovery when asked (exp105):
     // a bundle no module helper wraps is still a bundle of statements.
     let floor_pieces = crate::libdetect::discovery::BundlePieces {
@@ -420,7 +460,7 @@ pub fn unpack_bun(
         interop: options.interop,
     };
     let floor_request = options.library_discovery;
-    let floor = |code: &str| -> Result<BunUnpackOutcome, String> {
+    let floor = |code: &str| -> Result<BunUnpackOutcome, BunError> {
         Ok(BunUnpackOutcome {
             result: write_passthrough(code, out_dir)?,
             manifest: None,
@@ -640,7 +680,10 @@ pub fn unpack_bun(
 
     // Pass 2: each factory body with cross-factory references rewritten,
     // then the runtime the same way.
-    fs::create_dir_all(out_dir.join(VENDOR_DIR)).map_err(|e| format!("mkdir vendor: {e}"))?;
+    fs::create_dir_all(out_dir.join(VENDOR_DIR)).map_err(|source| BunError::Write {
+        what: "mkdir vendor",
+        source,
+    })?;
     let mut files = Vec::new();
     let mut entries = Vec::new();
     let mut bundle_order = Vec::new();
@@ -768,7 +811,10 @@ pub fn unpack_bun(
     let mut runtime_file = None;
     if !runtime.trim_matches(is_js_space).is_empty() {
         let path = out_dir.join(RUNTIME_FILE);
-        fs::write(&path, &runtime).map_err(|e| format!("write runtime: {e}"))?;
+        fs::write(&path, &runtime).map_err(|source| BunError::Write {
+            what: "write runtime",
+            source,
+        })?;
         files.push(UnpackedFile {
             path,
             metadata: None,
@@ -782,7 +828,7 @@ pub fn unpack_bun(
         adapter: options
             .adapter
             .vendor_record_stamp()
-            .ok_or("this adapter writes no vendor record")?,
+            .ok_or(BunError::Refused("this adapter writes no vendor record"))?,
         hash_version: MATCH_KEY.version,
         runtime_file,
         legal_comments: {
@@ -800,8 +846,12 @@ pub fn unpack_bun(
             order_by_prior_manifest(annotate_hash_ordinals(entries), prior.factories.as_deref())
         },
     };
-    fs::write(bun_manifest_path(out_dir), manifest.to_written_json())
-        .map_err(|e| format!("write manifest: {e}"))?;
+    fs::write(bun_manifest_path(out_dir), manifest.to_written_json()).map_err(|source| {
+        BunError::Write {
+            what: "write manifest",
+            source,
+        }
+    })?;
 
     Ok(BunUnpackOutcome {
         result: UnpackResult { files },
@@ -1049,17 +1099,16 @@ fn place_names_modules(
     options: &BunUnpackOptions<'_>,
     discovery: Option<&crate::libdetect::discovery::DiscoveryReport>,
     require_var: Option<&str>,
-) -> Result<Vec<crate::naming::module_names::ClaimedRegion>, String> {
+) -> Result<Vec<crate::naming::module_names::ClaimedRegion>, BunError> {
     let Some(source) = options.library_discovery.and_then(|r| r.module_answers) else {
         return Ok(Vec::new());
     };
     if !options.library_discovery.is_some_and(|r| r.list_units) {
-        return Err(
-            "library-matching names needs the discovery claim rows: list_units must be on"
-                .to_string(),
-        );
+        return Err(BunError::Refused(
+            "library-matching names needs the discovery claim rows: list_units must be on",
+        ));
     }
-    let report = discovery.ok_or("library-matching names ran no discovery")?;
+    let report = discovery.ok_or(BunError::Refused("library-matching names ran no discovery"))?;
     place_factories_from_index(c, code, ingest, report, source, require_var)?;
     Ok(claimed_regions(&c.container, &report.placement_groups))
 }
@@ -1079,7 +1128,7 @@ fn place_factories_from_index(
     report: &crate::libdetect::discovery::DiscoveryReport,
     source: crate::libdetect::discovery::ModuleAnswersSource<'_>,
     require_var: Option<&str>,
-) -> Result<(), String> {
+) -> Result<(), BunError> {
     use crate::place::library_layout::{LayoutInput, RegionInput, plan};
     // One folded claim per factory: the claims inside its declarator, in
     // start order. A factory holds no other factory's statements, so one
@@ -1521,12 +1570,12 @@ fn naming_lookup(factories: &[FactoryRecord]) -> HashMap<&str, usize> {
 /// (vendor/@scope/name/…) when the grouped name has one.
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
-fn write_vendor_file(out_dir: &Path, rel_path: &str, body: &str) -> Result<PathBuf, String> {
+fn write_vendor_file(out_dir: &Path, rel_path: &str, body: &str) -> Result<PathBuf, FileError> {
     let path = out_dir.join(rel_path);
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        fs::create_dir_all(parent).map_err(FileError::at(FileOp::Mkdir, parent))?;
     }
-    fs::write(&path, body).map_err(|e| format!("write {}: {e}", path.display()))?;
+    fs::write(&path, body).map_err(FileError::at(FileOp::Write, &path))?;
     Ok(path)
 }
 

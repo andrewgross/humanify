@@ -46,7 +46,7 @@ fn a_missing_embedded_file_fails_the_write() {
         source: out.join("nowhere/gone.bin"),
     }];
     let err = write_embedded_files(&out, &files).unwrap_err();
-    assert!(err.contains("gone.bin"), "{err}");
+    assert!(err.to_string().contains("gone.bin"), "{err}");
 }
 
 #[test]

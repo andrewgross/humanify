@@ -36,6 +36,35 @@ pub trait ExternalUnpacker {
     fn run(&self, code: &str, out_dir: &Path) -> Result<ShimRun, UnpackerError>;
 }
 
+/// Why the webcrack adapter gave no files.
+#[derive(Debug)]
+pub enum WebcrackError {
+    /// The shim did not run to completion.
+    Run(UnpackerError),
+    /// The shim printed nothing.
+    NoOutput,
+    /// The shim's contract line is not the expected JSON.
+    Json(serde_json::Error),
+    /// The shim named a file outside its output directory.
+    Outside { path: PathBuf, out_dir: PathBuf },
+}
+
+impl std::fmt::Display for WebcrackError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Run(e) => f.write_str(&e.0),
+            Self::NoOutput => f.write_str("webcrack shim: no output"),
+            Self::Json(e) => write!(f, "webcrack shim output: {e}"),
+            Self::Outside { path, out_dir } => write!(
+                f,
+                "webcrack shim reported {}, outside its output directory {}",
+                path.display(),
+                out_dir.display()
+            ),
+        }
+    }
+}
+
 #[derive(serde::Deserialize)]
 struct ShimFile {
     path: PathBuf,
@@ -57,29 +86,27 @@ pub fn unpack_webcrack(
     code: &str,
     out_dir: &Path,
     unpacker: &dyn ExternalUnpacker,
-) -> Result<UnpackResult, String> {
-    let ShimRun { out_dir, stdout } = unpacker.run(code, out_dir).map_err(|e| e.0)?;
+) -> Result<UnpackResult, WebcrackError> {
+    let ShimRun { out_dir, stdout } = unpacker.run(code, out_dir).map_err(WebcrackError::Run)?;
     let result = parse_shim_output(&stdout)?;
     if let Some(stray) = result.files.iter().find(|f| !f.path.starts_with(&out_dir)) {
-        return Err(format!(
-            "webcrack shim reported {}, outside its output directory {}",
-            stray.path.display(),
-            out_dir.display()
-        ));
+        return Err(WebcrackError::Outside {
+            path: stray.path.clone(),
+            out_dir,
+        });
     }
     Ok(result)
 }
 
 /// The shim's stdout → the unpack result (its LAST non-empty line: a
 /// dependency that logs to stdout cannot corrupt the contract line).
-pub fn parse_shim_output(stdout: &str) -> Result<UnpackResult, String> {
+pub fn parse_shim_output(stdout: &str) -> Result<UnpackResult, WebcrackError> {
     let line = stdout
         .lines()
         .rev()
         .find(|l| !l.trim().is_empty())
-        .ok_or("webcrack shim: no output")?;
-    let parsed: ShimOutput =
-        serde_json::from_str(line).map_err(|e| format!("webcrack shim output: {e}"))?;
+        .ok_or(WebcrackError::NoOutput)?;
+    let parsed: ShimOutput = serde_json::from_str(line).map_err(WebcrackError::Json)?;
     Ok(UnpackResult {
         files: parsed
             .files

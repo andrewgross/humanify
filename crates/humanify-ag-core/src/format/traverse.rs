@@ -32,13 +32,14 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{BuildHasherDefault, Hasher};
 
 use super::ast::{Field, FieldShape, Kind, Node, NodeComments, NodeId, Slot, Tree};
+use super::error::FormatError;
 
 /// A path's index.
 pub type PathId = u32;
 type CtxId = u32;
 type QueueId = u32;
 
-type R<T> = Result<T, String>;
+type R<T> = Result<T, FormatError>;
 
 /// FxHash for the u32-keyed maps (no dependency; iteration order is never
 /// read).
@@ -317,8 +318,8 @@ impl<'t> Engine<'t> {
                 .tree
                 .kind_mut(n)
                 .list_mut(f)
-                .ok_or_else(|| format!("no list field {f:?}")),
-            Container::Node(_) => Err("not a list container".into()),
+                .ok_or(FormatError::NoListField(f)),
+            Container::Node(_) => Err(FormatError::Traverse("not a list container")),
         }
     }
 
@@ -783,7 +784,9 @@ impl<'t> Engine<'t> {
 
     /// `path.get(key)` for a single-node field (`setContext(this.context)`).
     pub fn get(&mut self, p: PathId, field: Field) -> R<PathId> {
-        let node = self.node(p).ok_or("get on a removed path")?;
+        let node = self
+            .node(p)
+            .ok_or(FormatError::Traverse("get on a removed path"))?;
         let child = self.path_get(
             Some(p),
             node,
@@ -809,7 +812,9 @@ impl<'t> Engine<'t> {
 
     /// `path.set(key, node)` (a plain field write).
     pub fn set(&mut self, p: PathId, field: Field, value: NodeId) -> R<()> {
-        let node = self.node(p).ok_or("set on a removed path")?;
+        let node = self
+            .node(p)
+            .ok_or(FormatError::Traverse("set on a removed path"))?;
         self.tree.kind_mut(node).set(field, Some(value))
     }
 
@@ -933,7 +938,9 @@ impl<'t> Engine<'t> {
     pub fn replace_with(&mut self, p: PathId, replacement: NodeId) -> R<()> {
         self.resync(p);
         if self.removed(p) {
-            return Err("You can't replace this node, we've already removed it".into());
+            return Err(FormatError::Traverse(
+                "You can't replace this node, we've already removed it",
+            ));
         }
         if self.node(p) == Some(replacement) {
             return Ok(());
@@ -962,10 +969,9 @@ impl<'t> Engine<'t> {
             }
         }
         if self.type_is(p, Kind::is_expression) && self.kind(replacement).is_statement() {
-            return Err(
-                "replaceExpressionWithStatements is not ported (no stage-6 visitor reaches it)"
-                    .into(),
-            );
+            return Err(FormatError::Traverse(
+                "replaceExpressionWithStatements is not ported (no stage-6 visitor reaches it)",
+            ));
         }
         if let Some(old) = self.node(p) {
             self.inherit_and_remove_comments(replacement, old);
@@ -984,22 +990,23 @@ impl<'t> Engine<'t> {
     /// (and so the TS stage throws).
     fn replace_with_raw(&mut self, p: PathId, node: Option<NodeId>) -> R<()> {
         let d = self.paths[p as usize].clone();
-        let container = d.container.ok_or("Container is falsy")?;
+        let container = d
+            .container
+            .ok_or(FormatError::Traverse("Container is falsy"))?;
         let parent = d.parent;
         if let Key::Field(f) = d.key {
             let shape = self.tree.kind_mut(parent).field_shape(f);
             let ty = self.kind(parent).type_name();
             match (shape, node) {
                 (FieldShape::List, _) => {
-                    return Err(format!(
-                        "Property {f:?} of {ty} expected type of array but got {}",
-                        if node.is_some() { "object" } else { "null" }
-                    ));
+                    return Err(FormatError::ExpectedArray {
+                        field: f,
+                        kind: ty,
+                        got_node: node.is_some(),
+                    });
                 }
                 (FieldShape::Required, None) => {
-                    return Err(format!(
-                        "Property {f:?} of {ty} expected a node but instead got null"
-                    ));
+                    return Err(FormatError::ExpectedNode { field: f, kind: ty });
                 }
                 _ => {}
             }
@@ -1023,10 +1030,10 @@ impl<'t> Engine<'t> {
                 if i < list.len() {
                     list[i] = node.unwrap_or(NodeId::NONE);
                 } else {
-                    return Err("replace past the end of a list".into());
+                    return Err(FormatError::Traverse("replace past the end of a list"));
                 }
             }
-            _ => return Err("replace on a keyless path".into()),
+            _ => return Err(FormatError::Traverse("replace on a keyless path")),
         }
         Ok(())
     }
@@ -1034,7 +1041,9 @@ impl<'t> Engine<'t> {
     /// `path.replaceWithMultiple(nodes)`.
     pub fn replace_with_multiple(&mut self, p: PathId, nodes: Vec<NodeId>) -> R<()> {
         self.resync(p);
-        let first = *nodes.first().ok_or("replaceWithMultiple with no nodes")?;
+        let first = *nodes
+            .first()
+            .ok_or(FormatError::Traverse("replaceWithMultiple with no nodes"))?;
         let last = *nodes.last().expect("non-empty");
         if let Some(old) = self.node(p) {
             // inheritLeadingComments / inheritTrailingComments: the arrays
@@ -1058,7 +1067,11 @@ impl<'t> Engine<'t> {
                 list[i] = NodeId::NONE;
             }
             (Some(Container::Node(n)), Key::Field(f)) => self.tree.kind_mut(n).set(f, None)?,
-            _ => return Err("replaceWithMultiple on a keyless path".into()),
+            _ => {
+                return Err(FormatError::Traverse(
+                    "replaceWithMultiple on a keyless path",
+                ));
+            }
         }
         self.insert_after(p, nodes)?;
         if self.node(p).is_some() {
@@ -1074,9 +1087,13 @@ impl<'t> Engine<'t> {
     /// `path.insertBefore(nodes)`.
     pub fn insert_before(&mut self, p: PathId, nodes: Vec<NodeId>) -> R<()> {
         if self.removed(p) {
-            return Err("NodePath has been removed so is read-only.".into());
+            return Err(FormatError::Traverse(
+                "NodePath has been removed so is read-only.",
+            ));
         }
-        let pp = self.parent_path(p).ok_or("insertBefore at the root")?;
+        let pp = self
+            .parent_path(p)
+            .ok_or(FormatError::Traverse("insertBefore at the root"))?;
         let parent = self.paths[p as usize].parent;
         if self.path_is(pp, |k| {
             matches!(
@@ -1092,11 +1109,13 @@ impl<'t> Engine<'t> {
         let for_init = self.path_is(pp, |k| matches!(k, Kind::ForStatement { .. }))
             && self.key(p) == Key::Field(Field::Init);
         if self.type_is(p, Kind::is_expression) || for_init {
-            return Err("insertBefore on an expression is not ported".into());
+            return Err(FormatError::Traverse(
+                "insertBefore on an expression is not ported",
+            ));
         }
         if matches!(self.paths[p as usize].container, Some(Container::List(..))) {
             let Key::Index(k) = self.key(p) else {
-                return Err("list path without an index".into());
+                return Err(FormatError::Traverse("list path without an index"));
             };
             self.container_insert(p, k, nodes)?;
             return Ok(());
@@ -1105,18 +1124,26 @@ impl<'t> Engine<'t> {
             let block = self.wrap_in_block(p)?;
             return self.unshift_container(block, Field::Body, nodes);
         }
-        Err("We don't know what to do with this node type. We were previously a Statement but we can't fit in here?".into())
+        Err(FormatError::Traverse(
+            "We don't know what to do with this node type. We were previously a Statement but we can't fit in here?",
+        ))
     }
 
     /// `path.insertAfter(nodes)`.
     fn insert_after(&mut self, p: PathId, nodes: Vec<NodeId>) -> R<()> {
         if self.removed(p) {
-            return Err("NodePath has been removed so is read-only.".into());
+            return Err(FormatError::Traverse(
+                "NodePath has been removed so is read-only.",
+            ));
         }
         if self.path_is(p, |k| matches!(k, Kind::SequenceExpression { .. })) {
-            return Err("insertAfter on a sequence is not ported".into());
+            return Err(FormatError::Traverse(
+                "insertAfter on a sequence is not ported",
+            ));
         }
-        let pp = self.parent_path(p).ok_or("insertAfter at the root")?;
+        let pp = self
+            .parent_path(p)
+            .ok_or(FormatError::Traverse("insertAfter at the root"))?;
         let parent = self.paths[p as usize].parent;
         if self.path_is(pp, |k| {
             matches!(
@@ -1142,11 +1169,13 @@ impl<'t> Engine<'t> {
         let for_init = self.path_is(pp, |k| matches!(k, Kind::ForStatement { .. }))
             && self.key(p) == Key::Field(Field::Init);
         if self.type_is(p, Kind::is_expression) || for_init {
-            return Err("insertAfter on an expression is not ported".into());
+            return Err(FormatError::Traverse(
+                "insertAfter on an expression is not ported",
+            ));
         }
         if matches!(self.paths[p as usize].container, Some(Container::List(..))) {
             let Key::Index(k) = self.key(p) else {
-                return Err("list path without an index".into());
+                return Err(FormatError::Traverse("list path without an index"));
             };
             self.container_insert(p, k + 1, nodes)?;
             return Ok(());
@@ -1155,7 +1184,9 @@ impl<'t> Engine<'t> {
             let block = self.wrap_in_block(p)?;
             return self.push_container(block, Field::Body, nodes);
         }
-        Err("We don't know what to do with this node type. We were previously a Statement but we can't fit in here?".into())
+        Err(FormatError::Traverse(
+            "We don't know what to do with this node type. We were previously a Statement but we can't fit in here?",
+        ))
     }
 
     /// The `isStatementOrBlock` branch's first half: replace the path's
@@ -1191,11 +1222,13 @@ impl<'t> Engine<'t> {
     /// `_containerInsert(from, nodes)`.
     fn container_insert(&mut self, p: PathId, from: usize, nodes: Vec<NodeId>) -> R<Vec<PathId>> {
         self.update_sibling_keys(p, from, nodes.len() as isize);
-        let container = self.paths[p as usize].container.ok_or("no container")?;
+        let container = self.paths[p as usize]
+            .container
+            .ok_or(FormatError::Traverse("no container"))?;
         {
             let list = self.list_mut(container)?;
             if from > list.len() {
-                return Err("insert past the end of a list".into());
+                return Err(FormatError::Traverse("insert past the end of a list"));
             }
             list.splice(from..from, nodes.iter().copied());
         }
@@ -1249,7 +1282,9 @@ impl<'t> Engine<'t> {
 
     /// `unshiftContainer(listKey, nodes)`.
     fn unshift_container(&mut self, p: PathId, field: Field, nodes: Vec<NodeId>) -> R<()> {
-        let node = self.node(p).ok_or("unshiftContainer on a removed path")?;
+        let node = self
+            .node(p)
+            .ok_or(FormatError::Traverse("unshiftContainer on a removed path"))?;
         let first = self.path_get(
             Some(p),
             node,
@@ -1265,7 +1300,9 @@ impl<'t> Engine<'t> {
 
     /// `pushContainer(listKey, nodes)`.
     fn push_container(&mut self, p: PathId, field: Field, nodes: Vec<NodeId>) -> R<()> {
-        let node = self.node(p).ok_or("pushContainer on a removed path")?;
+        let node = self
+            .node(p)
+            .ok_or(FormatError::Traverse("pushContainer on a removed path"))?;
         let len = self.list(Container::List(node, field)).len();
         let end = self.path_get(
             Some(p),
@@ -1284,7 +1321,9 @@ impl<'t> Engine<'t> {
     /// `path.remove()`.
     pub fn remove(&mut self, p: PathId) -> R<()> {
         if self.removed(p) {
-            return Err("NodePath has been removed so is read-only.".into());
+            return Err(FormatError::Traverse(
+                "NodePath has been removed so is read-only.",
+            ));
         }
         self.resync(p);
         if self.call_removal_hooks(p)? {

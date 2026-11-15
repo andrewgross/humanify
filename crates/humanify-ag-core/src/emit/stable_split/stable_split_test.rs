@@ -78,7 +78,11 @@ fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
     )
     .expect("the split runs");
     assert_eq!(
-        outcome.declined.as_deref(),
+        outcome
+            .declined
+            .as_ref()
+            .map(ToString::to_string)
+            .as_deref(),
         v["declined"].as_str(),
         "the runnable emit declines with the TS's reason"
     );
@@ -207,11 +211,7 @@ fn vendor_captures_resolve_to_owner_files_with_forced_accessors() {
         bridge_options(&[capture("ns"), capture("initM")], Some(BRIDGE_BUNDLE)),
     )
     .expect("the split runs");
-    assert!(
-        outcome.declined.is_none(),
-        "{:?}",
-        outcome.declined.as_deref().unwrap_or_default()
-    );
+    assert!(outcome.declined.is_none(), "{:?}", outcome.declined);
     let mut bridges = outcome.vendor_bridges.clone();
     bridges.sort_by(|a, b| a.name.cmp(&b.name));
     assert_eq!(bridges.len(), 2);
@@ -366,7 +366,10 @@ fn a_mid_size_bundle_whose_vendor_half_dominates_splits() {
         Err(e) => e,
         Ok(_) => panic!("the runtime alone does not clear the ≥50 gate"),
     };
-    assert!(err.contains("no recognizable bundle wrapper"), "{err}");
+    assert!(
+        err.to_string().contains("no recognizable bundle wrapper"),
+        "{err}"
+    );
     // The same runtime splits when the run hands the ORIGINAL input the
     // unpack stage saw: being a bundled app is a property of the INPUT.
     let outcome = stable_split(&runtime, gated_options(Some(&original)))
@@ -384,7 +387,10 @@ fn a_non_bundled_input_still_fails_the_split_loudly() {
             Err(e) => e,
             Ok(_) => panic!("a plain script never splits"),
         };
-        assert!(err.contains("no recognizable bundle wrapper"), "{err}");
+        assert!(
+            err.to_string().contains("no recognizable bundle wrapper"),
+            "{err}"
+        );
     }
     // A small IIFE input: the grammar passes, but the INPUT's binding
     // count is under the threshold — the same ≥50 logic, now measured on
@@ -394,7 +400,10 @@ fn a_non_bundled_input_still_fails_the_split_loudly() {
         Err(e) => e,
         Ok(_) => panic!("a small-IIFE input never splits"),
     };
-    assert!(err.contains("no recognizable bundle wrapper"), "{err}");
+    assert!(
+        err.to_string().contains("no recognizable bundle wrapper"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -408,7 +417,10 @@ fn the_wrapper_grammar_still_reads_the_runtime_even_with_an_input_gate() {
         Err(e) => e,
         Ok(_) => panic!("the grammar gates the text at hand"),
     };
-    assert!(err.contains("no recognizable bundle wrapper"), "{err}");
+    assert!(
+        err.to_string().contains("no recognizable bundle wrapper"),
+        "{err}"
+    );
 }
 
 /// A capture the split cannot resolve would leave a free name in a vendor
@@ -425,12 +437,12 @@ fn an_unresolvable_vendor_capture_fails_the_split() {
         Err(e) => e,
         Ok(_) => panic!("an unknown raw name fails"),
     };
-    assert!(err.contains("gone"), "{err}");
+    assert!(err.to_string().contains("gone"), "{err}");
     let err = match stable_split(BRIDGE_BUNDLE, bridge_options(&[capture("ns")], None)) {
         Err(e) => e,
         Ok(_) => panic!("captures without a fresh text fail"),
     };
-    assert!(err.contains("fresh"), "{err}");
+    assert!(err.to_string().contains("fresh"), "{err}");
     // A fresh text whose statement list does not align with the shipped
     // one (here: one statement fewer) is refused, never guessed through.
     let misaligned = BRIDGE_BUNDLE.replace("  var ns = {};\n", "");
@@ -441,7 +453,7 @@ fn an_unresolvable_vendor_capture_fails_the_split() {
         Err(e) => e,
         Ok(_) => panic!("a fresh text that disagrees with the shipped one fails"),
     };
-    assert!(err.contains("align"), "{err}");
+    assert!(err.to_string().contains("align"), "{err}");
     // The wrapper is ONE scope: the same raw name declared by two of its
     // statements is ambiguous and refused.
     let dup = BRIDGE_BUNDLE.replace("var ns = {};", "var ns = {};\n  var ns = 1;");
@@ -449,7 +461,7 @@ fn an_unresolvable_vendor_capture_fails_the_split() {
         Err(e) => e,
         Ok(_) => panic!("a name declared twice is refused"),
     };
-    assert!(err.contains("exactly one"), "{err}");
+    assert!(err.to_string().contains("exactly one"), "{err}");
 }
 
 /// A wrapper bundle for the fresh grouping (the clustered regime): enough
@@ -652,7 +664,7 @@ fn a_non_fossil_bundle_with_a_library_layout_fails_loud() {
         Err(err) => err,
     };
     assert!(
-        err.contains("library placement"),
+        err.to_string().contains("library placement"),
         "the refusal names the conflict: {err}"
     );
 }

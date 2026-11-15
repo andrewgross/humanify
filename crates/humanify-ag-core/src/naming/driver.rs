@@ -222,7 +222,7 @@ pub struct NamingOutcome {
     /// Why the prior-diff reconcile did not run although it was due (its
     /// `diff` failed or ran past its deadline) — see
     /// [`NamingOutcome::reconcile_skipped_warning`].
-    pub reconcile_error: Option<String>,
+    pub reconcile_error: Option<crate::naming::reconcile::step::StepError>,
     /// Cache misses / provider errors across every LLM pass.
     pub misses: usize,
     pub errors: usize,
@@ -251,6 +251,40 @@ pub struct NamingOutcome {
     pub era_dump: Option<crate::naming::restore::EraDump>,
 }
 
+/// Why the naming stage failed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NamingError {
+    /// Matching against the prior version failed (its message, as the
+    /// prior side gave it).
+    Prior(String),
+    /// The naming era failed.
+    Era(era::EraError),
+    /// The shipped text does not parse for the end-of-run census.
+    Census(crate::naming::passes::ShippedParseError),
+}
+
+impl std::fmt::Display for NamingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Prior(e) => f.write_str(e),
+            Self::Era(e) => e.fmt(f),
+            Self::Census(e) => e.fmt(f),
+        }
+    }
+}
+
+impl From<era::EraError> for NamingError {
+    fn from(e: era::EraError) -> Self {
+        Self::Era(e)
+    }
+}
+
+impl From<crate::naming::passes::ShippedParseError> for NamingError {
+    fn from(e: crate::naming::passes::ShippedParseError) -> Self {
+        Self::Census(e)
+    }
+}
+
 /// Run the naming stage.
 pub fn run_naming<P: NameProvider>(
     input: &NamingInput<'_>,
@@ -258,7 +292,7 @@ pub fn run_naming<P: NameProvider>(
     provider: &P,
     differ: &dyn crate::naming::reconcile::hunks::Differ,
     log: &mut crate::artifact_dump::DispatchLog,
-) -> Result<NamingOutcome, String> {
+) -> Result<NamingOutcome, NamingError> {
     let has_prior = input.prior.is_some();
     let deferred = config.sweep_deferred(has_prior);
     let opts = EraOptions {
@@ -293,9 +327,12 @@ pub fn run_naming<P: NameProvider>(
                 layout: config.layout,
                 same_program_check: true,
             },
-            |stage| era::prior_era(stage, &opts, provider, log),
-        ),
-        None => era::fresh_era(input.fresh, &opts, provider, log),
+            // The era's own error rides inside the match's Ok, so the
+            // match's text error and the era's typed one stay apart.
+            |stage| Ok(era::prior_era(stage, &opts, provider, log)),
+        )
+        .map_err(NamingError::Prior),
+        None => Ok(era::fresh_era(input.fresh, &opts, provider, log)),
     };
     // `captureSemanticBaseline` reads only the fresh text, and the family
     // permute's prior index only the prior text: both are built on a
@@ -314,7 +351,7 @@ pub fn run_naming<P: NameProvider>(
         },
         run_era,
     );
-    let era = era?;
+    let era = era??;
     let NamingEra {
         generated,
         era_dump,
@@ -637,7 +674,7 @@ pub fn run_naming<P: NameProvider>(
 }
 
 /// [`NamingOutcome::reconcile_skipped_warning`]'s line for one error.
-fn reconcile_skipped_warning(error: &str) -> String {
+fn reconcile_skipped_warning(error: &crate::naming::reconcile::step::StepError) -> String {
     format!(
         "WARNING: the prior-diff reconcile did not run ({error}) — names it would have \
 restored from the prior are missing from this output; re-run it"
@@ -673,7 +710,10 @@ fn reconcile_pass(
     trail: StrategyTrail,
     ledger_walk: Option<crate::naming::reconcile::step::LedgerWalk>,
     library_spans: &[(u32, u32)],
-) -> (StrategyTrail, Result<ReconcileRun, String>) {
+) -> (
+    StrategyTrail,
+    Result<ReconcileRun, crate::naming::reconcile::step::StepError>,
+) {
     match run_prior_diff_reconciliation(generated, prior, rules, trail, ledger_walk, library_spans)
     {
         Ok(PriorDiffOutcome {
@@ -993,9 +1033,7 @@ impl NamingOutcome {
     /// run (audit R3): the prior's names it would have restored are
     /// missing, so the output differs from a run where it ran. Print-only.
     pub fn reconcile_skipped_warning(&self) -> Option<String> {
-        self.reconcile_error
-            .as_deref()
-            .map(reconcile_skipped_warning)
+        self.reconcile_error.as_ref().map(reconcile_skipped_warning)
     }
 
     pub fn broken_prior_warning(&self) -> Option<String> {

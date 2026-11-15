@@ -215,7 +215,7 @@ pub fn carry_renames_into_bundle(
     ledger: &SplitLedger,
     renames: &[PostSplitRename],
     layout: crate::toolchain::BundleLayout,
-) -> Result<CarryResult, String> {
+) -> Result<CarryResult, crate::ingest::ParseError> {
     let mut result = CarryResult::default();
     if renames.is_empty() {
         return Ok(result);

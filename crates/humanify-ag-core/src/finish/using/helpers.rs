@@ -6,6 +6,7 @@
 
 use oxc_allocator::Allocator;
 
+use super::UsingError;
 use crate::format::ast::{Kind, NodeId, Tree};
 use crate::format::convert::Converter;
 use crate::ingest::Ingest;
@@ -27,29 +28,35 @@ fn strip_locs(tree: &mut Tree, node: NodeId) {
 }
 
 /// The helper's declaration node, named `uid`, added to `tree`.
-pub fn helper_declaration(tree: &mut Tree, name: &str, uid: &str) -> Result<NodeId, String> {
+pub fn helper_declaration(tree: &mut Tree, name: &str, uid: &str) -> Result<NodeId, UsingError> {
     let source = match name {
         "usingCtx" => USING_CTX_SOURCE,
         "setFunctionName" => SET_FUNCTION_NAME_SOURCE,
-        other => return Err(format!("unknown Babel helper {other}")),
+        other => {
+            return Err(UsingError::UnknownHelper {
+                name: other.to_string(),
+            });
+        }
     };
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, source, "helper.js");
     if !ingest.errors.is_empty() {
-        return Err(format!("helper {name} does not parse"));
+        return Err(UsingError::HelperParse {
+            name: name.to_string(),
+        });
     }
     let mut converter = Converter::with_tree(source, std::mem::take(tree));
     let program = converter.program(ingest.program);
     *tree = converter.tree;
     let program = program?;
     let Kind::Program { body, .. } = tree.kind(program) else {
-        return Err("helper: not a program".into());
+        return Err(UsingError::Refused("helper: not a program"));
     };
-    let decl = *body.last().ok_or("helper: empty")?;
+    let decl = *body.last().ok_or(UsingError::Refused("helper: empty"))?;
     strip_locs(tree, decl);
     let id = tree.ident(uid);
     let Kind::FunctionDeclaration(f) = tree.kind_mut(decl) else {
-        return Err("helper: not a function declaration".into());
+        return Err(UsingError::Refused("helper: not a function declaration"));
     };
     f.id = Some(id);
     tree.node_mut(decl).compact = true;

@@ -62,6 +62,34 @@ pub struct CloseDumpSides<'a> {
     pub fn_matches: &'a HashMap<String, String>,
 }
 
+/// Why the close-match dump could not be built.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CloseDumpError {
+    /// The replayed outcome's won pairs differ from the assignment.
+    Drift { won: usize, assigned: usize },
+    /// A pair's id is not a function entry of its side's index.
+    NotAFunction { side: &'static str, id: String },
+    /// A pair's row JSON is missing.
+    RowJsonUnavailable { prior: String, fresh: String },
+}
+
+impl std::fmt::Display for CloseDumpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Drift { won, assigned } => write!(
+                f,
+                "close-dump drift: the outcome replay's won set ({won}) does not equal the assignment ({assigned})"
+            ),
+            Self::NotAFunction { side, id } => {
+                write!(f, "close-dump: {side} {id} is not a function index entry")
+            }
+            Self::RowJsonUnavailable { prior, fresh } => {
+                write!(f, "close-dump: row JSON unavailable for {prior} / {fresh}")
+            }
+        }
+    }
+}
+
 /// Build the matches-close.json content, or `None` when the tier would not
 /// run at all (one side has no unmatched functions — the TS returns before
 /// the tier and never records; absent-on-both is agreement).
@@ -73,7 +101,7 @@ pub fn close_dump(
     sides: &CloseDumpSides<'_>,
     prior_program_json: &Value,
     fresh_program_json: &Value,
-) -> Result<Option<MatchesCloseFile>, String> {
+) -> Result<Option<MatchesCloseFile>, CloseDumpError> {
     close_dump_with_context(sides, prior_program_json, fresh_program_json).map(|(file, _)| file)
 }
 
@@ -98,7 +126,7 @@ pub fn close_dump_with_context(
     sides: &CloseDumpSides<'_>,
     prior_program_json: &Value,
     fresh_program_json: &Value,
-) -> Result<(Option<MatchesCloseFile>, Vec<ClosePairContext>), String> {
+) -> Result<(Option<MatchesCloseFile>, Vec<ClosePairContext>), CloseDumpError> {
     // The content-lookup indexes: built ONCE per side (720 pairs share
     // them; a per-pair build cost 2.5s × 2 × 720 — the close dump's
     // runtime).
@@ -154,11 +182,10 @@ pub fn close_dump_with_context(
         .map(|p| (p.prior_id.as_str(), p.fresh_id.as_str()))
         .collect();
     if won != assigned {
-        return Err(format!(
-            "close-dump drift: the outcome replay's won set ({}) does not equal the assignment ({})",
-            won.len(),
-            assigned.len()
-        ));
+        return Err(CloseDumpError::Drift {
+            won: won.len(),
+            assigned: assigned.len(),
+        });
     }
 
     // Per-pair rows (assignment order — the TS's context insertion order;
@@ -279,7 +306,7 @@ fn pair_row(
     sides: &CloseDumpSides<'_>,
     pair: &close::CloseMatchPair,
     ctx: PairRowCtx<'_>,
-) -> Result<(ClosePairRow, Vec<TransferPair>), String> {
+) -> Result<(ClosePairRow, Vec<TransferPair>), CloseDumpError> {
     let prior_span = sides.prior_graph.functions[ctx.prior_row].span;
     let fresh_span = sides.fresh_graph.functions[ctx.fresh_row].span;
     // The function INDEX row (the shingle sets' addressing) — the graph row
@@ -291,10 +318,10 @@ fn pair_row(
     {
         Some(IndexNode::Function(idx)) => *idx,
         _ => {
-            return Err(format!(
-                "close-dump: prior {} is not a function index entry",
-                pair.prior_id
-            ));
+            return Err(CloseDumpError::NotAFunction {
+                side: "prior",
+                id: pair.prior_id.clone(),
+            });
         }
     };
     let fresh_fn_idx = match sides
@@ -304,10 +331,10 @@ fn pair_row(
     {
         Some(IndexNode::Function(idx)) => *idx,
         _ => {
-            return Err(format!(
-                "close-dump: fresh {} is not a function index entry",
-                pair.fresh_id
-            ));
+            return Err(CloseDumpError::NotAFunction {
+                side: "fresh",
+                id: pair.fresh_id.clone(),
+            });
         }
     };
 
@@ -321,10 +348,10 @@ fn pair_row(
         .get(&(fresh_span.start, fresh_span.end))
         .and_then(|(_, kind)| row_json_in(ctx.fresh_json_index, fresh_span, kind));
     let (Some(prior_json), Some(fresh_json)) = (prior_json, fresh_json) else {
-        return Err(format!(
-            "close-dump: row JSON unavailable for {} / {}",
-            pair.prior_id, pair.fresh_id
-        ));
+        return Err(CloseDumpError::RowJsonUnavailable {
+            prior: pair.prior_id.clone(),
+            fresh: pair.fresh_id.clone(),
+        });
     };
 
     let prior_align = AlignSide::build(

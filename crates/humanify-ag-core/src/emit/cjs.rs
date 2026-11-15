@@ -298,16 +298,14 @@ impl Plan<'_, '_> {
     }
 
     /// The alias `reader` binds `decl` to.
-    fn ns(&self, reader: usize, decl: usize) -> Result<&str, String> {
+    fn ns(&self, reader: usize, decl: usize) -> Result<&str, EmitError> {
         self.aliases
             .get(&reader)
             .and_then(|m| m.get(&decl))
             .map(String::as_str)
-            .ok_or_else(|| {
-                format!(
-                    "runnable emit: no alias for {} in {} (internal)",
-                    self.input.files[decl], self.input.files[reader]
-                )
+            .ok_or_else(|| EmitError::NoAlias {
+                module: self.input.files[decl].clone(),
+                reader: self.input.files[reader].clone(),
             })
     }
 
@@ -390,7 +388,7 @@ impl Plan<'_, '_> {
         name: &str,
         binding: BindingId,
         decl_file: usize,
-    ) -> Result<bool, String> {
+    ) -> Result<bool, EmitError> {
         let refs = self.input.scopes.binding(binding).refs.clone();
         let mut crosses = false;
         for site in refs {
@@ -430,7 +428,7 @@ impl Plan<'_, '_> {
         name: &str,
         decl_file: usize,
         span: Span,
-    ) -> Result<bool, String> {
+    ) -> Result<bool, EmitError> {
         let Some((stmt, file)) = self.file_at(span.start) else {
             return Ok(false);
         };
@@ -438,7 +436,7 @@ impl Plan<'_, '_> {
             return Ok(false);
         }
         let Some(id) = self.ident(span) else {
-            return Err(format!("runnable emit: no identifier node at {span:?}"));
+            return Err(EmitError::NoIdentifier(span));
         };
         if parent_is_delete(self.nodes, id) {
             // Neutralized by the read rewrite; never a write.
@@ -446,14 +444,14 @@ impl Plan<'_, '_> {
         }
         match classify_write(self.nodes, id, span) {
             WriteKind::FnRedecl => {
-                return Err(format!(
-                    "runnable emit: cross-file function redeclaration of \"{name}\" cannot preserve hoisting"
-                ));
+                return Err(EmitError::FunctionRedeclaration {
+                    name: name.to_string(),
+                });
             }
             WriteKind::PatternRedecl => {
-                return Err(format!(
-                    "runnable emit: cross-file redeclaration of \"{name}\" through a destructuring declarator is not supported"
-                ));
+                return Err(EmitError::PatternRedeclaration {
+                    name: name.to_string(),
+                });
             }
             WriteKind::VarRedecl => {
                 let list = &mut self.redecls[stmt];
@@ -473,7 +471,7 @@ impl Plan<'_, '_> {
     }
 
     /// `planBinding`.
-    fn plan_binding(&mut self, name: &str, binding: BindingId) -> Result<(), String> {
+    fn plan_binding(&mut self, name: &str, binding: BindingId) -> Result<(), EmitError> {
         let b = self.input.scopes.binding(binding);
         let Some(decl_stmt) = stmt_index_of(&self.ranges, b.id_span.start) else {
             return Ok(());
@@ -525,7 +523,7 @@ impl Plan<'_, '_> {
         param: &str,
         target: &str,
         ctx_files: &mut HashSet<usize>,
-    ) -> Result<(), String> {
+    ) -> Result<(), EmitError> {
         let Some(binding) = self.get_binding(param) else {
             return Ok(());
         };
@@ -563,12 +561,12 @@ impl Plan<'_, '_> {
                     continue;
                 };
                 let Some(id) = self.ident(span) else {
-                    return Err(format!("runnable emit: no identifier node at {span:?}"));
+                    return Err(EmitError::NoIdentifier(span));
                 };
                 if parent_is_declarator(self.nodes, id) {
-                    return Err(format!(
-                        "runnable emit: wrapper parameter \"{param}\" is redeclared"
-                    ));
+                    return Err(EmitError::ParamRedeclared {
+                        param: param.to_string(),
+                    });
                 }
                 let edit = self.edit_for_write_target(id, span, param, target);
                 self.add_edit(stmt, edit);
@@ -620,7 +618,7 @@ impl Plan<'_, '_> {
     }
 
     /// `planWrapperContext`.
-    fn plan_wrapper_context(&mut self) -> Result<(), String> {
+    fn plan_wrapper_context(&mut self) -> Result<(), EmitError> {
         let roles = self.input.layout.wrapper_parameter_roles();
         let var_name = self.reserve_bundle_var();
         let mut ctx_files = HashSet::new();
@@ -644,7 +642,7 @@ impl Plan<'_, '_> {
     }
 
     /// `assertLoadTimeAcyclic`.
-    fn assert_load_time_acyclic(&self) -> Result<(), String> {
+    fn assert_load_time_acyclic(&self) -> Result<(), EmitError> {
         #[derive(Clone, Copy, PartialEq)]
         enum Color {
             Gray,
@@ -655,22 +653,19 @@ impl Plan<'_, '_> {
             file: usize,
             colors: &mut HashMap<usize, Color>,
             stack: &mut Vec<usize>,
-        ) -> Result<(), String> {
+        ) -> Result<(), EmitError> {
             colors.insert(file, Color::Gray);
             stack.push(file);
             for &dep in plan.load_time_edges.get(file) {
                 match colors.get(&dep) {
                     Some(Color::Gray) => {
                         let at = stack.iter().position(|&f| f == dep).unwrap_or(0);
-                        let mut cycle: Vec<&str> = stack[at..]
+                        let mut cycle: Vec<String> = stack[at..]
                             .iter()
-                            .map(|&f| plan.input.files[f].as_str())
+                            .map(|&f| plan.input.files[f].clone())
                             .collect();
-                        cycle.push(plan.input.files[dep].as_str());
-                        return Err(format!(
-                            "runnable emit: load-time reference cycle: {}",
-                            cycle.join(" -> ")
-                        ));
+                        cycle.push(plan.input.files[dep].clone());
+                        return Err(EmitError::Cycle(cycle));
                     }
                     Some(Color::Black) => {}
                     None => visit(plan, dep, colors, stack)?,
@@ -794,7 +789,7 @@ impl Plan<'_, '_> {
     /// Deferring only shortens a header, so it converges; a hazard with
     /// nothing left to defer is a decline. A tree with no hazard is
     /// emitted byte for byte as before.
-    fn settle_load_order(&mut self) -> Result<(), String> {
+    fn settle_load_order(&mut self) -> Result<(), EmitError> {
         while let Some(path) = self.load_order_hazard() {
             let newly: Vec<usize> = path
                 .iter()
@@ -808,12 +803,11 @@ impl Plan<'_, '_> {
                 })
                 .collect();
             if newly.is_empty() {
-                let name = |i: usize| self.input.files[path[i]].as_str();
-                return Err(format!(
-                    "runnable emit: load-order hazard: {} reads {} at load before its body runs",
-                    name(path.len() - 1),
-                    name(0)
-                ));
+                let name = |i: usize| self.input.files[path[i]].clone();
+                return Err(EmitError::LoadOrderHazard {
+                    reader: name(path.len() - 1),
+                    read: name(0),
+                });
             }
             self.deferred.extend(newly);
         }
@@ -1069,11 +1063,18 @@ fn relocate_namespace_augmentations(plan: &mut Plan<'_, '_>) {
 /// prints for the node at depth 0, wherever it sat in the bundle. A line
 /// that begins inside a template quasi or a string is content and stays
 /// byte for byte (the one owner: [`TextView::pretty`]).
-fn reindented(text: &TextView<'_>, start: u32, end: u32, edits: &[Edit]) -> Result<String, String> {
+fn reindented(
+    text: &TextView<'_>,
+    start: u32,
+    end: u32,
+    edits: &[Edit],
+) -> Result<String, EmitError> {
     let mut sorted: Vec<&Edit> = edits.iter().collect();
     sorted.sort_by_key(|e| (e.start, e.end));
     if sorted.windows(2).any(|w| w[1].start < w[0].end) {
-        return Err("runnable emit: overlapping rewrites (internal)".into());
+        return Err(EmitError::Internal(
+            "runnable emit: overlapping rewrites (internal)",
+        ));
     }
     let replacements: Vec<Replacement> = sorted
         .into_iter()
@@ -1109,11 +1110,13 @@ fn declaration_kind(kind: VariableDeclarationKind) -> &'static str {
 }
 
 impl Plan<'_, '_> {
-    fn ns_of_cross(&self, reader: usize, name: &str) -> Result<&str, String> {
+    fn ns_of_cross(&self, reader: usize, name: &str) -> Result<&str, EmitError> {
         let c = self
             .cross
             .get(name)
-            .ok_or_else(|| format!("runnable emit: no cross record for {name}"))?;
+            .ok_or_else(|| EmitError::NoCrossRecord {
+                name: name.to_string(),
+            })?;
         self.ns(reader, c.decl_file)
     }
 
@@ -1124,7 +1127,7 @@ impl Plan<'_, '_> {
         name: &str,
         init: Option<&Expression<'_>>,
         pool: &mut Vec<Edit>,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<Option<String>, EmitError> {
         let Some(init) = init else {
             return Ok(None);
         };
@@ -1157,7 +1160,7 @@ impl Plan<'_, '_> {
         decl: &VariableDeclaration<'_>,
         redecls: &[(u32, String)],
         pool: &mut Vec<Edit>,
-    ) -> Result<Edit, String> {
+    ) -> Result<Edit, EmitError> {
         let mut lines = Vec::new();
         for d in &decl.declarations {
             if let Some(name) = Self::redecl_name(redecls, d) {
@@ -1188,11 +1191,13 @@ impl Plan<'_, '_> {
         init: &VariableDeclaration<'_>,
         redecls: &[(u32, String)],
         pool: &mut Vec<Edit>,
-    ) -> Result<Edit, String> {
+    ) -> Result<Edit, EmitError> {
         let mut parts = Vec::new();
         for d in &init.declarations {
             let Some(name) = Self::redecl_name(redecls, d) else {
-                return Err("runnable emit: for-init mixes a cross-file var redeclaration with local declarators".into());
+                return Err(EmitError::Internal(
+                    "runnable emit: for-init mixes a cross-file var redeclaration with local declarators",
+                ));
             };
             if let Some(assign) = self.assignment_for(reader, &name, d.init.as_ref(), pool)? {
                 parts.push(assign);
@@ -1212,7 +1217,7 @@ impl Plan<'_, '_> {
         stmt: &Statement<'_>,
         redecls: &[(u32, String)],
         mut pool: Vec<Edit>,
-    ) -> Result<Vec<Edit>, String> {
+    ) -> Result<Vec<Edit>, EmitError> {
         let all_within = |s: Span| {
             redecls
                 .iter()
@@ -1254,22 +1259,19 @@ impl Plan<'_, '_> {
         Ok(out)
     }
 
-    fn unsupported_redecl(&self, redecls: &[(u32, String)]) -> String {
-        let mut names: Vec<&str> = Vec::new();
+    fn unsupported_redecl(&self, redecls: &[(u32, String)]) -> EmitError {
+        let mut names: Vec<String> = Vec::new();
         for (_, n) in redecls {
-            if !names.contains(&n.as_str()) {
-                names.push(n);
+            if !names.contains(n) {
+                names.push(n.clone());
             }
         }
-        format!(
-            "runnable emit: cross-file var redeclaration of \"{}\" in an unsupported position",
-            names.join(", ")
-        )
+        EmitError::UnsupportedRedeclaration(names)
     }
 
     /// `stmtText`: the statement re-indented to its own depth (exp223),
     /// spliced where it was rewritten.
-    fn stmt_text(&self, idx: usize) -> Result<String, String> {
+    fn stmt_text(&self, idx: usize) -> Result<String, EmitError> {
         let (start, end) = self.ranges[idx];
         let edits = &self.edits[idx];
         let redecls = &self.redecls[idx];
@@ -1296,7 +1298,7 @@ impl Plan<'_, '_> {
     }
 
     /// `assembleFile`: directives, accessor block, require header, body.
-    fn assemble_file(&self, file: usize, stmt_idxs: &[usize]) -> Result<String, String> {
+    fn assemble_file(&self, file: usize, stmt_idxs: &[usize]) -> Result<String, EmitError> {
         let path = self.input.files[file].as_str();
         let mut header: Vec<String> = self.directives.clone();
         if let Some(exps) = self.exports.get(&file) {
@@ -1422,15 +1424,14 @@ fn pick_free_file(name: &str, taken: &HashSet<String>) -> String {
 // ---------------------------------------------------------------------------
 
 /// Build the plan's scaffolding and the import scope, then the aliases.
-fn new_plan<'a, 's>(input: &'s RunnableInput<'a, 's>) -> Result<Plan<'a, 's>, String> {
+fn new_plan<'a, 's>(input: &'s RunnableInput<'a, 's>) -> Result<Plan<'a, 's>, EmitError> {
     let nodes = input.semantic.nodes();
     let statements: &'a [Statement<'a>] = &input.wrapper.body.statements;
     if input.order.len() != statements.len() {
-        return Err(format!(
-            "runnable emit: ledger.order has {} entries but the wrapper has {} statements",
-            input.order.len(),
-            statements.len()
-        ));
+        return Err(EmitError::OrderLength {
+            order: input.order.len(),
+            statements: statements.len(),
+        });
     }
     let file_id: HashMap<&str, usize> = input
         .files
@@ -1440,9 +1441,9 @@ fn new_plan<'a, 's>(input: &'s RunnableInput<'a, 's>) -> Result<Plan<'a, 's>, St
         .collect();
     let mut stmt_file = Vec::with_capacity(input.order.len());
     for f in input.order {
-        let id = file_id.get(f.as_str()).ok_or_else(|| {
-            format!("runnable emit: ledger.order references \"{f}\" missing from ledger.files")
-        })?;
+        let id = file_id
+            .get(f.as_str())
+            .ok_or_else(|| EmitError::OrderMissing { file: f.clone() })?;
         stmt_file.push(*id);
     }
     let directives = input
@@ -1665,7 +1666,7 @@ fn written_aliases(plan: &Plan<'_, '_>) -> Vec<(String, String, String)> {
 /// per importer, carried from the prior tree's own require lines).
 #[derive(Debug)]
 pub struct EmitDecline {
-    pub reason: String,
+    pub reason: EmitError,
     pub layout: Option<Box<EmittedLayout>>,
 }
 
@@ -1679,11 +1680,106 @@ pub struct EmittedLayout {
     pub by_file: Vec<(String, Vec<usize>)>,
 }
 
-impl From<String> for EmitDecline {
-    fn from(reason: String) -> Self {
+impl From<EmitError> for EmitDecline {
+    fn from(reason: EmitError) -> Self {
         EmitDecline {
             reason,
             layout: None,
+        }
+    }
+}
+
+/// Why the runnable emit declined: the review tree is written instead.
+/// Each variant prints the text the emit reported before the error was
+/// typed (the decline reason reaches the run's stats).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EmitError {
+    /// No namespace alias for a module in a reader (an internal step).
+    NoAlias { module: String, reader: String },
+    /// No identifier node at a reference's span.
+    NoIdentifier(Span),
+    /// A cross-file function redeclaration.
+    FunctionRedeclaration { name: String },
+    /// A cross-file redeclaration through a destructuring declarator.
+    PatternRedeclaration { name: String },
+    /// A wrapper parameter is redeclared.
+    ParamRedeclared { param: String },
+    /// A load-time reference cycle through these files.
+    Cycle(Vec<String>),
+    /// A file reads another at load before that one's body runs.
+    LoadOrderHazard { reader: String, read: String },
+    /// A step that holds by construction did not (the text names it).
+    Internal(&'static str),
+    /// No cross-file record for a name.
+    NoCrossRecord { name: String },
+    /// Cross-file var redeclarations in a position the emit cannot rewrite.
+    UnsupportedRedeclaration(Vec<String>),
+    /// The ledger's order and the wrapper disagree on the statement count.
+    OrderLength { order: usize, statements: usize },
+    /// The ledger's order names a file the ledger does not list.
+    OrderMissing { file: String },
+    /// No free namespace variable for a module in an importer.
+    NoNamespaceVariable { module: String, importer: String },
+    /// A vendor bridge's owner file is not emitted.
+    BridgeNoFile { file: String, name: String },
+}
+
+impl std::fmt::Display for EmitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoAlias { module, reader } => write!(
+                f,
+                "runnable emit: no alias for {module} in {reader} (internal)"
+            ),
+            Self::NoIdentifier(span) => {
+                write!(f, "runnable emit: no identifier node at {span:?}")
+            }
+            Self::FunctionRedeclaration { name } => write!(
+                f,
+                "runnable emit: cross-file function redeclaration of \"{name}\" cannot preserve hoisting"
+            ),
+            Self::PatternRedeclaration { name } => write!(
+                f,
+                "runnable emit: cross-file redeclaration of \"{name}\" through a destructuring declarator is not supported"
+            ),
+            Self::ParamRedeclared { param } => write!(
+                f,
+                "runnable emit: wrapper parameter \"{param}\" is redeclared"
+            ),
+            Self::Cycle(files) => write!(
+                f,
+                "runnable emit: load-time reference cycle: {}",
+                files.join(" -> ")
+            ),
+            Self::LoadOrderHazard { reader, read } => write!(
+                f,
+                "runnable emit: load-order hazard: {reader} reads {read} at load before its body runs"
+            ),
+            Self::Internal(what) => f.write_str(what),
+            Self::NoCrossRecord { name } => {
+                write!(f, "runnable emit: no cross record for {name}")
+            }
+            Self::UnsupportedRedeclaration(names) => write!(
+                f,
+                "runnable emit: cross-file var redeclaration of \"{}\" in an unsupported position",
+                names.join(", ")
+            ),
+            Self::OrderLength { order, statements } => write!(
+                f,
+                "runnable emit: ledger.order has {order} entries but the wrapper has {statements} statements"
+            ),
+            Self::OrderMissing { file } => write!(
+                f,
+                "runnable emit: ledger.order references \"{file}\" missing from ledger.files"
+            ),
+            Self::NoNamespaceVariable { module, importer } => write!(
+                f,
+                "runnable emit: no free namespace variable for {module} in {importer}"
+            ),
+            Self::BridgeNoFile { file, name } => write!(
+                f,
+                "vendor bridge: no emitted file {file} to export {name} from"
+            ),
         }
     }
 }
@@ -1706,9 +1802,11 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
     // captured bindings whether or not any app file references them.
     for (file, name) in input.forced_exports {
         let Some(f) = input.files.iter().position(|p| p == file) else {
-            return Err(
-                format!("vendor bridge: no emitted file {file} to export {name} from").into(),
-            );
+            return Err(EmitError::BridgeNoFile {
+                file: file.clone(),
+                name: name.clone(),
+            }
+            .into());
         };
         plan.exports.entry(f).or_default().insert(name.clone());
     }

@@ -91,7 +91,9 @@ fn a_shim_past_its_deadline_is_killed_and_fails_loudly() {
     let result = rx
         .recv_timeout(Duration::from_secs(30))
         .expect("unpack_webcrack hung past the shim's deadline");
-    let err = result.expect_err("a shim past its deadline is an error");
+    let err = result
+        .expect_err("a shim past its deadline is an error")
+        .to_string();
     assert!(err.contains("timed out after 0.5s"), "{err}");
 }
 

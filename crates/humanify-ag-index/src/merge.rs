@@ -1096,7 +1096,8 @@ fn stream_tables(
             Some(&edges),
             &literals,
             &mut put,
-        )?;
+        )
+        .map_err(|e| e.to_string())?;
     }
     drop(units);
     drop(edges);
@@ -1221,7 +1222,8 @@ fn stream_names_tables(
         let unit_rows = units
             .get(kind)
             .ok_or_else(|| format!("names rows for slice {kind}: the slice has no unit rows"))?;
-        let ids = humanify_ag_core::libindex::table::unit_row_ids(unit_rows)?;
+        let ids = humanify_ag_core::libindex::table::unit_row_ids(unit_rows)
+            .map_err(|e| e.to_string())?;
         let id_ofs = unit_row_id_ofs(
             segments,
             unit_rows,
@@ -1241,7 +1243,8 @@ fn stream_names_tables(
         let mut put = |name: String, bytes: Vec<u8>| sink.whole(&name, bytes);
         humanify_ag_core::libindex::table::names_lookup_files_into(
             units, &names, &interner, &mut put,
-        )?;
+        )
+        .map_err(|e| e.to_string())?;
     }
     Ok(())
 }

@@ -131,7 +131,8 @@ pub fn unpack_bundle(
             webcrack_shim: Some(&shim),
             library_discovery,
         },
-    )?;
+    )
+    .map_err(|e| e.to_string())?;
     let (
         files,
         vendor_record,
@@ -317,7 +318,8 @@ pub fn filter_libraries(
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Filtered, String> {
     let span = profiler.pipeline_span("library-detection");
-    let detection = detect_libraries(detector, &files, &crate::index_files::read_utf8)?;
+    let detection = detect_libraries(detector, &files, &crate::index_files::read_utf8)
+        .map_err(|e| e.to_string())?;
     span.end(Some(
         Fields::new()
             .with("libraryCount", detection.library_files.len())

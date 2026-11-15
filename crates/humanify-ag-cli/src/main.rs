@@ -388,7 +388,9 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
     use humanify_ag_core::unpack::{AdapterOutcome, AdapterRun, gate, run_adapter};
     use std::path::Path;
 
-    let code = humanify_ag_core::unpack::input::read_input(Path::new(input))?.text;
+    let code = humanify_ag_core::unpack::input::read_input(Path::new(input))
+        .map_err(|e| e.to_string())?
+        .text;
     let out = Path::new(out_dir);
     let toolchain = humanify_ag_core::toolchain::resolve_toolchain(
         &humanify_ag_core::detect::detect_bundle(&code),
@@ -438,7 +440,9 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
                 .map(|s| s as &dyn humanify_ag_core::unpack::webcrack::ExternalUnpacker),
             library_discovery: None,
         },
-    )? {
+    )
+    .map_err(|e| e.to_string())?
+    {
         AdapterOutcome::VendorRecord(outcome) => outcome,
         AdapterOutcome::Files { result, .. } => {
             println!(

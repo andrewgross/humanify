@@ -21,6 +21,8 @@
 //! they still decide parentheses — see `printer`). Synthesized nodes carry
 //! none of them, exactly like Babel's builders.
 
+use super::error::FormatError;
+
 /// A node's index in its [`Tree`]. `NONE` is a hole: an array elision, or
 /// the slot `replaceWithMultiple` nulls before it inserts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1100,12 +1102,12 @@ impl Kind {
     /// Write a single-node field (`node[key] = value`). Err when this kind
     /// has no such field. A required field written with None holds NONE
     /// (the transient null of `replaceWithMultiple`).
-    pub fn set(&mut self, field: Field, value: Option<NodeId>) -> Result<(), String> {
+    pub fn set(&mut self, field: Field, value: Option<NodeId>) -> Result<(), FormatError> {
         let name = self.type_name();
         match self.single_mut(field) {
             Some(SlotMut::Req(slot)) => *slot = value.unwrap_or(NodeId::NONE),
             Some(SlotMut::Opt(slot)) => *slot = value,
-            None => return Err(format!("{name} has no field {field:?}")),
+            None => return Err(FormatError::NoField { kind: name, field }),
         }
         Ok(())
     }

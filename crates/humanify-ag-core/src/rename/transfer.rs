@@ -341,7 +341,7 @@ pub fn apply_prior_version(
     stage: &crate::prior::MatchStage<'_, '_>,
     freeze: &PreFreeze,
     profile: NameProfile,
-) -> Result<(TransferOutcome, crate::twins::gates::TwinGateOutput), String> {
+) -> Result<(TransferOutcome, crate::twins::gates::TwinGateOutput), TransferError> {
     stage::apply_prior_version(stage, freeze, profile)
 }
 
@@ -352,8 +352,48 @@ pub fn statement_twins(
     stage: &crate::prior::MatchStage<'_, '_>,
     freeze: &PreFreeze,
     profile: NameProfile,
-) -> Result<crate::twins::gates::TwinGateOutput, String> {
+) -> Result<crate::twins::gates::TwinGateOutput, TransferError> {
     stage::statement_twins(stage, freeze, profile)
 }
 
 pub use stage::{PreFreeze, library_freeze, pre_transfer_states};
+
+/// Why carrying the prior version's names failed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TransferError {
+    /// The statement twins' fossil map failed.
+    Twins(crate::twins::fossil::FossilMapError),
+    /// A matched binding has no Babel binding on the fresh side.
+    NoBabelBinding { name: String },
+    /// A matched function pair's row JSON is missing.
+    RowJsonUnavailable { prior: String, fresh: String },
+    /// A matched pair's placeholder maps differ.
+    PlaceholdersMisaligned {
+        at: String,
+        prior: usize,
+        new: usize,
+    },
+}
+
+impl std::fmt::Display for TransferError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Twins(e) => e.fmt(f),
+            Self::NoBabelBinding { name } => write!(f, "binding rename {name}: no babel binding"),
+            Self::RowJsonUnavailable { prior, fresh } => {
+                write!(f, "matched pair {prior} / {fresh}: row JSON unavailable")
+            }
+            Self::PlaceholdersMisaligned { at, prior, new } => write!(
+                f,
+                "placeholder maps misaligned for matched pair at {at}: prior has {prior} slots, new has {new} — \
+             equal hashes guarantee equal slot sets, so a mapping is stale or corrupt"
+            ),
+        }
+    }
+}
+
+impl From<crate::twins::fossil::FossilMapError> for TransferError {
+    fn from(e: crate::twins::fossil::FossilMapError) -> Self {
+        Self::Twins(e)
+    }
+}

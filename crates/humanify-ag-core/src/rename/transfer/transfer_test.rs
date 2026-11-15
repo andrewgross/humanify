@@ -93,7 +93,8 @@ fn synthetic_pairs_match_the_ts_probe() {
                 stage,
                 &Default::default(),
                 crate::rename::name_profile::NameProfile::Bun,
-            )?;
+            )
+            .map_err(|e| e.to_string())?;
             Ok(outcome.rename.trail().transfer_rows())
         })
         .unwrap_or_else(|e| panic!("{name}: {e}"));

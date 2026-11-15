@@ -372,7 +372,7 @@ fn top_level_await_in_a_chunk_is_refused() {
         ),
     ]);
     let err = read_input(&entry).unwrap_err();
-    assert!(err.contains("top-level await"), "{err}");
+    assert!(err.to_string().contains("top-level await"), "{err}");
 }
 
 #[test]
@@ -388,7 +388,7 @@ fn an_import_of_a_name_the_chunk_does_not_export_is_refused() {
         ),
     ]);
     let err = read_input(&entry).unwrap_err();
-    assert!(err.contains("nope"), "{err}");
+    assert!(err.to_string().contains("nope"), "{err}");
 }
 
 #[test]
@@ -655,7 +655,7 @@ fn a_lazy_chunks_var_declared_in_a_nested_block_is_refused() {
         ),
     ]);
     let err = link(&entry).unwrap_err();
-    assert!(err.contains("nested block"), "{err}");
+    assert!(err.to_string().contains("nested block"), "{err}");
 }
 
 #[test]

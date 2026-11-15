@@ -16,6 +16,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::ast::{NodeId, Tree};
+use super::error::FormatError;
 use crate::ingest::Ingest;
 use crate::rename::validated::scopes::BabelScopes;
 
@@ -23,7 +24,7 @@ use crate::rename::validated::scopes::BabelScopes;
 pub fn undefined_binding_scopes(
     tree: &Tree,
     ingest: &Ingest<'_>,
-) -> Result<HashSet<NodeId>, String> {
+) -> Result<HashSet<NodeId>, FormatError> {
     let scoping = ingest.semantic().scoping();
     let any = scoping
         .symbol_ids()
@@ -48,11 +49,10 @@ pub fn undefined_binding_scopes(
         }
     }
     if out.len() < wanted.len() {
-        return Err(format!(
-            "undefined-binding scopes: {} Babel scope(s), {} matched in the tree",
-            wanted.len(),
-            out.len()
-        ));
+        return Err(FormatError::UndefinedScopes {
+            wanted: wanted.len(),
+            matched: out.len(),
+        });
     }
     Ok(out)
 }

@@ -54,6 +54,7 @@ use oxc_semantic::{Semantic, SymbolId};
 use oxc_span::GetSpan;
 
 use crate::babel_view::{DiffLines, unparen};
+use crate::error::{FileError, FileOp};
 use crate::naming::plumbing::{conventional_import_name, require_specifier, sole_write};
 use crate::naming::report::diagnostics::ExtraText;
 use crate::place::layout::METADATA_DIR;
@@ -342,7 +343,7 @@ pub fn name_library_imports_in_tree(
     files: &[&str],
     never_rename: NeverRename,
     profile: NameProfile,
-) -> Result<LibraryNamesReport, String> {
+) -> Result<LibraryNamesReport, FileError> {
     let eligible = Eligibility::new(never_rename);
     let metadata = format!("{METADATA_DIR}/");
     let files: Vec<&str> = files
@@ -352,7 +353,7 @@ pub fn name_library_imports_in_tree(
         .collect();
     let works = crate::par::map_ordered(&files, |file| {
         let text = read_utf8(&output_dir.join(file))?;
-        Ok::<_, String>(name_library_imports_in_file(
+        Ok::<_, FileError>(name_library_imports_in_file(
             file, &text, &eligible, profile,
         ))
     });
@@ -368,7 +369,7 @@ pub fn name_library_imports_in_tree(
         report.trail.extend(work.trail);
         if let Some(text) = work.text {
             let path = output_dir.join(file);
-            std::fs::write(&path, text).map_err(|e| format!("write {}: {e}", path.display()))?;
+            std::fs::write(&path, text).map_err(FileError::at(FileOp::Write, &path))?;
             report.named += work.named.len();
             report.files += 1;
         }

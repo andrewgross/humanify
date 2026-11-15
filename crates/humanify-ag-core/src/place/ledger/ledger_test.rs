@@ -133,7 +133,7 @@ fn a_failed_rederivation_leaves_the_ledger_untouched_and_refused() {
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     )
     .unwrap_err();
-    assert!(err.contains("not a bijection"), "{err}");
+    assert!(err.to_string().contains("not a bijection"), "{err}");
     assert_eq!(format!("{ledger:?}"), before);
 
     // An emitted hash that no statement carries.

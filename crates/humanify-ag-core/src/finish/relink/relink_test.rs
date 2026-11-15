@@ -22,6 +22,7 @@ fn wrap_extracted_factory(
         bridges,
         crate::toolchain::InteropHelpers::Bun,
     )
+    .map_err(|e| e.to_string())
 }
 
 fn lookup(entries: &[(&str, &str)]) -> FactoryLookup {

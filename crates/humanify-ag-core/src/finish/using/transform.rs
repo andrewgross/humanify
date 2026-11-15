@@ -34,6 +34,7 @@
 
 use std::collections::HashSet;
 
+use super::UsingError;
 use crate::format::ast::{Kind, NodeId, Tree};
 
 /// One edit of the source text: `[start, end)` becomes `text`.
@@ -83,14 +84,14 @@ impl Splice {
 }
 
 /// Apply `splices` to `text` (any order in; text order out).
-pub fn apply(text: &str, mut splices: Vec<Splice>) -> Result<String, String> {
+pub fn apply(text: &str, mut splices: Vec<Splice>) -> Result<String, UsingError> {
     splices.sort_by_key(Splice::order_key);
     let mut out = String::with_capacity(text.len() + splices.len() * 48);
     let mut cursor = 0usize;
     for s in splices {
         let (start, end) = (s.start as usize, s.end as usize);
         if start < cursor || end > text.len() || !text.is_char_boundary(start) {
-            return Err(format!("using desugar: overlapping splice at {start}"));
+            return Err(UsingError::OverlappingSplice { at: start });
         }
         out.push_str(&text[cursor..start]);
         out.push_str(&s.text);
@@ -169,15 +170,15 @@ fn is_using(tree: &Tree, node: NodeId) -> bool {
     matches!(tree.kind(node), Kind::VariableDeclaration { kind, .. } if *kind == "using" || *kind == "await using")
 }
 
-fn span(tree: &Tree, node: NodeId) -> Result<(u32, u32), String> {
-    tree.node(node)
-        .span
-        .ok_or_else(|| "using desugar: a node without a source span".into())
+fn span(tree: &Tree, node: NodeId) -> Result<(u32, u32), UsingError> {
+    tree.node(node).span.ok_or(UsingError::Refused(
+        "using desugar: a node without a source span",
+    ))
 }
 
 /// The node's span with its outermost parentheses, if any (a
 /// parenthesized sequence must stay ONE argument).
-fn outer_span(tree: &Tree, node: NodeId) -> Result<(u32, u32), String> {
+fn outer_span(tree: &Tree, node: NodeId) -> Result<(u32, u32), UsingError> {
     let (mut start, mut end) = span(tree, node)?;
     for &(id, s, e) in &tree.parens {
         if id == node && s <= start && e >= end {
@@ -205,11 +206,13 @@ fn rewrite_declarator(
     ctx_name: &str,
     is_await: bool,
     state: &mut State<'_>,
-) -> Result<(), String> {
+) -> Result<(), UsingError> {
     let Kind::VariableDeclarator { id, init } = tree.kind(decl) else {
         return Ok(());
     };
-    let init = init.ok_or("a using declaration without an initializer")?;
+    let init = init.ok_or(UsingError::Refused(
+        "a using declaration without an initializer",
+    ))?;
     let method = if is_await { "a" } else { "u" };
     let mut open = format!("{ctx_name}.{method}(");
     let mut close = ")".to_string();
@@ -242,7 +245,7 @@ fn rewrite_body(
     tree: &mut Tree,
     body: &[NodeId],
     state: &mut State<'_>,
-) -> Result<Option<Context>, String> {
+) -> Result<Option<Context>, UsingError> {
     let mut ctx: Option<String> = None;
     let mut needs_await = false;
     for &stmt in body {
@@ -260,7 +263,12 @@ fn rewrite_body(
         *kind = "const";
         let declarations = declarations.clone();
         let stmt_span = span(tree, stmt)?;
-        let first = span(tree, *declarations.first().ok_or("an empty declaration")?)?;
+        let first = span(
+            tree,
+            *declarations
+                .first()
+                .ok_or(UsingError::Refused("an empty declaration"))?,
+        )?;
         state.splices.push(Splice {
             start: stmt_span.0,
             end: first.0,
@@ -328,7 +336,7 @@ impl Context {
 
 /// The offset just past a static block's `{` (whitespace and comments may
 /// sit between `static` and it).
-fn static_block_open(source: &str, start: u32) -> Result<u32, String> {
+fn static_block_open(source: &str, start: u32) -> Result<u32, UsingError> {
     let bytes = source.as_bytes();
     let mut i = start as usize + "static".len();
     while i < bytes.len() {
@@ -345,7 +353,9 @@ fn static_block_open(source: &str, start: u32) -> Result<u32, String> {
             break;
         }
     }
-    Err("using desugar: a static block without its `{`".into())
+    Err(UsingError::Refused(
+        "using desugar: a static block without its `{`",
+    ))
 }
 
 /// The `BlockStatement|StaticBlock` visitor on one node.
@@ -354,7 +364,7 @@ fn visit_block(
     node: NodeId,
     parent: Parent,
     state: &mut State<'_>,
-) -> Result<(), String> {
+) -> Result<(), UsingError> {
     match tree.kind(node).clone() {
         Kind::BlockStatement { body, directives } => {
             if !body.iter().any(|&s| is_using(tree, s)) {
@@ -386,7 +396,7 @@ fn visit_block(
             }
         }
         Kind::ForOfStatement { left, .. } if is_using(tree, left) => {
-            return Err("for (using … of …): not ported".into());
+            return Err(UsingError::Refused("for (using … of …): not ported"));
         }
         _ => {}
     }
@@ -413,7 +423,7 @@ fn traverse(
     node: NodeId,
     parent: Parent,
     state: &mut State<'_>,
-) -> Result<(), String> {
+) -> Result<(), UsingError> {
     // Function: an async function's own blocks first (the skip-nested pass).
     if is_async_function(tree, node) {
         let p = parent_of_children(tree, node);
@@ -435,7 +445,7 @@ fn traverse_skipping_functions(
     node: NodeId,
     parent: Parent,
     state: &mut State<'_>,
-) -> Result<(), String> {
+) -> Result<(), UsingError> {
     if tree.kind(node).is_function() {
         return Ok(()); // path.skip()
     }
@@ -449,18 +459,24 @@ fn traverse_skipping_functions(
 
 /// Run the plugin over a Program: the splices for its blocks and the
 /// helpers it needs, in `addHelper` order (the caller places them).
-pub fn plan_program(tree: &mut Tree, program: NodeId, state: &mut State<'_>) -> Result<(), String> {
+pub fn plan_program(
+    tree: &mut Tree,
+    program: NodeId,
+    state: &mut State<'_>,
+) -> Result<(), UsingError> {
     traverse(tree, program, Parent::Other, state)
 }
 
 /// The splice that puts the helpers' text on a line of its own above the
 /// program's first statement (after any hashbang and directive prologue,
 /// where Babel's `unshiftContainer` puts them).
-pub fn helpers_splice(tree: &Tree, program: NodeId, text: String) -> Result<Splice, String> {
+pub fn helpers_splice(tree: &Tree, program: NodeId, text: String) -> Result<Splice, UsingError> {
     let Kind::Program { body, .. } = tree.kind(program) else {
-        return Err("using desugar: not a program".into());
+        return Err(UsingError::Refused("using desugar: not a program"));
     };
-    let first = *body.first().ok_or("using desugar: an empty program")?;
+    let first = *body
+        .first()
+        .ok_or(UsingError::Refused("using desugar: an empty program"))?;
     let at = span(tree, first)?.0;
     Ok(Splice::open(at, (at, u32::MAX), format!("{text}\n")))
 }

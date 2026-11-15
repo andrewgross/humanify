@@ -171,7 +171,7 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
     // A bundle that does not parse runs no discovery — nor does the
     // pipeline on it: said, not failed, so a score can count it as
     // "discovery never ran".
-    let report = report?;
+    let report = report.map_err(|e| e.to_string())?;
     let no_discovery = report.is_none().then(|| {
         format!(
             "the {} adapter ran no library discovery (the input does not parse)",
@@ -210,7 +210,9 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
 
 /// The verb: read the input, run, write `out` (or stdout).
 pub fn run_discover(args: &DiscoverArgs<'_>, out: Option<&str>) -> Result<(), String> {
-    let code = humanify_ag_core::unpack::input::read_input(std::path::Path::new(args.input))?.text;
+    let code = humanify_ag_core::unpack::input::read_input(std::path::Path::new(args.input))
+        .map_err(|e| e.to_string())?
+        .text;
     let doc = discover(&code, args)?;
     let text = serde_json::to_string(&doc).map_err(|e| e.to_string())? + "\n";
     match out {

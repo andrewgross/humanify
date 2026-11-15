@@ -27,6 +27,7 @@ use std::path::{Path, PathBuf};
 
 use humanify_ag_model::detection::{BundlerDetectionResult, BundlerType};
 
+use crate::error::{FileError, FileOp};
 use crate::toolchain::{Chosen, Reason};
 
 /// Module metadata webcrack reports for one extracted file
@@ -289,6 +290,48 @@ pub fn discover_without_vendor_record(
     )
 }
 
+/// Why the selected adapter could not unpack the bundle.
+#[derive(Debug)]
+pub enum UnpackError {
+    /// The Bun or esbuild adapter failed.
+    Bun(bun::BunError),
+    /// The webcrack adapter failed.
+    Webcrack(webcrack::WebcrackError),
+    /// The webcrack adapter was selected without its shim.
+    NoShim,
+    /// The passthrough adapter could not write its file.
+    File(FileError),
+}
+
+impl std::fmt::Display for UnpackError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bun(e) => e.fmt(f),
+            Self::Webcrack(e) => e.fmt(f),
+            Self::NoShim => f.write_str("the webcrack adapter needs its subprocess shim"),
+            Self::File(e) => e.fmt(f),
+        }
+    }
+}
+
+impl From<bun::BunError> for UnpackError {
+    fn from(e: bun::BunError) -> Self {
+        Self::Bun(e)
+    }
+}
+
+impl From<webcrack::WebcrackError> for UnpackError {
+    fn from(e: webcrack::WebcrackError) -> Self {
+        Self::Webcrack(e)
+    }
+}
+
+impl From<FileError> for UnpackError {
+    fn from(e: FileError) -> Self {
+        Self::File(e)
+    }
+}
+
 /// Run the selected adapter (`adapter.unpack(code, outputDir, options)`) —
 /// THE one dispatch site: the pipeline, the `unpack`, `discover` and
 /// `match` verbs all come through here, so a registered adapter is run
@@ -299,7 +342,7 @@ pub fn run_adapter(
     code: &str,
     out_dir: &Path,
     run: AdapterRun<'_>,
-) -> Result<AdapterOutcome, String> {
+) -> Result<AdapterOutcome, UnpackError> {
     match adapter {
         // The vendor-record adapters share the one extraction flow; the
         // adapter only stamps the record.
@@ -326,8 +369,7 @@ pub fn run_adapter(
             let result = webcrack::unpack_webcrack(
                 code,
                 out_dir,
-                run.webcrack_shim
-                    .ok_or("the webcrack adapter needs its subprocess shim")?,
+                run.webcrack_shim.ok_or(UnpackError::NoShim)?,
             )?;
             Ok(AdapterOutcome::Files {
                 result,
@@ -349,10 +391,10 @@ pub fn run_adapter(
 /// adapter's no-factory floor: the whole input as `<out>/index.js`.
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
-pub fn write_passthrough(code: &str, out_dir: &Path) -> Result<UnpackResult, String> {
-    fs::create_dir_all(out_dir).map_err(|e| format!("mkdir {}: {e}", out_dir.display()))?;
+pub fn write_passthrough(code: &str, out_dir: &Path) -> Result<UnpackResult, FileError> {
+    fs::create_dir_all(out_dir).map_err(FileError::at(FileOp::Mkdir, out_dir))?;
     let path = out_dir.join("index.js");
-    fs::write(&path, code).map_err(|e| format!("write {}: {e}", path.display()))?;
+    fs::write(&path, code).map_err(FileError::at(FileOp::Write, &path))?;
     Ok(UnpackResult {
         files: vec![UnpackedFile {
             path,

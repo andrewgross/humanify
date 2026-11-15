@@ -149,8 +149,31 @@ impl LibraryDetector {
 pub type ReadText<'a> = &'a dyn Fn(&Path) -> std::io::Result<String>;
 
 /// `path`'s text through `read`; the error names the path.
-fn read_text(read: ReadText<'_>, path: &Path) -> Result<String, String> {
-    read(path).map_err(|e| format!("read {}: {e}", path.display()))
+fn read_text(read: ReadText<'_>, path: &Path) -> Result<String, DetectError> {
+    read(path)
+        .map_err(crate::error::FileError::at(
+            crate::error::FileOp::Read,
+            path,
+        ))
+        .map_err(DetectError::File)
+}
+
+/// Why library detection failed.
+#[derive(Debug)]
+pub enum DetectError {
+    /// A file could not be read.
+    File(crate::error::FileError),
+    /// The vendor record has no `factories` array.
+    NoFactories,
+}
+
+impl std::fmt::Display for DetectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::File(e) => e.fmt(f),
+            Self::NoFactories => f.write_str("bun manifest without a factories array"),
+        }
+    }
 }
 
 /// `detector.detectLibraries(files)`, reading each file through `read`.
@@ -158,7 +181,7 @@ pub fn detect_libraries(
     detector: LibraryDetector,
     files: &[UnpackedFile],
     read: ReadText<'_>,
-) -> Result<LibraryDetectionResult, String> {
+) -> Result<LibraryDetectionResult, DetectError> {
     match detector {
         LibraryDetector::VendorRecord => detect_vendor_record(files, read),
         LibraryDetector::Default => detect_default(files, read),
@@ -411,7 +434,7 @@ pub fn extract_library_name_from_path(module_path: &str) -> String {
 fn detect_default(
     files: &[UnpackedFile],
     read: ReadText<'_>,
-) -> Result<LibraryDetectionResult, String> {
+) -> Result<LibraryDetectionResult, DetectError> {
     let mut result = LibraryDetectionResult::default();
     for file in files {
         // Layer 1: the module path webcrack reported.
@@ -481,10 +504,10 @@ struct Manifest {
 /// the TS `manifest.factories.map` throws out of `detectLibraries`.
 // default: legacy, untriaged: a Result error becomes a value here
 #[allow(clippy::disallowed_methods)]
-fn parse_manifest(raw: &str) -> Option<Result<Manifest, String>> {
+fn parse_manifest(raw: &str) -> Option<Result<Manifest, DetectError>> {
     let value: serde_json::Value = serde_json::from_str(raw).ok()?;
     let Some(entries) = value.get("factories").and_then(|f| f.as_array()) else {
-        return Some(Err("bun manifest without a factories array".to_string()));
+        return Some(Err(DetectError::NoFactories));
     };
     let mut factories = HashMap::new();
     for e in entries {
@@ -517,7 +540,7 @@ fn parse_manifest(raw: &str) -> Option<Result<Manifest, String>> {
 fn load_manifest(
     files: &[UnpackedFile],
     read: ReadText<'_>,
-) -> Option<Result<(Manifest, PathBuf), String>> {
+) -> Option<Result<(Manifest, PathBuf), DetectError>> {
     let start = files.first()?.path.parent()?;
     start.ancestors().find_map(|dir| {
         let raw = read(&bun_manifest_path(dir)).ok()?;
@@ -552,7 +575,7 @@ pub fn relative_posix(from: &Path, to: &Path) -> String {
 fn detect_vendor_record(
     files: &[UnpackedFile],
     read: ReadText<'_>,
-) -> Result<LibraryDetectionResult, String> {
+) -> Result<LibraryDetectionResult, DetectError> {
     let mut result = LibraryDetectionResult::default();
     if let Some(found) = load_manifest(files, read) {
         let (manifest, root) = found?;

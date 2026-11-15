@@ -33,7 +33,8 @@ use crate::place::library_layout::is_synthetic_vendor_path;
 use crate::place::stems::{module_stem_of_wrapper, stem_of};
 use crate::place::trail::{PlacementTrail, TrailEntry};
 use crate::twins::fossil::{
-    FossilExtract, FossilModule, declared_names, export_registration_target, extract_fossil_modules,
+    FossilExtract, FossilMapError, FossilModule, declared_names, export_registration_target,
+    extract_fossil_modules,
 };
 
 /// The eager zone's file: the program's entry file (exp074).
@@ -736,6 +737,44 @@ impl Default for FossilOptions<'_> {
     }
 }
 
+/// Why the fossil split could not place the bundle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FossilSplitError {
+    /// The fossil map's inputs disagree.
+    Map(FossilMapError),
+    /// The bundle records no module fossils.
+    NoFossils,
+    /// A placed library module is not one of the bundle's fossils.
+    LibraryOutside { module: usize },
+    /// A module ended without a file.
+    Unassigned { module: usize },
+}
+
+impl std::fmt::Display for FossilSplitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Map(e) => e.fmt(f),
+            Self::NoFossils => f.write_str(
+                "fossil split: the bundle records no module fossils (no __esm init \
+definitions) — fix detection or run with --disable fossil-split",
+            ),
+            Self::LibraryOutside { module } => write!(
+                f,
+                "library placement: module {module} is outside this bundle's fossils"
+            ),
+            Self::Unassigned { module } => {
+                write!(f, "fossil split: module {module} was never assigned a file")
+            }
+        }
+    }
+}
+
+impl From<FossilMapError> for FossilSplitError {
+    fn from(e: FossilMapError) -> Self {
+        Self::Map(e)
+    }
+}
+
 /// `assignFossil`.
 pub fn assign_fossil(
     body: &[Value],
@@ -743,14 +782,10 @@ pub fn assign_fossil(
     hashes: &[String],
     prior: Option<&StableSplitLedger>,
     options: FossilOptions,
-) -> Result<FossilAssignment, String> {
+) -> Result<FossilAssignment, FossilSplitError> {
     let extract = extract_fossil_modules(body, hashes)?;
     if extract.modules.is_empty() {
-        return Err(
-            "fossil split: the bundle records no module fossils (no __esm init \
-definitions) — fix detection or run with --disable fossil-split"
-                .into(),
-        );
+        return Err(FossilSplitError::NoFossils);
     }
     // A module's identity is its hash multiset: a ledger hashed by another
     // function (the TS era) has no modules this run can match.
@@ -789,9 +824,7 @@ definitions) — fix detection or run with --disable fossil-split"
     // on a disagreement the index wins, never the model's fresh name.
     for &(i, ref path) in options.library {
         if i >= extract.modules.len() {
-            return Err(format!(
-                "library placement: module {i} is outside this bundle's fossils"
-            ));
+            return Err(FossilSplitError::LibraryOutside { module: i });
         }
         let path = carried_content_name(i, path, &matched.matches, prior_modules, options.library)
             .unwrap_or(path);
@@ -854,11 +887,7 @@ definitions) — fix detection or run with --disable fossil-split"
     let final_file: Vec<String> = file_of_module
         .into_iter()
         .enumerate()
-        .map(|(i, f)| {
-            f.ok_or(format!(
-                "fossil split: module {i} was never assigned a file"
-            ))
-        })
+        .map(|(i, f)| f.ok_or(FossilSplitError::Unassigned { module: i }))
         .collect::<Result<_, _>>()?;
 
     let mut assignment = vec![String::new(); body.len()];

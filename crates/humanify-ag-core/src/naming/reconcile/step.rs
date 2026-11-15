@@ -72,6 +72,25 @@ pub struct StepRules<'r> {
     pub differ: &'r dyn hunks::Differ,
 }
 
+/// Why the prior-diff reconcile did not run.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StepError {
+    /// The generated text does not parse: the parser's first diagnostic.
+    Parse(String),
+    /// The shell's `diff` gave no diff (boxed: the error rides beside the
+    /// trail, which is already large).
+    Diff(Box<super::hunks::DiffError>),
+}
+
+impl std::fmt::Display for StepError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse(e) => write!(f, "generated text does not parse: {e}"),
+            Self::Diff(e) => e.fmt(f),
+        }
+    }
+}
+
 /// `runPriorDiffReconciliation(code, prior)`. Err when the step could not
 /// run (unparseable text, a `diff` failure) — the caller ships the
 /// pre-reconcile output, as the TS returns undefined.
@@ -82,7 +101,7 @@ pub fn run_prior_diff_reconciliation(
     trail: StrategyTrail,
     ledger: Option<LedgerWalk>,
     library_spans: &[(u32, u32)],
-) -> Result<PriorDiffOutcome, (String, StrategyTrail)> {
+) -> Result<PriorDiffOutcome, (StepError, StrategyTrail)> {
     let StepRules {
         eligible,
         profile,
@@ -91,16 +110,13 @@ pub fn run_prior_diff_reconciliation(
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
     if !ingest.errors.is_empty() {
-        return Err((
-            format!("generated text does not parse: {}", ingest.errors[0]),
-            trail,
-        ));
+        return Err((StepError::Parse(ingest.errors[0].clone()), trail));
     }
     let semantic = ingest.semantic();
     let ph = crate::profiling::phase("reconcile:diff");
     let diff_text = match differ.normal_diff(prior_text, code) {
         Ok(d) => d,
-        Err(e) => return Err((e.0, trail)),
+        Err(e) => return Err((StepError::Diff(Box::new(e)), trail)),
     };
     drop(ph);
     let ph = crate::profiling::phase("reconcile:options");

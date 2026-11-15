@@ -33,13 +33,15 @@ fn a_misaligned_reparse_fails_loud() {
             .unwrap();
     let count = resolve_function_libraries(&json_of("var a = function(){};"), &carry).unwrap_err();
     assert!(
-        count.contains("2 functions carried across beautify, 1 found"),
+        count
+            .to_string()
+            .contains("2 functions carried across beautify, 1 found"),
         "{count}"
     );
     let ty = resolve_function_libraries(&json_of("var a = () => 1; var b = function(){};"), &carry)
         .unwrap_err();
     assert!(
-        ty.contains(
+        ty.to_string().contains(
             "function #0 is a FunctionExpression before re-parse and a ArrowFunctionExpression after"
         ),
         "{ty}"
@@ -115,7 +117,9 @@ fn consumed_classification_joins_by_fresh_span() {
     )
     .unwrap_err();
     assert!(
-        missing.contains("without a function classification"),
+        missing
+            .to_string()
+            .contains("without a function classification"),
         "{missing}"
     );
     // A key off by one names no function; a wrong sessionId disagrees.
@@ -124,6 +128,7 @@ fn consumed_classification_joins_by_fresh_span() {
     assert!(
         off.classify(&json, &graph)
             .unwrap_err()
+            .to_string()
             .contains("no function at")
     );
     let mut wrong = key(Span::new(lib_start, lib_end), lib_row);
@@ -133,6 +138,7 @@ fn consumed_classification_joins_by_fresh_span() {
         wrong
             .classify(&json, &graph)
             .unwrap_err()
+            .to_string()
             .contains("in the graph")
     );
 }

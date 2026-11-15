@@ -12,6 +12,7 @@ pub mod babel_view;
 pub mod cut;
 pub mod detect;
 pub mod emit;
+pub mod error;
 pub mod finish;
 pub mod format;
 pub mod graph;
@@ -37,6 +38,9 @@ pub mod unpack;
 
 #[cfg(test)]
 mod detect_test;
+
+#[cfg(test)]
+mod error_text_pin_test;
 
 #[cfg(test)]
 mod graph_test;

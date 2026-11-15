@@ -201,6 +201,30 @@ fn is_function_kind(kind: AstKind<'_>) -> bool {
     )
 }
 
+/// Why the run's input is not a bundled app the split can cut.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InputGateError {
+    /// The input does not parse.
+    Parse { diagnostics: usize },
+    /// The input has no wrapper the frozen gate recognises.
+    NoWrapper,
+}
+
+impl std::fmt::Display for InputGateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse { diagnostics } => write!(
+                f,
+                "oxc failed to parse the input bundle: {diagnostics} diagnostic(s)"
+            ),
+            Self::NoWrapper => f.write_str(
+                "the run's input bundle has no recognizable bundle wrapper (the frozen \
+≥50-binding gate is measured on the input)",
+            ),
+        }
+    }
+}
+
 /// The run's input-bundle gate: is the ORIGINAL text — the input the
 /// unpack stage saw, before its vendor extraction spliced the CJS
 /// factories out — really a bundled app? The frozen WP1.5 grammar AND the
@@ -217,18 +241,15 @@ fn is_function_kind(kind: AstKind<'_>) -> bool {
 ///
 /// Returns the original wrapper's binding count — the caller's proof the
 /// input is bundled, threaded to the split's statement slicing.
-pub fn original_bundle_binding_count(original: &str) -> Result<usize, String> {
+pub fn original_bundle_binding_count(original: &str) -> Result<usize, InputGateError> {
     let allocator = oxc_allocator::Allocator::default();
     let ingest = crate::ingest::Ingest::parse(&allocator, original, "input bundle");
     if !ingest.errors.is_empty() {
-        return Err(format!(
-            "oxc failed to parse the input bundle: {} diagnostic(s)",
-            ingest.errors.len()
-        ));
+        return Err(InputGateError::Parse {
+            diagnostics: ingest.errors.len(),
+        });
     }
-    let wrapper = find_wrapper_function(ingest.program, ingest.semantic()).ok_or(
-        "the run's input bundle has no recognizable bundle wrapper (the frozen \
-≥50-binding gate is measured on the input)",
-    )?;
+    let wrapper = find_wrapper_function(ingest.program, ingest.semantic())
+        .ok_or(InputGateError::NoWrapper)?;
     Ok(wrapper.binding_count)
 }

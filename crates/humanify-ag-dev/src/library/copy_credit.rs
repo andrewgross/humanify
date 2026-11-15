@@ -116,7 +116,8 @@ impl LiteralIndex {
         }
         let table = LiteralTable::open(Source::paged(Box::new(
             humanify_ag_cli::index_files::FileReadAt::open(&bin).map_err(|e| e.to_string())?,
-        )))?;
+        )))
+        .map_err(|e| e.to_string())?;
         Ok(Some(LiteralIndex::with(table, packages, files)))
     }
 

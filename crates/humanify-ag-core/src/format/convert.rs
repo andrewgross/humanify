@@ -28,13 +28,14 @@ use oxc_ast::ast::{
 };
 use oxc_span::{GetSpan, Span};
 
+use super::error::FormatError;
 use crate::babel_view::BabelLines;
 
 use super::ast::{
     Binary, Call, Class, Func, Kind, Loc, Member, Method, Node, NodeId, Prop, Quasi, Tree,
 };
 
-type R<T> = Result<T, String>;
+type R<T> = Result<T, FormatError>;
 
 pub struct Converter<'t> {
     text: &'t str,
@@ -229,11 +230,11 @@ impl<'t> Converter<'t> {
                 body: self.statement(&st.body)?,
             },
             other => {
-                return Err(format!(
-                    "unsupported statement at {}..{}",
-                    other.span().start,
-                    other.span().end
-                ));
+                return Err(FormatError::UnsupportedAt {
+                    what: "statement",
+                    start: other.span().start,
+                    end: other.span().end,
+                });
             }
         })
     }
@@ -375,7 +376,9 @@ impl<'t> Converter<'t> {
             return Ok(Vec::new());
         };
         if w.keyword == WithClauseKeyword::Assert {
-            return Err("import assertions (`assert {…}`) are not ported".into());
+            return Err(FormatError::Unsupported(
+                "import assertions (`assert {…}`) are not ported",
+            ));
         }
         let mut out = Vec::with_capacity(w.with_entries.len());
         for a in &w.with_entries {
@@ -410,7 +413,7 @@ impl<'t> Converter<'t> {
                 let class = self.class(c)?;
                 Ok(self.node(Kind::ClassDeclaration(class), c.span))
             }
-            _ => Err("TypeScript declaration".into()),
+            _ => Err(FormatError::Unsupported("TypeScript declaration")),
         }
     }
 
@@ -507,7 +510,7 @@ impl<'t> Converter<'t> {
                         self.node(Kind::ClassDeclaration(class), c.span)
                     }
                     ExportDefaultDeclarationKind::TSInterfaceDeclaration(_) => {
-                        return Err("TypeScript interface".into());
+                        return Err(FormatError::Unsupported("TypeScript interface"));
                     }
                     other => self.expr(other.to_expression())?,
                 },
@@ -522,7 +525,7 @@ impl<'t> Converter<'t> {
         let mut out = Vec::new();
         for p in &params.items {
             if !p.decorators.is_empty() {
-                return Err("decorators".into());
+                return Err(FormatError::Unsupported("decorators"));
             }
             let pattern = self.binding(&p.pattern)?;
             out.push(match &p.initializer {
@@ -547,7 +550,10 @@ impl<'t> Converter<'t> {
     }
 
     fn func(&mut self, f: &Function<'_>) -> R<Func> {
-        let body = f.body.as_ref().ok_or("a function without a body")?;
+        let body = f
+            .body
+            .as_ref()
+            .ok_or(FormatError::Unsupported("a function without a body"))?;
         let id = f.id.as_ref().map(|id| self.ident(&id.name, id.span));
         let params = self.params(&f.params)?;
         let body = self.function_body(body)?;
@@ -575,7 +581,7 @@ impl<'t> Converter<'t> {
 
     fn class(&mut self, c: &oxc_ast::ast::Class<'_>) -> R<Class> {
         if !c.decorators.is_empty() {
-            return Err("decorators".into());
+            return Err(FormatError::Unsupported("decorators"));
         }
         let id = c.id.as_ref().map(|id| self.ident(&id.name, id.span));
         let super_class = c
@@ -603,7 +609,7 @@ impl<'t> Converter<'t> {
             }
             ClassElement::MethodDefinition(m) => {
                 if !m.decorators.is_empty() {
-                    return Err("decorators".into());
+                    return Err(FormatError::Unsupported("decorators"));
                 }
                 let private = matches!(m.key, PropertyKey::PrivateIdentifier(_));
                 let method = Method {
@@ -629,7 +635,7 @@ impl<'t> Converter<'t> {
             }
             ClassElement::PropertyDefinition(p) => {
                 if !p.decorators.is_empty() {
-                    return Err("decorators".into());
+                    return Err(FormatError::Unsupported("decorators"));
                 }
                 let private = matches!(p.key, PropertyKey::PrivateIdentifier(_));
                 let prop = Prop {
@@ -650,11 +656,12 @@ impl<'t> Converter<'t> {
             // Babel's parser needs the `decoratorAutoAccessors` plugin for
             // `accessor x`; without it the parse throws (and so does the TS
             // stage).
-            ClassElement::AccessorProperty(p) => Err(format!(
-                "Support for the experimental syntax 'decoratorAutoAccessors' isn't currently enabled at {}",
-                p.span.start
-            )),
-            ClassElement::TSIndexSignature(_) => Err("TypeScript index signature".into()),
+            ClassElement::AccessorProperty(p) => {
+                Err(FormatError::AutoAccessor { at: p.span.start })
+            }
+            ClassElement::TSIndexSignature(_) => {
+                Err(FormatError::Unsupported("TypeScript index signature"))
+            }
         }
     }
 
@@ -782,7 +789,7 @@ impl<'t> Converter<'t> {
             }
             other => match other.as_member_expression() {
                 Some(m) => self.member(m),
-                None => Err("TypeScript assignment target".into()),
+                None => Err(FormatError::Unsupported("TypeScript assignment target")),
             },
         }
     }
@@ -926,7 +933,9 @@ impl<'t> Converter<'t> {
                     match method_kind {
                         Some(kind) => {
                             let Expression::FunctionExpression(f) = &p.value else {
-                                return Err("a method without a function value".into());
+                                return Err(FormatError::Unsupported(
+                                    "a method without a function value",
+                                ));
                             };
                             let method = Method {
                                 kind,
@@ -985,7 +994,9 @@ impl<'t> Converter<'t> {
             Expression::CallExpression(c) => self.call(c),
             Expression::ChainExpression(c) => match &c.expression {
                 ChainElement::CallExpression(call) => self.call(call),
-                ChainElement::TSNonNullExpression(_) => Err("TypeScript non-null".into()),
+                ChainElement::TSNonNullExpression(_) => {
+                    Err(FormatError::Unsupported("TypeScript non-null"))
+                }
                 other => self.member(other.to_member_expression()),
             },
             Expression::ObjectExpression(o) => self.object(o),
@@ -1097,7 +1108,9 @@ impl<'t> Converter<'t> {
 
     fn import_call(&mut self, i: &oxc_ast::ast::ImportExpression<'_>) -> R<Kind> {
         if i.phase.is_some() {
-            return Err("import.source()/import.defer() are not ported".into());
+            return Err(FormatError::Unsupported(
+                "import.source()/import.defer() are not ported",
+            ));
         }
         let callee = self.node(Kind::Import, Span::new(i.span.start, i.span.start + 6));
         let mut arguments = vec![self.expr(&i.source)?];
@@ -1139,10 +1152,11 @@ impl<'t> Converter<'t> {
             Expression::NewTarget(m) => self.meta("new", "target", m.span),
             other => {
                 let span = other.span();
-                return Err(format!(
-                    "unsupported expression at {}..{}",
-                    span.start, span.end
-                ));
+                return Err(FormatError::UnsupportedAt {
+                    what: "expression",
+                    start: span.start,
+                    end: span.end,
+                });
             }
         })
     }

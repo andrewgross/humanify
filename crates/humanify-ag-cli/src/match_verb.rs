@@ -113,7 +113,9 @@ pub struct MatchVerbArgs<'a> {
 /// matched. Deterministic: inventory rows are in build order and pair
 /// rows are sorted by prior span (matches_dump's dump order).
 pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
-    let code = humanify_ag_core::unpack::input::read_input(std::path::Path::new(args.input))?.text;
+    let code = humanify_ag_core::unpack::input::read_input(std::path::Path::new(args.input))
+        .map_err(|e| e.to_string())?
+        .text;
     let prior = read_text(args.prior_version)?;
     if humanify_ag_model::js::trim(&prior).is_empty() {
         return Err(format!(
@@ -170,7 +172,8 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
                 toolchain.module_identity.piece,
             )
         },
-    )?
+    )
+    .map_err(|e| e.to_string())?
     .into_result();
 
     // A MULTI-file tree (>= 2 candidates) is the raw-bundle regime: the
@@ -334,7 +337,8 @@ impl MatchRun {
                 text,
                 &humanify_ag_core::format::FormatOptions::default(),
                 &[],
-            )?
+            )
+            .map_err(|e| e.to_string())?
             .text
         };
         // The prior side is the run's shared state: this file's stage
@@ -346,13 +350,14 @@ impl MatchRun {
             *side,
             !multi,
             |stage| {
-                let freeze =
-                    humanify_ag_core::rename::transfer::library_freeze(stage, None, false)?;
+                let freeze = humanify_ag_core::rename::transfer::library_freeze(stage, None, false)
+                    .map_err(|e| e.to_string())?;
                 let twins = humanify_ag_core::rename::transfer::statement_twins(
                     stage,
                     &freeze,
                     name_profile,
-                )?;
+                )
+                .map_err(|e| e.to_string())?;
                 let section = file_section(stage, &twins, &fresh, prior, path, !multi)?;
                 self.matched_any = true;
                 if multi {
@@ -479,12 +484,14 @@ fn wrapped_factory_text(
         &std::collections::BTreeMap::new(),
         &[],
         interop,
-    )?;
+    )
+    .map_err(|e| e.to_string())?;
     Ok(humanify_ag_core::format::format_file(
         &wrapped,
         &humanify_ag_core::format::FormatOptions::default(),
         &[],
-    )?
+    )
+    .map_err(|e| e.to_string())?
     .text)
 }
 

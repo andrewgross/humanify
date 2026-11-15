@@ -138,12 +138,13 @@ pub fn lookup_files(
     units: &BTreeMap<String, Vec<UnitRow>>,
     edges: Option<&BTreeMap<String, Vec<EdgeRow>>>,
     literals: &[LiteralRow],
-) -> Result<BTreeMap<String, Vec<u8>>, String> {
+) -> Result<BTreeMap<String, Vec<u8>>, TableError> {
     let mut files = BTreeMap::new();
     lookup_files_into(units, edges, literals, &mut |name, bytes| {
         files.insert(name, bytes);
-        Ok(())
-    })?;
+        Ok::<(), std::convert::Infallible>(())
+    })
+    .map_err(TableWriteError::into_table)?;
     Ok(files)
 }
 
@@ -151,12 +152,13 @@ pub fn lookup_files(
 /// (name, bytes) as the table is produced — a streaming finish writes and
 /// drops them one at a time instead of holding them all. The same tables,
 /// the same bytes.
-pub fn lookup_files_into(
+pub fn lookup_files_into<E>(
     units: &BTreeMap<String, Vec<UnitRow>>,
     edges: Option<&BTreeMap<String, Vec<EdgeRow>>>,
     literals: &[LiteralRow],
-    put: &mut dyn FnMut(String, Vec<u8>) -> Result<(), String>,
-) -> Result<(), String> {
+    put: &mut dyn FnMut(String, Vec<u8>) -> Result<(), E>,
+) -> Result<(), TableWriteError<E>> {
+    let mut put = |name: String, bytes: Vec<u8>| put(name, bytes).map_err(TableWriteError::Sink);
     let slices: Vec<&[UnitRow]> = units.values().map(Vec::as_slice).collect();
     let edge_slices: Vec<&[EdgeRow]> = edges
         .into_iter()
@@ -181,7 +183,7 @@ pub fn lookup_files_into(
         LITERALS_FILE.to_string(),
         LiteralTable::encode(literals, &packages),
     )?;
-    let mut names = serde_json::to_vec(&packages).map_err(|e| e.to_string())?;
+    let mut names = serde_json::to_vec(&packages).map_err(TableError::Json)?;
     names.push(b'\n');
     put(PACKAGES_FILE.to_string(), names)?;
     Ok(())
@@ -194,6 +196,154 @@ fn owner_id(packages: &[String], owner: &str) -> u32 {
         .binary_search_by(|p| p.as_str().cmp(owner))
         .map(|i| i as u32)
         .unwrap_or_else(|_| panic!("owner {owner} is not in the package table"))
+}
+
+/// Why a lookup table could not be encoded or opened.
+#[derive(Debug)]
+pub enum TableError {
+    /// A key column runs past the table's end.
+    ColumnOverrun { n: u64, at: u64, len: u64 },
+    /// The table's size disagrees with its header.
+    SizeMismatch {
+        what: &'static str,
+        len: u64,
+        want: u64,
+    },
+    /// The file does not start with the table's magic.
+    NotATable {
+        what: &'static str,
+        magic: &'static [u8; 8],
+    },
+    /// A unit or callee hash that is not 16 lowercase hex digits.
+    BadHash { what: &'static str, hash: String },
+    /// An edge row names no unit row.
+    EdgeWithoutUnit {
+        hash: String,
+        owner: String,
+        file: String,
+    },
+    /// Two edge rows for one unit row.
+    TwoEdgeRows,
+    /// A name row names no unit row.
+    NameRowWithoutUnit {
+        hash: String,
+        owner: String,
+        file: String,
+    },
+    /// Names rows for a slice that has no unit rows.
+    NamesWithoutSlice { slice: String },
+    /// Names rows out of row-id order.
+    NamesOutOfOrder { row: u32, prev: u32 },
+    /// A names entry range past the table's entries.
+    EntriesOverrun { from: u64, to: u64, n: u64 },
+    /// A names entry's name id past the strings.
+    NameIdPast { name: usize, strings: usize },
+    /// A names entry's kind ordinal that is no kind.
+    NoKind { kind: u32 },
+    /// The literal table's package count does not fit.
+    PackageCount,
+    /// The literal table is shorter than its header says.
+    LiteralShort { len: u64 },
+    /// A JSON side file could not be serialized.
+    Json(serde_json::Error),
+}
+
+impl TableError {
+    fn bad_hash(what: &'static str, hash: &str) -> TableError {
+        TableError::BadHash {
+            what,
+            hash: hash.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for TableError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ColumnOverrun { n, at, len } => write!(
+                f,
+                "a key column of {n} keys at byte {at} runs past the table's {len} bytes"
+            ),
+            Self::SizeMismatch { what, len, want } => write!(
+                f,
+                "{what} is {len} bytes, its header says {want} bytes: a damaged or partly written table"
+            ),
+            Self::NotATable { what, magic } => write!(
+                f,
+                "{what}: not a {} table",
+                String::from_utf8_lossy(&magic[..])
+            ),
+            Self::BadHash { what, hash } => {
+                write!(f, "{what} {hash:?} is not 16 lowercase hex digits")
+            }
+            Self::EdgeWithoutUnit { hash, owner, file } => {
+                write!(f, "edge row {hash} {owner} {file} has no unit row")
+            }
+            Self::TwoEdgeRows => f.write_str("two edge rows for one unit row"),
+            Self::NameRowWithoutUnit { hash, owner, file } => {
+                write!(
+                    f,
+                    "name row {hash:?}/{owner}/{file:?}: no unit row holds it"
+                )
+            }
+            Self::NamesWithoutSlice { slice } => {
+                write!(
+                    f,
+                    "names rows for slice {slice}: the slice has no unit rows"
+                )
+            }
+            Self::NamesOutOfOrder { row, prev } => write!(
+                f,
+                "names row {row} follows {prev} — the rows must be in row-id order, one per row"
+            ),
+            Self::EntriesOverrun { from, to, n } => {
+                write!(f, "names entries {from}..{to} run past the table's {n}")
+            }
+            Self::NameIdPast { name, strings } => {
+                write!(f, "names entry's name id {name} past the {strings} strings")
+            }
+            Self::NoKind { kind } => write!(f, "names entry's kind ordinal {kind} is no kind"),
+            Self::PackageCount => f.write_str("literal table: package count"),
+            Self::LiteralShort { len } => write!(
+                f,
+                "literal table is {len} bytes, shorter than its header says"
+            ),
+            Self::Json(e) => e.fmt(f),
+        }
+    }
+}
+
+/// Why a streaming table write stopped: a table failed, or the writer
+/// handed in (`put`) refused its bytes.
+#[derive(Debug)]
+pub enum TableWriteError<E> {
+    Table(TableError),
+    Sink(E),
+}
+
+impl<E> From<TableError> for TableWriteError<E> {
+    fn from(e: TableError) -> Self {
+        Self::Table(e)
+    }
+}
+
+impl TableWriteError<std::convert::Infallible> {
+    /// The table error of a write whose writer cannot fail.
+    fn into_table(self) -> TableError {
+        match self {
+            Self::Table(e) => e,
+            Self::Sink(never) => match never {},
+        }
+    }
+}
+
+impl<E: std::fmt::Display> std::fmt::Display for TableWriteError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Table(e) => e.fmt(f),
+            Self::Sink(e) => e.fmt(f),
+        }
+    }
 }
 
 // ------------------------------------------------------------------ bytes
@@ -349,7 +499,7 @@ impl KeyColumnBytes {
     }
 
     /// The column at byte `at` of `src` (the tests' entry).
-    pub fn open(&self, src: &Source, at: u64) -> Result<KeyColumn, String> {
+    pub fn open(&self, src: &Source, at: u64) -> Result<KeyColumn, TableError> {
         KeyColumn::open(src, at, self.n)
     }
 }
@@ -370,13 +520,14 @@ impl KeyColumn {
         (fence_len(n) + n) * 8
     }
 
-    fn open(src: &Source, at: u64, n: u64) -> Result<KeyColumn, String> {
+    fn open(src: &Source, at: u64, n: u64) -> Result<KeyColumn, TableError> {
         let f = fence_len(n);
         if at + Self::bytes(n) > src.len() {
-            return Err(format!(
-                "a key column of {n} keys at byte {at} runs past the table's {} bytes",
-                src.len()
-            ));
+            return Err(TableError::ColumnOverrun {
+                n,
+                at,
+                len: src.len(),
+            });
         }
         Ok(KeyColumn {
             fence: src.u64s(at, f as usize),
@@ -425,24 +576,27 @@ impl KeyColumn {
     }
 }
 
-fn check_size(what: &str, src: &Source, want: u64) -> Result<(), String> {
+fn check_size(what: &'static str, src: &Source, want: u64) -> Result<(), TableError> {
     if src.len() == want {
         Ok(())
     } else {
-        Err(format!(
-            "{what} is {} bytes, its header says {want} bytes: a damaged or partly written table",
-            src.len()
-        ))
+        Err(TableError::SizeMismatch {
+            what,
+            len: src.len(),
+            want,
+        })
     }
 }
 
-fn header(src: &Source, magic: &[u8; 8], what: &str, n: usize) -> Result<Vec<u64>, String> {
+fn header(
+    src: &Source,
+    magic: &'static [u8; 8],
+    what: &'static str,
+    n: usize,
+) -> Result<Vec<u64>, TableError> {
     let need = 8 + 8 * n as u64;
     if src.len() < need || src.bytes(0, 8) != magic {
-        return Err(format!(
-            "{what}: not a {} table",
-            String::from_utf8_lossy(magic)
-        ));
+        return Err(TableError::NotATable { what, magic });
     }
     Ok(src.u64s(8, n))
 }
@@ -463,11 +617,11 @@ const UNIT_ROW: u64 = 12;
 /// Each row's position in the unit table's rows ([`UnitTable::encode`]'s
 /// order: by key, a key's rows in their order in `rows`) — the edge
 /// table's key.
-pub fn unit_row_ids(rows: &[UnitRow]) -> Result<Vec<u32>, String> {
+pub fn unit_row_ids(rows: &[UnitRow]) -> Result<Vec<u32>, TableError> {
     let mut keyed: Vec<(u64, usize)> = Vec::with_capacity(rows.len());
     for (i, r) in rows.iter().enumerate() {
-        let key = unit_key(&r.hash)
-            .ok_or_else(|| format!("unit row hash {:?} is not 16 lowercase hex digits", r.hash))?;
+        let key =
+            unit_key(&r.hash).ok_or_else(|| TableError::bad_hash("unit row hash", &r.hash))?;
         keyed.push((key, i));
     }
     keyed.sort_unstable();
@@ -480,12 +634,11 @@ pub fn unit_row_ids(rows: &[UnitRow]) -> Result<Vec<u32>, String> {
 
 impl UnitTable {
     /// `rows` in any order; a key's rows keep their order in `rows`.
-    pub fn encode(rows: &[UnitRow], packages: &[String]) -> Result<Vec<u8>, String> {
+    pub fn encode(rows: &[UnitRow], packages: &[String]) -> Result<Vec<u8>, TableError> {
         let mut by_key: BTreeMap<u64, Vec<(u32, u64)>> = BTreeMap::new();
         for r in rows {
-            let key = unit_key(&r.hash).ok_or_else(|| {
-                format!("unit row hash {:?} is not 16 lowercase hex digits", r.hash)
-            })?;
+            let key =
+                unit_key(&r.hash).ok_or_else(|| TableError::bad_hash("unit row hash", &r.hash))?;
             by_key
                 .entry(key)
                 .or_default()
@@ -504,7 +657,7 @@ impl UnitTable {
         Ok(out.0)
     }
 
-    pub fn open(src: Source) -> Result<UnitTable, String> {
+    pub fn open(src: Source) -> Result<UnitTable, TableError> {
         let h = header(&src, UNITS_MAGIC, "unit table", 2)?;
         let (n_keys, n_rows) = (h[0], h[1]);
         let keys_at = 24;
@@ -577,7 +730,7 @@ impl EdgeTable {
         units: &[UnitRow],
         edges: &[EdgeRow],
         packages: &[String],
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<Vec<u8>, TableError> {
         let ids = unit_row_ids(units)?;
         let row_of: HashMap<(&str, &str, &str), u32> = units
             .iter()
@@ -588,14 +741,13 @@ impl EdgeTable {
         for e in edges {
             let row = *row_of
                 .get(&(e.hash.as_str(), e.owner.as_str(), e.file.as_str()))
-                .ok_or_else(|| {
-                    format!("edge row {} {} {} has no unit row", e.hash, e.owner, e.file)
+                .ok_or_else(|| TableError::EdgeWithoutUnit {
+                    hash: e.hash.clone(),
+                    owner: e.owner.clone(),
+                    file: e.file.clone(),
                 })?;
             let own = owner_id(packages, &e.owner);
-            let key = |h: &str| {
-                unit_key(h)
-                    .ok_or_else(|| format!("callee hash {h:?} is not 16 lowercase hex digits"))
-            };
+            let key = |h: &str| unit_key(h).ok_or_else(|| TableError::bad_hash("callee hash", h));
             let mut callees: Vec<EdgeCallee> = Vec::new();
             for h in &e.inside {
                 callees.push(EdgeCallee {
@@ -617,7 +769,7 @@ impl EdgeTable {
         }
         keyed.sort_unstable_by_key(|(row, _)| *row);
         if keyed.windows(2).any(|w| w[0].0 == w[1].0) {
-            return Err("two edge rows for one unit row".into());
+            return Err(TableError::TwoEdgeRows);
         }
         let mut list_ids: HashMap<&[EdgeCallee], u32> = HashMap::new();
         let mut lists: Vec<&[EdgeCallee]> = Vec::new();
@@ -644,7 +796,7 @@ impl EdgeTable {
         Ok(out.0)
     }
 
-    pub fn open(src: Source) -> Result<EdgeTable, String> {
+    pub fn open(src: Source) -> Result<EdgeTable, TableError> {
         let h = header(&src, EDGES_MAGIC, "edge table", 3)?;
         let (n_rows, n_lists, n_callees) = (h[0], h[1], h[2]);
         let keys_at = 8 + 3 * 8;
@@ -707,19 +859,17 @@ impl CalleePrintTable {
     /// `edges` in any order: every INSIDE print credited to its row's
     /// owner, every OUT-OF print to the owner the row records for it,
     /// sorted per print and once each.
-    pub fn encode(edges: &[EdgeRow], packages: &[String]) -> Result<Vec<u8>, String> {
+    pub fn encode(edges: &[EdgeRow], packages: &[String]) -> Result<Vec<u8>, TableError> {
         let mut by_key: BTreeMap<u64, BTreeSet<u32>> = BTreeMap::new();
         for e in edges {
             let own = owner_id(packages, &e.owner);
             for h in &e.inside {
-                let key = unit_key(h)
-                    .ok_or_else(|| format!("callee hash {h:?} is not 16 lowercase hex digits"))?;
+                let key = unit_key(h).ok_or_else(|| TableError::bad_hash("callee hash", h))?;
                 by_key.entry(key).or_default().insert(own);
             }
             for c in &e.out_of {
-                let key = unit_key(&c.hash).ok_or_else(|| {
-                    format!("callee hash {:?} is not 16 lowercase hex digits", c.hash)
-                })?;
+                let key = unit_key(&c.hash)
+                    .ok_or_else(|| TableError::bad_hash("callee hash", &c.hash))?;
                 by_key
                     .entry(key)
                     .or_default()
@@ -737,7 +887,7 @@ impl CalleePrintTable {
         Ok(out.0)
     }
 
-    pub fn open(src: Source) -> Result<CalleePrintTable, String> {
+    pub fn open(src: Source) -> Result<CalleePrintTable, TableError> {
         let h = header(&src, CALLEE_PRINTS_MAGIC, "callee-print table", 2)?;
         let (n_keys, n_owners) = (h[0], h[1]);
         let keys_at = 8 + 2 * 8;
@@ -850,7 +1000,7 @@ pub struct NameRowCompact {
 pub fn compact_name_rows(
     units: &[UnitRow],
     rows: &[NameRow],
-) -> Result<(Vec<NameRowCompact>, NameInterner), String> {
+) -> Result<(Vec<NameRowCompact>, NameInterner), TableError> {
     let ids = unit_row_ids(units)?;
     let mut id_of: HashMap<(String, String, String), u32> = HashMap::new();
     for (r, id) in units.iter().zip(&ids) {
@@ -874,11 +1024,10 @@ pub fn compact_name_rows(
     for r in rows {
         let id = *id_of
             .get(&(r.hash.clone(), r.owner.clone(), r.file.clone()))
-            .ok_or_else(|| {
-                format!(
-                    "name row {:?}/{}/{:?}: no unit row holds it",
-                    r.hash, r.owner, r.file
-                )
+            .ok_or_else(|| TableError::NameRowWithoutUnit {
+                hash: r.hash.clone(),
+                owner: r.owner.clone(),
+                file: r.file.clone(),
             })?;
         by_row.entry(id).or_default().insert(&r.names);
     }
@@ -917,33 +1066,37 @@ pub fn names_lookup_files(
     units: &BTreeMap<String, Vec<UnitRow>>,
     names: &BTreeMap<String, Vec<NameRowCompact>>,
     interner: &NameInterner,
-) -> Result<BTreeMap<String, Vec<u8>>, String> {
+) -> Result<BTreeMap<String, Vec<u8>>, TableError> {
     let mut files = BTreeMap::new();
     names_lookup_files_into(units, names, interner, &mut |name, bytes| {
         files.insert(name, bytes);
-        Ok(())
-    })?;
+        Ok::<(), std::convert::Infallible>(())
+    })
+    .map_err(TableWriteError::into_table)?;
     Ok(files)
 }
 
 /// [`names_lookup_files`]'s writer form — see [`lookup_files_into`].
-pub fn names_lookup_files_into(
+pub fn names_lookup_files_into<E>(
     units: &BTreeMap<String, Vec<UnitRow>>,
     names: &BTreeMap<String, Vec<NameRowCompact>>,
     interner: &NameInterner,
-    put: &mut dyn FnMut(String, Vec<u8>) -> Result<(), String>,
-) -> Result<(), String> {
+    put: &mut dyn FnMut(String, Vec<u8>) -> Result<(), E>,
+) -> Result<(), TableWriteError<E>> {
+    let mut put = |name: String, bytes: Vec<u8>| put(name, bytes).map_err(TableWriteError::Sink);
     for (slice, rows) in names {
         if rows.is_empty() {
             continue;
         }
         let unit_rows = units
             .get(slice)
-            .ok_or_else(|| format!("names rows for slice {slice}: the slice has no unit rows"))?;
+            .ok_or_else(|| TableError::NamesWithoutSlice {
+                slice: slice.clone(),
+            })?;
         put(names_file(slice), NameTable::encode(unit_rows, rows)?)?;
     }
     if !interner.is_empty() {
-        let mut strings = serde_json::to_vec(interner.strings()).map_err(|e| e.to_string())?;
+        let mut strings = serde_json::to_vec(interner.strings()).map_err(TableError::Json)?;
         strings.push(b'\n');
         put(NAMES_STRINGS_FILE.to_string(), strings)?;
     }
@@ -1000,7 +1153,7 @@ impl NameTable {
     /// ([`unit_row_ids`]'s, the order the run reads); `rows` are already
     /// in row-id order, each row's lists in ([`super::names::RestoredName`]'s)
     /// order and unique — the merger's guarantee (exp161), checked here.
-    pub fn encode(unit_rows: &[UnitRow], rows: &[NameRowCompact]) -> Result<Vec<u8>, String> {
+    pub fn encode(unit_rows: &[UnitRow], rows: &[NameRowCompact]) -> Result<Vec<u8>, TableError> {
         let n_rows = unit_rows.len() as u64;
         let mut row_starts: Vec<u64> = Vec::with_capacity(rows.len() + 1);
         let mut list_starts: Vec<u64> = Vec::with_capacity(rows.len() + 1);
@@ -1013,10 +1166,10 @@ impl NameTable {
             if let Some(p) = prev
                 && r.row <= p
             {
-                return Err(format!(
-                    "names row {} follows {} — the rows must be in row-id order, one per row",
-                    r.row, p
-                ));
+                return Err(TableError::NamesOutOfOrder {
+                    row: r.row,
+                    prev: p,
+                });
             }
             prev = Some(r.row);
             // rows with no names keep an empty range: row_starts is dense
@@ -1047,7 +1200,7 @@ impl NameTable {
         Ok(out.0)
     }
 
-    pub fn open(src: Source) -> Result<NameTable, String> {
+    pub fn open(src: Source) -> Result<NameTable, TableError> {
         let h = header(&src, NAMES_MAGIC, "names table", 3)?;
         let (n_rows, n_lists, n_entries) = (h[0], h[1], h[2]);
         let lists_at = 8 + 24;
@@ -1069,7 +1222,7 @@ impl NameTable {
         &self,
         row: u32,
         strings: &[String],
-    ) -> Result<Vec<Vec<super::names::RestoredName>>, String> {
+    ) -> Result<Vec<Vec<super::names::RestoredName>>, TableError> {
         if row as u64 >= self.n_rows {
             return Ok(Vec::new());
         }
@@ -1081,7 +1234,7 @@ impl NameTable {
                     .u64s(self.lists_at + self.n_rows_plus() * 8 + l * 8, 2);
                 self.entries(eb[0], eb[1], strings)
             })
-            .collect::<Result<Vec<_>, String>>()?;
+            .collect::<Result<Vec<_>, TableError>>()?;
         Ok(lists)
     }
 
@@ -1094,12 +1247,13 @@ impl NameTable {
         from: u64,
         to: u64,
         strings: &[String],
-    ) -> Result<Vec<super::names::RestoredName>, String> {
+    ) -> Result<Vec<super::names::RestoredName>, TableError> {
         if to < from || to > self.n_entries {
-            return Err(format!(
-                "names entries {from}..{to} run past the table's {}",
-                self.n_entries
-            ));
+            return Err(TableError::EntriesOverrun {
+                from,
+                to,
+                n: self.n_entries,
+            });
         }
         let bytes = self.src.bytes(
             self.entries_at + from * NAMES_ENTRY,
@@ -1113,14 +1267,12 @@ impl NameTable {
                 let slot = u32::from_le_bytes(c[0..4].try_into().expect("4 bytes"));
                 let name = u32::from_le_bytes(c[4..8].try_into().expect("4 bytes")) as usize;
                 let kind = u32::from_le_bytes(c[8..12].try_into().expect("4 bytes"));
-                let spelled = strings.get(name).ok_or_else(|| {
-                    format!(
-                        "names entry's name id {name} past the {} strings",
-                        strings.len()
-                    )
+                let spelled = strings.get(name).ok_or(TableError::NameIdPast {
+                    name,
+                    strings: strings.len(),
                 })?;
                 let kind = super::names::NameKind::from_ordinal(kind)
-                    .ok_or_else(|| format!("names entry's kind ordinal {kind} is no kind"))?;
+                    .ok_or(TableError::NoKind { kind })?;
                 Ok(super::names::RestoredName {
                     slot,
                     name: spelled.clone(),
@@ -1243,7 +1395,7 @@ impl LiteralTable {
         out.0
     }
 
-    pub fn open(src: Source) -> Result<LiteralTable, String> {
+    pub fn open(src: Source) -> Result<LiteralTable, TableError> {
         Self::open_keyed(src, literal_key)
     }
 
@@ -1251,11 +1403,13 @@ impl LiteralTable {
     /// encoded with.
     // default: legacy, untriaged: a Result error becomes a value here
     #[allow(clippy::map_err_ignore)]
-    pub(crate) fn open_keyed(src: Source, key: fn(&str) -> u64) -> Result<LiteralTable, String> {
+    pub(crate) fn open_keyed(
+        src: Source,
+        key: fn(&str) -> u64,
+    ) -> Result<LiteralTable, TableError> {
         let h = header(&src, LITERALS_MAGIC, "literal table", 5)?;
         let (n_lits, n_files, n_post, n_file_lits) = (h[0], h[1], h[2], h[3]);
-        let literal_packages =
-            u32::try_from(h[4]).map_err(|_| "literal table: package count".to_string())?;
+        let literal_packages = u32::try_from(h[4]).map_err(|_| TableError::PackageCount)?;
         let keys_at = 8 + 5 * 8;
         let df_at = keys_at + KeyColumn::bytes(n_lits);
         let str_off_at = df_at + n_lits * 4;
@@ -1264,10 +1418,7 @@ impl LiteralTable {
         let file_off_at = owner_at + n_files * 4;
         let strings_at = file_off_at + (n_files + 1) * 8;
         if strings_at > src.len() {
-            return Err(format!(
-                "literal table is {} bytes, shorter than its header says",
-                src.len()
-            ));
+            return Err(TableError::LiteralShort { len: src.len() });
         }
         let n_string_bytes = src.u64s(str_off_at + n_lits * 8, 1)[0];
         let postings_at = strings_at + n_string_bytes;

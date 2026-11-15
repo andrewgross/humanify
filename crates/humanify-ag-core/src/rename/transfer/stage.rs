@@ -17,6 +17,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use super::TransferError;
 use crate::modules::soundness::collect_eval_with_taint;
 use crate::prior::MatchStage;
 use crate::rename::name_profile::NameProfile;
@@ -52,7 +53,7 @@ pub fn library_freeze(
     stage: &MatchStage<'_, '_>,
     source: Option<&crate::libdetect::function_carry::LibraryClassification>,
     skip_libraries: bool,
-) -> Result<PreFreeze, String> {
+) -> Result<PreFreeze, crate::libdetect::function_carry::CarryError> {
     Ok(PreFreeze {
         library: crate::libdetect::function_carry::classify_library_functions(
             stage.fresh.json,
@@ -69,7 +70,7 @@ pub(super) fn apply_prior_version(
     stage: &MatchStage<'_, '_>,
     freeze: &PreFreeze,
     profile: NameProfile,
-) -> Result<(TransferOutcome, TwinGateOutput), String> {
+) -> Result<(TransferOutcome, TwinGateOutput), TransferError> {
     use crate::profiling::phase;
     let fresh_semantic = stage.fresh.ingest.semantic();
     let ph = phase("transfer:side-rows");
@@ -181,7 +182,7 @@ pub(super) fn statement_twins(
     stage: &MatchStage<'_, '_>,
     freeze: &PreFreeze,
     profile: NameProfile,
-) -> Result<TwinGateOutput, String> {
+) -> Result<TwinGateOutput, TransferError> {
     let fresh_rows = SideRows::build(
         stage.fresh.graph,
         stage.fresh.ingest.semantic(),
@@ -216,7 +217,7 @@ fn settle(
     fresh_rows: &SideRows<'_, '_>,
     freeze: &PreFreeze,
     profile: NameProfile,
-) -> Result<Settled, String> {
+) -> Result<Settled, TransferError> {
     let mut fresh_state = RenameState::new(stage.fresh.ingest.semantic(), Anchor::Fresh, profile);
     // The names mode's placed modules, before anything else runs: every
     // binding declared inside the placed spans is library-held — the
@@ -350,7 +351,7 @@ fn gate_twins(
     evidence: &TransferEvidence,
     fn_state: &[Lifecycle],
     binding_state: &[Lifecycle],
-) -> Result<TwinGateOutput, String> {
+) -> Result<TwinGateOutput, TransferError> {
     let graph = stage.fresh.graph;
     let claimed: HashSet<String> = evidence.binding_renames[..evidence.cascade_renames]
         .iter()
@@ -384,6 +385,7 @@ fn gate_twins(
             binding_states: &binding_states,
         },
     )
+    .map_err(TransferError::from)
 }
 
 fn row_state(s: &Lifecycle) -> RowState {

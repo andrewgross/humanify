@@ -370,7 +370,7 @@ fn the_loader_reads_the_recipes_slice_and_refuses_another_fingerprint() {
         &target_bun,
         crate::libindex::recipe::TerserSlices::Off,
     ) {
-        Err(LoadError::Unusable(e)) => assert!(e.contains("literals.bin"), "{e}"),
+        Err(LoadError::Unusable(e)) => assert!(e.to_string().contains("literals.bin"), "{e}"),
         other => panic!("no literal table: {:?}", other.err()),
     }
     std::fs::remove_dir_all(&dir).ok();

@@ -125,17 +125,68 @@ pub struct Recipe {
     pub production: bool,
 }
 
+/// A recipe spelling that does not parse.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecipeError {
+    /// The spelling as given.
+    pub text: String,
+    pub why: RecipeFault,
+}
+
+/// What is wrong with a recipe spelling.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RecipeFault {
+    NoColon,
+    UnknownBundler,
+    UnknownSetting(String),
+    NoTarget,
+    NoFormat,
+    /// A bundler whose recipe script decides NODE_ENV itself.
+    ProductionUnsupported(&'static str),
+    /// A bundler with no bun platform asked for target=bun.
+    NoBunPlatform(&'static str),
+}
+
+impl std::fmt::Display for RecipeFault {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoColon => f.write_str("no `:`"),
+            Self::UnknownBundler => f.write_str("unknown bundler"),
+            Self::UnknownSetting(part) => write!(f, "unknown setting {part:?}"),
+            Self::NoTarget => f.write_str("no target"),
+            Self::NoFormat => f.write_str("no format"),
+            Self::ProductionUnsupported(bundler) => write!(
+                f,
+                "{bundler}'s recipe script decides NODE_ENV (production is a Bun / esbuild setting)"
+            ),
+            Self::NoBunPlatform(bundler) => write!(f, "{bundler} has no bun platform"),
+        }
+    }
+}
+
+impl std::fmt::Display for RecipeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "--recipe {:?}: {} (form: <bun|esbuild|webpack|rollup>:target=<bun|node>,format=<cjs|esm>[,minify][,production])",
+            self.text, self.why
+        )
+    }
+}
+
 impl Recipe {
     /// `bun:target=bun,format=cjs,minify` — every key named, no defaults
     /// (a recipe left to a default is a recipe nobody chose).
-    pub fn parse(text: &str) -> Result<Recipe, String> {
-        let bad = |why: &str| {
-            format!(
-                "--recipe {text:?}: {why} (form: <bun|esbuild|webpack|rollup>:target=<bun|node>,format=<cjs|esm>[,minify][,production])"
-            )
+    pub fn parse(text: &str) -> Result<Recipe, RecipeError> {
+        let bad = |why: RecipeFault| RecipeError {
+            text: text.to_string(),
+            why,
         };
-        let (bundler, rest) = text.split_once(':').ok_or_else(|| bad("no `:`"))?;
-        let bundler = RecipeBundler::parse(bundler).ok_or_else(|| bad("unknown bundler"))?;
+        let (bundler, rest) = text
+            .split_once(':')
+            .ok_or_else(|| bad(RecipeFault::NoColon))?;
+        let bundler =
+            RecipeBundler::parse(bundler).ok_or_else(|| bad(RecipeFault::UnknownBundler))?;
         let (mut target, mut format, mut minify, mut production) = (None, None, false, false);
         for part in rest.split(',').map(str::trim) {
             match part.split_once('=') {
@@ -145,27 +196,23 @@ impl Recipe {
                 Some(("format", "esm")) => format = Some(Format::Esm),
                 None if part == "minify" => minify = true,
                 None if part == "production" => production = true,
-                _ => return Err(bad(&format!("unknown setting {part:?}"))),
+                _ => return Err(bad(RecipeFault::UnknownSetting(part.to_string()))),
             }
         }
         let recipe = Recipe {
             bundler,
-            target: target.ok_or_else(|| bad("no target"))?,
-            format: format.ok_or_else(|| bad("no format"))?,
+            target: target.ok_or_else(|| bad(RecipeFault::NoTarget))?,
+            format: format.ok_or_else(|| bad(RecipeFault::NoFormat))?,
             minify,
             production,
         };
         if production && !matches!(recipe.bundler, RecipeBundler::Bun | RecipeBundler::Esbuild) {
-            return Err(bad(&format!(
-                "{}'s recipe script decides NODE_ENV (production is a Bun / esbuild setting)",
-                recipe.bundler.name()
+            return Err(bad(RecipeFault::ProductionUnsupported(
+                recipe.bundler.name(),
             )));
         }
         if recipe.bundler != RecipeBundler::Bun && recipe.target == Target::Bun {
-            return Err(bad(&format!(
-                "{} has no bun platform",
-                recipe.bundler.name()
-            )));
+            return Err(bad(RecipeFault::NoBunPlatform(recipe.bundler.name())));
         }
         Ok(recipe)
     }
@@ -301,6 +348,26 @@ impl DetectedRecipe {
     }
 }
 
+/// An index holds no slice for the detected recipe.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NoSlice {
+    /// The detected recipe, described.
+    pub detected: String,
+    /// The index's recipes, spelled.
+    pub has: Vec<String>,
+}
+
+impl std::fmt::Display for NoSlice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "no slice for recipe {} (has: {})",
+            self.detected,
+            self.has.join(", ")
+        )
+    }
+}
+
 /// The slice a detected recipe reads from `slices` (an index's recipes, in
 /// manifest order) and why; Err: the index has none for it (a loud
 /// WARNING in report mode, never a silent miss). Matching is on bundler
@@ -309,7 +376,7 @@ impl DetectedRecipe {
 pub fn choose_slice<'s>(
     slices: &'s [(Recipe, bool)],
     detected: &DetectedRecipe,
-) -> Result<(&'s Recipe, &'static str), String> {
+) -> Result<(&'s Recipe, &'static str), NoSlice> {
     let of_bundler = |r: &&(Recipe, bool)| Some(r.0.bundler) == detected.bundler;
     let found = match detected.target {
         Some(t) => slices
@@ -323,13 +390,9 @@ pub fn choose_slice<'s>(
             .find(|r| r.1)
             .map(|r| (&r.0, "the index's default slice for this bundler")),
     };
-    found.ok_or_else(|| {
-        let has: Vec<String> = slices.iter().map(|r| r.0.spelling()).collect();
-        format!(
-            "no slice for recipe {} (has: {})",
-            detected.describe(),
-            has.join(", ")
-        )
+    found.ok_or_else(|| NoSlice {
+        detected: detected.describe(),
+        has: slices.iter().map(|r| r.0.spelling()).collect(),
     })
 }
 

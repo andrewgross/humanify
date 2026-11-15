@@ -232,7 +232,8 @@ fn trail_json(trail: &PlacementTrail) -> Vec<Value> {
 /// failed (the TS threw).
 fn run(row: &Value, replay: &Replay) -> Result<(Vec<String>, Vec<Value>), String> {
     let code = row["code"].as_str().unwrap();
-    let mut input = split_input(code, crate::toolchain::BundleLayout::SingleWrapperFunction)?;
+    let mut input = split_input(code, crate::toolchain::BundleLayout::SingleWrapperFunction)
+        .map_err(|e| e.to_string())?;
     let ts_hashes: Vec<String> = row["hashes"]
         .as_array()
         .unwrap()
@@ -261,7 +262,8 @@ fn run(row: &Value, replay: &Replay) -> Result<(Vec<String>, Vec<Value>), String
                 trail: Some(&mut trail),
                 ..FossilOptions::default()
             },
-        )?
+        )
+        .map_err(|e| e.to_string())?
         .assignment
     } else if let Some(prior) = &prior {
         let carry = (!row["priorCarry"].is_null()).then(|| PriorCarry {
@@ -285,7 +287,8 @@ fn run(row: &Value, replay: &Replay) -> Result<(Vec<String>, Vec<Value>), String
                 switches: switches_of(&row["disabled"]),
             },
             Some(&mut trail),
-        )?
+        )
+        .map_err(|e| e.to_string())?
         .0
     } else {
         let (mut namer, mut reviser) = (replay, replay);

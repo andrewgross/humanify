@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 use humanify_ag_model::js::{cmp_utf16, is_js_whitespace, node_path_resolve};
 
+use crate::error::{FileError, FileOp};
 use crate::place::layout::METADATA_DIR;
 
 pub const RUNNER_FILENAME: &str = "run.cjs";
@@ -206,7 +207,7 @@ pub fn external_packages_from<'a>(contents: impl IntoIterator<Item = &'a str>) -
 /// `jsFilesUnder(dir)`: every `.js` / `.cjs` file, skipping
 /// `node_modules`, the metadata dir and the root's `embedded/` (readdir
 /// order; every consumer is per-file or order-free).
-pub fn js_files_under(dir: &Path) -> Result<Vec<PathBuf>, String> {
+pub fn js_files_under(dir: &Path) -> Result<Vec<PathBuf>, FileError> {
     let mut out = Vec::new();
     walk(dir, &mut out, true)?;
     Ok(out)
@@ -216,15 +217,15 @@ pub fn js_files_under(dir: &Path) -> Result<Vec<PathBuf>, String> {
 /// embedded files (data, even when named `.js` — exp217), not code.
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
-fn walk(dir: &Path, out: &mut Vec<PathBuf>, root: bool) -> Result<(), String> {
-    let entries = fs::read_dir(dir).map_err(|e| format!("readdir {}: {e}", dir.display()))?;
+fn walk(dir: &Path, out: &mut Vec<PathBuf>, root: bool) -> Result<(), FileError> {
+    let entries = fs::read_dir(dir).map_err(FileError::at(FileOp::Readdir, dir))?;
     for entry in entries {
-        let entry = entry.map_err(|e| format!("readdir {}: {e}", dir.display()))?;
+        let entry = entry.map_err(FileError::at(FileOp::Readdir, dir))?;
         let name = entry.file_name().to_string_lossy().into_owned();
         let full = entry.path();
         let ty = entry
             .file_type()
-            .map_err(|e| format!("stat {}: {e}", full.display()))?;
+            .map_err(FileError::at(FileOp::Stat, &full))?;
         if ty.is_dir() {
             if name == "node_modules"
                 || name == METADATA_DIR
@@ -243,13 +244,13 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>, root: bool) -> Result<(), String> {
 /// `readFile(…, "utf-8")`: invalid sequences become U+FFFD.
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
-pub(crate) fn read_utf8(path: &Path) -> Result<String, String> {
-    let bytes = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+pub(crate) fn read_utf8(path: &Path) -> Result<String, FileError> {
+    let bytes = fs::read(path).map_err(FileError::at(FileOp::Read, path))?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// `detectExternalPackages(dir)`.
-pub fn detect_external_packages(dir: &Path) -> Result<Vec<String>, String> {
+pub fn detect_external_packages(dir: &Path) -> Result<Vec<String>, FileError> {
     let files = js_files_under(dir)?;
     let contents: Vec<String> = files
         .iter()
@@ -396,15 +397,48 @@ pub fn write_runnable_scaffold(
     externals: &[String],
     resolve_from_dir: Option<&Path>,
     working_dir: &Path,
-) -> Result<(), String> {
+) -> Result<(), FileError> {
     let dependencies = resolve_external_versions(externals, resolve_from_dir, working_dir);
     let write = |name: &str, text: String| {
         let p = output_dir.join(name);
-        fs::write(&p, text).map_err(|e| format!("write {}: {e}", p.display()))
+        fs::write(&p, text).map_err(FileError::at(FileOp::Write, &p))
     };
     write(RUNNER_FILENAME, runner_source(entry_file))?;
     write("package.json", package_json_source(&dependencies))?;
     write(SCAFFOLD_README, readme_source(entry_file, &dependencies))
+}
+
+/// Why an embedded file could not be copied into the tree.
+#[derive(Debug)]
+pub enum EmbeddedCopyError {
+    /// Its directory could not be made.
+    File(FileError),
+    /// The copy itself failed.
+    Copy {
+        from: PathBuf,
+        to: PathBuf,
+        source: std::io::Error,
+    },
+}
+
+impl std::fmt::Display for EmbeddedCopyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::File(e) => e.fmt(f),
+            Self::Copy { from, to, source } => write!(
+                f,
+                "copy the embedded file {} to {}: {source}",
+                from.display(),
+                to.display()
+            ),
+        }
+    }
+}
+
+impl From<FileError> for EmbeddedCopyError {
+    fn from(e: FileError) -> Self {
+        Self::File(e)
+    }
 }
 
 /// Copy the embedded files a linked Bun app reads by path
@@ -417,19 +451,17 @@ pub fn write_runnable_scaffold(
 pub fn write_embedded_files(
     output_dir: &Path,
     files: &[crate::unpack::chunk_link::EmbeddedFile],
-) -> Result<usize, String> {
+) -> Result<usize, EmbeddedCopyError> {
     let root = output_dir.join(crate::unpack::chunk_link::EMBEDDED_DIR);
     for f in files {
         let to = root.join(&f.rel);
         if let Some(dir) = to.parent() {
-            fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+            fs::create_dir_all(dir).map_err(FileError::at(FileOp::Mkdir, dir))?;
         }
-        fs::copy(&f.source, &to).map_err(|e| {
-            format!(
-                "copy the embedded file {} to {}: {e}",
-                f.source.display(),
-                to.display()
-            )
+        fs::copy(&f.source, &to).map_err(|source| EmbeddedCopyError::Copy {
+            from: f.source.clone(),
+            to: to.clone(),
+            source,
         })?;
     }
     Ok(files.len())

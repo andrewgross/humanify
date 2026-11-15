@@ -112,6 +112,32 @@ fn file_statement_slices(content: &str) -> Vec<&str> {
         .collect()
 }
 
+/// Why the review tree does not reconstruct the bundle's statements.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReconstructError {
+    /// The ledger asks `file` for a statement it does not hold.
+    Short { file: String, at: usize },
+    /// `file` holds statements the ledger does not ask for.
+    Beyond { file: String, extra: usize },
+    /// The statements differ from the bundle's.
+    Mismatch,
+}
+
+impl std::fmt::Display for ReconstructError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Short { file, at } => write!(f, "reconstruct: {file} is short of statement {at}"),
+            Self::Beyond { file, extra } => write!(
+                f,
+                "reconstruct: {file} has {extra} statement(s) beyond the ledger"
+            ),
+            Self::Mismatch => f.write_str(
+                "stable split: emitted tree does not reconstruct the source statements (tree/ledger invariant violated)",
+            ),
+        }
+    }
+}
+
 /// `assertConcatEquivalence` (+ `reconstructBodyParts`): the review tree,
 /// re-sliced per file and replayed through the ledger's `order` (per-file
 /// FIFO cursors), must hold EXACTLY the bundle's statements — as a
@@ -123,7 +149,7 @@ pub fn assert_concat_equivalence(
     order: &[String],
     spans: &[(u32, u32)],
     code: &str,
-) -> Result<(), String> {
+) -> Result<(), ReconstructError> {
     let parts: Vec<(&str, Vec<&str>)> = contents
         .iter()
         .map(|(file, content)| (file.as_str(), file_statement_slices(content)))
@@ -138,17 +164,20 @@ pub fn assert_concat_equivalence(
     for file in order {
         let at = index.get(file.as_str()).map_or(0, |&i| cursor[i]);
         let Some(&i) = index.get(file.as_str()).filter(|&&i| at < parts[i].1.len()) else {
-            return Err(format!("reconstruct: {file} is short of statement {at}"));
+            return Err(ReconstructError::Short {
+                file: file.clone(),
+                at,
+            });
         };
         rebuilt.push(parts[i].1[at]);
         cursor[i] += 1;
     }
     for (i, (file, slices)) in parts.iter().enumerate() {
         if cursor[i] != slices.len() {
-            return Err(format!(
-                "reconstruct: {file} has {} statement(s) beyond the ledger",
-                slices.len() - cursor[i]
-            ));
+            return Err(ReconstructError::Beyond {
+                file: file.to_string(),
+                extra: slices.len() - cursor[i],
+            });
         }
     }
     let mut expected: Vec<&str> = spans
@@ -160,7 +189,7 @@ pub fn assert_concat_equivalence(
     rebuilt.sort_by(|a, b| cmp_utf16(a, b));
     expected.sort_by(|a, b| cmp_utf16(a, b));
     if rebuilt != expected {
-        return Err("stable split: emitted tree does not reconstruct the source statements (tree/ledger invariant violated)".to_string());
+        return Err(ReconstructError::Mismatch);
     }
     Ok(())
 }

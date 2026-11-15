@@ -177,11 +177,25 @@ pub fn select_name_profile(
 /// `selectNameProfile(name)`: the profile registered under `name` (the
 /// pipeline config carries the selection by name, as it does the unpack
 /// adapter's); an unknown name is an error.
-pub fn name_profile_named(name: &str) -> Result<NameProfile, String> {
+pub fn name_profile_named(name: &str) -> Result<NameProfile, UnknownProfile> {
     NAME_PROFILES
         .into_iter()
         .find(|p| p.name() == name)
-        .ok_or_else(|| format!("No name profile named \"{name}\""))
+        .ok_or_else(|| UnknownProfile {
+            name: name.to_string(),
+        })
+}
+
+/// No name profile is registered under `name`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnknownProfile {
+    pub name: String,
+}
+
+impl std::fmt::Display for UnknownProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "No name profile named \"{}\"", self.name)
+    }
 }
 
 #[cfg(test)]

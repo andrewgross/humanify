@@ -440,16 +440,36 @@ pub fn lazy_init_helper_names(body: &[Value]) -> HashSet<String> {
     helpers
 }
 
+/// The fossil map was handed a different number of statement hashes
+/// than statements.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FossilMapError {
+    pub hashes: usize,
+    pub statements: usize,
+}
+
+impl std::fmt::Display for FossilMapError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "fossil map: {} hashes for {} statements",
+            self.hashes, self.statements
+        )
+    }
+}
+
 /// Extract the fossil modules of a wrapper body (:298). `hashes` is the
 /// rename-blind statement hash per statement, SAME ORDER AS `body` — the
 /// caller computes them once for everything (the inventory's own).
-pub fn extract_fossil_modules(body: &[Value], hashes: &[String]) -> Result<FossilExtract, String> {
+pub fn extract_fossil_modules(
+    body: &[Value],
+    hashes: &[String],
+) -> Result<FossilExtract, FossilMapError> {
     if hashes.len() != body.len() {
-        return Err(format!(
-            "fossil map: {} hashes for {} statements",
-            hashes.len(),
-            body.len()
-        ));
+        return Err(FossilMapError {
+            hashes: hashes.len(),
+            statements: body.len(),
+        });
     }
     let helpers = lazy_init_helper_names(body);
     let mut raw = find_init_defs(body, &helpers);

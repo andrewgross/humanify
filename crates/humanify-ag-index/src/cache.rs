@@ -327,7 +327,7 @@ pub fn search_store(root: &Path, detected: &DetectedRecipe) -> StoreSearch {
             }
         };
         if let Err(e) = check_manifest_stamps(&text) {
-            out.candidates.push((name, e));
+            out.candidates.push((name, e.to_string()));
             continue;
         }
         let Ok(m) = serde_json::from_str::<Manifest>(&text) else {
@@ -336,7 +336,7 @@ pub fn search_store(root: &Path, detected: &DetectedRecipe) -> StoreSearch {
             continue;
         };
         if let Err(e) = m.check_compatible() {
-            out.candidates.push((name, e));
+            out.candidates.push((name, e.to_string()));
             continue;
         }
         // The same question the lookup asks later, asked through the same
@@ -363,7 +363,7 @@ pub fn search_store(root: &Path, detected: &DetectedRecipe) -> StoreSearch {
                 None => continue,
             },
             Err(why) => {
-                out.candidates.push((name, why));
+                out.candidates.push((name, why.to_string()));
                 continue;
             }
         };

@@ -28,11 +28,69 @@ use humanify_ag_model::llm::{BatchRenameRequest, CacheKeyParams, LlmCall};
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use crate::error::{FileError, FileOp};
 use crate::naming::ask_trace::{AskScope, AskSite};
 use crate::naming::driver::NamingOutcome;
 use crate::naming::passes::sweep::SweepDispatch;
 use crate::naming::waves::processor::DispatchRecord;
 use crate::trail::Anchor;
+
+/// Why the artifact dump could not be written.
+#[derive(Debug)]
+pub enum DumpError {
+    /// Making the dump directory or writing a section failed.
+    File(FileError),
+    /// A section's records could not be serialized.
+    Serialize {
+        name: String,
+        source: serde_json::Error,
+    },
+    /// The classification site's text does not parse.
+    Site(crate::modules::UnparsedSite),
+    /// Re-creating the naming part file failed mid-run.
+    Part(std::io::Error),
+    /// The naming part writer was lost mid-run.
+    NamingPartLost,
+    /// Writing or assembling prompts.jsonl failed (`op` names which).
+    Prompts {
+        op: &'static str,
+        source: std::io::Error,
+    },
+    /// A part file could not be read back.
+    ReadPart {
+        name: &'static str,
+        source: std::io::Error,
+    },
+    /// An ask row could not be serialized.
+    AskRow(serde_json::Error),
+}
+
+impl std::fmt::Display for DumpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::File(e) => e.fmt(f),
+            Self::Serialize { name, source } => write!(f, "serialize {name}: {source}"),
+            Self::Site(e) => e.fmt(f),
+            Self::Part(e) => e.fmt(f),
+            Self::NamingPartLost => f.write_str("the naming part writer failed mid-run"),
+            Self::Prompts { op, source } => write!(f, "{op} {PROMPTS}: {source}"),
+            Self::ReadPart { name, source } => write!(f, "read {name}: {source}"),
+            Self::AskRow(e) => write!(f, "ask row: {e}"),
+        }
+    }
+}
+
+impl From<FileError> for DumpError {
+    fn from(e: FileError) -> Self {
+        Self::File(e)
+    }
+}
+
+impl From<crate::modules::UnparsedSite> for DumpError {
+    fn from(e: crate::modules::UnparsedSite) -> Self {
+        Self::Site(e)
+    }
+}
 
 /// One dump directory: a section is `<dir>/<name>.json`, its records as
 /// serde writes them (pretty, a trailing newline).
@@ -44,8 +102,8 @@ impl DumpSink {
     /// The sink over `dir`, created when missing.
     // io: legacy effect site, listed in dev/census/effects-allowlist.json
     #[allow(clippy::disallowed_methods)]
-    pub fn create(dir: &Path) -> Result<DumpSink, String> {
-        std::fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+    pub fn create(dir: &Path) -> Result<DumpSink, DumpError> {
+        std::fs::create_dir_all(dir).map_err(FileError::at(FileOp::Mkdir, dir))?;
         Ok(DumpSink {
             dir: dir.to_path_buf(),
         })
@@ -54,16 +112,18 @@ impl DumpSink {
     /// Write one section: `records` serialized to `<name>.json`.
     // io: legacy effect site, listed in dev/census/effects-allowlist.json
     #[allow(clippy::disallowed_methods)]
-    pub fn section<T: Serialize + ?Sized>(&self, name: &str, records: &T) -> Result<(), String> {
+    pub fn section<T: Serialize + ?Sized>(&self, name: &str, records: &T) -> Result<(), DumpError> {
         let path = self.dir.join(format!("{name}.json"));
-        let file =
-            std::fs::File::create(&path).map_err(|e| format!("write {}: {e}", path.display()))?;
+        let file = std::fs::File::create(&path).map_err(FileError::at(FileOp::Write, &path))?;
         let mut out = BufWriter::new(file);
-        serde_json::to_writer_pretty(&mut out, records)
-            .map_err(|e| format!("serialize {name}: {e}"))?;
+        serde_json::to_writer_pretty(&mut out, records).map_err(|source| DumpError::Serialize {
+            name: name.to_string(),
+            source,
+        })?;
         out.write_all(b"\n")
             .and_then(|()| out.flush())
-            .map_err(|e| format!("write {}: {e}", path.display()))
+            .map_err(FileError::at(FileOp::Write, &path))?;
+        Ok(())
     }
 }
 
@@ -100,7 +160,7 @@ pub struct DumpInputs<'a> {
 }
 
 /// Write every section the run reached.
-pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), String> {
+pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), DumpError> {
     let sink = DumpSink::create(inp.dir)?;
     let out = inp.outcome;
     let capture = out.capture.as_ref();
@@ -382,7 +442,7 @@ impl DispatchLog {
     /// Assemble the dump's prompts.jsonl from its parts (kept even when
     /// the run wrote zero rows: the file then holds one newline). An error here is the same
     /// error `write_artifact_dump` would have reported. Idempotent.
-    pub fn close(&mut self) -> Result<(), String> {
+    pub fn close(&mut self) -> Result<(), DumpError> {
         match self.rows.take() {
             Some(rows) => rows.close(),
             None => Ok(()),
@@ -447,7 +507,7 @@ impl LogRows {
         }
     }
 
-    fn close(self) -> Result<(), String> {
+    fn close(self) -> Result<(), DumpError> {
         match self {
             LogRows::Files(files) => files.close(),
             LogRows::Memory { .. } => Ok(()),
@@ -476,7 +536,7 @@ struct LogFiles {
     /// surfaces at close, like any dump write error).
     naming: Option<BufWriter<std::fs::File>>,
     rows: u64,
-    error: Option<String>,
+    error: Option<std::io::Error>,
 }
 
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
@@ -517,7 +577,7 @@ impl LogFiles {
         self.naming = match part(&self.dir, NAMING_PART) {
             Ok(w) => Some(w),
             Err(e) => {
-                self.error = Some(e.to_string());
+                self.error = Some(e);
                 None
             }
         };
@@ -535,9 +595,9 @@ impl LogFiles {
     // io: legacy effect site, listed in dev/census/effects-allowlist.json
     // default: legacy, untriaged: a Result error becomes a value here
     #[allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
-    fn close(self) -> Result<(), String> {
+    fn close(self) -> Result<(), DumpError> {
         if let Some(e) = self.error {
-            return Err(e);
+            return Err(DumpError::Part(e));
         }
         let LogFiles {
             dir,
@@ -546,23 +606,29 @@ impl LogFiles {
             rows,
             ..
         } = self;
-        let mut naming = naming.ok_or("the naming part writer failed mid-run")?;
+        let mut naming = naming.ok_or(DumpError::NamingPartLost)?;
+        let write = |source| DumpError::Prompts {
+            op: "write",
+            source,
+        };
         vendor
             .flush()
             .and_then(|()| naming.flush())
-            .map_err(|e| format!("write {PROMPTS}: {e}"))?;
+            .map_err(write)?;
         drop(vendor);
         drop(naming);
         let path = dir.join(PROMPTS);
         if rows == 0 {
-            std::fs::write(&path, "\n").map_err(|e| format!("write {PROMPTS}: {e}"))?;
+            std::fs::write(&path, "\n").map_err(write)?;
         } else {
-            let mut out =
-                std::fs::File::create(&path).map_err(|e| format!("write {PROMPTS}: {e}"))?;
+            let mut out = std::fs::File::create(&path).map_err(write)?;
             for name in [VENDOR_PART, NAMING_PART] {
-                let mut r =
-                    std::fs::File::open(dir.join(name)).map_err(|e| format!("read {name}: {e}"))?;
-                std::io::copy(&mut r, &mut out).map_err(|e| format!("assemble {PROMPTS}: {e}"))?;
+                let mut r = std::fs::File::open(dir.join(name))
+                    .map_err(|source| DumpError::ReadPart { name, source })?;
+                std::io::copy(&mut r, &mut out).map_err(|source| DumpError::Prompts {
+                    op: "assemble",
+                    source,
+                })?;
             }
         }
         let _ = std::fs::remove_file(dir.join(VENDOR_PART));
@@ -577,16 +643,16 @@ impl LogFiles {
 /// Returns the row count.
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
-pub fn write_ask_rows(path: &Path, rows: &[AskRow]) -> Result<usize, String> {
+pub fn write_ask_rows(path: &Path, rows: &[AskRow]) -> Result<usize, DumpError> {
     let mut text = String::new();
     for row in rows {
-        text.push_str(&serde_json::to_string(row).map_err(|e| format!("ask row: {e}"))?);
+        text.push_str(&serde_json::to_string(row).map_err(DumpError::AskRow)?);
         text.push('\n');
     }
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(FileError::at(FileOp::Mkdir, parent))?;
     }
-    std::fs::write(path, text).map_err(|e| format!("write {}: {e}", path.display()))?;
+    std::fs::write(path, text).map_err(FileError::at(FileOp::Write, path))?;
     Ok(rows.len())
 }
 

@@ -113,7 +113,7 @@ fn throws_loudly_when_the_bundle_records_no_fossils() {
         FossilOptions::default(),
     )
     .expect_err("no fossils");
-    assert!(err.contains("no module fossils"), "{err}");
+    assert!(err.to_string().contains("no module fossils"), "{err}");
 }
 
 #[test]

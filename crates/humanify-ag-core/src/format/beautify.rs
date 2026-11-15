@@ -24,10 +24,11 @@
 use std::collections::HashSet;
 
 use super::ast::{Binary, Field, Kind, NodeId, Quasi, Tree};
+use super::error::FormatError;
 use super::template_raw::raw_for_string;
 use super::traverse::{Engine, Key, PathId, VisitFn, Visitor};
 
-type R<T> = Result<T, String>;
+type R<T> = Result<T, FormatError>;
 
 /// Which visitors run, one bit each (for the printer-only gate, and for
 /// the planted perturbations that prove the byte gate can see a visitor).
@@ -184,12 +185,12 @@ pub fn run(
 /// The path's node (the visitors only run on live paths).
 fn node_of(e: &Engine<'_>, p: PathId) -> R<NodeId> {
     e.node(p)
-        .ok_or_else(|| "a visitor on a removed path".to_string())
+        .ok_or(FormatError::Traverse("a visitor on a removed path"))
 }
 
 fn parent_of(e: &Engine<'_>, p: PathId) -> R<PathId> {
     e.parent_path(p)
-        .ok_or_else(|| "a visitor at the root".to_string())
+        .ok_or(FormatError::Traverse("a visitor at the root"))
 }
 
 /// A literal that runs no code: any literal but a template literal with
@@ -443,7 +444,9 @@ fn sequence_expression(e: &mut Engine<'_>, p: PathId) -> R<()> {
     if e.path_is(pp, is_loop_with_repeated_head) {
         return Ok(());
     }
-    let (last, rest) = expressions.split_last().ok_or("an empty sequence")?;
+    let (last, rest) = expressions
+        .split_last()
+        .ok_or(FormatError::Traverse("an empty sequence"))?;
     let stmts = rest.iter().map(|&x| expression_statement(e, x)).collect();
     e.insert_before(pp, stmts)?;
     e.replace_with(p, *last)
@@ -691,7 +694,9 @@ fn concat_call(e: &mut Engine<'_>, p: PathId) -> R<()> {
         } => {
             match tail {
                 Some((tail, raw)) => {
-                    let last = quasis.last_mut().ok_or("a template without quasis")?;
+                    let last = quasis
+                        .last_mut()
+                        .ok_or(FormatError::Traverse("a template without quasis"))?;
                     last.raw.push_str(&raw_for_string(&tail, raw.as_deref()));
                     if let Some(cooked) = last.cooked.as_mut() {
                         cooked.push_str(&tail);

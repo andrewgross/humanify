@@ -41,12 +41,12 @@ fn a_tree_that_lost_or_changed_a_statement_is_refused_with_the_ts_message() {
         "var a = 1;\nvar b = f();\n",
     );
     assert_eq!(
-        assert_concat_equivalence(&changed, &order(), &spans(), CODE),
+        assert_concat_equivalence(&changed, &order(), &spans(), CODE).map_err(|e| e.to_string()),
         Err("stable split: emitted tree does not reconstruct the source statements (tree/ledger invariant violated)".to_string())
     );
     let short = tree("\"use strict\";\n", "var a = 1;\nvar b = f();\n");
     assert_eq!(
-        assert_concat_equivalence(&short, &order(), &spans(), CODE),
+        assert_concat_equivalence(&short, &order(), &spans(), CODE).map_err(|e| e.to_string()),
         Err("reconstruct: x.js is short of statement 1".to_string())
     );
     let extra = tree(
@@ -54,7 +54,7 @@ fn a_tree_that_lost_or_changed_a_statement_is_refused_with_the_ts_message() {
         "var a = 1;\nvar b = f();\n",
     );
     assert_eq!(
-        assert_concat_equivalence(&extra, &order(), &spans(), CODE),
+        assert_concat_equivalence(&extra, &order(), &spans(), CODE).map_err(|e| e.to_string()),
         Err("reconstruct: x.js has 1 statement(s) beyond the ledger".to_string())
     );
 }

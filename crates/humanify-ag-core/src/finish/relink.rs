@@ -28,7 +28,7 @@ use humanify_ag_model::js::{cmp_utf16, trim};
 
 use crate::emit::paths::compute_relative_import_path;
 use crate::graph::is_babel_assignment_target;
-use crate::ingest::Ingest;
+use crate::ingest::{Ingest, ParseError};
 use crate::rename::validated::RenameState;
 use crate::toolchain::InteropHelpers;
 use crate::trail::Anchor;
@@ -129,11 +129,38 @@ const THUNK_PROP: &str = "f";
 pub(crate) fn parse_or_err<'a>(
     allocator: &'a Allocator,
     code: &'a str,
-) -> Result<Ingest<'a>, String> {
+) -> Result<Ingest<'a>, ParseError> {
     let ingest = Ingest::parse_unambiguous(allocator, code);
     match ingest.errors.first() {
-        Some(e) => Err(e.clone()),
+        Some(e) => Err(ParseError(e.clone())),
         None => Ok(ingest),
+    }
+}
+
+/// Why an extracted factory could not be wrapped.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RelinkError {
+    /// The text does not parse.
+    Parse(ParseError),
+    /// A bridged read sits where a local binding shadows `require`.
+    ShadowedRequire { name: String },
+}
+
+impl std::fmt::Display for RelinkError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Parse(e) => e.fmt(f),
+            Self::ShadowedRequire { name } => write!(
+                f,
+                "the bridged read of {name} sits in a scope that shadows `require`"
+            ),
+        }
+    }
+}
+
+impl From<ParseError> for RelinkError {
+    fn from(e: ParseError) -> Self {
+        Self::Parse(e)
     }
 }
 
@@ -219,7 +246,7 @@ pub fn relink_factory_references(
     code: &str,
     from_file: &str,
     lookup: &FactoryLookup,
-) -> Result<String, String> {
+) -> Result<String, ParseError> {
     let allocator = Allocator::default();
     let ingest = parse_or_err(&allocator, code)?;
     let mut refs = factory_refs(&ingest, lookup);
@@ -257,7 +284,10 @@ pub fn relink_factory_references(
 
 /// The interop helpers (the run's standard names) `body` references FREE
 /// (unbound anywhere in it) — bound from the helper file.
-fn free_interop_helpers(body: &str, interop: InteropHelpers) -> Result<Vec<&'static str>, String> {
+fn free_interop_helpers(
+    body: &str,
+    interop: InteropHelpers,
+) -> Result<Vec<&'static str>, ParseError> {
     // The body is an EXPRESSION: parenthesized, so a `function (…) {…}`
     // factory is not read as a nameless declaration.
     let expression = format!("({body}\n)");
@@ -284,7 +314,7 @@ pub fn wrap_extracted_factory(
     lookup: &FactoryLookup,
     bridges: &[VendorBridge],
     interop: InteropHelpers,
-) -> Result<(String, usize), String> {
+) -> Result<(String, usize), RelinkError> {
     let rt = compute_relative_import_path(from_file, &interop.runtime_file());
     let module_helper = interop.module_helper();
     let mut bound = vec![module_helper];
@@ -310,7 +340,7 @@ fn apply_vendor_bridges(
     code: &str,
     from_file: &str,
     bridges: &[VendorBridge],
-) -> Result<(String, usize), String> {
+) -> Result<(String, usize), RelinkError> {
     if bridges.is_empty() {
         return Ok((code.to_string(), 0));
     }
@@ -347,9 +377,9 @@ fn apply_vendor_bridges(
             .get_binding(state.view().scope_of_node(node.id()), "require")
             .is_some()
         {
-            return Err(format!(
-                "the bridged read of {name} sits in a scope that shadows `require`"
-            ));
+            return Err(RelinkError::ShadowedRequire {
+                name: name.to_string(),
+            });
         }
         let target = format!(
             "require(\"{}\").{}",

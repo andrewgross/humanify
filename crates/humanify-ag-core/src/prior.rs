@@ -377,7 +377,8 @@ fn run_match_stage<T>(
         },
         prior.json,
         fresh.json,
-    )?;
+    )
+    .map_err(|e| e.to_string())?;
     // The TS's same-program sanity check (:624) — a prior sharing nearly no
     // structural hashes with the new version is a wrong file, not an
     // aggressive refactor. Fails the dump loudly instead of transferring
@@ -505,7 +506,8 @@ fn build_side_dependents<'g>(
         anchor,
         Some(graph),
         true,
-    )?;
+    )
+    .map_err(|e| e.to_string())?;
     Ok(SideDependents {
         index,
         graph_side,

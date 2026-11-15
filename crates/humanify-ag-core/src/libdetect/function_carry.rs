@@ -102,6 +102,79 @@ pub fn functions_in_tree_order(program: &Value) -> Vec<TreeFunction> {
     out
 }
 
+/// Why the library classification of a mixed file failed. Each variant
+/// prints the text the stage reported before the error was typed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CarryError {
+    /// A function of the beautified tree has no raw start: beautify
+    /// synthesized it, so raw offsets cannot identify it.
+    Synthesized { babel_type: String },
+    /// The re-parsed text holds a different number of functions than the
+    /// carry.
+    CountMismatch { carried: usize, found: usize },
+    /// Function `ordinal` changed type across the re-parse.
+    TypeMismatch {
+        ordinal: usize,
+        before: String,
+        after: String,
+    },
+    /// Banner regions reached the naming stage with no classification.
+    Missing,
+    /// No graph function sits at a classified span.
+    NoFunctionAt {
+        span: Span,
+        session_id: Option<String>,
+    },
+    /// The graph and the classification name different functions at one span.
+    SessionMismatch {
+        span: Span,
+        graph: String,
+        classified: String,
+    },
+}
+
+impl std::fmt::Display for CarryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Synthesized { babel_type } => write!(
+                f,
+                "library carry: a {babel_type} in the beautified tree has no raw start — beautify synthesized a function, so raw offsets no longer identify it"
+            ),
+            Self::CountMismatch { carried, found } => write!(
+                f,
+                "library carry: {carried} functions carried across beautify, {found} found in the re-parsed text"
+            ),
+            Self::TypeMismatch {
+                ordinal,
+                before,
+                after,
+            } => write!(
+                f,
+                "library carry: function #{ordinal} is a {before} before re-parse and a {after} after"
+            ),
+            Self::Missing => f.write_str(
+                "library regions reached the naming stage without a function classification — raw offsets cannot classify beautified functions (#32)",
+            ),
+            Self::NoFunctionAt { span, session_id } => write!(
+                f,
+                "library classification: no function at fresh span {}..{}{}",
+                span.start,
+                span.end,
+                session_id.as_ref().map_or(String::new(), |s| format!(" ({s})"))
+            ),
+            Self::SessionMismatch {
+                span,
+                graph,
+                classified,
+            } => write!(
+                f,
+                "library classification: fresh span {}..{} is {graph} in the graph, {classified} in the classification",
+                span.start, span.end
+            ),
+        }
+    }
+}
+
 /// Per-ordinal library (None = app code) plus the node type as a checksum
 /// (`FunctionLibraryCarry`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -117,7 +190,7 @@ pub struct FunctionLibraryCarry {
 pub fn carry_function_libraries(
     transformed: &Value,
     regions: &[CommentRegion],
-) -> Result<FunctionLibraryCarry, String> {
+) -> Result<FunctionLibraryCarry, CarryError> {
     let fns = functions_in_tree_order(transformed);
     carry_in_walk_order(
         fns.iter().map(|f| {
@@ -140,7 +213,7 @@ pub fn carry_format_tree(
     tree: &FormatTree,
     root: FormatNodeId,
     regions: &[CommentRegion],
-) -> Result<FunctionLibraryCarry, String> {
+) -> Result<FunctionLibraryCarry, CarryError> {
     let mut fns: Vec<(&str, Option<u32>)> = Vec::new();
     let mut stack = vec![root];
     while let Some(id) = stack.pop() {
@@ -158,13 +231,13 @@ pub fn carry_format_tree(
 fn carry_in_walk_order<'a>(
     fns: impl IntoIterator<Item = (&'a str, Option<u32>)>,
     regions: &[CommentRegion],
-) -> Result<FunctionLibraryCarry, String> {
+) -> Result<FunctionLibraryCarry, CarryError> {
     let mut carry = FunctionLibraryCarry::default();
     for (babel_type, start) in fns {
         let Some(start) = start else {
-            return Err(format!(
-                "library carry: a {babel_type} in the beautified tree has no raw start — beautify synthesized a function, so raw offsets no longer identify it"
-            ));
+            return Err(CarryError::Synthesized {
+                babel_type: babel_type.to_string(),
+            });
         };
         carry
             .libraries
@@ -180,22 +253,22 @@ fn carry_in_walk_order<'a>(
 pub fn resolve_function_libraries(
     reparsed: &Value,
     carry: &FunctionLibraryCarry,
-) -> Result<Vec<(Span, String)>, String> {
+) -> Result<Vec<(Span, String)>, CarryError> {
     let fns = functions_in_tree_order(reparsed);
     if fns.len() != carry.libraries.len() {
-        return Err(format!(
-            "library carry: {} functions carried across beautify, {} found in the re-parsed text",
-            carry.libraries.len(),
-            fns.len()
-        ));
+        return Err(CarryError::CountMismatch {
+            carried: carry.libraries.len(),
+            found: fns.len(),
+        });
     }
     let mut out = Vec::new();
     for (i, f) in fns.into_iter().enumerate() {
         if f.babel_type != carry.types[i] {
-            return Err(format!(
-                "library carry: function #{i} is a {} before re-parse and a {} after",
-                carry.types[i], f.babel_type
-            ));
+            return Err(CarryError::TypeMismatch {
+                ordinal: i,
+                before: carry.types[i].clone(),
+                after: f.babel_type,
+            });
         }
         if let Some(library) = &carry.libraries[i] {
             out.push((f.span, library.clone()));
@@ -236,10 +309,10 @@ impl LibraryClassification {
         &self,
         fresh: &Value,
         graph: &UnifiedGraph,
-    ) -> Result<Vec<(usize, String)>, String> {
+    ) -> Result<Vec<(usize, String)>, CarryError> {
         let keyed: Vec<(Span, Option<&str>, String)> = match self {
             Self::Missing => {
-                return Err("library regions reached the naming stage without a function classification — raw offsets cannot classify beautified functions (#32)".into());
+                return Err(CarryError::Missing);
             }
             Self::Consumed(keys) => keys
                 .iter()
@@ -260,28 +333,25 @@ impl LibraryClassification {
 fn join_rows(
     keyed: &[(Span, Option<&str>, String)],
     graph: &UnifiedGraph,
-) -> Result<Vec<(usize, String)>, String> {
+) -> Result<Vec<(usize, String)>, CarryError> {
     let mut by_row: Vec<Option<String>> = vec![None; graph.functions.len()];
     for (span, session_id, library) in keyed {
         let row = graph
             .functions
             .iter()
             .position(|f| f.span == *span)
-            .ok_or_else(|| {
-                format!(
-                    "library classification: no function at fresh span {}..{}{}",
-                    span.start,
-                    span.end,
-                    session_id.map_or(String::new(), |s| format!(" ({s})"))
-                )
+            .ok_or_else(|| CarryError::NoFunctionAt {
+                span: *span,
+                session_id: session_id.map(str::to_string),
             })?;
         if let Some(id) = session_id
             && graph.functions[row].session_id != *id
         {
-            return Err(format!(
-                "library classification: fresh span {}..{} is {} in the graph, {id} in the classification",
-                span.start, span.end, graph.functions[row].session_id
-            ));
+            return Err(CarryError::SessionMismatch {
+                span: *span,
+                graph: graph.functions[row].session_id.clone(),
+                classified: id.to_string(),
+            });
         }
         by_row[row] = Some(library.clone());
     }
@@ -301,7 +371,7 @@ pub fn classify_library_functions(
     has_wrapper: bool,
     skip_libraries: bool,
     source: Option<&LibraryClassification>,
-) -> Result<Vec<(usize, String)>, String> {
+) -> Result<Vec<(usize, String)>, CarryError> {
     match source {
         Some(c) if skip_libraries && !has_wrapper => c.classify(fresh, graph),
         _ => Ok(Vec::new()),

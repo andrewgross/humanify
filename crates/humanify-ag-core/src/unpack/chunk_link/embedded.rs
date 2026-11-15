@@ -49,7 +49,9 @@ use oxc_span::Span;
 use oxc_syntax::symbol::SymbolId;
 
 use super::analyse::{Chunk, Edit, StmtKind};
+use super::error::{DecodeError, LinkError};
 use super::graph::{Target, resolve_sym};
+use crate::error::{FileError, FileOp};
 
 /// The output tree's folder for the embedded files a program reads by
 /// path (beside `src/`, `vendor/` and `run.cjs`).
@@ -117,21 +119,21 @@ pub(super) fn is_bun_module(path: &Path) -> bool {
 /// leaves it.
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
-fn file_of(dir: &Path, rest: &str) -> Result<PathBuf, String> {
+fn file_of(dir: &Path, rest: &str) -> Result<PathBuf, LinkError> {
     let inside = Path::new(rest)
         .components()
         .all(|c| matches!(c, Component::Normal(_)));
     if !inside || rest.contains('\\') {
-        return Err(format!(
-            "/$bunfs/root/{rest} leaves the embedded root; not linked"
-        ));
+        return Err(LinkError::EmbeddedOutside {
+            rest: rest.to_string(),
+        });
     }
     let path = dir.join(rest);
     if !path.is_file() {
-        return Err(format!(
-            "/$bunfs/root/{rest} is read but {} does not exist",
-            path.display()
-        ));
+        return Err(LinkError::EmbeddedMissing {
+            rest: rest.to_string(),
+            path,
+        });
     }
     Ok(path)
 }
@@ -145,14 +147,14 @@ fn file_of(dir: &Path, rest: &str) -> Result<PathBuf, String> {
 /// code unit); one without is UTF-8 when it decodes as UTF-8 (ASCII, or a
 /// file an unpacker already decoded), else UTF-16 (text with no ASCII
 /// character, e.g. pure CJK).
-pub(super) fn decode_text(bytes: &[u8]) -> Result<String, String> {
+pub(super) fn decode_text(bytes: &[u8]) -> Result<String, DecodeError> {
     if !bytes.contains(&0)
         && let Ok(s) = std::str::from_utf8(bytes)
     {
         return Ok(s.to_string());
     }
     if !bytes.len().is_multiple_of(2) {
-        return Err("is neither UTF-8 nor UTF-16LE (odd length)".into());
+        return Err(DecodeError::OddLength);
     }
     let units = bytes
         .as_chunks::<2>()
@@ -161,7 +163,7 @@ pub(super) fn decode_text(bytes: &[u8]) -> Result<String, String> {
         .map(|p| u16::from_le_bytes(*p));
     char::decode_utf16(units)
         .collect::<Result<String, _>>()
-        .map_err(|e| format!("is neither UTF-8 nor UTF-16LE ({e})"))
+        .map_err(DecodeError::Utf16)
 }
 
 /// `text` as a JavaScript string literal, the way Bun's printer writes a
@@ -233,7 +235,7 @@ fn is_require(
     c: usize,
     callee: Callee,
     aliases: &BTreeSet<Target>,
-) -> Result<bool, String> {
+) -> Result<bool, LinkError> {
     Ok(match callee {
         Callee::MetaRequire => true,
         Callee::Sym(s) => aliases.contains(&resolve_sym(chunks, c, s)?),
@@ -243,7 +245,7 @@ fn is_require(
 /// Decide every chunk's embedded-file uses (see the module doc).
 // io: legacy effect site, listed in dev/census/effects-allowlist.json
 #[allow(clippy::disallowed_methods)]
-pub(super) fn resolve(chunks: &[Chunk], dir: &Path) -> Result<Resolved, String> {
+pub(super) fn resolve(chunks: &[Chunk], dir: &Path) -> Result<Resolved, LinkError> {
     let aliases = require_aliases(chunks);
     let mut out = Resolved::default();
     let mut files: BTreeMap<String, PathBuf> = BTreeMap::new();
@@ -256,22 +258,22 @@ pub(super) fn resolve(chunks: &[Chunk], dir: &Path) -> Result<Resolved, String> 
                 None => false,
             };
             if required && r.extra_args {
-                return Err(format!(
-                    "{}: /$bunfs/root/{} is required with import attributes (Bun's \
-                     sqlite_embedded loader); not linked",
-                    chunk.path.display(),
-                    r.rest
-                ));
+                return Err(LinkError::EmbeddedAttributes {
+                    path: chunk.path.clone(),
+                    rest: r.rest.clone(),
+                });
             }
             if is_bun_module(&path) {
                 out.bun_module_paths += usize::from(!required);
                 continue;
             }
             if let Some((call, _)) = r.call.filter(|_| required && !r.rest.ends_with(".node")) {
-                let bytes = std::fs::read(&path)
-                    .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-                let text =
-                    decode_text(&bytes).map_err(|e| format!("/$bunfs/root/{} {e}", r.rest))?;
+                let bytes =
+                    std::fs::read(&path).map_err(FileError::at(FileOp::CannotRead, &path))?;
+                let text = decode_text(&bytes).map_err(|why| LinkError::EmbeddedText {
+                    rest: r.rest.clone(),
+                    why,
+                })?;
                 edits.push(Edit {
                     start: call.start as usize,
                     end: call.end as usize,
@@ -281,14 +283,13 @@ pub(super) fn resolve(chunks: &[Chunk], dir: &Path) -> Result<Resolved, String> 
                 continue;
             }
             if !r.dirname_free {
-                return Err(format!(
-                    "{}: /$bunfs/root/{} sits where `__dirname` is bound; not linked",
-                    chunk.path.display(),
-                    r.rest
-                ));
+                return Err(LinkError::DirnameBound {
+                    path: chunk.path.clone(),
+                    rest: r.rest.clone(),
+                });
             }
             let at = serde_json::to_string(&format!("/{EMBEDDED_DIR}/{}", r.rest))
-                .map_err(|e| e.to_string())?;
+                .map_err(LinkError::Json)?;
             edits.push(Edit {
                 start: r.literal.start as usize,
                 end: r.literal.end as usize,

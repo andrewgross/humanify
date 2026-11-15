@@ -214,7 +214,10 @@ fn a_recipe_the_index_does_not_hold_is_an_error_naming_what_it_has() {
     )
     .expect_err("no target-bun slice");
     assert!(
-        err.contains("bun:target=bun") && err.contains("has: bun:target=node,format=cjs,minify"),
+        err.to_string().contains("bun:target=bun")
+            && err
+                .to_string()
+                .contains("has: bun:target=node,format=cjs,minify"),
         "{err}"
     );
     assert!(

@@ -94,11 +94,31 @@ pub fn parse_estree_json(text: &str) -> serde_json::Value {
 ///   `1e+400`, which serde_json refuses as out of range. It is read as the
 ///   largest finite double, still a NUMBER (readers classify literals by
 ///   their JSON type); the literal's `raw` keeps the source spelling.
-pub fn try_parse_estree_json(text: &str) -> Result<serde_json::Value, String> {
+pub fn try_parse_estree_json(text: &str) -> Result<serde_json::Value, EstreeJsonError> {
     let text = strict_json_from_estree(text);
     let mut de = serde_json::Deserializer::from_str(&text);
     de.disable_recursion_limit();
-    serde::Deserialize::deserialize(&mut de).map_err(|e| format!("estree json: {e}"))
+    serde::Deserialize::deserialize(&mut de).map_err(EstreeJsonError)
+}
+
+/// The program's ESTree JSON did not read back as JSON.
+#[derive(Debug)]
+pub struct EstreeJsonError(pub serde_json::Error);
+
+impl std::fmt::Display for EstreeJsonError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "estree json: {}", self.0)
+    }
+}
+
+/// A parse that failed: the parser's first diagnostic, as it printed it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParseError(pub String);
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
 }
 
 /// oxc's spelling of an infinite number (`oxc_estree`'s `f64` impl).
