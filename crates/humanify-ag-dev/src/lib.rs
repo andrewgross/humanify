@@ -13,6 +13,7 @@ pub(crate) mod bin_build;
 pub(crate) mod census;
 pub mod cli;
 pub(crate) mod committed;
+pub(crate) mod difflabel;
 pub(crate) mod e2e;
 pub mod env;
 pub(crate) mod eval;

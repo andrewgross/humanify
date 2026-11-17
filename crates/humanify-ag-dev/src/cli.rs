@@ -202,6 +202,14 @@ const VERBS: &[Verb] = &[
         footprint: LIGHT,
     },
     Verb {
+        words: &["diff", "label"],
+        usage: "diff label <from-tree> <to-tree> <from-input-dir> <to-input-dir> [<out.json>]",
+        proves: "why each changed line between two output trees is in the diff: one label per line, the totals adding up to what `diff -rN` counts",
+        cannot_prove: "which lines of changed input code really changed (every changed line from a changed input function counts as real); anything about a tree with no provenance file",
+        settings: &[],
+        footprint: LIGHT,
+    },
+    Verb {
         words: &["run", "stub"],
         usage: "run stub <bin> <bundle> <out> [<prior.js>] [--library-index D] [--pipeline-set library.matching=off]",
         proves: "what the binary does on a bundle with every name answered by the one stub (no LLM)",
@@ -557,11 +565,30 @@ fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
         ["eval", "neutrality"] => done(verbs::neutrality(&live(), parsed, verb.settings)),
         ["eval", "walk"] => done(verbs::walk(&live(), parsed)),
         ["eval", "walk-report"] => done(verbs::walk_report(&live(), parsed)),
+        ["diff", "label"] => diff_label(parsed),
         ["run", "stub"] => done(verbs::stub(&live(), parsed)),
         ["index", "build"] => done(verbs::index_build(&live(), parsed)),
         ["boot-gate"] => done(verbs::boot_gate(&live(), parsed)),
         ["library", "score"] => done(verbs::library_score(&live(), parsed)),
         _ => unreachable!("every implemented verb has a runner"),
+    }
+}
+
+fn diff_label(parsed: &settings::Parsed) -> (u8, String, String) {
+    use std::path::Path;
+    let (from, to, from_input, to_input, out) = match parsed.positionals.as_slice() {
+        [a, b, c, d] => (a, b, c, d, None),
+        [a, b, c, d, out] => (a, b, c, d, Some(Path::new(out))),
+        _ => {
+            let usage = "usage: humanify-ag-dev diff label <from-tree> <to-tree> <from-input-dir> <to-input-dir> [<out.json>]\n";
+            return (2, String::new(), usage.into());
+        }
+    };
+    let trees = (Path::new(from), Path::new(to));
+    let inputs = (Path::new(from_input), Path::new(to_input));
+    match crate::difflabel::run(trees, inputs, out) {
+        Ok(report) => (0, report, String::new()),
+        Err(e) => (1, String::new(), format!("{e}\n")),
     }
 }
 
