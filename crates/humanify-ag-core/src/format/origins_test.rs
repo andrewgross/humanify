@@ -86,3 +86,16 @@ fn a_license_header_shifts_the_marks_with_the_text() {
     let got = top_level_origins(code);
     assert!(got.iter().all(|(_, o)| *o == 0), "{got:?}");
 }
+
+#[test]
+fn every_piece_of_a_split_sequence_names_its_own_input_bytes() {
+    let code = "function f(){e(\"aa\"),e(\"bb\"),e(\"cc\")}";
+    let formatted = format_file_with_origins(code, &FormatOptions::default(), &[]).unwrap();
+    let pieces: Vec<&str> = formatted
+        .statement_origins
+        .iter()
+        .skip(1)
+        .map(|(_, origin)| &code[*origin as usize..*origin as usize + 7])
+        .collect();
+    assert_eq!(pieces, ["e(\"aa\")", "e(\"bb\")", "e(\"cc\")"]);
+}

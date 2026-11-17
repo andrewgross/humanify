@@ -338,8 +338,12 @@ impl<'t> Printer<'t> {
     }
 
     /// The first source-spanned node printed inside an open statement is
-    /// its origin.
+    /// its origin. An expression statement's own span is skipped: after a
+    /// sequence split it still spans the whole sequence.
     fn note_origin(&mut self, node: NodeId) {
+        if matches!(self.kind(node), Kind::ExpressionStatement { .. }) {
+            return;
+        }
         let Some(marks) = self.marks.as_mut() else {
             return;
         };
