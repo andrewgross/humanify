@@ -160,8 +160,30 @@ pub struct RunnableInput<'a, 's> {
     pub layout: crate::toolchain::BundleLayout,
 }
 
+/// Where one emitted file's statements sit, as the emit wrote it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FileLines {
+    pub path: String,
+    /// Lines before the first statement (the header and its blank line).
+    pub header_lines: u32,
+    /// `(bundle statement index, lines it takes)`, in emitted order.
+    pub statements: Vec<(usize, u32)>,
+}
+
+impl FileLines {
+    pub fn total(&self) -> u32 {
+        self.header_lines + self.statements.iter().map(|s| s.1).sum::<u32>()
+    }
+}
+
+fn line_count(text: &str) -> u32 {
+    text.matches('\n').count() as u32 + 1
+}
+
 /// The emitted tree plus what the ledger records from it.
 pub struct RunnableTree {
+    /// One per ledger file, in `files` order.
+    pub lines: Vec<FileLines>,
     /// Relative path → content, in the TS Map's insertion order (ledger
     /// files, then the bundle runtime, then the entry).
     pub files: Vec<(String, String)>,
@@ -1373,7 +1395,11 @@ impl Plan<'_, '_> {
     }
 
     /// `assembleFile`: directives, accessor block, require header, body.
-    fn assemble_file(&self, file: usize, stmt_idxs: &[usize]) -> Result<String, EmitError> {
+    fn assemble_file(
+        &self,
+        file: usize,
+        stmt_idxs: &[usize],
+    ) -> Result<(String, FileLines), EmitError> {
         let path = self.input.files[file].as_str();
         let mut header: Vec<String> = self.directives.clone();
         if let Some(exps) = self.exports.get(&file) {
@@ -1408,12 +1434,24 @@ impl Plan<'_, '_> {
         if header.is_empty() {
             self.neutralize_leading_string(stmt_idxs, &mut body);
         }
+        let lines = FileLines {
+            path: path.to_string(),
+            header_lines: match header.iter().map(|h| line_count(h)).sum::<u32>() {
+                0 => 0,
+                n => n + 1,
+            },
+            statements: stmt_idxs
+                .iter()
+                .zip(&body)
+                .map(|(idx, text)| (*idx, line_count(text)))
+                .collect(),
+        };
         let sections: Vec<String> = [header, body]
             .into_iter()
             .filter(|s| !s.is_empty())
             .map(|s| s.join("\n"))
             .collect();
-        Ok(format!("{}\n", sections.join("\n\n")))
+        Ok((format!("{}\n", sections.join("\n\n")), lines))
     }
 
     /// `neutralizeLeadingString`: a headerless file whose first statement
@@ -1872,14 +1910,16 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
     let idxs_of: HashMap<usize, &[usize]> =
         by_file.iter().map(|(f, v)| (*f, v.as_slice())).collect();
     let mut files = Vec::with_capacity(input.files.len() + 2);
+    let mut lines = Vec::with_capacity(input.files.len());
     for (f, path) in input.files.iter().enumerate() {
         let idxs = idxs_of.get(&f).copied().unwrap_or(&[]);
         // -- the emitted layout is recorded (recordEmittedLayout ran) ------
-        let content = plan.assemble_file(f, idxs).map_err(|reason| EmitDecline {
+        let (content, file_lines) = plan.assemble_file(f, idxs).map_err(|reason| EmitDecline {
             reason,
             layout: Some(Box::new(layout())),
         })?;
         files.push((path.clone(), content));
+        lines.push(file_lines);
     }
     if let Some(bc) = &plan.bundle_context {
         files.push((bc.file_name.clone(), BUNDLE_RUNTIME.to_string()));
@@ -1887,6 +1927,7 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
     files.push((entry.clone(), plan.entry_source(&entry)));
     Ok(RunnableTree {
         files,
+        lines,
         aliases: written_aliases(&plan),
         layout: by_file
             .into_iter()

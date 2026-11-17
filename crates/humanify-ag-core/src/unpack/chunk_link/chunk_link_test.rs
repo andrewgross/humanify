@@ -307,7 +307,7 @@ fn external_imports_become_requires() {
     // A lone entry with only externals is not a chunked layout ...
     assert!(read_input(&entry, &Disk).unwrap().link.is_none());
     // ... but the linker still maps its externals when it links one.
-    let (text, _) = link(&entry, &Disk).unwrap();
+    let (text, _, _) = link(&entry, &Disk).unwrap();
     assert_eq!(run(&text), "/ a/b /\n");
 }
 
@@ -893,4 +893,51 @@ fn chunks_with_no_code_are_named_by_what_they_load_not_where_they_are_written() 
     let (a2, b2) = link_in("bb", "ba");
     assert_ne!(a1, b1);
     assert_eq!((a1, b1), (a2, b2));
+}
+
+#[test]
+fn the_link_map_points_every_copied_run_at_its_chunk_bytes() {
+    let files = [
+        (
+            "index.js",
+            format!(
+                "{HEAD}import{{a as x}}from\"/$bunfs/root/chunk-a.js\";function main(){{return x()+1}}\
+console.log(main());import(\"/$bunfs/root/chunk-b.js\").then((m)=>console.log(m.b()));\n"
+            ),
+        ),
+        (
+            "chunk-a.js",
+            format!("{HEAD}function a(){{return 41}}export{{a}};\n"),
+        ),
+        (
+            "chunk-b.js",
+            format!(
+                "{HEAD}var k=7;class C{{v(){{return k}}}}function b(){{return new C().v()}}export{{b}};\n"
+            ),
+        ),
+    ];
+    let refs: Vec<(&str, &str)> = files.iter().map(|(n, t)| (*n, t.as_str())).collect();
+    let entry = layout(&refs);
+    let (text, _, map) = link(&entry, &Disk).unwrap();
+    assert_eq!(run(&text), "42\n7\n");
+    assert_eq!(map.files, ["index.js", "chunk-a.js", "chunk-b.js"]);
+    for r in &map.runs {
+        let chunk = &files[r.chunk as usize].1;
+        let (out, src, len) = (r.out as usize, r.src as usize, r.len as usize);
+        assert_eq!(text[out..out + len], chunk[src..src + len]);
+    }
+    let at = |needle: &str| map.source_of(text.find(needle).unwrap() as u32);
+    let in_chunk = |file: usize, needle: &str| {
+        Some((
+            file as u32,
+            Some(files[file].1.find(needle).unwrap() as u32),
+        ))
+    };
+    assert_eq!(at("return 41"), in_chunk(1, "return 41"));
+    assert_eq!(at("return k"), in_chunk(2, "return k"));
+    assert_eq!(at("return new C"), in_chunk(2, "return new C"));
+    assert_eq!(at("console.log(main"), in_chunk(0, "console.log(main"));
+    assert_eq!(at("// @bun"), None);
+    let init = text.find("=7").unwrap() as u32;
+    assert_eq!(map.source_of(init - 1).map(|s| s.0), Some(2));
 }

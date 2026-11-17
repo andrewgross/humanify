@@ -30,6 +30,7 @@ pub mod prior;
 pub mod prior_tree;
 pub mod profiling;
 pub mod propagation;
+pub mod provenance;
 pub mod rename;
 pub mod similarity;
 pub mod toolchain;

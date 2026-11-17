@@ -2710,3 +2710,34 @@ fn a_commonjs_apps_entry_and_its_own_package_json_stay_in_the_app() {
         assert!(!body.contains("console.log"), "{body}");
     }
 }
+
+#[test]
+fn the_edit_map_reads_a_runtime_offset_back_to_its_raw_offset() {
+    use crate::unpack::bun::{EditMap, TextEdit, slice_with_edits};
+    let raw = "var a=1;var gone=function(){};var b=a+2;console.log(b);";
+    let edit = |find: &str, replacement: &str| {
+        let start = raw.find(find).unwrap();
+        TextEdit {
+            start,
+            end: start + find.len(),
+            replacement: replacement.to_string(),
+        }
+    };
+    let edits = [
+        edit("var gone=function(){};", ""),
+        edit("b=a", "total=a"),
+        edit("(b)", "(total)"),
+    ];
+    let runtime = slice_with_edits(raw, &edits, 0, raw.len());
+    assert_eq!(runtime, "var a=1;var total=a+2;console.log(total);");
+    let map = EditMap::new(&edits);
+    assert_eq!(map.raw_of(runtime.len() - 1), raw.len() - 1);
+    for needle in ["var a=1", "+2", "console"] {
+        let at = runtime.find(needle).unwrap();
+        assert_eq!(map.raw_of(at), raw.find(needle).unwrap(), "{needle}");
+    }
+    assert_eq!(
+        map.raw_of(runtime.find("otal=").unwrap()),
+        raw.find("b=a").unwrap()
+    );
+}

@@ -25,6 +25,7 @@ pub const DIAGNOSTIC_ONLY: &[&str] = &[
     ".humanify/placement-stats.json",
     ".humanify/stage-hashes.json",
     ".humanify/library-report.json",
+    ".humanify/provenance.json",
 ];
 
 fn excludes() -> Vec<String> {

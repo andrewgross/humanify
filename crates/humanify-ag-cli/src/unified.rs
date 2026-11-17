@@ -331,6 +331,7 @@ fn pipeline_body(
     )
     .map_err(|e| Crash(format!("cannot link the input {input}: {e}")))?;
     let input_link = input_bundle.link.clone();
+    let input_link_map = input_bundle.link_map;
     if let Some(link) = &input_link {
         renderer.message(&format!(
             "Input: a Bun code-split layout, {} chunks linked into one program \
@@ -461,6 +462,7 @@ fn pipeline_body(
                     input,
                     bundled_code: &bundled_code,
                     input_link: input_link.as_ref(),
+                    input_link_map: input_link_map.as_ref(),
                     toolchain,
                     markers,
                     prior: &prior,
@@ -484,6 +486,7 @@ fn pipeline_body(
         outcome,
         fresh,
         path,
+        ..
     }) = &last
     {
         let _ph = phase("reports");
@@ -653,6 +656,7 @@ struct BuildInputs<'a> {
     input: &'a str,
     bundled_code: &'a str,
     input_link: Option<&'a humanify_ag_core::unpack::chunk_link::LinkReport>,
+    input_link_map: Option<&'a humanify_ag_core::unpack::chunk_link::LinkMap>,
     toolchain: Toolchain,
     markers: MarkerOffer,
     prior: &'a crate::prior_tree::PriorInputs,
@@ -695,6 +699,7 @@ fn build_tree(
         input,
         bundled_code,
         input_link,
+        input_link_map,
         toolchain,
         markers,
         prior,
@@ -818,7 +823,7 @@ fn build_tree(
             outcome,
             path: source,
             fresh,
-            ..
+            origins,
         }) = &last
         && let Some(code) = &outcome.code
     {
@@ -831,6 +836,11 @@ fn build_tree(
             Crash("no working directory: the config was not read from a process".into())
         })?;
         let mut split = crate::split_stage::SplitStageInput {
+            provenance: crate::split_stage::ProvenanceInput {
+                link: input_link_map,
+                unpack: unpacked.origins.as_ref(),
+                origins,
+            },
             embedded_files: input_link.as_ref().map_or(&[], |l| l.embedded.as_slice()),
             input_file: Path::new(input),
             working_dir,
@@ -1426,6 +1436,8 @@ struct NamedFile {
     outcome: NamingOutcome,
     path: std::path::PathBuf,
     fresh: String,
+    /// `(offset in fresh, offset in the unpacked file)` per statement.
+    origins: Vec<(u32, u32)>,
 }
 
 /// Stages 6-9 per processed file (unminify's plugin loop): the formatted
@@ -1497,7 +1509,7 @@ impl NamingRun<'_> {
             let bridge = self
                 .era_bridge
                 .filter(|b| file.path.ends_with(&b.runtime_file));
-            let formatted = self.format_one(&code, &file.path, bridge.is_some())?;
+            let formatted = self.format_one(&code, &file.path, true)?;
             let library = formatted
                 .library_carry
                 .map(humanify_ag_core::libdetect::function_carry::LibraryClassification::Carried);
@@ -1520,6 +1532,7 @@ impl NamingRun<'_> {
                     outcome,
                     path: file.path.clone(),
                     fresh: formatted.text,
+                    origins: formatted.statement_origins,
                 });
             }
         }

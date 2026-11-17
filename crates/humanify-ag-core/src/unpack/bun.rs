@@ -266,9 +266,19 @@ impl Default for BunUnpackOptions<'_> {
     }
 }
 
+/// Where the unpacked files' bytes sit in the text the adapter read.
+pub struct UnpackOrigins {
+    /// Runtime-file offsets back to that text.
+    pub runtime: EditMap,
+    /// Each vendored factory's declaration span in that text, and its file.
+    pub vendor: Vec<((u32, u32), String)>,
+}
+
 /// What the Bun adapter did, beyond the files.
 pub struct BunUnpackOutcome {
     pub result: UnpackResult,
+    /// `None`: the one-file floor, whose file is the text itself.
+    pub origins: Option<UnpackOrigins>,
     /// The written manifest — None when the adapter fell back to a single
     /// `index.js` (no factory helper, or no extractable factory).
     pub manifest: Option<BunModulesManifest>,
@@ -431,6 +441,7 @@ pub fn unpack_bun(
     let floor = |code: &str, tree: &mut OutputTree| -> Result<BunUnpackOutcome, BunError> {
         Ok(BunUnpackOutcome {
             result: write_passthrough(code, tree),
+            origins: None,
             manifest: None,
             name_counts: None,
             llm_renamed: 0,
@@ -741,6 +752,10 @@ pub fn unpack_bun(
     // container's own edits (the unspliced wrappers' renames) apply.
     all_edits.extend(restoration.edits.iter().cloned());
     let runtime = slice_with_edits(code, &all_edits, 0, code.len());
+    let origins = UnpackOrigins {
+        runtime: EditMap::new(&all_edits),
+        vendor: factory_files.clone(),
+    };
     let era_bridge = classification
         .as_ref()
         .filter(|_| {
@@ -810,6 +825,7 @@ pub fn unpack_bun(
 
     Ok(BunUnpackOutcome {
         result: UnpackResult { files },
+        origins: Some(origins),
         manifest: Some(manifest),
         name_counts,
         llm_renamed,
@@ -1648,6 +1664,31 @@ impl EditMap {
             return if end { at + len } else { at };
         }
         (p as i64 + self.delta[k]) as usize
+    }
+
+    /// The raw offset of output offset `out`; an offset inside a
+    /// replacement reads as the start of the range it replaced.
+    pub fn raw_of(&self, out: usize) -> usize {
+        let starts_before = |k: usize| (self.applied[k].0 as i64 + self.delta[k]) as usize <= out;
+        let (mut lo, mut hi) = (0, self.applied.len());
+        while lo < hi {
+            let mid = (lo + hi) / 2;
+            if starts_before(mid) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        let Some(k) = lo.checked_sub(1) else {
+            return out;
+        };
+        let (start, _, len) = self.applied[k];
+        let out_start = (start as i64 + self.delta[k]) as usize;
+        if out < out_start + len {
+            start
+        } else {
+            (out as i64 - self.delta[k + 1]) as usize
+        }
     }
 
     pub fn map_span(&self, span: (u32, u32)) -> (u32, u32) {

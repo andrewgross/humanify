@@ -184,6 +184,8 @@ pub struct SplitOutcome {
     pub aliases: Vec<(String, String, String)>,
     /// Per statement: span in the shipped text.
     pub spans: Vec<(u32, u32)>,
+    /// Where each runnable file's statements sit (empty: a review tree).
+    pub lines: Vec<super::cjs::FileLines>,
     pub facts: Vec<LoadOrderFacts>,
     /// The vendor captures RESOLVED to (raw name, owner file, live
     /// accessor name) — what the finishing stage's vendor bridge splices
@@ -454,6 +456,7 @@ pub fn stable_split(
         layout: Vec::new(),
         aliases: Vec::new(),
         spans: input.spans.clone(),
+        lines: Vec::new(),
         facts: Vec::new(),
         vendor_bridges,
         cycle_moves,
@@ -469,6 +472,7 @@ pub fn stable_split(
             }
             outcome.runnable = Some(tree.files.iter().map(|(p, _)| p.clone()).collect());
             outcome.files = tree.files;
+            outcome.lines = tree.lines;
             // The dump's emit.json is `captureRunnableEmitLayout`'s, which
             // runs inside `recordEmittedLayout` — past its `--disable
             // emit-align` return, so the review capture stays then.

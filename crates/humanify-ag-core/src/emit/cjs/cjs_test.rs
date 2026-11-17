@@ -529,3 +529,34 @@ fn the_entry_keeps_the_prior_order_except_for_load_time_effects() {
         ["e.js", "c.js", "b.js", "a.js", "d.js"]
     );
 }
+
+#[test]
+fn every_emitted_file_records_the_lines_of_each_statement() {
+    let mut code = String::from("(function (exports, require, module) {\n");
+    code.push_str("  var helperH = function () {\n    return 41;\n  };\n");
+    code.push_str("  var valueB = helperH();\n");
+    code.push_str("  console.log(\"value \" + (valueB + 1));\n");
+    let mut order = vec!["a.js", "b.js", "b.js"];
+    for i in 0..55 {
+        code.push_str(&format!("  var pad{i:02} = {i};\n"));
+        order.push("a.js");
+    }
+    code.push_str("});\n");
+    let tree = emit_tree(&code, &order);
+    assert_eq!(tree.lines.len(), 2);
+    for lines in &tree.lines {
+        let text = &tree.files.iter().find(|(p, _)| *p == lines.path).unwrap().1;
+        assert_eq!(
+            lines.total() as usize,
+            text.lines().count(),
+            "{}",
+            lines.path
+        );
+    }
+    let a = tree.lines.iter().find(|l| l.path == "a.js").unwrap();
+    assert_eq!(a.statements[0], (0, 3));
+    let b = tree.lines.iter().find(|l| l.path == "b.js").unwrap();
+    let text = &tree.files.iter().find(|(p, _)| p == "b.js").unwrap().1;
+    let first = text.lines().nth(b.header_lines as usize).unwrap();
+    assert_eq!(first, "var valueB = (0, a.helperH)();", "{text}");
+}

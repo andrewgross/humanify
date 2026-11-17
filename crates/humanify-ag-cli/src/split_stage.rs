@@ -42,7 +42,15 @@ use crate::writers::{
 use humanify_ag_core::output_tree::OutputTree;
 
 /// What the split stage is given.
+/// What the stages before the split recorded for the provenance file.
+pub struct ProvenanceInput<'a> {
+    pub link: Option<&'a humanify_ag_core::unpack::chunk_link::LinkMap>,
+    pub unpack: Option<&'a humanify_ag_core::unpack::bun::UnpackOrigins>,
+    pub origins: &'a [(u32, u32)],
+}
+
 pub struct SplitStageInput<'a> {
+    pub provenance: ProvenanceInput<'a>,
     /// The embedded files the linked input reads by path (exp217): the
     /// runnable tree's `embedded/`.
     pub embedded_files: &'a [humanify_ag_core::unpack::chunk_link::EmbeddedFile],
@@ -456,6 +464,41 @@ fn report_namer(namer: &ProviderSplitNamer<'_>, renderer: &mut dyn ProgressRende
     ));
 }
 
+fn write_provenance(
+    code: &str,
+    outcome: &SplitOutcome,
+    input: &SplitStageInput<'_>,
+    tree: &mut OutputTree,
+) -> Result<(), humanify_ag_core::provenance::ProvenanceError> {
+    use humanify_ag_core::provenance::{PROVENANCE_PATH, Sources, provenance_json};
+    let (Some(fresh), false) = (input.fresh, outcome.lines.is_empty()) else {
+        return Ok(());
+    };
+    let input_name = input
+        .input_file
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let sources = Sources {
+        link: input.provenance.link,
+        input_name: &input_name,
+        unpack: input.provenance.unpack,
+        fresh,
+        origins: input.provenance.origins,
+        shipped: code,
+        spans: &outcome.spans,
+    };
+    let root = tree.root().to_path_buf();
+    let line_count = |path: &str| {
+        tree.read(&root.join(path)).map_or(0, |bytes| {
+            bytes.iter().filter(|b| **b == b'\n').count() as u32
+        })
+    };
+    let text = provenance_json(&sources, &outcome.lines, &line_count)?;
+    tree.put_rel(PROVENANCE_PATH, text);
+    Ok(())
+}
+
 /// A failure after the commit point (committing into the in-memory tree
 /// cannot fail).
 struct PostCommit(String);
@@ -533,6 +576,7 @@ fn commit_and_finish(
         renderer.message(m);
     }
     let (relinked, reconciled) = finished.map_err(|e| PostCommit(e.to_string()))?;
+    write_provenance(code, outcome, input, tree).map_err(|e| PostCommit(e.to_string()))?;
     if let Some(names) = report.library_names.take() {
         post_split.trail = names.trail;
     }

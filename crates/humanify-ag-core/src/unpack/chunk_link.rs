@@ -124,6 +124,50 @@ impl LinkReport {
     }
 }
 
+/// A run of the linked text copied unedited from a chunk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LinkRun {
+    pub out: u32,
+    pub chunk: u32,
+    pub src: u32,
+    pub len: u32,
+}
+
+/// The linked text written for one chunk, the linker's own text included.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChunkSpan {
+    pub out: u32,
+    pub end: u32,
+    pub chunk: u32,
+}
+
+/// Which chunk bytes each part of the linked text came from.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LinkMap {
+    /// Chunk file names, entry first; `LinkRun::chunk` indexes this.
+    pub files: Vec<String>,
+    /// Sorted by `out`.
+    pub runs: Vec<LinkRun>,
+    /// Sorted by `out`.
+    pub spans: Vec<ChunkSpan>,
+}
+
+impl LinkMap {
+    /// The chunk a linked offset belongs to, and its offset in that chunk
+    /// when the byte was copied from it (`None`: the linker wrote it).
+    pub fn source_of(&self, at: u32) -> Option<(u32, Option<u32>)> {
+        let i = self.runs.partition_point(|r| r.out <= at);
+        if let Some(r) = i.checked_sub(1).map(|i| self.runs[i])
+            && at < r.out + r.len
+        {
+            return Some((r.chunk, Some(r.src + (at - r.out))));
+        }
+        let i = self.spans.partition_point(|s| s.out <= at);
+        let span = self.spans[i.checked_sub(1)?];
+        (at < span.end).then_some((span.chunk, None))
+    }
+}
+
 /// Is this file a Bun code-split entry: an ESM file under Bun's pragma
 /// (`// @bun`, not the CommonJS `@bun-cjs`) that imports at least one
 /// `/$bunfs/root/` sibling present beside it? The pragma and specifier
@@ -152,7 +196,10 @@ fn sibling_specifiers(text: &str) -> Vec<&str> {
 
 /// Link the layout whose entry is `entry` (see the module doc), its
 /// files read through `disk`.
-pub fn link(entry: &Path, disk: &dyn FolderReader) -> Result<(String, LinkReport), LinkError> {
+pub fn link(
+    entry: &Path,
+    disk: &dyn FolderReader,
+) -> Result<(String, LinkReport, LinkMap), LinkError> {
     let mut loader = Loader::new(entry, disk);
     let mut chunks: Vec<Chunk> = Vec::new();
     while let Some(path) = loader.queue.get(chunks.len()).cloned() {
@@ -164,7 +211,7 @@ pub fn link(entry: &Path, disk: &dyn FolderReader) -> Result<(String, LinkReport
     let needs_ns = namespaces_needed(&chunks);
     let names = names::assign(&chunks, &order, &needs_init, &needs_ns)?;
     let embedded = embedded::resolve(&chunks, &loader.dir, disk)?;
-    let text = emit::program(&emit::Plan {
+    let (text, runs, spans) = emit::program(&emit::Plan {
         chunks: &chunks,
         order: &order,
         placement: &placement,
@@ -193,7 +240,17 @@ pub fn link(entry: &Path, disk: &dyn FolderReader) -> Result<(String, LinkReport
         bun_module_paths: embedded.bun_module_paths,
         embedded: embedded.files,
     };
-    Ok((text, report))
+    let files = chunks
+        .iter()
+        .map(|c| match c.path.strip_prefix(&loader.dir) {
+            Ok(rel) => Ok(rel.to_string_lossy().into_owned()),
+            Err(_) => Err(LinkError::Refused {
+                path: c.path.clone(),
+                what: "a linked file outside the input folder",
+            }),
+        })
+        .collect::<Result<_, _>>()?;
+    Ok((text, report, LinkMap { files, runs, spans }))
 }
 
 /// Chunks something loads lazily or imports as a namespace.
