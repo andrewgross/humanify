@@ -39,8 +39,8 @@ fn key(name: &str) -> String {
 #[derive(Default)]
 struct Buf {
     text: String,
-    /// `(offset in text, offset in the chunk, length)`.
-    runs: Vec<(u32, u32, u32)>,
+    /// `(offset in text, offset in the chunk, length, edited)`.
+    runs: Vec<(u32, u32, u32, bool)>,
 }
 
 impl Buf {
@@ -48,10 +48,23 @@ impl Buf {
         self.text.push_str(s);
     }
 
+    /// Linker text that stands for the chunk bytes at `src`.
+    fn lit_at(&mut self, s: &str, src: usize) {
+        if !s.is_empty() {
+            self.runs
+                .push((self.text.len() as u32, src as u32, s.len() as u32, true));
+        }
+        self.text.push_str(s);
+    }
+
     fn copy(&mut self, text: &str, from: usize, to: usize) {
         if to > from {
-            self.runs
-                .push((self.text.len() as u32, from as u32, (to - from) as u32));
+            self.runs.push((
+                self.text.len() as u32,
+                from as u32,
+                (to - from) as u32,
+                false,
+            ));
             self.text.push_str(&text[from..to]);
         }
     }
@@ -62,7 +75,7 @@ impl Buf {
         let mut pos = range.0;
         for e in edits[lo..].iter().take_while(|e| e.start < range.1) {
             self.copy(text, pos, e.start);
-            self.lit(&e.text);
+            self.lit_at(&e.text, e.start);
             pos = e.end;
         }
         self.copy(text, pos, range.1);
@@ -71,7 +84,7 @@ impl Buf {
     fn append(&mut self, other: Buf) {
         let base = self.text.len() as u32;
         self.runs
-            .extend(other.runs.iter().map(|r| (r.0 + base, r.1, r.2)));
+            .extend(other.runs.iter().map(|r| (r.0 + base, r.1, r.2, r.3)));
         self.text.push_str(&other.text);
     }
 }
@@ -120,6 +133,7 @@ pub(super) fn program(
             chunk: c as u32,
             src: r.1,
             len: r.2,
+            edited: r.3,
         }));
         out.push_str(&buf.text);
         spans.push(ChunkSpan {
@@ -351,10 +365,10 @@ fn statement(
             let d = plan.names.name(Target::Default(c));
             let value = if moved {
                 top.lit(&format!("var {d};"));
-                init.lit(&format!("{d}="));
+                init.lit_at(&format!("{d}="), expr.start as usize);
                 init
             } else {
-                top.lit(&format!("var {d}="));
+                top.lit_at(&format!("var {d}="), expr.start as usize);
                 top
             };
             out.span(value, *expr);
@@ -377,7 +391,7 @@ fn statement(
                 top.lit(&format!("var {};", names.join(",")));
             }
             for (k, (d, _)) in kept.iter().enumerate() {
-                top.lit(if k == 0 { "var " } else { "," });
+                top.lit_at(if k == 0 { "var " } else { "," }, d.pattern.start as usize);
                 declarator(d, out, top);
             }
             if !kept.is_empty() {
@@ -397,7 +411,7 @@ fn statement(
         StmtKind::Class { name: sym, .. } => {
             let n = name(*sym);
             top.lit(&format!("var {n};"));
-            init.lit(&format!("{n}="));
+            init.lit_at(&format!("{n}="), st.span.start as usize);
             out.span(init, st.span);
             init.lit(";");
         }
@@ -418,7 +432,7 @@ fn assignment(d: &Declarator, out: &Out<'_>, buf: &mut Buf) {
         return;
     };
     if !d.simple {
-        buf.lit("(");
+        buf.lit_at("(", d.pattern.start as usize);
     }
     out.span(buf, d.pattern);
     buf.lit("=");

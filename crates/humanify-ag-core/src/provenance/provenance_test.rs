@@ -41,12 +41,14 @@ fn each_statement_line_reads_back_to_its_input_byte() {
                 chunk: 0,
                 src: 10,
                 len: 50,
+                edited: false,
             },
             LinkRun {
                 out: 200,
                 chunk: 1,
                 src: 0,
                 len: 50,
+                edited: false,
             },
         ],
         spans: vec![

@@ -131,6 +131,8 @@ pub struct LinkRun {
     pub chunk: u32,
     pub src: u32,
     pub len: u32,
+    /// The linker's text for the chunk bytes at `src`, not a copy.
+    pub edited: bool,
 }
 
 /// The linked text written for one chunk, the linker's own text included.
@@ -160,7 +162,8 @@ impl LinkMap {
         if let Some(r) = i.checked_sub(1).map(|i| self.runs[i])
             && at < r.out + r.len
         {
-            return Some((r.chunk, Some(r.src + (at - r.out))));
+            let within = if r.edited { 0 } else { at - r.out };
+            return Some((r.chunk, Some(r.src + within)));
         }
         let i = self.spans.partition_point(|s| s.out <= at);
         let span = self.spans[i.checked_sub(1)?];

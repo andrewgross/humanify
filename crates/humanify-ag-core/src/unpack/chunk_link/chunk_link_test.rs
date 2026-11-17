@@ -921,7 +921,7 @@ console.log(main());import(\"/$bunfs/root/chunk-b.js\").then((m)=>console.log(m.
     let (text, _, map) = link(&entry, &Disk).unwrap();
     assert_eq!(run(&text), "42\n7\n");
     assert_eq!(map.files, ["index.js", "chunk-a.js", "chunk-b.js"]);
-    for r in &map.runs {
+    for r in map.runs.iter().filter(|r| !r.edited) {
         let chunk = &files[r.chunk as usize].1;
         let (out, src, len) = (r.out as usize, r.src as usize, r.len as usize);
         assert_eq!(text[out..out + len], chunk[src..src + len]);
@@ -937,6 +937,9 @@ console.log(main());import(\"/$bunfs/root/chunk-b.js\").then((m)=>console.log(m.
     assert_eq!(at("return k"), in_chunk(2, "return k"));
     assert_eq!(at("return new C"), in_chunk(2, "return new C"));
     assert_eq!(at("console.log(main"), in_chunk(0, "console.log(main"));
+    let renamed = map.source_of(text.find("()+1").unwrap() as u32 - 1);
+    assert_eq!(renamed, in_chunk(0, "x()+1"));
+    assert_eq!(at("=class"), in_chunk(2, "class C"));
     assert_eq!(at("// @bun"), None);
     let init = text.find("=7").unwrap() as u32;
     assert_eq!(map.source_of(init - 1).map(|s| s.0), Some(2));
