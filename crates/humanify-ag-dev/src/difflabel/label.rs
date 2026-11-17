@@ -17,15 +17,20 @@ pub enum Label {
     Renamed,
     Reshaped,
     NotInOtherTree,
-    Require,
+    RequireMoved,
+    RequireRenamed,
+    RequireEdge,
     Export,
     PipelineWritten,
-    LinkerWritten,
+    LinkerMoved,
+    LinkerRenamed,
+    LinkerChanged,
+    LinkerUnpaired,
     NoProvenance,
 }
 
 impl Label {
-    pub const ALL: [Label; 13] = [
+    pub const ALL: [Label; 18] = [
         Label::InputChanged,
         Label::InputDuplicate,
         Label::InputOutsideUnits,
@@ -34,10 +39,15 @@ impl Label {
         Label::Renamed,
         Label::Reshaped,
         Label::NotInOtherTree,
-        Label::Require,
+        Label::RequireMoved,
+        Label::RequireRenamed,
+        Label::RequireEdge,
         Label::Export,
         Label::PipelineWritten,
-        Label::LinkerWritten,
+        Label::LinkerMoved,
+        Label::LinkerRenamed,
+        Label::LinkerChanged,
+        Label::LinkerUnpaired,
         Label::NoProvenance,
     ];
 
@@ -84,10 +94,20 @@ impl Label {
                 "noise",
                 "unchanged input the other tree has no located lines for",
             ),
-            Label::Require => (
-                "require-line",
+            Label::RequireMoved => (
+                "require-moved",
+                "noise",
+                "a require line the file has on both sides, at another position",
+            ),
+            Label::RequireRenamed => (
+                "require-renamed",
+                "noise",
+                "a require of the same module under another local name",
+            ),
+            Label::RequireEdge => (
+                "require-edge",
                 "wiring",
-                "a require line the pipeline wrote",
+                "a require of a module the file does not require on the other side",
             ),
             Label::Export => ("export-line", "wiring", "an export line the pipeline wrote"),
             Label::PipelineWritten => (
@@ -95,10 +115,25 @@ impl Label {
                 "wiring",
                 "other text the pipeline wrote (headers, glue)",
             ),
-            Label::LinkerWritten => (
-                "linker-written",
-                "wiring",
-                "text the chunk linker wrote in place of imports and exports",
+            Label::LinkerMoved => (
+                "linker-moved",
+                "noise",
+                "linker text the paired input file also has, at another position",
+            ),
+            Label::LinkerRenamed => (
+                "linker-renamed",
+                "noise",
+                "linker text the paired input file has with other identifiers",
+            ),
+            Label::LinkerChanged => (
+                "linker-changed",
+                "real",
+                "linker text the paired input file has no counterpart for: its imports or declarations changed",
+            ),
+            Label::LinkerUnpaired => (
+                "linker-unpaired",
+                "unknown",
+                "linker text of an input file that has no paired file in the other version",
             ),
             Label::NoProvenance => (
                 "no-provenance",
@@ -133,6 +168,11 @@ pub struct Labeller<'a> {
     /// Per side (from, to), per pair.
     unit_lines: [UnitLines<'a>; 2],
     sets: RefCell<BTreeMap<(bool, u32), LineSet<'a>>>,
+    /// Per side, per input file.
+    linker_lines: [BTreeMap<u32, Vec<Place<'a>>>; 2],
+    /// Per side and group (an input file's linker text, an output file's
+    /// require lines): how each of its lines is found on the other side.
+    wiring: RefCell<BTreeMap<(bool, String), BTreeMap<Place<'a>, Found>>>,
 }
 
 /// The line with every identifier-like word replaced by `$`.
@@ -156,6 +196,18 @@ fn masked(line: &str) -> String {
     out
 }
 
+fn masked_owned(line: &str) -> String {
+    masked(line)
+}
+
+/// The other tree's require lines of a path it may not have.
+fn require_lines_in<'a>(tree: &'a Tree, path: &str) -> Vec<Place<'a>> {
+    match tree.files_with_rows().find(|p| *p == path) {
+        Some(own) => require_lines(tree, own),
+        None => Vec::new(),
+    }
+}
+
 fn wiring(text: &str) -> Label {
     let text = text.trim_start();
     let declares = ["const ", "var ", "let "]
@@ -168,7 +220,7 @@ fn wiring(text: &str) -> Label {
         "Object.defineProperty(exports",
     ];
     if declares && text.contains("= require(") {
-        Label::Require
+        Label::RequireEdge
     } else if exports.iter().any(|e| text.starts_with(e)) {
         Label::Export
     } else {
@@ -179,23 +231,109 @@ fn wiring(text: &str) -> Label {
 fn unit_lines<'a>(tree: &'a Tree, side: &Side) -> UnitLines<'a> {
     let mut out = UnitLines::new();
     for path in tree.files_with_rows() {
-        let rows = tree.rows(path);
-        let end = tree.line_count(path).map_or(0, |n| n + 1);
-        for (i, (first, origin)) in rows.iter().enumerate() {
-            let Origin::At(file, offset) = *origin else {
+        for (line, origin) in tree.lines_with_origin(path) {
+            let Origin::At(file, offset) = origin else {
                 continue;
             };
-            let Standing::Unchanged(pair) = side.at(tree.input_name(file), offset) else {
-                continue;
-            };
-            let next = rows.get(i + 1).map_or(end, |r| r.0);
-            out.entry(pair)
-                .or_default()
-                .extend((*first..next).map(|line| UnitLine { offset, path, line }));
+            if let Standing::Unchanged(pair) = side.at(tree.input_name(file), offset) {
+                out.entry(pair)
+                    .or_default()
+                    .push(UnitLine { offset, path, line });
+            }
         }
     }
     out.values_mut().for_each(|lines| lines.sort_unstable());
     out
+}
+
+type Place<'a> = (&'a str, u32);
+
+/// Per input file, the lines the linker wrote for it.
+fn linker_lines(tree: &Tree) -> BTreeMap<u32, Vec<Place<'_>>> {
+    let mut out: BTreeMap<u32, Vec<Place<'_>>> = BTreeMap::new();
+    for path in tree.files_with_rows() {
+        for (line, origin) in tree.lines_with_origin(path) {
+            if let Origin::Linker(file) = origin {
+                out.entry(file).or_default().push((path, line));
+            }
+        }
+    }
+    out
+}
+
+/// A file's require lines.
+fn require_lines<'a>(tree: &'a Tree, path: &'a str) -> Vec<Place<'a>> {
+    tree.lines_with_origin(path)
+        .filter(|(line, origin)| {
+            let text = tree.line(path, *line).unwrap_or("");
+            *origin == Origin::Pipeline && wiring(text) == Label::RequireEdge
+        })
+        .map(|(line, _)| (path, line))
+        .collect()
+}
+
+/// What a require line loads.
+fn require_target(text: &str) -> String {
+    text.split_once("require(")
+        .map_or("", |(_, rest)| rest)
+        .to_string()
+}
+
+/// How a line of one side is found on the other.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Found {
+    SameText,
+    SameKey,
+    Missing,
+}
+
+fn counts<'t>(items: impl Iterator<Item = &'t str>) -> BTreeMap<&'t str, u32> {
+    let mut out = BTreeMap::new();
+    for item in items {
+        *out.entry(item).or_default() += 1;
+    }
+    out
+}
+
+/// Per line of `mine` (`(text, key)`): whether the other side has a line
+/// of that text left for it, else one of that key.
+fn match_lines(mine: &[(&str, String)], theirs: &[(&str, String)]) -> Vec<Found> {
+    let their_texts = counts(theirs.iter().map(|l| l.0));
+    let my_texts = counts(mine.iter().map(|l| l.0));
+    let unmatched = |lines: &[(&str, String)], other: &BTreeMap<&str, u32>| -> Vec<bool> {
+        let mut seen: BTreeMap<&str, u32> = BTreeMap::new();
+        let mut left = Vec::with_capacity(lines.len());
+        for line in lines {
+            let n = seen.entry(line.0).or_default();
+            *n += 1;
+            left.push(*n > other.get(line.0).copied().unwrap_or(0));
+        }
+        left
+    };
+    let (mine_left, theirs_left) = (unmatched(mine, &their_texts), unmatched(theirs, &my_texts));
+    let their_keys = counts(
+        theirs
+            .iter()
+            .zip(&theirs_left)
+            .filter(|(_, left)| **left)
+            .map(|(l, _)| l.1.as_str()),
+    );
+    let mut seen: BTreeMap<&str, u32> = BTreeMap::new();
+    mine.iter()
+        .zip(mine_left)
+        .map(|(line, left)| {
+            if !left {
+                return Found::SameText;
+            }
+            let n = seen.entry(line.1.as_str()).or_default();
+            *n += 1;
+            if *n <= their_keys.get(line.1.as_str()).copied().unwrap_or(0) {
+                Found::SameKey
+            } else {
+                Found::Missing
+            }
+        })
+        .collect()
 }
 
 fn compare(mine: &str, theirs: &str, same_path: bool) -> Label {
@@ -220,6 +358,8 @@ impl<'a> Labeller<'a> {
             to,
             unit_lines: [unit_lines(from, &truth.from), unit_lines(to, &truth.to)],
             sets: RefCell::new(BTreeMap::new()),
+            linker_lines: [linker_lines(from), linker_lines(to)],
+            wiring: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -288,6 +428,90 @@ impl<'a> Labeller<'a> {
         }
     }
 
+    fn keyed(
+        &self,
+        to_side: bool,
+        lines: &[Place<'a>],
+        key: fn(&str) -> String,
+    ) -> Vec<(&'a str, String)> {
+        let text = |place: &Place<'a>| self.tree(to_side).line(place.0, place.1).unwrap_or("");
+        lines.iter().map(|p| (text(p), key(text(p)))).collect()
+    }
+
+    /// How a wiring line is found on the other side, among its group's
+    /// lines there.
+    fn found(
+        &self,
+        to_side: bool,
+        group: String,
+        at: Place<'a>,
+        lines: impl FnOnce() -> (Vec<Place<'a>>, Vec<Place<'a>>),
+        key: fn(&str) -> String,
+    ) -> Found {
+        let mut wiring = self.wiring.borrow_mut();
+        let found = wiring.entry((to_side, group)).or_insert_with(|| {
+            let (mine, theirs) = lines();
+            let matched = match_lines(
+                &self.keyed(to_side, &mine, key),
+                &self.keyed(!to_side, &theirs, key),
+            );
+            mine.into_iter().zip(matched).collect()
+        });
+        found.get(&at).copied().unwrap_or(Found::Missing)
+    }
+
+    fn linker(&self, to_side: bool, file: u32, at: Place<'a>) -> Label {
+        let side = usize::from(to_side);
+        let name = self.tree(to_side).input_name(file);
+        let lines = || {
+            let partner = self
+                .truth
+                .paired_file(to_side, name)
+                .and_then(|other| self.tree(!to_side).input_index(other));
+            let of = |side: usize, file: Option<u32>| {
+                file.and_then(|f| self.linker_lines[side].get(&f))
+                    .cloned()
+                    .unwrap_or_default()
+            };
+            (of(side, Some(file)), of(1 - side, partner))
+        };
+        if self.truth.paired_file(to_side, name).is_none() {
+            return Label::LinkerUnpaired;
+        }
+        match self.found(to_side, format!("linker {name}"), at, lines, masked_owned) {
+            Found::SameText => Label::LinkerMoved,
+            Found::SameKey => Label::LinkerRenamed,
+            Found::Missing => Label::LinkerChanged,
+        }
+    }
+
+    fn require(&self, to_side: bool, at: Place<'a>) -> Label {
+        let lines = || {
+            (
+                require_lines(self.tree(to_side), at.0),
+                require_lines_in(self.tree(!to_side), at.0),
+            )
+        };
+        match self.found(
+            to_side,
+            format!("require {}", at.0),
+            at,
+            lines,
+            require_target,
+        ) {
+            Found::SameText => Label::RequireMoved,
+            Found::SameKey => Label::RequireRenamed,
+            Found::Missing => Label::RequireEdge,
+        }
+    }
+
+    fn pipeline(&self, to_side: bool, at: Place<'a>) -> Label {
+        match wiring(self.tree(to_side).line(at.0, at.1).unwrap_or("")) {
+            Label::RequireEdge => self.require(to_side, at),
+            other => other,
+        }
+    }
+
     /// The label of one line (1-based) of a file of one tree.
     pub fn label(&self, to_side: bool, path: &'a str, line: u32) -> Label {
         let tree = self.tree(to_side);
@@ -298,8 +522,8 @@ impl<'a> Labeller<'a> {
         };
         match tree.origin(path, line) {
             None => Label::NoProvenance,
-            Some(Origin::Pipeline) => wiring(tree.line(path, line).unwrap_or("")),
-            Some(Origin::Linker(_)) => Label::LinkerWritten,
+            Some(Origin::Pipeline) => self.pipeline(to_side, (path, line)),
+            Some(Origin::Linker(file)) => self.linker(to_side, file, (path, line)),
             Some(Origin::At(file, offset)) => match side.at(tree.input_name(file), offset) {
                 Standing::Unchanged(pair) => {
                     self.unchanged(to_side, pair, UnitLine { offset, path, line })

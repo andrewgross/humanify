@@ -63,3 +63,66 @@ fn a_byte_outside_every_unit_or_in_an_unknown_file_says_so() {
     assert_eq!(t.from.at("a.js", 2), Standing::OutsideUnits);
     assert_eq!(t.from.at("b.js", 2), Standing::UnknownFile);
 }
+
+#[test]
+fn an_input_file_is_paired_with_the_file_holding_most_of_its_unchanged_units() {
+    let t = Truth::compare(
+        vec![
+            InputFile::parse(
+                "chunk-a.js",
+                "function a(x){return x+1}function b(y){return y*2}",
+            ),
+            InputFile::parse("chunk-b.js", "function c(z){return z-7}"),
+        ],
+        vec![
+            InputFile::parse(
+                "chunk-q.js",
+                "function a(x){return x+1}function b(y){return y*2}",
+            ),
+            InputFile::parse("chunk-r.js", "function n(w){return w/9}"),
+        ],
+    );
+    assert_eq!(t.paired_file(false, "chunk-a.js"), Some("chunk-q.js"));
+    assert_eq!(t.paired_file(true, "chunk-q.js"), Some("chunk-a.js"));
+    assert_eq!(t.paired_file(false, "chunk-b.js"), None);
+    assert_eq!(t.paired_file(true, "chunk-r.js"), None);
+}
+
+#[test]
+fn files_with_only_duplicated_units_pair_by_the_texts_they_share() {
+    let twin = "function a(x){return x+1}";
+    let t = Truth::compare(
+        vec![
+            InputFile::parse("chunk-a.js", &format!("{twin}function b(y){{return y*2}}")),
+            InputFile::parse("chunk-b.js", twin),
+        ],
+        vec![
+            InputFile::parse("chunk-q.js", twin),
+            InputFile::parse("chunk-r.js", &format!("{twin}function b(y){{return y*2}}")),
+        ],
+    );
+    assert_eq!(t.paired_file(false, "chunk-a.js"), Some("chunk-r.js"));
+    assert_eq!(t.paired_file(false, "chunk-b.js"), Some("chunk-q.js"));
+}
+
+#[test]
+fn files_that_only_re_export_pair_by_their_export_names() {
+    let t = Truth::compare(
+        vec![
+            InputFile::parse(
+                "chunk-a.js",
+                "import{x,y}from\"./k.js\";export{x as ONE,y as TWO};",
+            ),
+            InputFile::parse("chunk-b.js", "import{z}from\"./k.js\";export{z as THREE};"),
+        ],
+        vec![
+            InputFile::parse("chunk-q.js", "import{p}from\"./m.js\";export{p as THREE};"),
+            InputFile::parse(
+                "chunk-r.js",
+                "import{q,r}from\"./m.js\";export{q as ONE,r as TWO};",
+            ),
+        ],
+    );
+    assert_eq!(t.paired_file(false, "chunk-a.js"), Some("chunk-r.js"));
+    assert_eq!(t.paired_file(false, "chunk-b.js"), Some("chunk-q.js"));
+}

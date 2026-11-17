@@ -47,7 +47,7 @@ fn a_line_of_unchanged_input_is_labelled_by_how_its_text_differs() {
     );
     let (truth, from) = (truth(), from_tree());
     let labeller = Labeller::new(&truth, &from, &to);
-    assert_eq!(labeller.label(true, "src/n.js", 1), Label::Require);
+    assert_eq!(labeller.label(true, "src/n.js", 1), Label::RequireEdge);
     assert_eq!(labeller.label(true, "src/n.js", 2), Label::Renamed);
     assert_eq!(labeller.label(true, "src/n.js", 3), Label::Reshaped);
     assert_eq!(labeller.label(true, "src/n.js", 4), Label::MovedFile);
@@ -96,4 +96,54 @@ fn an_unchanged_unit_the_other_tree_has_no_lines_for_says_so() {
     let labeller = Labeller::new(&truth, &from, &to);
     assert_eq!(labeller.label(false, "src/m.js", 3), Label::NotInOtherTree);
     assert_eq!(labeller.label(true, "src/m.js", 1), Label::PipelineWritten);
+}
+
+#[test]
+fn linker_text_is_matched_against_the_paired_chunks_linker_text() {
+    let from = tree(
+        &[(
+            "src/m.js",
+            "var a, b;\n(0, one.initOne)();\n(0, two.initTwo)();\nfunction alpha(x) {\n}\n",
+        )],
+        r#"{"src/m.js":[[1,0,null],[4,0,0]]}"#,
+    );
+    let to = tree(
+        &[(
+            "src/m.js",
+            "(0, uno.initUno)();\n(0, two.initTwo)();\n(0, three.initThree)();\nvar a, b;\nfunction alpha(x) {\n}\n",
+        )],
+        r#"{"src/m.js":[[1,0,null],[5,0,0]]}"#,
+    );
+    let truth = truth();
+    let labeller = Labeller::new(&truth, &from, &to);
+    assert_eq!(labeller.label(false, "src/m.js", 1), Label::LinkerMoved);
+    assert_eq!(labeller.label(false, "src/m.js", 2), Label::LinkerRenamed);
+    assert_eq!(labeller.label(true, "src/m.js", 1), Label::LinkerRenamed);
+    assert_eq!(labeller.label(true, "src/m.js", 2), Label::LinkerMoved);
+    assert_eq!(labeller.label(true, "src/m.js", 3), Label::LinkerChanged);
+}
+
+#[test]
+fn a_require_line_is_matched_against_the_same_files_require_lines() {
+    let from = tree(
+        &[(
+            "src/m.js",
+            "const one = require(\"./one.js\");\nconst two = require(\"./two.js\");\nconst gone = require(\"./gone.js\");\n",
+        )],
+        r#"{"src/m.js":[[1]]}"#,
+    );
+    let to = tree(
+        &[(
+            "src/m.js",
+            "const two = require(\"./two.js\");\nconst uno = require(\"./one.js\");\nconst fresh = require(\"./fresh.js\");\n",
+        )],
+        r#"{"src/m.js":[[1]]}"#,
+    );
+    let truth = truth();
+    let labeller = Labeller::new(&truth, &from, &to);
+    assert_eq!(labeller.label(false, "src/m.js", 1), Label::RequireRenamed);
+    assert_eq!(labeller.label(false, "src/m.js", 2), Label::RequireMoved);
+    assert_eq!(labeller.label(false, "src/m.js", 3), Label::RequireEdge);
+    assert_eq!(labeller.label(true, "src/m.js", 2), Label::RequireRenamed);
+    assert_eq!(labeller.label(true, "src/m.js", 3), Label::RequireEdge);
 }

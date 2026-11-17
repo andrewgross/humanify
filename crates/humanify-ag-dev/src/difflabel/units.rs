@@ -50,7 +50,13 @@ pub struct InputFile {
     pub name: String,
     /// Sorted by start, an enclosing unit first.
     pub units: Vec<Unit>,
+    /// The names its export statements give.
+    pub exports: Vec<String>,
     tokens: Vec<Token>,
+}
+
+pub fn name_key(name: &str) -> u128 {
+    u128::from(name_hash(name))
 }
 
 fn name_hash(name: &str) -> u64 {
@@ -146,6 +152,21 @@ fn collect(ingest: &Ingest<'_>) -> Collected {
     out
 }
 
+fn export_names(ingest: &Ingest<'_>) -> Vec<String> {
+    let mut out = Vec::new();
+    for statement in &ingest.program.body {
+        if let Statement::ExportNamedDeclaration(export) = statement {
+            out.extend(
+                export
+                    .specifiers
+                    .iter()
+                    .map(|s| s.exported.name().to_string()),
+            );
+        }
+    }
+    out
+}
+
 fn tokens_in(tokens: &[Token], start: u32, end: u32) -> &[Token] {
     let from = tokens.partition_point(|t| t.start < start);
     let to = tokens.partition_point(|t| t.start < end);
@@ -210,6 +231,7 @@ impl InputFile {
         InputFile {
             name: name.to_string(),
             units: with_parents(units),
+            exports: export_names(&ingest),
             tokens,
         }
     }

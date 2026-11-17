@@ -199,7 +199,7 @@ fn table(tally: &Tally) -> String {
     out
 }
 
-fn as_json(tally: &Tally, diff_total: u64, pairs: u32) -> String {
+fn as_json(tally: &Tally, diff_total: u64, truth: &Truth) -> String {
     let labels: BTreeMap<&str, serde_json::Value> = Label::ALL
         .iter()
         .map(|l| {
@@ -212,7 +212,8 @@ fn as_json(tally: &Tally, diff_total: u64, pairs: u32) -> String {
         .collect();
     format!(
         "{:#}\n",
-        json!({"changedLines": tally.total(), "diffSays": diff_total, "unchangedInputPairs": pairs, "labels": labels})
+        json!({"changedLines": tally.total(), "diffSays": diff_total, "unchangedInputPairs": truth.pairs,
+            "unpairedInputFiles": {"from": truth.unpaired_files(false), "to": truth.unpaired_files(true)}, "labels": labels})
     )
 }
 
@@ -244,12 +245,14 @@ pub fn run(
     let label_seconds = started.elapsed().as_secs_f64() - read_seconds;
     let diff_total = changed_lines_in_trees(trees.0, trees.1)?;
     if let Some(out) = out {
-        std::fs::write(out, as_json(&tally, diff_total, truth.pairs))
+        std::fs::write(out, as_json(&tally, diff_total, &truth))
             .map_err(|e| format!("{}: {e}", out.display()))?;
     }
+    let (paired, files_from, files_to) = truth.file_counts();
     let mut report = format!(
         "diff label: {} -> {}\nchanged lines: {} (diff -rN counts {diff_total})\n\
-         unchanged input pairs: {}; files that are not text, not compared: {not_text}\n\
+         unchanged input pairs: {}; input files paired: {paired} of {files_from} -> {files_to}; \
+         files that are not text, not compared: {not_text}\n\
          time: read and compare inputs {read_seconds:.1}s, diff and label {label_seconds:.1}s\n\n",
         trees.0.display(),
         trees.1.display(),

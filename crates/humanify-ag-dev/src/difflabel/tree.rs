@@ -129,6 +129,23 @@ impl Tree {
             .map_or("", String::as_str)
     }
 
+    pub fn input_index(&self, name: &str) -> Option<u32> {
+        let at = self.input_files.iter().position(|n| n == name)?;
+        Some(at as u32)
+    }
+
+    /// Every line of a file with its origin.
+    pub fn lines_with_origin<'a>(&'a self, path: &str) -> impl Iterator<Item = (u32, Origin)> + 'a {
+        let rows = self.rows(path);
+        let end = self.line_count(path).map_or(0, |n| n + 1);
+        rows.iter()
+            .enumerate()
+            .flat_map(move |(i, (first, origin))| {
+                let next = rows.get(i + 1).map_or(end, |r| r.0);
+                (*first..next).map(move |line| (line, *origin))
+            })
+    }
+
     /// A file's rows: `(first line, origin)`, each running to the next.
     pub fn rows(&self, path: &str) -> &[(u32, Origin)] {
         self.rows.get(path).map_or(&[], Vec::as_slice)
