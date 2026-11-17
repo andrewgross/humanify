@@ -24,12 +24,8 @@ fn the_table_holds_the_whole_subcommand_map() {
     for want in [
         "check",
         "eval score",
-        "eval rescore",
-        "eval summarize",
-        "eval leaderboard",
-        "eval bands",
-        "eval diff",
         "eval neutrality",
+        "diff label",
         "eval vendor-precision",
         "eval walk",
         "run stub",

@@ -14,6 +14,7 @@ use crate::runners::tree_diff::{DIAGNOSTIC_ONLY, changed_lines_in_trees};
 
 const SURFACES: [&str; 4] = ["src", "vendor", "metadata", "other"];
 const EXAMPLES_PER_LABEL: usize = 20;
+pub const GROUPS: [&str; 4] = ["real", "noise", "wiring", "unknown"];
 
 pub fn surface(path: &str) -> &'static str {
     match path.split('/').next() {
@@ -163,7 +164,7 @@ fn table(tally: &Tally) -> String {
         "{:<8} {:>10} {:>7}   {:>10} {:>7}",
         "group", "all lines", "share", "no .humanify", "share"
     );
-    for group in ["real", "noise", "wiring", "unknown"] {
+    for group in GROUPS {
         let of_group = |count: &dyn Fn(Label) -> u64| -> u64 {
             let in_group = Label::ALL.iter().filter(|l| l.describe().1 == group);
             in_group.map(|l| count(*l)).sum()
@@ -199,7 +200,7 @@ fn table(tally: &Tally) -> String {
     out
 }
 
-fn as_json(tally: &Tally, diff_total: u64, truth: &Truth) -> String {
+fn as_json(tally: &Tally, diff_total: u64, truth: &Truth) -> serde_json::Value {
     let labels: BTreeMap<&str, serde_json::Value> = Label::ALL
         .iter()
         .map(|l| {
@@ -210,19 +211,41 @@ fn as_json(tally: &Tally, diff_total: u64, truth: &Truth) -> String {
             (name, json!({"group": group, "lines": tally.of(*l), "bySurface": by_surface, "examples": examples}))
         })
         .collect();
-    format!(
-        "{:#}\n",
-        json!({"changedLines": tally.total(), "diffSays": diff_total, "unchangedInputPairs": truth.pairs,
-            "unpairedInputFiles": {"from": truth.unpaired_files(false), "to": truth.unpaired_files(true)}, "labels": labels})
-    )
+    let group_lines = |group: &str, without_metadata: bool| -> u64 {
+        let in_group = Label::ALL.iter().filter(|l| l.describe().1 == group);
+        let metadata = |l: Label| {
+            if without_metadata {
+                tally.cell(l, "metadata")
+            } else {
+                0
+            }
+        };
+        in_group.map(|l| tally.of(*l) - metadata(*l)).sum()
+    };
+    let groups: BTreeMap<&str, serde_json::Value> = GROUPS
+        .iter()
+        .map(|g| {
+            (
+                *g,
+                json!({"lines": group_lines(g, false), "outsideMetadata": group_lines(g, true)}),
+            )
+        })
+        .collect();
+    json!({"changedLines": tally.total(), "diffSays": diff_total, "unchangedInputPairs": truth.pairs,
+        "groups": groups,
+        "unpairedInputFiles": {"from": truth.unpaired_files(false), "to": truth.unpaired_files(true)}, "labels": labels})
 }
 
-/// The report text; `Err` when the totals differ from the diff's count.
-pub fn run(
-    trees: (&Path, &Path),
-    inputs: (&Path, &Path),
-    out: Option<&Path>,
-) -> Result<String, String> {
+/// One labelled diff.
+pub struct Labelled {
+    pub report: String,
+    pub card: serde_json::Value,
+    /// Whether the labelled lines add up to what `diff -rN` counts.
+    pub adds_up: bool,
+}
+
+/// Label every changed line between two trees.
+pub fn label_trees(trees: (&Path, &Path), inputs: (&Path, &Path)) -> Result<Labelled, String> {
     let started = Instant::now();
     let (from, to) = humanify_ag_core::par::join(|| Tree::read(trees.0), || Tree::read(trees.1));
     let (from, to) = (from?, to?);
@@ -244,10 +267,6 @@ pub fn run(
     }
     let label_seconds = started.elapsed().as_secs_f64() - read_seconds;
     let diff_total = changed_lines_in_trees(trees.0, trees.1)?;
-    if let Some(out) = out {
-        std::fs::write(out, as_json(&tally, diff_total, &truth))
-            .map_err(|e| format!("{}: {e}", out.display()))?;
-    }
     let (paired, files_from, files_to) = truth.file_counts();
     let mut report = format!(
         "diff label: {} -> {}\nchanged lines: {} (diff -rN counts {diff_total})\n\
@@ -260,14 +279,33 @@ pub fn run(
         truth.pairs,
     );
     report.push_str(&table(&tally));
-    if tally.total() == diff_total {
-        Ok(report)
+    Ok(Labelled {
+        report,
+        card: as_json(&tally, diff_total, &truth),
+        adds_up: tally.total() == diff_total,
+    })
+}
+
+/// The `diff label` verb: the report text; `Err` when the totals differ
+/// from the diff's count.
+pub fn run(
+    trees: (&Path, &Path),
+    inputs: (&Path, &Path),
+    out: Option<&Path>,
+) -> Result<String, String> {
+    let labelled = label_trees(trees, inputs)?;
+    if let Some(out) = out {
+        std::fs::write(out, format!("{:#}\n", labelled.card))
+            .map_err(|e| format!("{}: {e}", out.display()))?;
+    }
+    if labelled.adds_up {
+        Ok(labelled.report)
     } else {
-        Err(format!(
-            "{report}\n!! the labelled lines do not add up to the diff's count"
-        ))
+        Err(format!("{}\n{NOT_ADDING_UP}", labelled.report))
     }
 }
+
+pub const NOT_ADDING_UP: &str = "!! the labelled lines differ from the diff's count";
 
 #[cfg(test)]
 #[path = "report_test.rs"]

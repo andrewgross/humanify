@@ -1,18 +1,15 @@
-//! `eval summarize`: a label's cards -> `summary.json` + the console table
-//! (TS: `034/summarize.ts`, with `experiments/lib/invariants.ts`'s readers
-//! of the run statuses and verdicts and `run-manifest.ts`'s provenance).
-//! Every recorded verdict reaches the banner, printed BEFORE the numbers
-//! and again last: a fact written and unread reads as assurance.
+//! A label's cards -> `summary.json` and the console text. Every recorded
+//! verdict reaches the banner, printed before the numbers and again last.
 
 use std::cmp::Ordering;
 use std::path::Path;
 
 use crate::json::js::{JsObject, JsValue};
-use humanify_ag_model::js::{locale_compare, to_fixed};
+use humanify_ag_model::js::locale_compare;
 
-use super::card::{at, is_scorecard, number_at, obj, scorer_version, text, texts};
-use super::kpis::{Denominator, Kpi, caveat_lines, named};
+use super::card::{at, is_scorecard, number_at, obj, text, texts};
 use crate::committed::eval::SelfHopReference;
+use crate::difflabel::GROUPS;
 
 /// `a.localeCompare(b, undefined, { numeric: true })` for version-ish
 /// strings: digit runs compare by value.
@@ -77,152 +74,6 @@ pub fn load_cards(dir: &Path) -> Vec<JsValue> {
     cards.sort_by(|a, b| numeric_compare(&pair(a), &pair(b)));
     cards
 }
-
-/// `flattenSurfaces`: every numeric leaf of a card's `churn.surfaces`, as
-/// `split.<path>` (arrays are not totals).
-pub fn flatten_surfaces(v: &JsValue, at_path: &str, out: &mut Vec<(String, f64)>) {
-    match v {
-        JsValue::Number(n) => out.push((format!("split.{at_path}"), *n)),
-        JsValue::Object(o) => {
-            for (k, x) in o.entries() {
-                let p = if at_path.is_empty() {
-                    k.clone()
-                } else {
-                    format!("{at_path}.{k}")
-                };
-                flatten_surfaces(x, &p, out);
-            }
-        }
-        _ => {}
-    }
-}
-
-/// The folded totals, and how many cards carried each optional block.
-pub struct Totals {
-    pub totals: JsObject,
-    pub tree_cards: usize,
-    pub spelling_cards: usize,
-    pub clean_cards: usize,
-    pub surface_cards: usize,
-    pub layout_cards: usize,
-}
-
-const FIXED_TOTALS: &[(&str, &str)] = &[
-    ("stmts", "churn.statements.total"),
-    ("unchangedClean", "churn.statements.unchangedClean"),
-    ("unchangedChurned", "churn.statements.unchangedChurned"),
-    ("namingNoiseLines", "churn.lines.namingNoiseLines"),
-    ("novel", "churn.statements.novel"),
-    ("realLines", "churn.lines.realLines"),
-    ("sameNameMovedFile", "churn.relocations.sameNameMovedFile"),
-    ("novelNames", "churn.relocations.novelNames"),
-    ("freshNames", "churn.relocations.freshNames"),
-    ("mintedLeftovers", "determinism.mintedLeftovers"),
-];
-
-const LAYOUT_TOTALS: &[(&str, &str)] = &[
-    ("layoutChurnLines", "churnLines"),
-    ("layoutBuildConstantLines", "buildConstantLines"),
-    ("layoutNameOnlyLines", "nameOnlyLines"),
-    ("layoutSpellingIdenticalLines", "spellingIdenticalLines"),
-    ("layoutChurnLinesClean", "churnLinesClean"),
-    ("layoutRealClean", "realClean"),
-    ("layoutReal", "real"),
-    ("layoutNoise", "noise"),
-    ("layoutNaming", "naming"),
-    ("layoutAlias", "alias"),
-    ("layoutReorder", "reorder"),
-];
-
-/// Fold cards into the published totals (`summarizeCards`).
-pub fn summarize_cards(cards: &[JsValue]) -> Totals {
-    let mut sums: Vec<(String, f64)> = Vec::new();
-    let names = FIXED_TOTALS
-        .iter()
-        .map(|(k, _)| *k)
-        .chain(["relocatedStatements"])
-        .chain(LAYOUT_TOTALS.iter().map(|(k, _)| *k))
-        .chain(["vendorChurnLines", "vendorNoise", "vendorReal"]);
-    for n in names {
-        sums.push((n.to_string(), 0.0));
-    }
-    let add = |sums: &mut Vec<(String, f64)>, k: &str, v: f64| match sums
-        .iter_mut()
-        .find(|(n, _)| n == k)
-    {
-        Some(e) => e.1 += v,
-        None => sums.push((k.to_string(), v)),
-    };
-    let mut t = Totals {
-        totals: JsObject::new(),
-        tree_cards: 0,
-        spelling_cards: 0,
-        clean_cards: 0,
-        surface_cards: 0,
-        layout_cards: 0,
-    };
-    for c in cards {
-        for (k, p) in FIXED_TOTALS {
-            add(&mut sums, k, number_at(c, p).unwrap_or(0.0));
-        }
-        if let Some(n) = number_at(c, "churn.tree.relocatedStatements") {
-            add(&mut sums, "relocatedStatements", n);
-            t.tree_cards += 1;
-        }
-        if at(c, "churn.layout").is_some() {
-            t.layout_cards += 1;
-            if number_at(c, "churn.layout.spellingIdenticalLines").is_some() {
-                t.spelling_cards += 1;
-            }
-            let clean = number_at(c, "churn.layout.churnLinesClean").is_some();
-            if clean {
-                t.clean_cards += 1;
-            }
-            for (k, f) in LAYOUT_TOTALS {
-                let is_clean = *f == "churnLinesClean" || *f == "realClean";
-                if is_clean && !clean {
-                    continue;
-                }
-                add(
-                    &mut sums,
-                    k,
-                    number_at(c, &format!("churn.layout.{f}")).unwrap_or(0.0),
-                );
-            }
-        }
-        if at(c, "churn.vendor").is_some() {
-            add(
-                &mut sums,
-                "vendorChurnLines",
-                number_at(c, "churn.vendor.churnLines").unwrap_or(0.0),
-            );
-            add(
-                &mut sums,
-                "vendorNoise",
-                number_at(c, "churn.vendor.noise").unwrap_or(0.0),
-            );
-            add(
-                &mut sums,
-                "vendorReal",
-                number_at(c, "churn.vendor.real").unwrap_or(0.0),
-            );
-        }
-        if let Some(s) = at(c, "churn.surfaces") {
-            t.surface_cards += 1;
-            let mut flat = Vec::new();
-            flatten_surfaces(s, "", &mut flat);
-            for (k, v) in flat {
-                add(&mut sums, &k, v);
-            }
-        }
-    }
-    for (k, v) in sums {
-        t.totals.insert(k, JsValue::Number(v));
-    }
-    t
-}
-
-// ------------------------------------------------------- verdicts, statuses
 
 /// Every `*-run-status.json`'s recorded fields, sorted by version.
 pub fn run_statuses(dir: &Path) -> Vec<JsValue> {
@@ -450,7 +301,8 @@ fn status_banner(statuses: &[JsValue]) -> Vec<String> {
         names.join(", ")
     ));
     lines.push(
-        "   The KPIs below were computed from tree(s) the pipeline itself marked invalid.".into(),
+        "   The numbers below were computed from tree(s) the pipeline itself marked invalid."
+            .into(),
     );
     for f in failed {
         lines.push(format!(
@@ -624,153 +476,76 @@ fn naming_modes(dir: &Path, manifests: &[JsValue]) -> Vec<String> {
     }
 }
 
-// ------------------------------------------------------------------ tables
-
-fn pad(s: &str, w: usize) -> String {
-    format!("{s:>w$}")
+/// A label's group lines over its pairs, outside the metadata folder.
+fn group_lines(card: &JsValue, group: &str) -> f64 {
+    number_at(card, &format!("groups.{group}.outsideMetadata")).unwrap_or(0.0)
 }
 
-fn num_text(n: f64) -> String {
-    humanify_ag_model::js::number_to_string(n)
-}
-
-fn cp(n: f64, total: f64, w: usize) -> String {
-    let pct = if total != 0.0 {
-        to_fixed(100.0 * n / total, 1)
-    } else {
-        "0.0".into()
+/// The per-pair table of changed lines by group, with a total row.
+fn group_table(cards: &[JsValue]) -> Vec<String> {
+    let mut out = vec![format!(
+        "{:<18} {:>10} {:>10} {:>10} {:>10} {:>10}",
+        "pair", "changed", "real", "noise", "wiring", "unknown"
+    )];
+    let row = |name: &str, of: &dyn Fn(&str) -> f64| {
+        let cells: Vec<String> = GROUPS.iter().map(|g| format!("{:>10}", of(g))).collect();
+        let changed: f64 = GROUPS.iter().map(|g| of(g)).sum();
+        format!("{name:<18} {changed:>10} {}", cells.join(" "))
     };
-    pad(&format!("{} ({pct}%)", num_text(n)), w)
-}
-
-const CHURN_COLUMNS: &[(&str, usize)] = &[
-    ("clean", 15),
-    ("noise", 14),
-    ("novel", 13),
-    ("noiseLn", 8),
-    ("realLn", 8),
-    ("reloc", 13),
-    ("newName", 14),
-    ("mints", 6),
-];
-
-fn churn_row(
-    label: &str,
-    shown: &[&Kpi],
-    value: impl Fn(&Kpi) -> Option<f64>,
-    statements: f64,
-    names: f64,
-    det: &str,
-    llm: &str,
-) -> String {
-    let mut cells = vec![
-        format!("{label:<16}"),
-        pad(
-            &if statements != 0.0 {
-                num_text(statements)
-            } else {
-                String::new()
-            },
-            7,
-        ),
-    ];
-    for (k, (_, w)) in shown.iter().zip(CHURN_COLUMNS) {
-        cells.push(match value(k) {
-            None => pad("-", *w),
-            Some(v) => match k.denominator {
-                Some(Denominator::Statements) => cp(v, statements, *w),
-                Some(Denominator::Names) => cp(v, names, *w),
-                None => pad(&num_text(v), *w),
-            },
-        });
+    for card in cards {
+        out.push(row(str_at(card, "pair").unwrap_or(""), &|g| {
+            group_lines(card, g)
+        }));
     }
-    cells.push(pad(det, 6));
-    cells.push(pad(llm, 6));
-    cells.join(" ")
+    out.push(row("TOTAL", &|g| {
+        cards.iter().map(|c| group_lines(c, g)).sum()
+    }));
+    out.push(
+        "lines outside .humanify/; real = from changed input code (a ceiling), noise = from \
+         unchanged input, wiring = require and export lines of unknown cause"
+            .into(),
+    );
+    out
 }
 
-/// Summarize the label in `dir`: write `summary.json`, return the console
-/// text. `reference` is the committed self-hop reference.
+/// A label's cards -> `summary.json` and the console text: the run-health
+/// banner, the changed lines by group, the LLM and matching diagnostics.
 pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Result<String, String> {
     let cards = load_cards(dir);
     if cards.is_empty() {
-        return Err(format!("no scorecards in {}", dir.display()));
+        return Err(format!("no label cards in {}", dir.display()));
     }
-    if let Some(c) = cards.iter().find(|c| scorer_version(c).is_none()) {
-        return Err(format!(
-            "{}: the card for {} records no scorerVersion — not a card this harness's scorer wrote",
-            dir.display(),
-            at(c, "pair").and_then(JsValue::as_str).unwrap_or("?")
-        ));
-    }
-    let t = summarize_cards(&cards);
-    let totals = JsValue::Object(t.totals.clone());
     let statuses = run_statuses(dir);
     let v = verdicts(dir);
     let prov = provenance(dir);
-    let modes: Vec<String> = match at(&prov, "namingModes") {
+    let naming: Vec<String> = match at(&prov, "namingModes") {
         Some(JsValue::Array(a)) => a
             .iter()
             .filter_map(|x| x.as_str().map(str::to_string))
             .collect(),
         _ => Vec::new(),
     };
-    let mode = if modes.len() == 1 && modes[0] == "names" {
-        "names"
+    let mode = if naming == ["names"] { "names" } else { "off" };
+    let mut banner_lines = vec![if naming.len() == 1 {
+        format!("NAMING: {}", naming[0])
     } else {
-        "off"
-    };
-    let mut banner_lines = banner(&statuses, &v, reference_of(reference, mode));
-    let n = cards.len();
-    if t.tree_cards != n {
-        banner_lines.push(format!("NOTE: relocSt totals {} of {n} pairs — the rest recorded no tree churn, and their statements are missing from the total rather than counted as zero.", t.tree_cards));
-    }
-    if t.surface_cards != n {
-        banner_lines.push(format!("NOTE: the app/vendor split covers {} of {n} pairs — the rest predate it (exp170, 2026-10-31); re-score their trees with `eval rescore`. Their split is missing, not zero.", t.surface_cards));
-    }
-    if t.spelling_cards != t.layout_cards {
-        banner_lines.push(format!("NOTE: spellingIdentical totals {} of the {} scored pairs — the rest predate the field (2026-09-29), and their soft-noise mass is missing from the total rather than counted as zero.", t.spelling_cards, t.layout_cards));
-    }
-    if t.clean_cards != t.layout_cards {
-        banner_lines.push(format!("NOTE: the clean-diff totals cover {} of the {} scored pairs — the rest predate the breakdown (2026-10-02), and their clean numbers are missing from the total rather than counted as zero.", t.clean_cards, t.layout_cards));
-    }
-    let versions: Vec<u64> = {
-        let mut v: Vec<u64> = cards.iter().filter_map(scorer_version).collect();
-        v.sort();
-        v.dedup();
-        v
-    };
-    if versions.len() > 1 {
-        banner_lines.push(format!("!! SCORER: MIXED (versions {versions:?}) — this label's cards were scored by different scorers; re-score it with `eval rescore`"));
-    }
-    let list = |p: &str| match at(&prov, p) {
-        Some(JsValue::Array(a)) => a
-            .iter()
-            .filter_map(|x| x.as_str().map(str::to_string))
-            .collect::<Vec<_>>(),
-        _ => Vec::new(),
-    };
-    let naming = list("namingModes");
-    let mut head = vec![
-        if naming.len() == 1 {
-            format!("NAMING: {}", naming[0])
-        } else {
-            format!(
-                "!! NAMING: MIXED ({}) — this label's pairs ran in different naming modes",
-                naming.join(" + ")
-            )
-        },
         format!(
-            "SCORER: v{}",
-            versions
-                .iter()
-                .map(u64::to_string)
-                .collect::<Vec<_>>()
-                .join("+v")
-        ),
-    ];
-    head.extend(banner_lines);
-    let banner_lines = head;
+            "!! NAMING: MIXED ({}) — this label's pairs ran in different naming modes",
+            naming.join(" + ")
+        )
+    }];
+    banner_lines.extend(banner(&statuses, &v, reference_of(reference, mode)));
+    let short: Vec<&str> = cards
+        .iter()
+        .filter(|c| number_at(c, "changedLines") != number_at(c, "diffSays"))
+        .filter_map(|c| str_at(c, "pair"))
+        .collect();
+    if !short.is_empty() {
+        banner_lines.push(format!(
+            "!! LABELS DO NOT ADD UP to the diff's count for: {}",
+            short.join(", ")
+        ));
+    }
     let (llm_digests, mut llm_lines) = llm_section(dir, &cards);
     let (matching_digests, matching_lines) = matching_section(dir, &cards);
     llm_lines.extend(matching_lines);
@@ -778,7 +553,6 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
         ("model", text(label)),
         ("provenance", prov),
         ("pairs", JsValue::Array(cards.clone())),
-        ("totals", totals.clone()),
         ("runStatuses", JsValue::Array(statuses.clone())),
         ("verdicts", v),
         ("llmDiagnostics", JsValue::Array(llm_digests)),
@@ -787,58 +561,16 @@ pub fn summarize(dir: &Path, label: &str, reference: &SelfHopReference) -> Resul
     let path = dir.join("summary.json");
     std::fs::write(&path, crate::json::js_text(&summary, false))
         .map_err(|e| format!("{}: {e}", path.display()))?;
-
-    let mut out = Vec::new();
-    out.push(format!("\n=== eval: {label} ==="));
+    let mut out = vec![format!("\n=== eval: {label} ===")];
     out.extend(banner_lines.iter().cloned());
-    if !banner_lines.is_empty() {
-        out.push(String::new());
-    }
-    out.push("clean/noise/novel = % of stmts · reloc/newName = % of names · noise+reloc+mints are the reducible KPIs to drive to 0".into());
-    let keys: Vec<&str> = CHURN_COLUMNS.iter().map(|(k, _)| *k).collect();
-    let shown = named(&keys);
-    let mut head_cells = vec![format!("{:<16}", "pair"), pad("stmts", 7)];
-    head_cells.extend(CHURN_COLUMNS.iter().map(|(k, w)| pad(k, *w)));
-    head_cells.push(pad("%det", 6));
-    head_cells.push(pad("%llm", 6));
-    let head = head_cells.join(" ");
-    let rule = "-".repeat(head.chars().count());
-    out.push(head);
-    out.push(rule.clone());
-    for c in &cards {
-        let d = |p: &str| number_at(c, p).map(num_text).unwrap_or_default();
-        out.push(churn_row(
-            str_at(c, "pair").unwrap_or(""),
-            &shown,
-            |k| k.of_card(c),
-            number_at(c, "churn.statements.total").unwrap_or(0.0),
-            number_at(c, "churn.relocations.freshNames").unwrap_or(0.0),
-            &d("determinism.functions.pctDeterministic"),
-            &d("determinism.functions.pctReachingLLM"),
-        ));
-    }
-    out.push(rule);
-    let tot = |k: &str| number_at(&totals, k).unwrap_or(0.0);
-    out.push(churn_row(
-        "TOTAL",
-        &shown,
-        |k| k.of_totals(&totals),
-        tot("stmts"),
-        tot("freshNames"),
-        "",
-        "",
-    ));
-    out.extend(caveat_lines(&shown));
-    print_layout(&cards, &totals, t.clean_cards, &mut out);
-    print_surfaces(&cards, &totals, &mut out);
+    out.push(String::new());
+    out.extend(group_table(&cards));
     out.extend(llm_lines);
     out.push(format!("\nwrote {}", path.display()));
-    if !banner_lines.is_empty() {
-        out.push(String::new());
-        out.extend(banner_lines);
-    }
+    out.push(String::new());
+    out.extend(banner_lines);
     if statuses.is_empty() {
-        out.push("\nNOTE: no per-pair run status was recorded — this predates the check, so whether the pipeline accepted its own output is UNKNOWN, not clean.".into());
+        out.push("\nNOTE: no per-pair run status was recorded, so whether the pipeline accepted its own output is UNKNOWN, not clean.".into());
     }
     Ok(out.join("\n") + "\n")
 }
@@ -881,334 +613,6 @@ fn pair_rows(cards: &[JsValue], digests: &[JsValue]) -> Vec<(String, Option<JsVa
             (pair, d)
         })
         .collect()
-}
-
-fn print_layout(cards: &[JsValue], totals: &JsValue, clean_cards: usize, out: &mut Vec<String>) {
-    let scored: Vec<&JsValue> = cards
-        .iter()
-        .filter(|c| at(c, "churn.layout").is_some())
-        .collect();
-    if scored.is_empty() {
-        return;
-    }
-    out.push("\n=== on-disk diff composition (git lines; EVAL_LAYOUT) ===".into());
-    let cols = [
-        ("churn", 9),
-        ("churnEXB", 9),
-        ("bldConst", 9),
-        ("real", 9),
-        ("noise", 9),
-        ("naming", 8),
-        ("nameOnly", 9),
-        ("alias", 7),
-        ("reorder", 9),
-        ("relocSt", 8),
-        ("spell", 9),
-    ];
-    let head = std::iter::once(format!("{:<16}", "pair"))
-        .chain(cols.iter().map(|(k, w)| pad(k, *w)))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let rule = "-".repeat(head.chars().count());
-    out.push(head);
-    out.push(rule.clone());
-    let row = |label: &str, v: [f64; 9], reloc: f64| {
-        let pct = if v[0] != 0.0 {
-            format!("{}%", to_fixed(100.0 * v[8] / v[0], 1))
-        } else {
-            "-".into()
-        };
-        let cells = [
-            num_text(v[0]),
-            num_text(v[1]),
-            num_text(v[2]),
-            num_text(v[3]),
-            num_text(v[4]),
-            num_text(v[5]),
-            num_text(v[6]),
-            num_text(v[7]),
-            format!("{} {pct}", num_text(v[8])),
-            num_text(reloc),
-        ];
-        std::iter::once(format!("{label:<16}"))
-            .chain(cells.iter().zip(&cols).map(|(c, (_, w))| pad(c, *w)))
-            .collect::<Vec<_>>()
-            .join(" ")
-    };
-    let tot = |k: &str| number_at(totals, k).unwrap_or(0.0);
-    let line = |label: &str, v: [f64; 9], reloc: f64, spell: f64| {
-        format!("{} {}", row(label, v, reloc), pad(&num_text(spell), 9))
-    };
-    out.push(line(
-        "TOTAL",
-        [
-            tot("layoutChurnLines"),
-            tot("layoutChurnLines") - tot("layoutBuildConstantLines"),
-            tot("layoutBuildConstantLines"),
-            tot("layoutReal"),
-            tot("layoutNoise"),
-            tot("layoutNaming"),
-            tot("layoutNameOnlyLines"),
-            tot("layoutAlias"),
-            tot("layoutReorder"),
-        ],
-        tot("relocatedStatements"),
-        tot("layoutSpellingIdenticalLines"),
-    ));
-    out.push(rule);
-    for c in &scored {
-        let l = |k: &str| number_at(c, &format!("churn.layout.{k}"));
-        let churn = l("churnLines").unwrap_or(0.0);
-        out.push(line(
-            str_at(c, "pair").unwrap_or(""),
-            [
-                churn,
-                l("churnLinesExBuild").unwrap_or(churn),
-                l("buildConstantLines").unwrap_or(0.0),
-                l("real").unwrap_or(0.0),
-                l("noise").unwrap_or(0.0),
-                l("naming").unwrap_or(0.0),
-                l("nameOnlyLines").unwrap_or(0.0),
-                l("alias").unwrap_or(0.0),
-                l("reorder").unwrap_or(0.0),
-            ],
-            number_at(c, "churn.tree.relocatedStatements").unwrap_or(0.0),
-            l("spellingIdenticalLines").unwrap_or(0.0),
-        ));
-    }
-    out.push("reorder = byte-identical statements emitted at a different position; relocSt = statements that changed FILE (order-independent)".into());
-    out.push(format!(
-        "spell = SOFT noise inside real — of the {} real lines above, {} are spelling-only (statement pairs identical modulo wrapper arrow<->function spelling)",
-        num_text(tot("layoutReal")),
-        num_text(tot("layoutSpellingIdenticalLines"))
-    ));
-    // The clean diff.
-    out.push("\n=== clean diff (raw vs clean; soft-flow breakdown) ===".into());
-    let cols2 = [
-        ("rawChurn", 10),
-        ("-buildMeta", 11),
-        ("-spelling", 11),
-        ("cleanChurn", 12),
-        ("rawReal", 9),
-        ("cleanReal", 10),
-    ];
-    let head = std::iter::once(format!("{:<16}", "pair"))
-        .chain(cols2.iter().map(|(k, w)| pad(k, *w)))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let rule = "-".repeat(head.chars().count());
-    out.push(head);
-    out.push(rule.clone());
-    let row2 = |label: &str, v: [String; 6]| {
-        std::iter::once(format!("{label:<16}"))
-            .chain(v.iter().zip(&cols2).map(|(c, (_, w))| pad(c, *w)))
-            .collect::<Vec<_>>()
-            .join(" ")
-    };
-    let dash = |b: bool, x: f64| if b { num_text(x) } else { "-".into() };
-    out.push(row2(
-        "TOTAL",
-        [
-            num_text(tot("layoutChurnLines")),
-            num_text(tot("layoutBuildConstantLines")),
-            num_text(tot("layoutSpellingIdenticalLines")),
-            dash(clean_cards > 0, tot("layoutChurnLinesClean")),
-            num_text(tot("layoutReal")),
-            dash(clean_cards > 0, tot("layoutRealClean")),
-        ],
-    ));
-    out.push(rule);
-    for c in &scored {
-        let l = |k: &str| number_at(c, &format!("churn.layout.{k}"));
-        let d = |k: &str| l(k).map(num_text).unwrap_or_else(|| "-".into());
-        out.push(row2(
-            str_at(c, "pair").unwrap_or(""),
-            [
-                num_text(l("churnLines").unwrap_or(0.0)),
-                num_text(l("buildConstantLines").unwrap_or(0.0)),
-                num_text(l("spellingIdenticalLines").unwrap_or(0.0)),
-                d("churnLinesClean"),
-                num_text(l("real").unwrap_or(0.0)),
-                d("realClean"),
-            ],
-        ));
-    }
-    out.push("raw = the frozen charge every recorded label prints (the trend line). clean = raw minus the valued categories: buildMeta (VERSION/BUILD_TIME/GIT_SHA constants inlined at many sites) and spelling (wrapper arrow<->function re-serializations). cleanChurn still INCLUDES the noise columns above. A `-` clean number means the card predates 2026-10-02, not a clean diff of zero.".into());
-}
-
-fn print_surfaces(cards: &[JsValue], totals: &JsValue, out: &mut Vec<String>) {
-    let split: Vec<&JsValue> = cards
-        .iter()
-        .filter(|c| at(c, "churn.surfaces").is_some())
-        .collect();
-    if split.is_empty() {
-        return;
-    }
-    out.push("\n=== app vs vendor (exp170; app + vendor + cross = the column above) ===".into());
-    let head = [
-        format!("{:<12}", "kpi"),
-        pad("app", 10),
-        pad("vendor", 10),
-        pad("cross", 10),
-        pad("= total", 10),
-    ]
-    .join(" ");
-    out.push(head.clone());
-    out.push("-".repeat(head.chars().count()));
-    // The split totals are FLAT keys with dots in them (`split.lines.app.
-    // churnLines`), not nested records.
-    let get = |k: &str| match totals
-        .as_object()
-        .and_then(|o| o.get(&format!("split.{k}")))
-    {
-        Some(JsValue::Number(n)) => Some(*n),
-        _ => None,
-    };
-    let tot = |k: &str| number_at(totals, k).unwrap_or(0.0);
-    let cell = |v: Option<f64>| pad(&v.map(num_text).unwrap_or_else(|| "-".into()), 10);
-    let mut row = |name: &str, axis: &str, field: &str, total: f64, cross: Option<Option<f64>>| {
-        let app = get(&format!("{axis}.app.{field}"));
-        let ven = get(&format!("{axis}.vendor.{field}"));
-        let cr = cross.unwrap_or_else(|| get(&format!("{axis}.crossBoundary.{field}")));
-        out.push(
-            [
-                format!("{name:<12}"),
-                cell(app),
-                cell(ven),
-                cell(cr),
-                cell(Some(total)),
-            ]
-            .join(" "),
-        );
-    };
-    row(
-        "treeLn*",
-        "lines",
-        "churnLines",
-        tot("layoutChurnLines") + tot("vendorChurnLines"),
-        None,
-    );
-    let cross_ln = get("lines.crossBoundary.churnLines");
-    let cross_files = get("lines.crossBoundary.appSideFromFiles");
-    row(
-        "real*",
-        "lines",
-        "real",
-        tot("layoutReal") + tot("vendorReal"),
-        Some(cross_ln.map(|c| c - cross_files.unwrap_or(0.0))),
-    );
-    row(
-        "files*",
-        "lines",
-        "fileAddRemove",
-        tot("layoutChurnLines") - tot("layoutNoise") - tot("layoutReal"),
-        Some(cross_files),
-    );
-    row(
-        "noise*",
-        "lines",
-        "noise",
-        tot("layoutNoise") + tot("vendorNoise"),
-        Some(Some(0.0)),
-    );
-    row(
-        "noise",
-        "statements",
-        "unchangedChurned",
-        tot("unchangedChurned"),
-        None,
-    );
-    row(
-        "noiseLn",
-        "statements",
-        "namingNoiseLines",
-        tot("namingNoiseLines"),
-        None,
-    );
-    row("novel", "statements", "novel", tot("novel"), None);
-    row("realLn", "statements", "realLines", tot("realLines"), None);
-    row(
-        "reloc",
-        "names",
-        "sameNameMovedFile",
-        tot("sameNameMovedFile"),
-        None,
-    );
-    row(
-        "relocSt",
-        "tree",
-        "relocatedStatements",
-        tot("relocatedStatements"),
-        None,
-    );
-    row("newName", "names", "novelNames", tot("novelNames"), None);
-    out.push(
-        [
-            format!("{:<12}", "mints"),
-            cell(get("mints.app")),
-            cell(get("mints.vendor")),
-            pad(
-                &format!(
-                    "{} unatt",
-                    get("mints.unattributed")
-                        .map(num_text)
-                        .unwrap_or_else(|| "-".into())
-                ),
-                10,
-            ),
-            cell(Some(tot("mintedLeftovers"))),
-        ]
-        .join(" "),
-    );
-    out.push("* tree git lines: app = src/ (the composition), vendor = vendor/ (the vendor scorer: its noise is vendorLn, its real vendorReal), total = the two surfaces' old sum. Statement rows: the BUNDLE (everything but CJS library factories: app code and ESM-inlined library code), by the file each statement is filed in — so vendor there is what the library placement filed into vendor/. mints are attributed by name; the unattributed rest is never guessed.".into());
-    for c in split {
-        let Some(x) = at(c, "churn.surfaces.lines.crossBoundary") else {
-            continue;
-        };
-        let g = |k: &str| number_at(x, k).unwrap_or(0.0);
-        let mut line = format!(
-            "cross-boundary {}: {} lines (app side {}, vendor side {}); to vendor {} stmts, to app {} stmts",
-            str_at(c, "pair").unwrap_or(""),
-            num_text(g("churnLines")),
-            num_text(g("appSide")),
-            num_text(g("vendorSide")),
-            num_text(g("toVendor.statements")),
-            num_text(g("toApp.statements"))
-        );
-        if g("capped") != 0.0 {
-            line.push_str(&format!(
-                "; {} statement lines over their file's charge, not taken",
-                num_text(g("capped"))
-            ));
-        }
-        if g("refused") != 0.0 {
-            line.push_str(&format!(
-                "; {} lines of one-line statements not paired (too generic to prove a move)",
-                num_text(g("refused"))
-            ));
-        }
-        if g("unparsedVendorFiles") != 0.0 {
-            line.push_str(&format!(
-                "; {} vendor files unparsed",
-                num_text(g("unparsedVendorFiles"))
-            ));
-        }
-        out.push(line);
-        if let Some(JsValue::Array(moves)) = at(x, "moves") {
-            for m in moves.iter().take(12) {
-                out.push(format!(
-                    "    {}x {} -> {} ({} ln)",
-                    number_at(m, "statements").map(num_text).unwrap_or_default(),
-                    str_at(m, "from").unwrap_or(""),
-                    str_at(m, "to").unwrap_or(""),
-                    number_at(m, "lines").map(num_text).unwrap_or_default()
-                ));
-            }
-            if moves.len() > 12 {
-                out.push(format!("    ... {} more", moves.len() - 12));
-            }
-        }
-    }
 }
 
 #[cfg(test)]

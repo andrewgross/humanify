@@ -1,20 +1,8 @@
-//! The per-hop report over one or more version walks (the port of
-//! `experiments/walk/report.ts`). NO NEW METRIC in the tables: every number
-//! is produced by an existing owner — the eval scorer run on (hop N-1
-//! tree, hop N tree) exactly as the eval runs it on a pair (`scoring`), and
-//! the changed lines per top-level dir from the system `diff -rN`. Cards
-//! are cached in `<walk>/cards/`, so re-running the report is cheap.
-//!
-//! One section is new (exp198): HOPS TO LOOK AT — the hops whose noise, or
-//! whose vendor structural-hash turnover (vendor files named by a content
-//! hash, `module-<8 hex>.js` / `lib_<8 hex>.js`, present in only one of the
-//! two trees: the vendor layout re-drawing itself), is far above the walk's
-//! own median. A reader of a 124-hop walk should not have to find the one
-//! hop where the vendor layout turned over by scrolling.
-//!
-//! What a walk hop is NOT: an eval pair. A hop's prior is the SAME walk's
-//! previous output, so a per-hop delta between two walks also contains
-//! divergence inherited from earlier hops. Read the totals.
+//! The per-hop report over one or more version walks. Each hop is the
+//! diff labeller run on (hop N-1 tree, hop N tree), cached in
+//! `<walk>/cards/`, beside the changed lines per top-level folder from
+//! `diff -rN`. A hop's prior is the same walk's previous output, so a
+//! per-hop delta between two walks also holds what earlier hops left.
 
 use std::path::{Path, PathBuf};
 
@@ -84,29 +72,43 @@ fn versions_of(m: &JsValue) -> Vec<String> {
 }
 
 fn card_path(walk: &Path, from: &str, to: &str) -> PathBuf {
-    walk.join("cards").join(format!("{from}__{to}.json"))
+    walk.join("cards").join(format!("{from}__{to}.labels.json"))
 }
 
-/// Score one hop with the eval's own scorer; cached. Err names the failure.
+/// The folder holding a version's input files.
+fn input_folder(walk: &Path, version: &str) -> Result<PathBuf, String> {
+    let m = manifest(walk)?;
+    let base = at(Some(&m), &["inputsBase"])
+        .and_then(JsValue::as_str)
+        .ok_or_else(|| format!("{}: manifest.json records no inputsBase", text(walk)))?;
+    let input = super::super::input_of(base, version);
+    Ok(Path::new(&input)
+        .parent()
+        .unwrap_or(Path::new(""))
+        .to_path_buf())
+}
+
+/// Label one hop's diff; cached. Err names the failure.
 pub fn score_hop(ctx: &Ctx, walk: &Path, from: &str, to: &str) -> Result<(), String> {
     let dest = card_path(walk, from, to);
     if dest.is_file() {
         return Ok(());
     }
     let (fresh, prior) = (walk.join("trees").join(to), walk.join("trees").join(from));
-    let stats = walk.join("runs").join(format!("{to}.stats.json"));
+    let (prior_input, fresh_input) = (input_folder(walk, from)?, input_folder(walk, to)?);
     let pair = format!("{from}->{to}");
     let inputs = PairInputs {
         fresh_tree: &fresh,
         prior_tree: &prior,
-        stats: &stats,
+        prior_input: &prior_input,
+        fresh_input: &fresh_input,
         pair: &pair,
     };
     match scoring::analyze(ctx, &inputs) {
         Ok(card) => write(&dest, &card),
         Err(e) => {
             let _ = write(&PathBuf::from(format!("{}.stderr", text(&dest))), &e);
-            Err(format!("the scorer failed (see {}.stderr)", text(&dest)))
+            Err(format!("the labeller failed (see {}.stderr)", text(&dest)))
         }
     }
 }
@@ -287,11 +289,14 @@ pub fn walk_rows(ctx: &Ctx, walk: &Path) -> Result<Vec<Row>, String> {
 
 // ── presentation ────────────────────────────────────────────────────────
 
-/// The headline noise: src on-disk noise (naming + alias + reorder) +
-/// vendor noise.
+/// A group's changed lines outside the metadata folder.
+fn group(card: Option<&JsValue>, name: &str) -> Option<f64> {
+    num_at(card, &["groups", name, "outsideMetadata"])
+}
+
+/// The headline noise: changed lines from unchanged input.
 fn noise_lines(card: Option<&JsValue>) -> Option<f64> {
-    let l = num_at(card, &["churn", "layout", "noise"])?;
-    Some(l + num_at(card, &["churn", "vendor", "noise"]).unwrap_or(0.0))
+    group(card, "noise")
 }
 
 /// `n.toLocaleString("en-US")`; `-` for a missing value.
@@ -324,12 +329,8 @@ struct Column {
     total: bool,
 }
 
-fn layout(r: &Row, k: &str) -> Option<f64> {
-    num_at(r.card.as_ref(), &["churn", "layout", k])
-}
-
-fn vendor(r: &Row, k: &str) -> Option<f64> {
-    num_at(r.card.as_ref(), &["churn", "vendor", k])
+fn label(r: &Row, name: &str) -> Option<f64> {
+    num_at(r.card.as_ref(), &["labels", name, "lines"])
 }
 
 fn by_top(r: &Row, k: &str) -> Option<f64> {
@@ -378,94 +379,53 @@ const DETAIL: &[Column] = &[
         total: true,
     },
     Column {
-        head: "noiseLines",
-        get: |r| noise_lines(r.card.as_ref()),
+        head: "real",
+        get: |r| group(r.card.as_ref(), "real"),
         total: true,
     },
-    Column {
-        head: "naming",
-        get: |r| layout(r, "naming"),
-        total: true,
-    },
-    Column {
-        head: "alias",
-        get: |r| layout(r, "alias"),
-        total: true,
-    },
-    Column {
-        head: "reorderLn",
-        get: |r| layout(r, "reorder"),
-        total: true,
-    },
-    Column {
-        head: "vendorLn",
-        get: |r| vendor(r, "noise"),
-        total: true,
-    },
-    Column {
-        head: "nameOnly",
-        get: |r| layout(r, "nameOnlyLines"),
-        total: true,
-    },
-    Column {
-        head: "treeLn",
-        get: |r| layout(r, "churnLines"),
-        total: true,
-    },
-    Column {
-        head: "realExBuild",
-        get: |r| layout(r, "realExBuild"),
-        total: true,
-    },
-    Column {
-        head: "vendorReal",
-        get: |r| vendor(r, "real"),
-        total: true,
-    },
-    // The eval KPIs (kpis.ts `fromCard`), on the BUNDLE.
     Column {
         head: "noise",
-        get: |r| {
-            num_at(
-                r.card.as_ref(),
-                &["churn", "statements", "unchangedChurned"],
-            )
-        },
+        get: |r| group(r.card.as_ref(), "noise"),
         total: true,
     },
     Column {
-        head: "noiseLn",
-        get: |r| num_at(r.card.as_ref(), &["churn", "lines", "namingNoiseLines"]),
+        head: "wiring",
+        get: |r| group(r.card.as_ref(), "wiring"),
         total: true,
     },
     Column {
-        head: "novel",
-        get: |r| num_at(r.card.as_ref(), &["churn", "statements", "novel"]),
+        head: "unknown",
+        get: |r| group(r.card.as_ref(), "unknown"),
         total: true,
     },
     Column {
-        head: "realLn",
-        get: |r| num_at(r.card.as_ref(), &["churn", "lines", "realLines"]),
+        head: "renamed",
+        get: |r| label(r, "renamed"),
         total: true,
     },
     Column {
-        head: "relocSt",
-        get: |r| num_at(r.card.as_ref(), &["churn", "tree", "relocatedStatements"]),
+        head: "movedFile",
+        get: |r| label(r, "moved-file"),
         total: true,
     },
     Column {
-        head: "reloc",
-        get: |r| {
-            num_at(
-                r.card.as_ref(),
-                &["churn", "relocations", "sameNameMovedFile"],
-            )
-        },
+        head: "movedInFile",
+        get: |r| label(r, "moved-in-file"),
         total: true,
     },
     Column {
-        head: "mints",
-        get: |r| num_at(r.card.as_ref(), &["determinism", "mintedLeftovers"]),
+        head: "linkerMoved",
+        get: |r| label(r, "linker-moved"),
+        total: true,
+    },
+    Column {
+        head: "linkerRenamed",
+        get: |r| label(r, "linker-renamed"),
+        total: true,
+    },
+    Column {
+        head: "requireEdge",
+        get: |r| label(r, "require-edge"),
         total: true,
     },
 ];
@@ -566,23 +526,18 @@ const HEADLINE: &[Column] = &[
         total: true,
     },
     Column {
-        head: "noiseLines",
-        get: |r| noise_lines(r.card.as_ref()),
+        head: "noise",
+        get: |r| group(r.card.as_ref(), "noise"),
         total: true,
     },
     Column {
-        head: "nameOnly",
-        get: |r| layout(r, "nameOnlyLines"),
+        head: "real",
+        get: |r| group(r.card.as_ref(), "real"),
         total: true,
     },
     Column {
-        head: "realExBuild",
-        get: |r| layout(r, "realExBuild"),
-        total: true,
-    },
-    Column {
-        head: "novel",
-        get: |r| num_at(r.card.as_ref(), &["churn", "statements", "novel"]),
+        head: "wiring",
+        get: |r| group(r.card.as_ref(), "wiring"),
         total: true,
     },
     Column {
@@ -745,9 +700,9 @@ pub fn hops_to_look_at(name: &str, rows: &[Row]) -> Vec<String> {
 fn example_hops(rows: &[Row], n: usize) -> Vec<&Row> {
     let scored: Vec<&Row> = rows
         .iter()
-        .filter(|r| r.from.is_some() && at(r.card.as_ref(), &["churn", "layout"]).is_some())
+        .filter(|r| r.from.is_some() && at(r.card.as_ref(), &["groups"]).is_some())
         .collect();
-    let real = |r: &&Row| layout(r, "realExBuild").unwrap_or(0.0);
+    let real = |r: &&Row| group(r.card.as_ref(), "real").unwrap_or(0.0);
     let mut by_real = scored.clone();
     by_real.sort_by(|a, b| real(b).total_cmp(&real(a)));
     let mut by_noise = scored.clone();
@@ -807,8 +762,8 @@ fn examples_section(
             text(&repo)
         ),
         "Reproduce any hunk with `git --git-dir <repo> diff vA vB -- <file>`.".into(),
-        "Hunk labels are for READING only (identifier-masked comparison, 034's".into(),
-        "`maskIdentifiers`); every number above comes from the eval scorer.".into(),
+        "Hunk labels here are for reading only (identifier-masked comparison);".into(),
+        "every number above comes from the diff labeller.".into(),
         String::new(),
     ];
     for r in example_hops(rows, n) {
@@ -819,15 +774,13 @@ fn examples_section(
         let tk = |k| fmt(Some(hunks::tally_of(&t, k) as f64));
         out.push(format!("### {from} → {}", r.to));
         out.push(String::new());
+        let of = |name| fmt(group(r.card.as_ref(), name));
         out.push(format!(
-            "Scorecard: src realExBuild {}, noise {} (naming {}, alias {}, reorder {}), nameOnly {}, vendor noise {}.",
-            fmt(layout(r, "realExBuild")),
-            fmt(layout(r, "noise")),
-            fmt(layout(r, "naming")),
-            fmt(layout(r, "alias")),
-            fmt(layout(r, "reorder")),
-            fmt(layout(r, "nameOnlyLines")),
-            fmt(vendor(r, "noise"))
+            "Labels: real {}, noise {}, wiring {}, unknown {}.",
+            of("real"),
+            of("noise"),
+            of("wiring"),
+            of("unknown")
         ));
         out.push(format!(
             "src hunks by reading label (changed lines): real {}, added {}, removed {}, name-only {}, moved {}.",
@@ -864,42 +817,26 @@ fn examples_section(
 
 // ── the report ──────────────────────────────────────────────────────────
 
-/// The KPI caveats the definitions repeat (kpis.ts `caveatLines` for
-/// noiseLn, realLn, reloc, treeLn, vendorLn — kept in step with the
-/// scorer's KPI table).
-const CAVEATS: &[&str] = &[
-    "noiseLn: scores the BUNDLE, not the split tree. It was structurally pinned at 0 for the whole 054 arc — a pass that only edits split files cannot move it, however much churn it removes. Read `layout.churnLines` for what a reviewer of the tree sees, and never conclude 'no effect' from this column alone.",
-    "realLn: realLn is STATEMENT MASS — one edited line inside a 5k-line statement charges the whole statement, so it overstates edited lines several-fold",
-    "reloc: reloc is NAME-keyed, so restoring a statement to its correct file MOVES the recycled name and charges for it — it rose on all three experiments that cut relocation 91%. Read relocation-churn.ts instead",
-    "treeLn: total tree churn, real change INCLUDED — it falls when noise falls but also when upstream simply changed less, so read it beside novel/realLn rather than as a noise column on its own",
-    "vendorLn: vendor was UNSCORED before exp046, so older references print `-`, which is not 0. This counts only reducible churn (manifest + bodies that differ solely in minifier-rerolled local names); read it next to vendorReal, never instead of it",
-];
-
 fn definitions() -> Vec<String> {
-    let mut d: Vec<String> = [
+    [
         "## What each column is",
         "",
-        "All per-hop numbers score (hop N-1 tree → hop N tree) of the SAME walk.",
+        "All per-hop numbers compare (hop N-1 tree → hop N tree) of the same walk.",
         "",
-        "- **diffLn / src / vendor** — changed lines between the two trees (`lib/diff.ts`, `diff -rN`; a modified line counts twice; the convention of `git diff --numstat --no-renames`; git rename detection would count a moved-but-identical file as 0). `.humanify/` excluded. Includes REAL change.",
-        "- **noiseLines** — the headline noise: src on-disk noise (`layout.noise` = naming + alias + reorder, git lines) + `vendor.noise`. Lower is better.",
-        "- **naming / alias / reorderLn** — composeDiff's src components. `naming` only sees renames in statements whose hash did NOT flip.",
-        "- **nameOnly** — `layout.nameOnlyLines`: LINE-level name-only churn (identical once local names are masked), incl. renames inside edited statements. Not additive with `naming`.",
-        "- **treeLn** — `layout.churnLines`, total src tree churn, real INCLUDED; **realExBuild** — src real change minus the build-constant inlining lines.",
-        "- **vendorLn / vendorReal** — vendor/ reducible noise vs genuine dependency change.",
-        "- **noise / noiseLn / novel / realLn / relocSt / reloc / mints** — the eval KPIs (`kpis.ts`) on the BUNDLE; noise/novel in statements.",
-        "- **cache+** — LLM cache entries written; must be 0 (no cache, rule 10). **wall s / RSS MB** — from the hop's run manifest (RSS = peak of the whole process tree).",
+        "- **diffLn / src / vendor**: changed lines between the two trees (`diff -rN`; a modified line counts twice). `.humanify/` excluded. Includes real change.",
+        "- **real**: changed lines from input code that changed, is new or was removed. A ceiling: every changed line inside a changed input function counts.",
+        "- **noise**: changed lines from input code that is unchanged (renamed, moved, printed differently). Lower is better.",
+        "- **wiring**: require and export lines whose cause is not known.",
+        "- **unknown**: lines the labeller cannot place (duplicated input text, unpaired input files, files with no provenance).",
+        "- **renamed … requireEdge**: single labels; `cargo dev diff label` lists them all with examples.",
+        "- **cache+**: LLM cache entries written; 0 on a cold walk. **wall s / RSS MB**: from the hop's run manifest (RSS = peak of the whole process tree).",
         "",
-        "Caveats (from `kpis.ts`):",
+        "A per-hop delta between two walks is not an A/B: each walk's hop N inherits its own hop N-1.",
         "",
     ]
     .iter()
     .map(|s| s.to_string())
-    .collect();
-    d.extend(CAVEATS.iter().map(|c| format!("- {c}")));
-    d.push("- Per-hop TS-vs-Rust deltas are NOT an A/B: each walk's hop N inherits its own hop N-1, so divergence compounds. Cold LLM draws vary run to run (rule 11); `noise-bands.json` bands are for 4-pair eval TOTALS, not walk hops. `novel`/`realLn` are statement-hash based and should nearly agree between pipelines; a large gap there means the trees differ in structure, not naming.".into());
-    d.push(String::new());
-    d
+    .collect()
 }
 
 fn header_line(name: &str, dir: &Path, rows: &[Row]) -> Result<String, String> {

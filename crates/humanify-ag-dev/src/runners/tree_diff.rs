@@ -4,8 +4,8 @@
 //! line counts twice; `-rN` for trees), with the scorer's algorithm flags
 //! (`eval::difftool::LINE_DIFF_FLAGS`, the minimal edit). Used for verdicts that must read
 //! zero — neutrality's tree diff, the self-hop's cold count and warm
-//! identity — and for the walk report's per-directory columns; never for
-//! a scorecard KPI (the scorer counts its own lines).
+//! identity — for the walk report's per-directory columns, and as the
+//! total the diff labeller's labels are held to.
 
 use std::path::Path;
 use std::time::Duration;

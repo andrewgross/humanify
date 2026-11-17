@@ -1,22 +1,5 @@
-//! The LLM call diagnostics of a label (exp206): what each scored run's
-//! call ledger (`--stats-json` `llmCalls`, plus the `reask` backups and
-//! the prompt guard's re-ask count) says about the SERVER, the MODEL'S
-//! ANSWERS and the BACKUPS the pipeline took — the one reader of those
-//! blocks in the harness. `eval summarize` prints it per pair and writes
-//! it into `summary.json` (`llmDiagnostics`); `eval leaderboard` prints it
-//! side by side.
-//!
-//! These are DIAGNOSTICS, never KPIs: they explain a KPI move (a slower
-//! server, more collisions, fewer answers), they do not grade one. They
-//! carry no band. Server columns move with the endpoint and the cache;
-//! answer and backup columns are byte-identical with the model held fixed
-//! (a warm cache), so between two cold runs they move with the model's
-//! draws as well as with the change under test. A run scored before
-//! exp206 has no ledger: every column prints `-`.
-//!
-//! The digest / fold / table engine is shared by every per-run stats
-//! diagnostic (a `Spec`): the call ledger here (`LLM_CALLS`) and the
-//! matching counts (`eval::matching::MATCHING`, exp208).
+//! Per-run diagnostics read from a stats file (the LLM call ledger), with
+//! the tables the label summary prints per pair.
 
 use std::path::Path;
 
@@ -25,36 +8,15 @@ use humanify_ag_model::js::number_to_string;
 
 use super::card::{at, number_at};
 
-/// How a column folds across pairs.
-#[derive(Clone, Copy)]
-enum Fold {
-    Sum,
-    /// A percentile cannot be summed: the worst pair's.
-    Max,
-}
-
 pub struct Col {
     pub key: &'static str,
     /// Where the number lives in a `--stats-json` record; `a+b` is the
     /// sum of two paths (absent when either is).
     path: &'static str,
-    fold: Fold,
 }
 
 pub const fn sum(key: &'static str, path: &'static str) -> Col {
-    Col {
-        key,
-        path,
-        fold: Fold::Sum,
-    }
-}
-
-const fn max(key: &'static str, path: &'static str) -> Col {
-    Col {
-        key,
-        path,
-        fold: Fold::Max,
-    }
+    Col { key, path }
 }
 
 /// One family of per-run diagnostics read from `--stats-json`.
@@ -71,7 +33,7 @@ pub struct Spec {
 pub const LLM_CALLS: Spec = Spec {
     present: "llmCalls",
     groups: GROUPS,
-    caption: "DIAGNOSTICS, not KPIs: no band, no grade — they say WHY a KPI moved (server speed, the model's answers, backups taken, lost answers). '-' = scored before exp206 (no call ledger).",
+    caption: "DIAGNOSTICS, not KPIs: no band, no grade — they say WHY a number moved (server speed, the model's answers, backups taken, lost answers). '-' = scored before exp206 (no call ledger).",
 };
 
 const GROUPS: &[(&str, &[Col])] = &[
@@ -87,10 +49,10 @@ const GROUPS: &[(&str, &[Col])] = &[
             sum("rConn", "llmCalls.transport.total.retried.connection"),
             sum("r5xx", "llmCalls.transport.total.retried.status5xx"),
             sum("r429", "llmCalls.transport.total.retried.status429"),
-            max("p50ms", "llmCalls.timing.total.attemptMs.p50"),
-            max("p90ms", "llmCalls.timing.total.attemptMs.p90"),
-            max("p99ms", "llmCalls.timing.total.attemptMs.p99"),
-            max("maxMs", "llmCalls.timing.total.attemptMs.max"),
+            sum("p50ms", "llmCalls.timing.total.attemptMs.p50"),
+            sum("p90ms", "llmCalls.timing.total.attemptMs.p90"),
+            sum("p99ms", "llmCalls.timing.total.attemptMs.p99"),
+            sum("maxMs", "llmCalls.timing.total.attemptMs.max"),
         ],
     ),
     (
@@ -173,33 +135,6 @@ pub fn pair_digests(spec: &Spec, dir: &Path, cards: &[JsValue]) -> Vec<JsValue> 
             Some(JsValue::Object(o))
         })
         .collect()
-}
-
-/// A label's digests folded over `pairs` (sum, or the worst pair for a
-/// percentile). None when any of those pairs has no digest — a partial
-/// total would read as a real drop.
-pub fn fold(spec: &Spec, digests: &[JsValue], pairs: &[String]) -> Option<JsValue> {
-    let chosen: Vec<&JsValue> = pairs
-        .iter()
-        .map(|p| {
-            digests
-                .iter()
-                .find(|d| at(d, "pair").and_then(JsValue::as_str) == Some(p))
-        })
-        .collect::<Option<_>>()?;
-    let mut o = JsObject::new();
-    for c in spec.cols() {
-        let values: Vec<f64> = chosen.iter().filter_map(|d| number_at(d, c.key)).collect();
-        if values.len() != chosen.len() {
-            continue;
-        }
-        let v = match c.fold {
-            Fold::Sum => values.iter().sum(),
-            Fold::Max => values.iter().copied().fold(0.0, f64::max),
-        };
-        o.insert(c.key, JsValue::Number(v));
-    }
-    Some(JsValue::Object(o))
 }
 
 fn width(key: &str) -> usize {

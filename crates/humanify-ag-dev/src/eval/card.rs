@@ -1,16 +1,10 @@
-//! The card's JSON in the JS spelling (`JSON.stringify(x, null, 2)`, via
-//! `humanify_ag_model::js`): small builders for writing a card and a path
-//! reader for reading one back.
+//! Small builders and a path reader for the harness's JSON records.
 
 use crate::json::js::{JsObject, JsValue};
-use humanify_ag_model::js::to_fixed;
 
-/// The scorer version every card this scorer writes carries
-/// (`scorerVersion`). Version 2 (exp196) was the KPI statement form over oxc
-/// (`hash::forms::KPI_STATEMENT`, still its form); version 3 (exp222)
-/// counts changed lines with the minimal diff (`difftool::LINE_DIFF_FLAGS`),
-/// so every line column of a long file reads lower than v2's.
-pub const SCORER_VERSION: u64 = 3;
+/// The version label cards carry (`scorerVersion`): 4 is the diff
+/// labeller.
+pub const SCORER_VERSION: u64 = 4;
 
 /// An object from `(key, value)` pairs, in order.
 pub fn obj(entries: Vec<(&str, JsValue)>) -> JsValue {
@@ -19,21 +13,6 @@ pub fn obj(entries: Vec<(&str, JsValue)>) -> JsValue {
         o.insert(k, v);
     }
     JsValue::Object(o)
-}
-
-/// A count.
-pub fn count(x: usize) -> JsValue {
-    JsValue::Number(x as f64)
-}
-
-/// A signed count.
-pub fn int(x: i64) -> JsValue {
-    JsValue::Number(x as f64)
-}
-
-/// `+x.toFixed(d)`: rounded the JS way, then back to a number.
-pub fn fixed(x: f64, digits: usize) -> JsValue {
-    JsValue::Number(to_fixed(x, digits).parse().unwrap_or(0.0))
 }
 
 pub fn text(s: &str) -> JsValue {
@@ -58,18 +37,9 @@ pub fn number_at(v: &JsValue, path: &str) -> Option<f64> {
     }
 }
 
-/// A card's scorer version (`scorerVersion`); None for a card no scorer
-/// of this harness wrote.
-pub fn scorer_version(card: &JsValue) -> Option<u64> {
-    number_at(card, "scorerVersion").map(|n| n as u64)
-}
-
-/// Whether a parsed JSON file is a scorecard (shape, never file name: a
+/// Whether a parsed JSON file is a label card (shape, not file name: a
 /// run manifest also has a string `pair`).
 pub fn is_scorecard(v: &JsValue) -> bool {
     at(v, "pair").and_then(JsValue::as_str).is_some()
-        && at(v, "churn.statements")
-            .and_then(JsValue::as_object)
-            .is_some()
-        && at(v, "determinism").and_then(JsValue::as_object).is_some()
+        && at(v, "labels").and_then(JsValue::as_object).is_some()
 }

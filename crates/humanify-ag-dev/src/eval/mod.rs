@@ -1,27 +1,10 @@
-//! The eval's KPI scorer (version `card::SCORER_VERSION`): the statement
-//! identity, the per-pair scorecard and everything that reads cards
-//! (summary, leaderboard, bands).
+//! What reads a scored label: its cards, run records and stats files.
 
-pub mod analyze;
-pub mod bands;
 pub mod card;
-pub mod compose;
 pub mod difftool;
-pub mod kpis;
-pub mod leaderboard;
-pub mod line_churn;
-pub mod line_tokens;
 pub mod llm_diag;
 pub mod matching;
-pub mod real_ledger;
-pub mod report;
-pub mod rescore;
-pub mod stmts;
 pub mod summarize;
-pub mod surfaces;
-pub mod text;
-pub mod vendor;
-pub mod verbs;
 
 #[cfg(test)]
 pub(crate) mod test_support;

@@ -133,7 +133,7 @@ arguments prints every verb with what it proves and what it CANNOT prove):
 cargo dev                               # lists the verbs, what each proves and CANNOT prove
 cargo dev eval score <label>            # cold scored run of the binary
 cargo dev eval neutrality <ref>         # byte-identity gate for should-change-nothing edits
-cargo dev eval leaderboard <label>...   # compare labels
+cargo dev diff label <from-tree> <to-tree> <from-input-dir> <to-input-dir> [out.json]   # one label per changed line
 cargo dev eval walk <from>..<to> --walk-dir D   # a real version walk; its report flags the hops to read
 cargo dev library score <label> --index D --rule agreement|structural   # library naming P/R on a frozen corpus
 ```
@@ -169,10 +169,6 @@ skip) on its children's PATH, and `eval score` refuses to score into a label
 whose cards came from a different commit, pipeline, base mode, naming mode or
 library index (`--force-mixed` overrides). One comparison guard
 (`identity::guard`) decides every "may these two be compared" question.
-`crates/humanify-ag-dev/tests/measurement_owners.rs` and the dev crate's
-tests guard the stack: verdict files must be consumed by the summary, binary
-cards never join a TS label, statement extraction errors rather than falling
-back, and changed lines are counted in one module.
 
 For any change that could affect deobfuscation output (naming, matching,
 splitting), the final gate on top of `cargo dev check` is the eval harness — it
@@ -265,8 +261,7 @@ is RETIRED with the TS matcher it tested; the Rust
 matcher's replacement is an open follow-up
 (`git show 6c4b4d13f:docs/rust-port/19-cutover.md`).
 
-Scorer v2 always scores `vendor/` and the layout block when both trees have
-them (rule 8); a retired flag is an unknown flag, refused. There is no host-wide lock (exp205): the coordinating agent decides what runs together, from each verb's `footprint` that `cargo dev` prints (memory, LLM use, time, folders written). Two runs never share a folder by accident: a verb claims the folder it writes (`<folder>.live-run`) and a second run on it is refused at once, naming the first. Run an eval ALONE — a parallel heavy job (a gate batch, another
+A retired flag is an unknown flag, refused. There is no host-wide lock (exp205): the coordinating agent decides what runs together, from each verb's `footprint` that `cargo dev` prints (memory, LLM use, time, folders written). Two runs never share a folder by accident: a verb claims the folder it writes (`<folder>.live-run`) and a second run on it is refused at once, naming the first. Run an eval ALONE — a parallel heavy job (a gate batch, another
 eval) has OOM-killed a rebase before. A failed rebase (or any failed pair)
 fails the run: `eval score` never falls back, names every failed pair in a
 closing `!! eval score FAILED` verdict and exits 1; a missing input for a
@@ -295,37 +290,27 @@ prior is brought across (ledger re-derived, vendor names carried by content)
 or refused with a WARNING line. Details:
 `experiments/034-eval-harness/README.md`, "Scoring a Rust binary".
 
-**The KPI scorer is scorer version 2** (`cargo dev eval
-rescore|summarize|leaderboard|bands|diff`, `crates/humanify-ag-dev/src/eval/`,
-exp196): a NEW scorer version that re-scores the frozen reference trees, not a
-byte-identical port of the TS scorer. Cards carry `scorerVersion`; a card
-without it is the TS scorer's (v1). v2 differs from v1 in exactly 3 statements
-per reference label (a function that became `async`, which v1's hash could not
-see) and one vendor file in three off-mode cards; every other card field is
-byte-equal. The leaderboard REFUSES labels of different scorer versions unless
-`--force-mixed`; re-score a v1 label's trees with `cargo dev eval rescore
-<label>` to compare it. Bands are per scorer version: `noise-bands.json`
-`byScorer.2` (equal to the v1 bands for every KPI, except the names-mode
-section, re-measured on five pairs by exp201).
+**The measure is the diff labeller (`cargo dev diff label`,
+`crates/humanify-ag-dev/src/difflabel/`).** It takes two output trees and the
+two inputs they were made from, and gives every changed line of `diff -rN`
+exactly one label; the labels must add up to the diff's count or the verb
+fails. It compares the inputs unit by unit (every function and top-level
+statement, identifiers ignored) to find input code that is certainly
+unchanged, and reads each tree's `.humanify/provenance.json` to know which
+input bytes each output line came from. Labels fall into four groups:
 
-**Scorer version 3 (exp222, 2026-11-14) is the current one.** It is version 2
-with one change: both line counters (`eval::difftool`, `runners::tree_diff`)
-run GNU `diff --minimal`, because the default heuristic overcharges very large
-files (one split-era hop read 229,478 lines where the minimum is 60,876). It
-moves only the vendor columns of the references (`vendorReal` /
-`vendorChurnLines` −32 on the names references) and the walk report's
-`diffLn`; `byScorer.3` bands equal `byScorer.2`. The current references
-re-scored as v3 are `ref-names-40921b9f-{r1,r2,r3}-s3` and
-`serial-40921b9f-s1-s3` (names) and `ref-scratch-0f338ffa-{r1,r2,r3}-s3`
-(off), host-only, in `/work/exp222-runs/refs-s3/` and `/work/exp222-runs/off-s3/`.
-Re-score any older label with `cargo dev eval rescore <label>` before comparing.
+- **real**: from input code that changed, is new or was removed. A ceiling:
+  every changed line inside a changed input function counts.
+- **noise**: from unchanged input (renamed, moved, printed differently,
+  linker text reordered or renamed).
+- **wiring**: require and export lines whose cause is not known yet.
+- **unknown**: duplicated input text, unpaired input files, files with no
+  provenance.
 
-A label scored before exp201 has four pairs (both off-mode references stay
-that way). The leaderboard compares labels with different pair sets over the
-pairs both scored, with a `!! COMMON PAIRS` line and every total re-folded
-over those pairs (`--force-mixed` never overrides a pair-set mismatch;
-labels with no pair in common are refused); `eval bands` refuses repeats
-over different pair sets.
+`eval score` writes one label card per pair (`<v>.json`) and a summary table
+of the groups; the walk report shows the same groups per hop. There are no
+bands yet: nobody has measured how far the labels move between two cold runs
+of one commit, so a small move between two labels proves nothing.
 
 **The self-hop gate has two halves (00-control §3, 2026-09-25).** The COLD
 self-hop rarely reads 0, because the LLM re-rolls: on the scratch-base
@@ -339,70 +324,15 @@ permits. The summary judges both, and says "not judged" when a leg ran on a
 cache or on another version.
 
 ```bash
-cargo dev eval score <label>    # score current tree on 5 pairs (~95 min names mode, parallel lanes; ~119 min with --parallel-pairs 1, exp207)
-cargo dev eval leaderboard ref-names-40921b9f-r1 <label>
-#   ^ the current reference (names mode, five pairs, scratch bases, scorer v2;
-#     the off-mode one is ref-scratch-0f338ffa-r1-s2, four pairs). The leaderboard
-#     and bands read each card's <v>.identity.json; a label scored before
-#     identities is refused until `cargo dev eval rescore` re-scores it
+cargo dev eval score <label>    # the six pairs, cold (~95 min names mode, parallel lanes)
 ```
 
-Confirm the **reducible** KPIs (`noise`, `reloc`, `mints`) went **down** and that
-`novel` / `realLn` (real code change) did **not** move — a change that "reduces
-noise" by dropping real change is a regression. Judge every delta against the
-MEASURED bands in `dev/eval/noise-bands.json` (three
-same-commit cold repeats; the leaderboard prints `~0 (±band)` for deltas inside
-them). `novel`/`realLn` have a measured band of ZERO — byte-equal across all
-three repeats — so any movement in either is real; the ±2,800/hop figure that
-circulated before the bands existed is superseded folklore. Details:
-`experiments/034-eval-harness/README.md`.
-
-**When a KPI moves, read the LLM call diagnostics (exp206, 2026-11-08)**
-before explaining it: `--stats-json` `llmCalls` per namer, printed by
-`cargo dev eval summarize` and side by side by `eval leaderboard` (SERVER /
-MODEL ANSWERS / BACKUPS). They separate a slower or failing server
-(latency percentiles, retries by reason, failures by kind) from the model
-answering differently (per-identifier verdicts, answers repeating the prior
-name, hand-offs and ladder repairs) from answers truly lost. They are
-diagnostics, not KPIs, and have no band; between two cold runs the answer
-counts also move with the model's own variation. Labels scored before
-exp206 print `-`, and the coverage `retries` / `avgResponseTimeMs` of every
-Rust-era card before it (2026-09-26 to 2026-11-08, including
-`ref-names-111401fe-*`) are false zeros — never read them.
-
-**Read the MATCHING block before the KPIs (exp208, 2026-11-10).** `eval
-summarize` and `eval leaderboard` print how many functions the pipeline
-carried, close-matched, left unmatched or ambiguous, and sent to the LLM,
-and how many module bindings and identifiers the LLM named (read from each
-scored run's stats). Five of them — functions total, close-matched, sent
-to the LLM, unmatched, still ambiguous — are decided before any model
-answer and must be EQUAL between same-commit repeats: `eval bands`
-refuses to write when one differs, and a same-commit leaderboard prints
-`!! MATCHING NOT EQUAL`. That is a harness or determinism bug, not the
-LLM — find it before reading any KPI. The other counts move with the
-names of the cold-built base and the model's draws (exp209 proved the
-asked set is a pure function of bundle + prior); `eval bands` records
-their spread as `matchingBands` beside the KPI bands, and a same-commit
-move past it is flagged. The stats' `coverage.*.llm` columns mean "asked
-AND renamed", and `functions.failed` means "asked, nothing renamed".
-
-**Read every KPI per surface (exp170, 2026-10-31).** Each change/noise KPI is
-split three ways, and the three add back up exactly to the old column:
-
-- **APP** (`app:*`): everything outside `vendor/`, no vendor contribution. It
-  is what a reader who ignores `vendor/` sees, so judge app-side levers here.
-- **VENDOR** (`vendor:*`): `vendor/` plus any bundle code the library
-  placement filed into it.
-- **CROSS-BOUNDARY** (`cross:*`): code moved between `src/` and `vendor/`,
-  charged once as a move (paired by content). Read the moves the summary
-  lists; before the split, such a move was charged as an add on one side and
-  a removal on the other (exp164's vendorReal 506 was 244 vendor + 262 moved).
-
-`app:novel` / `app:realLn` have a band of 0 but CAN move when placement files
-new code into `vendor/` (exp166: 4 statements, 71 lines). The TOTAL
-`novel`/`realLn` decide whether real change moved. Labels scored before
-2026-10-31 print `-` for the split; re-score their trees with
-`cargo dev eval rescore <label>`.
+The summary prints, before the group table, the run-health banner (exit
+codes, boot, self-hop), and after it the LLM call diagnostics and the MATCHING
+block read from each scored run's stats. Five matching counts (functions
+total, close-matched, sent to the LLM, unmatched, still ambiguous) are decided
+before any model answer, so they are equal between same-commit repeats; a
+difference is a harness or determinism bug, not the LLM.
 
 **Names mode is the DEFAULT since exp171 (2026-10-31).** Library code the index
 recognises goes under `vendor/<package>/` with its names restored, and the rest
@@ -416,9 +346,7 @@ the eval refuses to score). An explicit `--library-index` that does not fit the
 kind fails. `cargo dev eval score` always hands names launches the prebuilt full index
 (pairs.json `libraryIndex`) and never a run-time build. **Every label has a
 NAMING MODE** (`pipeline.json` `namingMode`; labels before exp171 read as
-`off`). The leaderboard REFUSES mixed naming modes unless `--force-mixed`,
-exactly as it does for base modes. Neutrality across the flip must run in off
-mode.
+`off`). Neutrality across the flip must run in off mode.
 
 **Minifier style is not a change (exp200, 2026-11-08).** The match key
 (`match-key/5`, the vendor manifest's `hashVersion 5`) treats a concise arrow
@@ -433,145 +361,11 @@ plan, new forms) as `4736dcfa…`, now pairs.json `libraryIndex`; an index
 stamped with other form versions is refused. The first run of a new match-key version on a tree
 written by an older binary re-matches vendor modules by content (both sides
 formatted; each module's file and `lib_<hash>` identifier carried), so that
-hop costs about 1,000 extra vendor noise lines, not about 38,000. On
-2.1.179→181, vendor noise is about 6,200, against about 53,300 before
-(`exp200-e75f9e25`; its mints read 260 against the band's ±14, accepted by
-Andrew as draw-to-draw noise). With the rebuilt index (`exp204-75ae9334`,
-one cold run) noiseLn reads 68,225 against the reference's 77,578, and
-179→181's vendor "real" lines (library source unchanged) fall from 35,554 to
-4,468; novel/realLn exact, mints 230. The references were re-run on this
-index (`ref-names-40921b9f-*`, below); the older `ref-names-111401fe-*` used
-the OLD index `cb64c1f5…`, so the leaderboard refuses a new label against
-them unless `--force-mixed`.
+hop costs about 1,000 extra vendor noise lines, not about 38,000.
 
-**Which reference to use, and why it is not the one this file used to
-name.** Check a reference's `*-run-status.json` before citing it: absent is
-UNKNOWN, not passing. Labels live under `dev/eval/results/<label>/`; the
-current references are NOT committed (their report pages quote bundle code)
-and live on this host only.
-
-- **`ref-names-40921b9f-r1/r2/r3` (+ `serial-40921b9f-s1`) — the current
-  valid NAMES-mode cold reference, FIVE pairs, index `4736dcfa…`**
-  (2026-11-09/10, exp207: r1-r3 ran in parallel lanes, s1 one pair at a
-  time, same commit, same night). In all four, every rebase, scored leg and
-  self-hop leg exits 0, no provider errors, boots OK, warm self-hops
-  byte-identical with 0 writes, cold self-hop 2/2/2/8. novel 5,336 / realLn
-  556,875 byte-equal across the four (and to `exp204-75ae9334`); noiseLn
-  67,829-68,179. The pipeline's matching is identical in all four
-  (functions carried / close-matched / unmatched equal on every pair); only
-  the counts sent to the LLM move by a few, following the cold-built base's
-  names (exp209 investigates). The four set `noise-bands.json`
-  `byScorer.2.byMode.names` and the names self-hop range (2–8): noiseLn
-  ±350, noise ±20, reloc ±83, newName ±42, treeLn ±1,183, vendorLn ±84,
-  mints ±9. The parallel runs spread somewhat wider than the serial one on
-  noise/reloc/newName/treeLn/vendorLn, with no direction between them
-  (exp207 README, "Bands"). Results live on this host only:
-  `/work/ref-names-40921b9f-frozen/dev/eval/results/`.
-
-- **`ref-names-111401fe-r1/r2/r3` — the previous NAMES-mode cold
-  reference, FIVE pairs, OLD index `cb64c1f5…`** (2026-11-08, exp201: the four plus 2.1.179→181,
-  the minifier-change hop; scratch bases, scorer v2, full prebuilt index
-  `cb64c1f5…`). In each, all 5 rebases, 5 scored legs and both self-hop legs
-  exit 0, warm self-hops byte-identical with 0 writes, cold self-hop 22/2/8,
-  boots OK (six prompt halves re-recorded after a login expiry, `rerecorded`
-  note). novel 5,336 / realLn 556,875 byte-equal across the three, and
-  4,191 / 416,386 on the four shared pairs, equal to
-  `ref-names-0357696e-*-s2`. They set the names bands and self-hop range
-  (2–22) until exp207. **Names
-  bands are no longer bimodal: noiseLn ±989, noise ±9, treeLn ±745** (the
-  old ±15,709 / ±397 / ±2,116 were the pre-exp178 197→198 pair). The fifth
-  pair alone carries ~53,300 vendor noise lines and ~35,600 vendor "real"
-  lines with library source unchanged (exp200's target). Results live on
-  this host only: `/work/ref-names-111401fe-frozen/dev/eval/results/`.
-
-- **Scorer v2 references: `ref-names-0357696e-r1/r2/r3-s2` (names mode) and
-  `ref-scratch-0f338ffa-r1/r2/r3-s2` (off mode)** — the two references below,
-  re-scored by scorer v2 from their frozen trees (`/work/dev-harness-proof`):
-  novel **4,191** / realLn **416,386** in every names and every off label
-  (v1: 4,188 / 416,377 — the 3 `async` statements). Compare new off-mode
-  labels against the off one (four pairs); the names one is superseded by
-  the five-pair reference above; everything said below about the runs themselves holds.
-
-- **`ref-names-0357696e-r1/r2/r3` — the previous NAMES-mode cold (four pairs)
-  reference** (2026-10-31, scratch bases, full prebuilt index `cb64c1f5…`). All
-  12 pairs exit 0, boots OK, warm self-hops byte-identical, cold self-hop
-  8/8/8. novel 4,188 / realLn 416,377, byte-equal to every reference. These
-  runs set `noise-bands.json` `byMode.names` and the names self-hop range.
-  **Its 4-pair names bands were WIDE (superseded by exp201's five-pair
-  bands): noiseLn ±15,709, noise ±397, treeLn ±2,116.**
-  All of it came from one bimodal pair, 2.1.197→198: the error-classes lazy
-  init (275 callers) was frozen unrenamed because a library's restored local
-  of the same spelling settled its module row by name (exp178, fixed: a row
-  settles only for its own binding). From exp178 on, that binding settles by
-  module vote in every run and names-mode noise lands in the low mode
-  (~2,745 / ~50,900); exp201's three five-pair repeats all
-  landed there and re-measured the bands. vendorReal reads ~10,850 against off mode's ~1,320. That gap is REAL
-  dependency change, mostly highlight.js 11 at 2.1.198: names mode prints
-  vendor code formatted, while off mode prints one minified line per file
-  (exp173 corrects exp171's "defect" reading). In names mode, real change can
-  also move into `vendor/` (19 novel statements / 442 realLn on the reference,
-  from claimed ESM-inlined libraries), so the TOTALS stay the hold columns.
-- **`ref-scratch-0f338ffa-r1/r2/r3` — the current valid OFF-mode cold
-  reference** (compare only against off-mode labels; its bands are the
-  top-level `noise-bands.json`)
-  (2026-10-03), the first on SCRATCH bases (the default): three same-commit
-  cold repeats of main `0f338ffa` on the 8× gpt-oss-20b server (vLLM 0.30,
-  nginx in front, `-c 472`). All 12 pairs exit 0, boots OK, warm self-hops
-  byte-identical. They set the committed `noise-bands.json` and the self-hop
-  range. novel 4,188 / realLn 416,377 (byte-equal across all three and to
-  every prior reference); treeLn 147,218–147,234; noiseLn 47,593–48,969;
-  vendorLn ~1,500 / vendorReal ~3,370 as first scored. **The vendor scorer
-  changed 2026-10-06** (relocation pairing: a vendor file that changed a
-  little AND drew a new path is charged its own diff, not a whole-file
-  remove + add). Re-scored from the same trees: vendorReal 1,302–1,334,
-  vendorLn 3,524–3,579 (vendorChurnLines unchanged), and `noise-bands.json`
-  re-derived (vendorReal ±32, vendorLn ±55; every other band byte-equal).
-  **Vendor columns before and after 2026-10-06 are not comparable** — re-derive
-  an older label's vendor blocks first (034 README, "Vendor"). The result
-  cards themselves are gitignored, so a local copy of these refs still holds
-  the OLD vendor split until re-derived. Every movement vs the shipped binary on scratch bases
-  (`control-843826be-scratch`) was reviewed against the outputs:
-  `/work/post-cutover-notes.md` (2026-10-03) and `/work/eval-review-2026-10-03-ref/`.
-- `main-2026-09-18` — the last SEEDED-base reference, scored at
-  `1813577` (main; exp088 skeleton-vote merged, model back on gpt-oss-20b
-  :8000). Four pairs, all exit 0, `cache +0` on every pair, SEEDED bases
-  (rebuilt with the archive as prior — compare only against `--seeded-base`
-  runs). Hold columns byte-equal to ALL THREE prior references (novel 4,188
-  / realLn 416,377). 215→216 tree churn ex-build 24,768 (was 24,947),
-  nameOnlyLines 4,544 (was 4,734 — the exp088 merge). **Boot verdicts were
-  RE-RECORDED after the run:** the harness's own boot check failed on all
-  four trees with `claude_code_version_too_old` — since 2026-09-18 the API
-  refuses the account-default model to any CLI older than 2.1.251, which is
-  every version walked here. The gate now pins its model
-  (harness key `boot.model`, recorded in each label's
-  `pipeline.json` and `*-boot.json`; haiku-4-5 at the time, re-pinned to
-  `claude-opus-4-1` on 2026-09-28 when the API began refusing haiku-4-5,
-  sonnet-4-5 and sonnet-5 on the walked CLIs — `ae80cf71`) and all four
-  trees pass both halves with it; each `*-boot.json` carries a `rerecorded`
-  note.
-- `main-2026-08-20` — the previous reference, superseded by the above,
-  scored at the merge commit `77c4a59` (main; exp082-087 arc). Four pairs,
-  all exit 0, boot gates OK (both halves), seeded bases. Hold
-  columns byte-equal to BOTH prior references. 215→216 tree churn ex-build
-  24,947 (walk-measured 24,629 on the same commit; the eval's regenerated
-  base differs slightly), down ~1,100 on the week from the exp082/085/086
-  arc.
-- `main-2026-08-12` — the previous reference, superseded by the above,
-  scored at `d45610f`. Four pairs, all exit 0, boot gates OK, `cache +0`
-  on every pair. Byte-equal hold columns to `session-2026-08-05`.
-- `session-2026-08-05` — the previous reference, superseded by the above.
-  Four pairs, all `exitCode 0 / errors []`, boot gates OK, `cache +0` on
-  every pair (so every prompt was live, rule 10), `REBASE_PRIOR=1`.
-- `archive-shipped` — what the git history shipped. Still the right historical
-  comparison; not a statement about current main.
-- `baseline-2026-08-03` — **contains a FAILING pair.** 2.1.198 exited 1 there on
-  the exp059 capture. Unusable as a baseline for anything downstream of that fix.
-- `baseline-main` — labelled "current main" here until 2026-08-05, but it is from
-  **2026-07-21** and carries no run-status files at all, so its validity is
-  UNKNOWN. It was ~12 merged changes out of date by the time this was corrected.
-
-A label that says "current main" ages silently. Re-score and re-point it rather
-than trusting the name.
+**There is no reference label for the labeller yet.** Labels scored by the
+statement-hash scorer (everything before 2026-11-17, `ref-names-*`,
+`ref-scratch-*`) hold cards the summary no longer reads.
 
 The eval diffs a freshly-humanified `v` against a base `v-1` that it
 rebuilds with the current pipeline and **no prior** (a scratch base), so both

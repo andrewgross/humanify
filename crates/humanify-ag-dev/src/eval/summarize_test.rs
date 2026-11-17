@@ -1,16 +1,7 @@
 use super::*;
 
-fn card(pair: &str, novel: f64, layout: bool) -> JsValue {
-    let mut j = format!(
-        r#"{{"pair":"{pair}","scorerVersion":2,"determinism":{{"functions":{{"pctDeterministic":99,"pctReachingLLM":1}},"mintedLeftovers":3}},
-        "churn":{{"statements":{{"total":10,"unchangedClean":7,"unchangedChurned":1,"novel":{novel}}},"lines":{{"namingNoiseLines":4,"realLines":9}},
-        "relocations":{{"sameNameMovedFile":1,"novelNames":2,"freshNames":20}},"tree":{{"relocatedStatements":1}}"#
-    );
-    if layout {
-        j.push_str(r#","layout":{"churnLines":100,"buildConstantLines":4,"real":50,"noise":10,"naming":8,"alias":1,"reorder":1,"spellingIdenticalLines":0,"churnLinesClean":96,"realClean":46}"#);
-    }
-    j.push_str(r#","surfaces":{"names":{"app":{"novelNames":2},"vendor":{"novelNames":0},"crossBoundary":{"novelNames":0}}}}}"#);
-    JsValue::parse(&j).unwrap()
+fn card(pair: &str) -> JsValue {
+    JsValue::parse(&format!(r#"{{"pair":"{pair}","labels":{{}}}}"#)).unwrap()
 }
 
 #[test]
@@ -24,40 +15,12 @@ fn numeric_pair_order() {
 }
 
 #[test]
-fn totals_fold_every_scored_field_and_count_partial_blocks() {
-    let t = summarize_cards(&[card("a->b", 2.0, true), card("b->c", 3.0, false)]);
-    let tot = JsValue::Object(t.totals.clone());
-    assert_eq!(number_at(&tot, "novel"), Some(5.0));
-    assert_eq!(number_at(&tot, "stmts"), Some(20.0));
-    assert_eq!(number_at(&tot, "layoutChurnLines"), Some(100.0));
-    assert_eq!(number_at(&tot, "layoutRealClean"), Some(46.0));
-    assert_eq!(
-        t.totals.get("split.names.app.novelNames"),
-        Some(&JsValue::Number(4.0))
-    );
-    assert_eq!(
-        (t.layout_cards, t.clean_cards, t.surface_cards, t.tree_cards),
-        (1, 1, 2, 2)
-    );
-}
-
-#[test]
 fn the_cold_self_hop_is_judged_only_against_its_own_version() {
     let s = JsValue::parse(r#"{"version":"2.1.216","diffLines":200,"coldCache":"fresh"}"#).unwrap();
     let r = || Some(("2.1.216", vec![2, 32, 184]));
     assert!(cold_range_verdict(&s, r()).starts_with("!! cold self-hop 2.1.216: 200 ln — OUTSIDE"));
     let s2 = JsValue::parse(r#"{"version":"2.1.198","diffLines":5}"#).unwrap();
     assert!(cold_range_verdict(&s2, r()).contains("not judged"));
-}
-
-#[test]
-fn the_surface_table_reads_the_flat_split_totals() {
-    let mut out = Vec::new();
-    let c = card("a->b", 2.0, true);
-    let t = summarize_cards(std::slice::from_ref(&c));
-    print_surfaces(&[c], &JsValue::Object(t.totals), &mut out);
-    let row = out.iter().find(|l| l.starts_with("newName")).unwrap();
-    assert!(row.contains(" 2 ") && !row.contains(" - "), "{row}");
 }
 
 /// exp206: a pair whose scored run left a call ledger gets a digest in
@@ -74,7 +37,7 @@ fn the_llm_diagnostics_come_from_each_pairs_stats_file() {
     )
     .unwrap();
     std::fs::write(dir.join("c.stats.json"), r#"{"reask":{}}"#).unwrap();
-    let cards = [card("a->b", 1.0, false), card("b->c", 1.0, false)];
+    let cards = [card("a->b"), card("b->c")];
     let (digests, lines) = llm_section(&dir, &cards);
     assert_eq!(digests.len(), 1);
     assert_eq!(number_at(&digests[0], "calls"), Some(12.0));
@@ -98,7 +61,7 @@ fn the_matching_counts_come_from_each_pairs_stats_file() {
     )
     .unwrap();
     std::fs::write(dir.join("c.stats.json"), r#"{"reask":{}}"#).unwrap();
-    let cards = [card("a->b", 1.0, false), card("b->c", 1.0, false)];
+    let cards = [card("a->b"), card("b->c")];
     let (digests, lines) = matching_section(&dir, &cards);
     assert_eq!(digests.len(), 1);
     assert_eq!(number_at(&digests[0], "fnAsked"), Some(4.0));
@@ -108,23 +71,36 @@ fn the_matching_counts_come_from_each_pairs_stats_file() {
     assert!(bc.split_whitespace().skip(1).all(|c| c == "-"), "{bc}");
 }
 
-/// A card no scorer of this harness wrote (no `scorerVersion`) is refused,
-/// never read as some default version.
 #[test]
-fn a_card_without_a_scorer_version_is_refused() {
-    let dir = std::env::temp_dir().join(format!("dev-summarize-v-{}", std::process::id()));
+fn the_summary_tables_each_pairs_lines_by_group_and_flags_a_card_that_does_not_add_up() {
+    let dir = std::env::temp_dir().join(format!("dev-summarize-groups-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let text = crate::json::js::stringify(&card("2.1.85->2.1.86", 1.0, true))
-        .replace("\"scorerVersion\":2,", "");
-    std::fs::write(dir.join("2.1.86.json"), text).unwrap();
+    let card = |pair: &str, says: u32| {
+        format!(
+            r#"{{"pair":"{pair}","scorerVersion":4,"changedLines":10,"diffSays":{says},"labels":{{}},
+            "groups":{{"real":{{"lines":6,"outsideMetadata":5}},"noise":{{"lines":3,"outsideMetadata":3}},
+            "wiring":{{"lines":1,"outsideMetadata":1}},"unknown":{{"lines":0,"outsideMetadata":0}}}}}}"#
+        )
+    };
+    std::fs::write(dir.join("2.json"), card("1->2", 10)).unwrap();
+    std::fs::write(dir.join("3.json"), card("2->3", 11)).unwrap();
     let reference = crate::committed::eval::self_hop_reference(&crate::paths::repo_root())
         .unwrap()
         .value;
-    let e = summarize(&dir, "x", &reference).unwrap_err();
-    std::fs::remove_dir_all(&dir).unwrap();
+    let text = summarize(&dir, "label", &reference).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let row = |name: &str| -> Vec<String> {
+        let line = text.lines().find(|l| l.starts_with(name)).expect(&text);
+        line.split_whitespace()
+            .skip(1)
+            .map(str::to_string)
+            .collect()
+    };
+    assert_eq!(row("1->2"), ["9", "5", "3", "1", "0"]);
+    assert_eq!(row("TOTAL"), ["18", "10", "6", "2", "0"]);
     assert!(
-        e.contains("2.1.85->2.1.86") && e.contains("scorerVersion"),
-        "{e}"
+        text.contains("!! LABELS DO NOT ADD UP to the diff's count for: 2->3"),
+        "{text}"
     );
 }

@@ -29,10 +29,6 @@ pub const LINE_DIFF_FLAGS: &[&str] = &["--minimal"];
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Differ;
 
-fn is_marker(line: &str) -> bool {
-    line.starts_with('<') || line.starts_with('>')
-}
-
 impl Differ {
     /// The normal-format `diff` of two files' texts.
     pub fn normal_diff(&self, a: &Path, b: &Path) -> Result<String, String> {
@@ -61,15 +57,6 @@ impl Differ {
                 String::from_utf8_lossy(&done.stderr).trim()
             )),
         }
-    }
-
-    /// Changed lines between two files: `<` and `>` lines of their diff.
-    pub fn changed_lines(&self, a: &Path, b: &Path) -> Result<usize, String> {
-        Ok(self
-            .normal_diff(a, b)?
-            .split('\n')
-            .filter(|l| is_marker(l))
-            .count())
     }
 }
 
@@ -101,7 +88,3 @@ fn normalised(
 fn scratch_name(path: &Path) -> String {
     crate::committed::sha256_hex(path.display().to_string().as_bytes())
 }
-
-#[cfg(test)]
-#[path = "difftool_test.rs"]
-mod difftool_test;

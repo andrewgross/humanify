@@ -8,7 +8,7 @@ pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// The eval's committed config (pairs.json, noise-bands.json,
+/// The eval's committed config (pairs.json,
 /// self-hop-reference.json).
 pub const EVAL_DIR: &str = "dev/eval";
 /// The eval's labels (the committed references and local runs).

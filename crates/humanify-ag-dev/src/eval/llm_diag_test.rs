@@ -3,7 +3,7 @@
 
 use crate::json::js::JsValue;
 
-use super::{LLM_CALLS, digest, fold, tables};
+use super::{LLM_CALLS, digest, tables};
 
 fn stats(calls: f64, p90: f64, taken: f64) -> JsValue {
     JsValue::parse(&format!(
@@ -17,15 +17,6 @@ fn stats(calls: f64, p90: f64, taken: f64) -> JsValue {
         "reask":{{"lateRejections":1,"invalidSuggestionFinishes":0,"sweepReasked":0}}}}"#
     ))
     .unwrap()
-}
-
-fn with_pair(pair: &str, d: JsValue) -> JsValue {
-    let mut o = crate::json::js::JsObject::new();
-    o.insert("pair", JsValue::str(pair));
-    for (k, v) in d.as_object().unwrap().entries() {
-        o.insert(k.clone(), v.clone());
-    }
-    JsValue::Object(o)
 }
 
 fn n(v: &JsValue, k: &str) -> Option<f64> {
@@ -48,22 +39,6 @@ fn a_run_without_a_call_ledger_has_no_digest() {
     assert_eq!(n(&d, "lateRej"), Some(1.0));
     // Backup counters a pre-exp206 reask block lacks are absent, not zero.
     assert_eq!(n(&d, "handoff"), None);
-}
-
-#[test]
-fn counts_sum_and_percentiles_take_the_worst_pair() {
-    let digests = vec![
-        with_pair("a->b", digest(&LLM_CALLS, &stats(5.0, 20.0, 1.0)).unwrap()),
-        with_pair("b->c", digest(&LLM_CALLS, &stats(7.0, 90.0, 2.0)).unwrap()),
-    ];
-    let pairs = vec!["a->b".to_string(), "b->c".to_string()];
-    let f = fold(&LLM_CALLS, &digests, &pairs).unwrap();
-    assert_eq!(n(&f, "calls"), Some(12.0));
-    assert_eq!(n(&f, "taken"), Some(3.0));
-    assert_eq!(n(&f, "p90ms"), Some(90.0));
-    // A pair without a digest makes the whole fold unknown.
-    let more = vec!["a->b".to_string(), "c->d".to_string()];
-    assert!(fold(&LLM_CALLS, &digests, &more).is_none());
 }
 
 #[test]

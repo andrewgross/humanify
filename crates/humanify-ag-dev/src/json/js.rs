@@ -64,13 +64,6 @@ impl JsObject {
         self.entries.iter().find(|(k, _)| k == key).map(|(_, v)| v)
     }
 
-    pub fn get_mut(&mut self, key: &str) -> Option<&mut JsValue> {
-        self.entries
-            .iter_mut()
-            .find(|(k, _)| k == key)
-            .map(|(_, v)| v)
-    }
-
     pub fn entries(&self) -> &[(String, JsValue)] {
         &self.entries
     }
