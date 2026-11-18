@@ -974,12 +974,15 @@ fn shuffled(order: [&str; 3], x_body: &str) -> String {
 }
 
 #[test]
-fn an_init_call_that_runs_nothing_is_written_after_the_ones_that_do() {
-    // `d` has run by the time `s` returns, so where `x` calls it changes
-    // nothing: both import orders link to the same program.
+fn an_init_call_that_runs_nothing_is_not_written() {
+    // `d` has run by the time `s` returns, so `x` calling it does nothing
+    // wherever the call stands: both import orders link to one program.
     let (first, second) = (shuffled(["s", "d", "t"], ""), shuffled(["s", "t", "d"], ""));
     assert_eq!(run(&first), "d\ns\nt\nx\n");
     assert_eq!(first, second);
+    let x_init = first.lines().find(|l| l.contains("log(\"x\")")).unwrap();
+    let calls = x_init.split_once("=>{").unwrap().1.matches("();").count();
+    assert_eq!(calls, 2, "{x_init}");
 }
 
 #[test]

@@ -328,29 +328,24 @@ fn mark_run(calls: &[Vec<usize>], start: usize, run: &mut [bool]) {
     }
 }
 
-/// One chunk's init calls: the ones that run a chunk in import order,
-/// then the ones whose chunk an earlier call already ran, in written
-/// order. The second kind runs nothing wherever it stands, and the
-/// bundler moves it between builds of unchanged code.
-fn live_calls_first(calls: &[Vec<usize>], order: &Order, c: usize) -> Vec<usize> {
+/// One chunk's init calls that run a chunk, in import order. A call whose
+/// chunk an earlier call already ran does nothing wherever it stands,
+/// and the bundler moves it between builds of unchanged code.
+fn live_calls(calls: &[Vec<usize>], c: usize) -> Vec<usize> {
     let mut run = vec![false; calls.len()];
     run[c] = true;
-    let (mut live, mut dead) = (Vec::new(), Vec::new());
+    let mut live = Vec::new();
     for &d in &calls[c] {
-        if run[d] {
-            dead.push(d);
-        } else {
+        if !run[d] {
             live.push(d);
             mark_run(calls, d, &mut run);
         }
     }
-    dead.sort_by_key(|&d| order.position[d]);
-    live.extend(dead);
     live
 }
 
 /// Per chunk, the chunks whose init its own init calls, in call order. A
-/// chunk in a synchronous load cycle keeps its import order.
+/// chunk in a synchronous load cycle keeps every call of its import order.
 pub(super) fn init_calls(chunks: &[Chunk], order: &Order, needs_init: &[bool]) -> Vec<Vec<usize>> {
     let called = |ch: &Chunk| -> Vec<usize> {
         let deps = ch.static_deps.iter().copied();
@@ -363,7 +358,7 @@ pub(super) fn init_calls(chunks: &[Chunk], order: &Order, needs_init: &[bool]) -
             if cyclic[c] {
                 calls[c].clone()
             } else {
-                live_calls_first(&calls, order, c)
+                live_calls(&calls, c)
             }
         })
         .collect()
