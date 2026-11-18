@@ -23,6 +23,7 @@ pub enum Label {
     Export,
     PipelineWritten,
     LinkerMoved,
+    ImportsReordered,
     LinkerRenamed,
     LinkerChanged,
     LinkerUnpaired,
@@ -30,7 +31,7 @@ pub enum Label {
 }
 
 impl Label {
-    pub const ALL: [Label; 18] = [
+    pub const ALL: [Label; 19] = [
         Label::InputChanged,
         Label::InputDuplicate,
         Label::InputOutsideUnits,
@@ -45,6 +46,7 @@ impl Label {
         Label::Export,
         Label::PipelineWritten,
         Label::LinkerMoved,
+        Label::ImportsReordered,
         Label::LinkerRenamed,
         Label::LinkerChanged,
         Label::LinkerUnpaired,
@@ -119,6 +121,11 @@ impl Label {
                 "linker-moved",
                 "noise",
                 "linker text the paired input file also has, at another position",
+            ),
+            Label::ImportsReordered => (
+                "imports-reordered",
+                "noise",
+                "a linker init call the paired input file also has, at another position: the bundler wrote the same imports in another order",
             ),
             Label::LinkerRenamed => (
                 "linker-renamed",
@@ -226,6 +233,22 @@ fn wiring(text: &str) -> Label {
     } else {
         Label::PipelineWritten
     }
+}
+
+/// A statement that only calls a name with no arguments, as the linker
+/// writes a chunk's init: `name();` or `(0, module.name)();`.
+fn is_init_call(text: &str) -> bool {
+    let Some(callee) = text.trim().strip_suffix("();") else {
+        return false;
+    };
+    let callee = callee
+        .strip_prefix("(0, ")
+        .and_then(|c| c.strip_suffix(')'))
+        .unwrap_or(callee);
+    !callee.is_empty()
+        && callee
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '$' | '.'))
 }
 
 fn unit_lines<'a>(tree: &'a Tree, side: &Side) -> UnitLines<'a> {
@@ -479,6 +502,9 @@ impl<'a> Labeller<'a> {
             return Label::LinkerUnpaired;
         }
         match self.found(to_side, format!("linker {name}"), at, lines, masked_owned) {
+            Found::SameText if is_init_call(self.tree(to_side).line(at.0, at.1).unwrap_or("")) => {
+                Label::ImportsReordered
+            }
             Found::SameText => Label::LinkerMoved,
             Found::SameKey => Label::LinkerRenamed,
             Found::Missing => Label::LinkerChanged,

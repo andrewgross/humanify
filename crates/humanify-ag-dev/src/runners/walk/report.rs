@@ -419,6 +419,11 @@ const DETAIL: &[Column] = &[
         total: true,
     },
     Column {
+        head: "importsReordered",
+        get: |r| label(r, "imports-reordered"),
+        total: true,
+    },
+    Column {
         head: "linkerRenamed",
         get: |r| label(r, "linker-renamed"),
         total: true,

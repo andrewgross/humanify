@@ -119,7 +119,11 @@ fn linker_text_is_matched_against_the_paired_chunks_linker_text() {
     assert_eq!(labeller.label(false, "src/m.js", 1), Label::LinkerMoved);
     assert_eq!(labeller.label(false, "src/m.js", 2), Label::LinkerRenamed);
     assert_eq!(labeller.label(true, "src/m.js", 1), Label::LinkerRenamed);
-    assert_eq!(labeller.label(true, "src/m.js", 2), Label::LinkerMoved);
+    assert_eq!(labeller.label(true, "src/m.js", 2), Label::ImportsReordered);
+    assert_eq!(
+        labeller.label(false, "src/m.js", 3),
+        Label::ImportsReordered
+    );
     assert_eq!(labeller.label(true, "src/m.js", 3), Label::LinkerChanged);
 }
 
