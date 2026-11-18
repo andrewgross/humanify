@@ -211,6 +211,7 @@ pub fn link(
     let order = graph::order(&chunks);
     let placement = graph::placement(&chunks, &order)?;
     let needs_init = graph::needs_init(&chunks, &order, &placement.moved);
+    let init_calls = graph::init_calls(&chunks, &order, &needs_init);
     let needs_ns = namespaces_needed(&chunks);
     let names = names::assign(&chunks, &order, &needs_init, &needs_ns)?;
     let embedded = embedded::resolve(&chunks, &loader.dir, disk)?;
@@ -219,6 +220,7 @@ pub fn link(
         order: &order,
         placement: &placement,
         names: &names,
+        init_calls: &init_calls,
         embedded: &embedded.edits,
     })?;
     let report = LinkReport {

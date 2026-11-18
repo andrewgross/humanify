@@ -282,6 +282,93 @@ fn has_externals(chunk: &Chunk) -> bool {
         .any(|d| matches!(d.spec, Spec::External(_)))
 }
 
+/// Per chunk: can a walk from it over `edges` come back to it, or reach a
+/// chunk that can? (Found by removing, until none is left, every chunk
+/// with no edge to a remaining chunk.)
+fn reaches_a_cycle(edges: &[Vec<usize>]) -> Vec<bool> {
+    let mut left = vec![true; edges.len()];
+    loop {
+        let before = left.iter().filter(|l| **l).count();
+        for c in 0..edges.len() {
+            left[c] = left[c] && edges[c].iter().any(|&d| left[d]);
+        }
+        if before == left.iter().filter(|l| **l).count() {
+            return left;
+        }
+    }
+}
+
+/// The chunks on a cycle of static imports and synchronous requires, or
+/// between two such cycles: one of them can be loaded while its own init
+/// is still running.
+fn in_sync_load_cycle(chunks: &[Chunk]) -> Vec<bool> {
+    let forward: Vec<Vec<usize>> = chunks
+        .iter()
+        .map(|ch| {
+            let sync = ch.lazy.iter().filter(|e| e.sync).map(|e| e.target);
+            ch.static_deps.iter().copied().chain(sync).collect()
+        })
+        .collect();
+    let mut backward = vec![Vec::new(); chunks.len()];
+    for (c, deps) in forward.iter().enumerate() {
+        deps.iter().for_each(|&d| backward[d].push(c));
+    }
+    let (down, up) = (reaches_a_cycle(&forward), reaches_a_cycle(&backward));
+    down.iter().zip(up).map(|(d, u)| *d && u).collect()
+}
+
+/// Mark every chunk the init of `start` runs.
+fn mark_run(calls: &[Vec<usize>], start: usize, run: &mut [bool]) {
+    let mut stack = vec![start];
+    while let Some(c) = stack.pop() {
+        if !run[c] {
+            run[c] = true;
+            stack.extend(calls[c].iter().copied());
+        }
+    }
+}
+
+/// One chunk's init calls: the ones that run a chunk in import order,
+/// then the ones whose chunk an earlier call already ran, in written
+/// order. The second kind runs nothing wherever it stands, and the
+/// bundler moves it between builds of unchanged code.
+fn live_calls_first(calls: &[Vec<usize>], order: &Order, c: usize) -> Vec<usize> {
+    let mut run = vec![false; calls.len()];
+    run[c] = true;
+    let (mut live, mut dead) = (Vec::new(), Vec::new());
+    for &d in &calls[c] {
+        if run[d] {
+            dead.push(d);
+        } else {
+            live.push(d);
+            mark_run(calls, d, &mut run);
+        }
+    }
+    dead.sort_by_key(|&d| order.position[d]);
+    live.extend(dead);
+    live
+}
+
+/// Per chunk, the chunks whose init its own init calls, in call order. A
+/// chunk in a synchronous load cycle keeps its import order.
+pub(super) fn init_calls(chunks: &[Chunk], order: &Order, needs_init: &[bool]) -> Vec<Vec<usize>> {
+    let called = |ch: &Chunk| -> Vec<usize> {
+        let deps = ch.static_deps.iter().copied();
+        deps.filter(|&d| needs_init[d] && !order.eager[d]).collect()
+    };
+    let calls: Vec<Vec<usize>> = chunks.iter().map(called).collect();
+    let cyclic = in_sync_load_cycle(chunks);
+    (0..chunks.len())
+        .map(|c| {
+            if cyclic[c] {
+                calls[c].clone()
+            } else {
+                live_calls_first(&calls, order, c)
+            }
+        })
+        .collect()
+}
+
 /// A lazy chunk needs an init when it moved a statement or any lazy chunk
 /// it imports needs one (its init runs theirs first).
 pub(super) fn needs_init(chunks: &[Chunk], order: &Order, moved: &[Vec<bool>]) -> Vec<bool> {

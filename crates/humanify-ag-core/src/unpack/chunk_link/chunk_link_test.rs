@@ -944,3 +944,53 @@ console.log(main());import(\"/$bunfs/root/chunk-b.js\").then((m)=>console.log(m.
     let init = text.find("=7").unwrap() as u32;
     assert_eq!(map.source_of(init - 1).map(|s| s.0), Some(2));
 }
+
+/// A lazy chunk `x` importing `s`, `d`, `t` in the given order, where `s`
+/// imports `d`; `x_body` is the rest of `x`, `y` a chunk importing `x`.
+fn shuffled(order: [&str; 3], x_body: &str) -> String {
+    let import = |name: &str| format!("import\"/$bunfs/root/chunk-{name}.js\";");
+    let imports: String = order.iter().map(|n| import(n)).collect();
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!("{HEAD}import(\"/$bunfs/root/chunk-x.js\");\n"),
+        ),
+        (
+            "chunk-x.js",
+            &format!("{HEAD}{imports}console.log(\"x\");{x_body}\n"),
+        ),
+        (
+            "chunk-s.js",
+            &format!("{HEAD}{}console.log(\"s\");\n", import("d")),
+        ),
+        ("chunk-d.js", &format!("{HEAD}console.log(\"d\");\n")),
+        ("chunk-t.js", &format!("{HEAD}console.log(\"t\");\n")),
+        (
+            "chunk-y.js",
+            &format!("{HEAD}{}console.log(\"y\");\n", import("x")),
+        ),
+    ]);
+    linked(&entry).0
+}
+
+#[test]
+fn an_init_call_that_runs_nothing_is_written_after_the_ones_that_do() {
+    // `d` has run by the time `s` returns, so where `x` calls it changes
+    // nothing: both import orders link to the same program.
+    let (first, second) = (shuffled(["s", "d", "t"], ""), shuffled(["s", "t", "d"], ""));
+    assert_eq!(run(&first), "d\ns\nt\nx\n");
+    assert_eq!(first, second);
+}
+
+#[test]
+fn a_chunk_in_a_synchronous_load_cycle_keeps_its_import_order() {
+    // `x` can load `y` while `y`'s import of `x` is still running, so a
+    // call counted as running nothing may run something.
+    let body = "function later(){return import.meta.require(\"/$bunfs/root/chunk-y.js\")}";
+    let (first, second) = (
+        shuffled(["s", "d", "t"], body),
+        shuffled(["s", "t", "d"], body),
+    );
+    assert_eq!(run(&first), "d\ns\nt\nx\n");
+    assert_ne!(first, second);
+}

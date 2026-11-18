@@ -13,6 +13,8 @@ pub(super) struct Plan<'a> {
     pub order: &'a Order,
     pub placement: &'a Placement,
     pub names: &'a Names,
+    /// Per chunk, the chunks whose init its init calls (`graph::init_calls`).
+    pub init_calls: &'a [Vec<usize>],
     /// Per chunk, the edits that replace its embedded-file uses
     /// (`embedded::resolve`).
     pub embedded: &'a [Vec<Edit>],
@@ -304,8 +306,8 @@ fn chunk(plan: &Plan<'_>, c: usize) -> Result<Buf, LinkError> {
         top.lit(&namespace(plan, c, ns)?);
     }
     if plan.names.init.contains_key(&c) {
-        for d in &ch.static_deps {
-            if let Some(name) = plan.names.init.get(d).filter(|_| !plan.order.eager[*d]) {
+        for d in &plan.init_calls[c] {
+            if let Some(name) = plan.names.init.get(d) {
                 init.lit(&format!("{name}();"));
             }
         }
