@@ -95,4 +95,8 @@ fn a_run_labels_every_changed_line_and_adds_up_to_the_diff() {
     assert_eq!(lines("renamed"), Some(4));
     assert_eq!(lines("input-changed"), Some(2));
     assert_eq!(lines("no-provenance"), Some(2));
+    assert_eq!(
+        json["pairedInputFiles"],
+        serde_json::json!([["index.js", "index.js"]])
+    );
 }

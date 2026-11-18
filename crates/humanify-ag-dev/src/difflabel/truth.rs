@@ -323,6 +323,17 @@ impl Truth {
             .collect()
     }
 
+    /// Every paired input file with its partner, `(from, to)`.
+    pub fn paired_files(&self) -> Vec<(&str, &str)> {
+        let files = self.from.files.iter().zip(&self.from.partner);
+        files
+            .filter_map(|(f, partner)| {
+                let to = &self.to.files[(*partner)? as usize];
+                Some((f.name.as_str(), to.name.as_str()))
+            })
+            .collect()
+    }
+
     /// The other version's file an input file is paired with.
     pub fn paired_file(&self, to_side: bool, name: &str) -> Option<&str> {
         let (side, other) = if to_side {

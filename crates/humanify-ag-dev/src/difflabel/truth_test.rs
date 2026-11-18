@@ -86,6 +86,7 @@ fn an_input_file_is_paired_with_the_file_holding_most_of_its_unchanged_units() {
     assert_eq!(t.paired_file(true, "chunk-q.js"), Some("chunk-a.js"));
     assert_eq!(t.paired_file(false, "chunk-b.js"), None);
     assert_eq!(t.paired_file(true, "chunk-r.js"), None);
+    assert_eq!(t.paired_files(), [("chunk-a.js", "chunk-q.js")]);
 }
 
 #[test]

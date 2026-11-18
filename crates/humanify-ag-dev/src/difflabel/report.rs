@@ -233,6 +233,7 @@ fn as_json(tally: &Tally, diff_total: u64, truth: &Truth) -> serde_json::Value {
         .collect();
     json!({"changedLines": tally.total(), "diffSays": diff_total, "unchangedInputPairs": truth.pairs,
         "groups": groups,
+        "pairedInputFiles": truth.paired_files(),
         "unpairedInputFiles": {"from": truth.unpaired_files(false), "to": truth.unpaired_files(true)}, "labels": labels})
 }
 
