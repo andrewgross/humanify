@@ -39,6 +39,8 @@ pub struct Unit {
     pub start: u32,
     pub end: u32,
     pub parent: Option<u32>,
+    /// A top-level statement, not a function.
+    pub statement: bool,
     /// Where a function declaration declares its own name.
     own_name: Option<u32>,
     /// Hash of the text with every identifier replaced by a number, by
@@ -224,6 +226,7 @@ impl InputFile {
                 start,
                 end,
                 parent: None,
+                statement,
                 own_name,
                 text_key: text_key(text, &tokens, start, end, statement),
             })

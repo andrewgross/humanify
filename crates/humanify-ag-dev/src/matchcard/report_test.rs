@@ -44,19 +44,23 @@ fn the_card_counts_each_unchanged_function_once() {
         json!({
             "functions": {"fresh": 4, "prior": 3, "exact": 2, "close": 0, "ambiguous": 1, "unmatched": 0},
             "freshStandings": {"changed": 1, "unchanged": 3},
+            "freshByOwnByte": 4,
             "unchanged": 3, "correct": 1, "wrong": 1,
             "missedClose": 0, "missedCloseOther": 0, "missedAmbiguous": 0, "missedUnmatched": 1,
             "notJudged": 0, "otherMatched": 0, "otherUnmatched": 1,
             "precision": 0.5, "recall": 1.0 / 3.0,
+            "initWrappers": {
+                "unchanged": 0, "correct": 0, "wrong": 0,
+                "missedClose": 0, "missedCloseOther": 0, "missedAmbiguous": 0, "missedUnmatched": 0,
+                "notJudged": 0, "otherMatched": 2, "otherUnmatched": 2,
+                "precision": 0.0, "recall": 0.0, "inputFileUnpaired": 0,
+            },
         })
     );
     assert!(
-        scored.report.contains("precision 50.0% (1 of 2)"),
-        "{}",
-        scored.report
-    );
-    assert!(
-        scored.report.contains("recall 33.3% (1 of 3)"),
+        scored
+            .report
+            .contains("precision 50.0% (1 of 2); recall 33.3% (1 of 3)"),
         "{}",
         scored.report
     );
