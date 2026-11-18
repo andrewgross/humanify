@@ -24,6 +24,7 @@ pub struct PriorCarry {
     pub matcher: MatcherCarry,
     /// new final name → the matched prior counterpart's name.
     pub match_map: Vec<(String, String)>,
+    pub decisions: crate::matching::decisions::MatchDecisions,
 }
 
 /// TS `emptyMatcherCarry`.

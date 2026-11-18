@@ -167,6 +167,14 @@ const VERBS: &[Verb] = &[
         footprint: LIGHT,
     },
     Verb {
+        words: &["match", "score"],
+        usage: "match score <from-tree> <to-tree> <from-input-dir> <to-input-dir> [<out.json>]",
+        proves: "how many functions of unchanged input the matcher paired with their true partner, paired with another function or left for the LLM, in the run that wrote <to-tree> with <from-tree> as its prior",
+        cannot_prove: "anything about functions of changed or duplicated input, or about a function whose line has no input byte in the provenance file; whether the names it carried are good",
+        settings: &[],
+        footprint: LIGHT,
+    },
+    Verb {
         words: &["run", "stub"],
         usage: "run stub <bin> <bundle> <out> [<prior.js>] [--library-index D] [--pipeline-set library.matching=off]",
         proves: "what the binary does on a bundle with every name answered by the one stub (no LLM)",
@@ -517,7 +525,8 @@ fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
         ["eval", "neutrality"] => done(verbs::neutrality(&live(), parsed, verb.settings)),
         ["eval", "walk"] => done(verbs::walk(&live(), parsed)),
         ["eval", "walk-report"] => done(verbs::walk_report(&live(), parsed)),
-        ["diff", "label"] => diff_label(parsed),
+        ["diff", "label"] => two_trees(parsed, "diff label", crate::difflabel::run),
+        ["match", "score"] => two_trees(parsed, "match score", crate::matchcard::run),
         ["run", "stub"] => done(verbs::stub(&live(), parsed)),
         ["index", "build"] => done(verbs::index_build(&live(), parsed)),
         ["boot-gate"] => done(verbs::boot_gate(&live(), parsed)),
@@ -526,19 +535,27 @@ fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
     }
 }
 
-fn diff_label(parsed: &settings::Parsed) -> (u8, String, String) {
+type TwoTreeVerb = fn(
+    (&std::path::Path, &std::path::Path),
+    (&std::path::Path, &std::path::Path),
+    Option<&std::path::Path>,
+) -> Result<String, String>;
+
+fn two_trees(parsed: &settings::Parsed, verb: &str, run: TwoTreeVerb) -> (u8, String, String) {
     use std::path::Path;
     let (from, to, from_input, to_input, out) = match parsed.positionals.as_slice() {
         [a, b, c, d] => (a, b, c, d, None),
         [a, b, c, d, out] => (a, b, c, d, Some(Path::new(out))),
         _ => {
-            let usage = "usage: humanify-ag-dev diff label <from-tree> <to-tree> <from-input-dir> <to-input-dir> [<out.json>]\n";
-            return (2, String::new(), usage.into());
+            let usage = format!(
+                "usage: humanify-ag-dev {verb} <from-tree> <to-tree> <from-input-dir> <to-input-dir> [<out.json>]\n"
+            );
+            return (2, String::new(), usage);
         }
     };
     let trees = (Path::new(from), Path::new(to));
     let inputs = (Path::new(from_input), Path::new(to_input));
-    match crate::difflabel::run(trees, inputs, out) {
+    match run(trees, inputs, out) {
         Ok(report) => (0, report, String::new()),
         Err(e) => (1, String::new(), format!("{e}\n")),
     }

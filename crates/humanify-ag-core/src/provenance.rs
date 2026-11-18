@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use serde_json::{Value, json};
 
 use crate::emit::cjs::FileLines;
+use crate::place::layout::HUMANIFIED_SOURCE_PATH;
 use crate::unpack::bun::UnpackOrigins;
 use crate::unpack::chunk_link::LinkMap;
 
@@ -113,6 +114,18 @@ fn file_rows(
     rows
 }
 
+/// The rows of the named text itself, written as one file.
+fn whole_text_rows(by_line: &[Option<Source>]) -> Vec<Row> {
+    let mut rows: Vec<Row> = vec![(1, None)];
+    for (i, source) in by_line.iter().enumerate() {
+        if source.is_some() && *source != rows.last().and_then(|r| r.1) {
+            rows.pop_if(|last| last.0 == i as u32 + 1);
+            rows.push((i as u32 + 1, *source));
+        }
+    }
+    rows
+}
+
 fn row_json(row: &Row) -> Value {
     match row.1 {
         Some((file, offset)) => json!([row.0, file, offset]),
@@ -135,6 +148,10 @@ pub fn provenance_json(
         });
     }
     let mut files: BTreeMap<&str, Value> = BTreeMap::new();
+    if line_count(HUMANIFIED_SOURCE_PATH) as usize + 1 == by_line.len() {
+        let rows = whole_text_rows(&by_line);
+        files.insert(HUMANIFIED_SOURCE_PATH, rows.iter().map(row_json).collect());
+    }
     for lines in emitted {
         let rows = file_rows(
             lines,

@@ -57,7 +57,7 @@ pub fn changed_lines(diff: &str) -> Result<(Vec<u32>, Vec<u32>), String> {
     Ok((from, to))
 }
 
-fn read_input(dir: &Path) -> Result<Vec<InputFile>, String> {
+pub fn read_input(dir: &Path) -> Result<Vec<InputFile>, String> {
     let error = |e: std::io::Error| format!("{}: {e}", dir.display());
     let mut texts = Vec::new();
     for entry in std::fs::read_dir(dir).map_err(error)? {

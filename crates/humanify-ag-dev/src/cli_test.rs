@@ -26,6 +26,7 @@ fn the_table_holds_the_whole_subcommand_map() {
         "eval score",
         "eval neutrality",
         "diff label",
+        "match score",
         "eval vendor-precision",
         "eval walk",
         "run stub",

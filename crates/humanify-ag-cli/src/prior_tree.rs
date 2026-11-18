@@ -146,6 +146,7 @@ pub fn load_prior_tree(
         files.take(&in_tree);
     }
     files.take(humanify_ag_core::provenance::PROVENANCE_PATH);
+    files.take(humanify_ag_core::matching::decisions::MATCH_DECISIONS_PATH);
     let beside = prior_ledger_in(prior_file, &files)
         .and_then(|rel| files.take(&rel).map(|bytes| (root.join(rel), bytes)));
     let tree =

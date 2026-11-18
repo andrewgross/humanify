@@ -90,12 +90,13 @@ fn each_statement_line_reads_back_to_its_input_byte() {
         },
     ];
     let text = provenance_json(&sources, &emitted, &|path| {
-        if path == "src/a.js" { 7 } else { 1 }
+        if path == "src/b.js" { 1 } else { 7 }
     })
     .unwrap();
     assert_eq!(
         files(&text),
         json!({
+            ".humanify/humanified.js": [[1], [2, 0, 10], [3, 1, 0], [4, 1, 15], [6, 1, null]],
             "src/a.js": [[1], [4, 1, 0], [5, 1, 15], [7, 0, 10]],
             "src/b.js": [[1, 1, null]],
         })

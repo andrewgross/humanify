@@ -22,6 +22,7 @@ pub(crate) mod identity;
 pub(crate) mod json;
 pub(crate) mod launch;
 pub(crate) mod library;
+pub(crate) mod matchcard;
 pub(crate) mod paths;
 pub(crate) mod proc;
 pub(crate) mod runners;

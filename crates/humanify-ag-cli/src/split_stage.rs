@@ -532,6 +532,12 @@ fn commit_and_finish(
             serde_json::to_string(&map).expect("a name map serializes"),
         );
     }
+    if let Some(carry) = prior_carry {
+        tree.put_rel(
+            humanify_ag_core::matching::decisions::MATCH_DECISIONS_PATH,
+            serde_json::to_string(&carry.decisions).expect("match decisions serialize"),
+        );
+    }
     tree.put_rel(
         humanify_ag_core::place::layout::HUMANIFIED_SOURCE_PATH,
         code,

@@ -9,7 +9,7 @@ mod truth;
 mod units;
 
 pub use label::{Label, Labeller};
-pub use report::{GROUPS, NOT_ADDING_UP, label_trees, run};
+pub use report::{GROUPS, NOT_ADDING_UP, label_trees, read_input, run};
 pub use tree::{Origin, Tree};
-pub use truth::{Standing, Truth};
+pub use truth::{Side, Standing, Truth};
 pub use units::InputFile;

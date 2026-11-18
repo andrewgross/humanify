@@ -304,6 +304,7 @@ pub struct NamingEra {
 struct PendingCarry {
     matcher: MatcherCarry,
     matched: Vec<(usize, String)>,
+    decisions: crate::matching::decisions::MatchDecisions,
 }
 
 /// The naming graph's read-only inputs over the fresh text.
@@ -409,6 +410,7 @@ pub fn prior_era<P: NameProvider>(
     let pending = PendingCarry {
         matcher: outcome.carry.clone(),
         matched: outcome.matched_module_bindings.clone(),
+        decisions: crate::matching::decisions::of_stage(stage),
     };
     let prior = PriorStats {
         statement_twin: outcome.stats_twin.clone(),
@@ -908,6 +910,7 @@ fn run_era<P: NameProvider>(
             )
         })),
         matcher: p.matcher,
+        decisions: p.decisions,
     });
     drop(ph);
     let ph = crate::profiling::phase("era:generate");
