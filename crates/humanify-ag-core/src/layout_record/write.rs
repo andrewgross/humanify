@@ -108,13 +108,8 @@ impl Source {
         }
     }
 
-    /// Text with no input bytes of its own that holds other statements.
-    fn holds_statements(self) -> bool {
-        match self {
-            Source::Program { .. } => true,
-            Source::Linker { text, .. } => text == LinkerText::Init,
-            Source::Input { .. } => false,
-        }
+    fn is_startup(self) -> bool {
+        matches!(self, Source::Linker { text, .. } if text == LinkerText::Init)
     }
 }
 
@@ -187,6 +182,8 @@ struct Marked {
     marks: Vec<Mark>,
     functions: Vec<FunctionMark>,
     lines: u32,
+    /// The depth of the outermost statements.
+    outer: u32,
 }
 
 /// The lines of the named text one statement takes, and where it was
@@ -318,6 +315,7 @@ fn marked(run: &Run<'_>, mut decided: HashMap<u32, Match>) -> Result<Marked, Lay
         return Err(LayoutError::FunctionNotPrinted { at });
     }
     Ok(Marked {
+        outer: marks.iter().map(|m| m.depth).min().unwrap_or(0),
         marks,
         functions,
         lines: starts.len() as u32,
@@ -340,11 +338,10 @@ impl Marked {
 
     /// The line ranges of the outermost statements.
     fn outermost(&self) -> Vec<(u32, u32)> {
-        let depth = self.marks.iter().map(|m| m.depth).min().unwrap_or(0);
         let firsts: Vec<u32> = self
             .marks
             .iter()
-            .filter(|m| m.depth == depth)
+            .filter(|m| m.depth == self.outer)
             .map(|m| m.line)
             .collect();
         let ends = firsts.iter().skip(1).copied().chain([self.lines]);
@@ -355,21 +352,28 @@ impl Marked {
             .collect()
     }
 
-    /// One statement as a unit. A statement with no input text of its
-    /// own (a wrapper around the program, a startup function the linker
-    /// wrote) lists the statements inside it as its body.
+    /// Whether the statement lists the statements inside it: a wrapper
+    /// around the program that no input file holds, or a startup function
+    /// the linker wrote.
+    fn holds_statements(&self, own: &Mark) -> bool {
+        match own.source {
+            Some(Source::Input { .. }) => false,
+            Some(source @ Source::Linker { .. }) => source.is_startup(),
+            Some(Source::Program { .. }) | None => own.depth == self.outer,
+        }
+    }
+
+    /// One statement as a unit.
     fn unit(&self, place: &Place<'_>) -> Result<Unit, LayoutError> {
         let marks = self.marks_in(place.lines);
         let (first, last) = place.lines;
         let own = marks.first().filter(|m| m.line == first);
         let inner: Vec<u32> = match own {
-            Some(own) if place.same_lines && own.source.is_none_or(Source::holds_statements) => {
-                marks
-                    .iter()
-                    .filter(|m| m.depth == own.depth + 1 && m.line > first)
-                    .map(|m| m.line)
-                    .collect()
-            }
+            Some(own) if place.same_lines && self.holds_statements(own) => marks
+                .iter()
+                .filter(|m| m.depth == own.depth + 1 && m.line > first)
+                .map(|m| m.line)
+                .collect(),
             _ => Vec::new(),
         };
         let Some(&first_inner) = inner.first() else {

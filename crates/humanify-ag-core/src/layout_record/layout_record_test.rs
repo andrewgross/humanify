@@ -290,8 +290,8 @@ fn linker_text_is_named_by_its_kind_and_a_startup_function_lists_its_body() {
 #[test]
 fn a_wrapper_with_no_input_text_lists_the_statements_inside_it() {
     let (inner, mut map) = linked();
-    let code = format!("(function(){{var h=()=>1;{inner}}})();");
-    let shift = "(function(){var h=()=>1;".len() as u32;
+    let code = format!("(function(){{var h=()=>{{k()}};{inner}}})();");
+    let shift = "(function(){var h=()=>{k()};".len() as u32;
     map.runs.iter_mut().for_each(|r| r.out += shift);
     map.marks.iter_mut().for_each(|m| m.out += shift);
     for span in &mut map.spans {
@@ -315,10 +315,11 @@ fn a_wrapper_with_no_input_text_lists_the_statements_inside_it() {
     let body = units[0]["body"].as_array().unwrap();
     assert_eq!(
         body[0],
-        json!({"at": null, "line": 2, "rows": [[2, "program+18", "new"]]})
+        json!({"at": null, "line": 2, "rows": [[2, "program+18", "new"]]}),
+        "a helper is one unit: only the outermost wrapper lists what is inside it"
     );
     assert_eq!(body[1]["linker"], json!("init"));
-    assert_eq!(body[1]["body"], json!([{"at": [0, 7], "line": 4}]));
+    assert_eq!(body[1]["body"], json!([{"at": [0, 7], "line": 6}]));
     assert_eq!(body.len(), 3);
 }
 
