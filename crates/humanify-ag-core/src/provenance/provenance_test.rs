@@ -63,6 +63,7 @@ fn each_statement_line_reads_back_to_its_input_byte() {
                 chunk: 1,
             },
         ],
+        marks: Vec::new(),
     };
     let sources = Sources {
         link: Some(&link),

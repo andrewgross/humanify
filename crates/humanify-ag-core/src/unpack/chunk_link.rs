@@ -143,6 +143,34 @@ pub struct ChunkSpan {
     pub chunk: u32,
 }
 
+/// A piece of text the linker writes for a chunk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum LinkerText {
+    /// The chunk's init: its opening and its close.
+    Init,
+    /// `var ns={};`
+    Namespace,
+    /// The call that fills the namespace object.
+    Exports,
+    /// The declaration of the chunk's external bindings.
+    ExternalNames,
+    /// The chunk's `nth` external load.
+    Load { nth: u32 },
+    /// The call of chunk `target`'s init.
+    Call { target: u32 },
+    /// The hoisted declaration of the statement at chunk byte `src`.
+    Decl { src: u32 },
+}
+
+/// Linked text the linker wrote for a chunk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LinkMark {
+    pub out: u32,
+    pub len: u32,
+    pub chunk: u32,
+    pub text: LinkerText,
+}
+
 /// Which chunk bytes each part of the linked text came from.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LinkMap {
@@ -152,9 +180,18 @@ pub struct LinkMap {
     pub runs: Vec<LinkRun>,
     /// Sorted by `out`.
     pub spans: Vec<ChunkSpan>,
+    /// Sorted by `out`.
+    pub marks: Vec<LinkMark>,
 }
 
 impl LinkMap {
+    /// The chunk and the piece of linker text a linked offset is in.
+    pub fn linker_text_at(&self, at: u32) -> Option<(u32, LinkerText)> {
+        let i = self.marks.partition_point(|m| m.out <= at);
+        let m = self.marks[i.checked_sub(1)?];
+        (at < m.out + m.len).then_some((m.chunk, m.text))
+    }
+
     /// The chunk a linked offset belongs to, and its offset in that chunk
     /// when the byte was copied from it (`None`: the linker wrote it).
     pub fn source_of(&self, at: u32) -> Option<(u32, Option<u32>)> {
@@ -215,7 +252,12 @@ pub fn link(
     let needs_ns = namespaces_needed(&chunks);
     let names = names::assign(&chunks, &order, &needs_init, &needs_ns)?;
     let embedded = embedded::resolve(&chunks, &loader.dir, disk)?;
-    let (text, runs, spans) = emit::program(&emit::Plan {
+    let emit::Linked {
+        text,
+        runs,
+        spans,
+        marks,
+    } = emit::program(&emit::Plan {
         chunks: &chunks,
         order: &order,
         placement: &placement,
@@ -255,7 +297,16 @@ pub fn link(
             }),
         })
         .collect::<Result<_, _>>()?;
-    Ok((text, report, LinkMap { files, runs, spans }))
+    Ok((
+        text,
+        report,
+        LinkMap {
+            files,
+            runs,
+            spans,
+            marks,
+        },
+    ))
 }
 
 /// Chunks something loads lazily or imports as a namespace.

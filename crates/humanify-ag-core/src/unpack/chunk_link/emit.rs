@@ -6,7 +6,7 @@ use super::analyse::{Chunk, Declarator, Edit, Imported, Spec, Stmt, StmtKind};
 use super::error::LinkError;
 use super::graph::{Order, Placement, Target, resolve_export, resolve_sym};
 use super::names::Names;
-use super::{ChunkSpan, LinkRun};
+use super::{ChunkSpan, LinkMark, LinkRun, LinkerText};
 
 pub(super) struct Plan<'a> {
     pub chunks: &'a [Chunk],
@@ -43,9 +43,20 @@ struct Buf {
     text: String,
     /// `(offset in text, offset in the chunk, length, edited)`.
     runs: Vec<(u32, u32, u32, bool)>,
+    /// `(offset in text, length, what the linker wrote there)`.
+    marks: Vec<(u32, u32, LinkerText)>,
 }
 
 impl Buf {
+    /// Linker text of the given kind.
+    fn mark(&mut self, s: &str, kind: LinkerText) {
+        if !s.is_empty() {
+            self.marks
+                .push((self.text.len() as u32, s.len() as u32, kind));
+        }
+        self.text.push_str(s);
+    }
+
     fn lit(&mut self, s: &str) {
         self.text.push_str(s);
     }
@@ -87,6 +98,8 @@ impl Buf {
         let base = self.text.len() as u32;
         self.runs
             .extend(other.runs.iter().map(|r| (r.0 + base, r.1, r.2, r.3)));
+        self.marks
+            .extend(other.marks.iter().map(|m| (m.0 + base, m.1, m.2)));
         self.text.push_str(&other.text);
     }
 }
@@ -97,12 +110,18 @@ fn render(text: &str, range: (usize, usize), edits: &[Edit]) -> String {
     buf.text
 }
 
+/// The linked program and where each part of it came from.
+pub(super) struct Linked {
+    pub text: String,
+    pub runs: Vec<LinkRun>,
+    pub spans: Vec<ChunkSpan>,
+    pub marks: Vec<LinkMark>,
+}
+
 /// The program: pragma, wrapper, the entry's header comments, the
 /// `__esm` helper when any chunk has an init, every chunk, the wrapper's
 /// close.
-pub(super) fn program(
-    plan: &Plan<'_>,
-) -> Result<(String, Vec<LinkRun>, Vec<ChunkSpan>), LinkError> {
+pub(super) fn program(plan: &Plan<'_>) -> Result<Linked, LinkError> {
     let entry = &plan.chunks[0];
     let first_line = entry.text.lines().next().unwrap_or("");
     let first_stmt = entry
@@ -126,7 +145,7 @@ pub(super) fn program(
             plan.names.esm_helper
         ));
     }
-    let (mut runs, mut spans) = (Vec::new(), Vec::new());
+    let (mut runs, mut spans, mut marks) = (Vec::new(), Vec::new(), Vec::new());
     for &c in &plan.order.chunks {
         let buf = chunk(plan, c)?;
         let base = out.len() as u32;
@@ -137,6 +156,12 @@ pub(super) fn program(
             len: r.2,
             edited: r.3,
         }));
+        marks.extend(buf.marks.iter().map(|m| LinkMark {
+            out: m.0 + base,
+            len: m.1,
+            chunk: c as u32,
+            text: m.2,
+        }));
         out.push_str(&buf.text);
         spans.push(ChunkSpan {
             out: base,
@@ -146,7 +171,12 @@ pub(super) fn program(
         out.push('\n');
     }
     out.push_str("})\n");
-    Ok((out, runs, spans))
+    Ok(Linked {
+        text: out,
+        runs,
+        spans,
+        marks,
+    })
 }
 
 /// The edits that rename a chunk's bindings to their linked names and
@@ -291,7 +321,7 @@ fn chunk(plan: &Plan<'_>, c: usize) -> Result<Buf, LinkError> {
     }
     let (declared, loads) = externals(plan, c);
     if plan.order.eager[c] {
-        top.lit(&eager_loads(&declared, &loads));
+        external_loads(&mut top, &declared, &loads, "var ");
     } else {
         let names: Vec<&str> = declared
             .iter()
@@ -299,20 +329,27 @@ fn chunk(plan: &Plan<'_>, c: usize) -> Result<Buf, LinkError> {
             .filter(|d| !d.is_empty())
             .collect();
         if !names.is_empty() {
-            top.lit(&format!("var {};", names.join(",")));
+            top.mark(
+                &format!("var {};", names.join(",")),
+                LinkerText::ExternalNames,
+            );
         }
     }
     if let Some(ns) = plan.names.of.get(&Target::Ns(c)) {
-        top.lit(&namespace(plan, c, ns)?);
+        top.mark(&format!("var {ns}={{}};"), LinkerText::Namespace);
+        top.mark(&namespace(plan, c, ns)?, LinkerText::Exports);
     }
     if plan.names.init.contains_key(&c) {
         for d in &plan.init_calls[c] {
             if let Some(name) = plan.names.init.get(d) {
-                init.lit(&format!("{name}();"));
+                init.mark(
+                    &format!("{name}();"),
+                    LinkerText::Call { target: *d as u32 },
+                );
             }
         }
         if !plan.order.eager[c] {
-            init.lit(&lazy_loads(&declared, &loads));
+            external_loads(&mut init, &declared, &loads, "");
         }
     }
     let mut prev_end = ch.stmts.first().map_or(0, |s| s.span.start as usize);
@@ -328,9 +365,12 @@ fn chunk(plan: &Plan<'_>, c: usize) -> Result<Buf, LinkError> {
         statement(plan, at, st, &out, (&mut top, &mut init))?;
     }
     if let Some(name) = plan.names.init.get(&c) {
-        top.lit(&format!("var {name}={}(()=>{{", plan.names.esm_helper));
+        top.mark(
+            &format!("var {name}={}(()=>{{", plan.names.esm_helper),
+            LinkerText::Init,
+        );
         top.append(init);
-        top.lit("});");
+        top.mark("});", LinkerText::Init);
     }
     Ok(top)
 }
@@ -366,7 +406,7 @@ fn statement(
         StmtKind::DefaultExpr { expr, .. } => {
             let d = plan.names.name(Target::Default(c));
             let value = if moved {
-                top.lit(&format!("var {d};"));
+                top.mark(&format!("var {d};"), LinkerText::Decl { src: expr.start });
                 init.lit_at(&format!("{d}="), expr.start as usize);
                 init
             } else {
@@ -390,7 +430,10 @@ fn statement(
                 .map(|s| name(*s))
                 .collect();
             if !names.is_empty() {
-                top.lit(&format!("var {};", names.join(",")));
+                top.mark(
+                    &format!("var {};", names.join(",")),
+                    LinkerText::Decl { src: st.span.start },
+                );
             }
             for (k, (d, _)) in kept.iter().enumerate() {
                 top.lit_at(if k == 0 { "var " } else { "," }, d.pattern.start as usize);
@@ -412,7 +455,10 @@ fn statement(
         }
         StmtKind::Class { name: sym, .. } => {
             let n = name(*sym);
-            top.lit(&format!("var {n};"));
+            top.mark(
+                &format!("var {n};"),
+                LinkerText::Decl { src: st.span.start },
+            );
             init.lit_at(&format!("{n}="), st.span.start as usize);
             out.span(init, st.span);
             init.lit(";");
@@ -502,38 +548,21 @@ fn to_esm_init<'p>(plan: &'p Plan<'_>, c: usize) -> Option<&'p str> {
     plan.names.init.get(&h).map(String::as_str)
 }
 
-/// An eager chunk's external loads, as declarations at its top.
-fn eager_loads(declared: &[String], loads: &[String]) -> String {
-    declared
-        .iter()
-        .zip(loads)
-        .map(|(d, l)| {
-            if d.is_empty() {
-                format!("{l};")
-            } else {
-                format!("var {d}={l};")
-            }
-        })
-        .collect()
+/// A chunk's external loads: declarations at an eager chunk's top
+/// (`declare` is `var `), the first statements of a lazy chunk's init.
+fn external_loads(buf: &mut Buf, declared: &[String], loads: &[String], declare: &str) {
+    for (nth, (d, l)) in declared.iter().zip(loads).enumerate() {
+        let text = if d.is_empty() {
+            format!("{l};")
+        } else {
+            format!("{declare}{d}={l};")
+        };
+        buf.mark(&text, LinkerText::Load { nth: nth as u32 });
+    }
 }
 
-/// A lazy chunk's external loads, as its init's first statements.
-fn lazy_loads(declared: &[String], loads: &[String]) -> String {
-    declared
-        .iter()
-        .zip(loads)
-        .map(|(d, l)| {
-            if d.is_empty() {
-                format!("{l};")
-            } else {
-                format!("{d}={l};")
-            }
-        })
-        .collect()
-}
-
-/// A chunk's namespace object, Bun's way: `var ns={};__export(ns,{name:
-/// ()=>binding,…})` — a live getter per export.
+/// The call that fills a chunk's namespace object (`var ns={}`), Bun's
+/// way: `__export(ns,{name:()=>binding,…})` — a live getter per export.
 fn namespace(plan: &Plan<'_>, c: usize, ns: &str) -> Result<String, LinkError> {
     let mut props = Vec::new();
     for (name, _) in &plan.chunks[c].exports {
@@ -541,7 +570,7 @@ fn namespace(plan: &Plan<'_>, c: usize, ns: &str) -> Result<String, LinkError> {
         props.push(format!("{}:()=>{}", key(name), plan.names.name(t)));
     }
     Ok(format!(
-        "var {ns}={{}};{}({ns},{{{}}});",
+        "{}({ns},{{{}}});",
         plan.names.export_helper,
         props.join(",")
     ))

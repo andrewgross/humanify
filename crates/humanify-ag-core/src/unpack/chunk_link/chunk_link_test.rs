@@ -997,3 +997,84 @@ fn a_chunk_in_a_synchronous_load_cycle_keeps_its_import_order() {
     assert_eq!(run(&first), "d\ns\nt\nx\n");
     assert_ne!(first, second);
 }
+
+#[test]
+fn the_link_map_names_every_piece_of_text_the_linker_writes() {
+    use super::LinkerText::{Call, Decl, Exports, ExternalNames, Init, Load, Namespace};
+    let files = [
+        (
+            "index.js",
+            format!("{HEAD}import(\"/$bunfs/root/chunk-b.js\").then((m)=>console.log(m.b()));\n"),
+        ),
+        (
+            "chunk-b.js",
+            format!(
+                "{HEAD}import{{c}}from\"/$bunfs/root/chunk-c.js\";import{{sep}}from\"path\";\
+var k=7;class C{{v(){{return k+c()+sep.length}}}}function b(){{return new C().v()}}export{{b}};\n"
+            ),
+        ),
+        (
+            "chunk-c.js",
+            format!("{HEAD}var n=[1];function c(){{return n[0]}}export{{c}};\n"),
+        ),
+    ];
+    let refs: Vec<(&str, &str)> = files.iter().map(|(n, t)| (*n, t.as_str())).collect();
+    let (text, _, map) = link(&layout(&refs), &Disk).unwrap();
+    assert_eq!(run(&text), "9\n");
+    let b = &files[1].1;
+    let mark = |needle: &str| {
+        let at = text
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle} in:\n{text}"));
+        map.linker_text_at(at as u32)
+    };
+    let init_b = text
+        .find("return new C")
+        .map(|at| text[..at].len())
+        .unwrap();
+    let in_b = |needle: &str| {
+        let at = text[init_b..]
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle} in:\n{text}"));
+        map.linker_text_at((init_b + at) as u32)
+    };
+    assert_eq!(mark("var sep"), Some((1, ExternalNames)));
+    assert_eq!(mark("={};"), Some((1, Namespace)));
+    assert_eq!(mark(",{b:()=>"), Some((1, Exports)));
+    let c = &files[2].1;
+    assert_eq!(
+        mark("var n;"),
+        Some((
+            2,
+            Decl {
+                src: c.find("var n=[1]").unwrap() as u32
+            }
+        ))
+    );
+    assert_eq!(
+        mark("var C;"),
+        Some((
+            1,
+            Decl {
+                src: b.find("class C").unwrap() as u32
+            }
+        ))
+    );
+    assert_eq!(in_b("=__esm(()=>{"), Some((1, Init)));
+    assert_eq!(in_b("();"), Some((1, Call { target: 2 })));
+    assert_eq!(in_b("=require(\"path\")"), Some((1, Load { nth: 0 })));
+    assert_eq!(mark("return k+"), None);
+    // An init is two pieces, its opening and its close; every other
+    // piece of linker text is written once per chunk.
+    let mut seen = std::collections::BTreeMap::new();
+    for m in &map.marks {
+        *seen.entry((m.chunk, m.text)).or_insert(0) += 1;
+    }
+    for ((chunk, kind), n) in seen {
+        assert_eq!(
+            n,
+            if kind == Init { 2 } else { 1 },
+            "chunk {chunk} {kind:?}"
+        );
+    }
+}
