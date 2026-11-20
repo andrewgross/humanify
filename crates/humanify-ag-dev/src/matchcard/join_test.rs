@@ -1,48 +1,76 @@
-use std::collections::BTreeMap;
+use humanify_ag_core::layout_record::{FileEntry, FunctionId, Layout, Match, Row, Unit};
 
-use super::{NAMED_TEXT, Standings, locate, locate_init_wrappers};
-use crate::difflabel::{InputFile, Tree, Truth};
+use super::{Standings, locate, locate_init_wrappers};
+use crate::difflabel::{InputFile, Truth};
 
 const FROM: &str = "function a(x){return x+1}function b(y){return y*2}";
 const TO: &str = "function r(y){return y*2}function n(){}function q(x){return x+1}";
 
-fn tree(rows: &str) -> Tree {
-    let provenance = format!(
-        r#"{{"version":1,"rows":"","inputFiles":["index.js"],"files":{{".humanify/humanified.js":{rows}}}}}"#
-    );
-    Tree::from_parts(BTreeMap::new(), Some(&provenance)).unwrap()
+/// A layout whose named text holds these functions, one unit each.
+pub fn layout(inputs: &[&str], functions: &[(u32, FunctionId, Match)]) -> Layout {
+    let unit = |(i, (input, id, matched)): (usize, &(u32, FunctionId, Match))| Unit {
+        at: Some((*input, None)),
+        line: i as u32 + 1,
+        rows: vec![Row::Function {
+            line: i as u32 + 1,
+            id: id.clone(),
+            matched: matched.clone(),
+        }],
+        ..Unit::default()
+    };
+    let entry = FileEntry {
+        units: functions.iter().enumerate().map(unit).collect(),
+    };
+    Layout {
+        format: 1,
+        inputs: inputs.iter().map(|n| n.to_string()).collect(),
+        prior_layout: None,
+        named_text: "named.js".into(),
+        files: [("named.js".to_string(), entry)].into(),
+        prior_ambiguous: Vec::new(),
+    }
+}
+
+pub fn at(text: &str, needle: &str) -> FunctionId {
+    FunctionId::Byte(text.find(needle).unwrap() as u32)
+}
+
+fn new(id: FunctionId) -> (u32, FunctionId, Match) {
+    (0, id, Match::New)
 }
 
 #[test]
-fn a_function_sits_where_its_line_came_from() {
+fn a_function_sits_where_its_input_byte_is() {
     let truth = Truth::compare(
         vec![InputFile::parse("index.js", FROM)],
         vec![InputFile::parse("index.js", TO)],
     );
-    let b = FROM.find("function b").unwrap();
-    let (n, q) = (
-        TO.find("function n").unwrap(),
-        TO.find("function q").unwrap(),
+    let from = layout(
+        &["index.js"],
+        &[new(at(FROM, "function a")), new(at(FROM, "function b"))],
     );
-    let from = tree(&format!("[[1],[2,0,0],[4,0,{b}]]"));
-    let to = tree(&format!("[[1],[2,0,0],[3,0,{n}],[4,0,{q}],[6,0,null]]"));
-
-    let prior = locate(&from, &truth.from, &[2, 3, 4]).functions;
-    let located = locate(&to, &truth.to, &[1, 2, 3, 4, 5, 6]);
-    let (fresh, standings) = (located.functions, located.standings);
-
+    let to = layout(
+        &["index.js"],
+        &[
+            new(FunctionId::Linker("init+9".into())),
+            new(at(TO, "function r")),
+            new(at(TO, "function n")),
+            new(at(TO, "function q")),
+        ],
+    );
+    let prior = locate(&from, &truth.from).functions;
+    let located = locate(&to, &truth.to);
     let pairs =
         |side: &[crate::matchcard::score::Located]| side.iter().map(|f| f.pair).collect::<Vec<_>>();
-    let (a_pair, b_pair) = (prior[0].pair.unwrap(), prior[2].pair.unwrap());
-    assert_eq!(pairs(&prior), [Some(a_pair), Some(a_pair), Some(b_pair)]);
+    let (a_pair, b_pair) = (prior[0].pair.unwrap(), prior[1].pair.unwrap());
     assert_eq!(
-        pairs(&fresh),
-        [None, Some(b_pair), None, Some(a_pair), Some(a_pair), None]
+        pairs(&located.functions),
+        [None, Some(b_pair), None, Some(a_pair)]
     );
-    assert!(fresh[3].order < fresh[4].order, "text order within one row");
+    assert_eq!(located.by_own_byte, 3);
     assert_eq!(
-        standings,
-        Standings::from([("changed", 1), ("no input byte", 2), ("unchanged", 3)])
+        located.standings,
+        Standings::from([("changed", 1), ("no input byte", 1), ("unchanged", 2)])
     );
 }
 
@@ -54,31 +82,46 @@ fn a_function_inside_a_changed_one_is_judged_by_its_own_text() {
         vec![InputFile::parse("index.js", from_text)],
         vec![InputFile::parse("index.js", to_text)],
     );
-    let rows = format!(
-        "[[1,0,0],[2,0,{}],[3,0,{}]]",
-        to_text.find("var a").unwrap(),
-        to_text.find("return a").unwrap()
+    let to = layout(
+        &["index.js"],
+        &[new(FunctionId::Byte(0)), new(at(to_text, "function(x)"))],
     );
-    let located = locate(&tree(&rows), &truth.to, &[1, 2]);
-    let (fresh, standings) = (located.functions, located.standings);
-    assert_eq!(located.by_own_byte, 2);
+    let fresh = locate(&to, &truth.to).functions;
     assert_eq!(fresh[0].pair, None);
     assert!(fresh[1].pair.is_some(), "the inner function is unchanged");
-    assert_eq!(
-        standings,
-        Standings::from([("changed", 1), ("unchanged", 1)])
+}
+
+#[test]
+fn a_method_named_by_its_key_sits_in_its_own_function() {
+    let from_text = "class K{m(x){return x+1}n(){return 1}}";
+    let to_text = "class K{m(x){return x+1}n(){return 2}}";
+    let truth = Truth::compare(
+        vec![InputFile::parse("index.js", from_text)],
+        vec![InputFile::parse("index.js", to_text)],
     );
+    let to = layout(
+        &["index.js"],
+        &[new(at(to_text, "m(x)")), new(at(to_text, "n()"))],
+    );
+    let fresh = locate(&to, &truth.to).functions;
+    assert!(fresh[0].pair.is_some(), "the method is unchanged");
+    assert_eq!(fresh[1].pair, None);
 }
 
 #[test]
 fn an_init_wrapper_sits_in_the_input_file_the_linker_wrote_it_for() {
-    let text = "var initA = __esm(() => {\n  a();\n});\nvar initB = lazy(async () => {\n  b();\n});\nvar map = {\n  get: () => a\n};\nvar initC = __esm(() => {});\n";
-    let provenance = r#"{"version":1,"rows":"","inputFiles":["index.js","chunk-a.js","chunk-b.js"],
-        "files":{".humanify/humanified.js":[[1,1,null],[2,1,5],[3,1,null],[4,2,null],[5,2,9],[6,2,null],[7,0,null],[10,0,30]]}}"#;
-    let files = BTreeMap::from([(NAMED_TEXT.to_string(), text.as_bytes().to_vec())]);
-    let tree = Tree::from_parts(files, Some(provenance)).unwrap();
+    let linker = |input, id: &str| (input, FunctionId::Linker(id.into()), Match::New);
+    let tree = layout(
+        &["index.js", "chunk-a.js", "chunk-b.js"],
+        &[
+            linker(1, "init+9"),
+            linker(2, "init+9"),
+            linker(1, "exports+4"),
+            (0, FunctionId::Byte(30), Match::New),
+        ],
+    );
     let pair_of = |file: &str| (file != "chunk-b.js").then_some(file.len() as u32);
-    let got = locate_init_wrappers(&tree, &[1, 4, 8, 10], &pair_of);
+    let got = locate_init_wrappers(&tree, &pair_of);
     let pairs: Vec<_> = got.iter().map(|f| f.pair).collect();
     assert_eq!(pairs, [Some(10), None, None, None]);
 }

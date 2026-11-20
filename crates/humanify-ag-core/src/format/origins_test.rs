@@ -99,3 +99,37 @@ fn every_piece_of_a_split_sequence_names_its_own_input_bytes() {
         .collect();
     assert_eq!(pieces, ["e(\"aa\")", "e(\"bb\")", "e(\"cc\")"]);
 }
+
+#[test]
+fn every_function_names_the_input_byte_it_starts_at() {
+    let code = "var a=function(){return x=>y},o={m(){},get g(){return 1}};\
+class K{static s(){}#p(){}}function d(){}(async()=>{})();";
+    let formatted = format_file_with_origins(code, &FormatOptions::default(), &[]).unwrap();
+    let alloc = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse_unambiguous(&alloc, &formatted.text);
+    let (graph, _) = crate::graph::build_function_graph(ingest.semantic(), "input.js");
+    let mut starts: Vec<u32> = graph.functions.iter().map(|f| f.span.start).collect();
+    starts.sort_unstable();
+    let marked: Vec<u32> = formatted.function_origins.iter().map(|m| m.0).collect();
+    assert_eq!(marked, starts, "{}", formatted.text);
+    let firsts: Vec<&str> = formatted
+        .function_origins
+        .iter()
+        .map(|(_, raw)| &code[raw.unwrap() as usize..raw.unwrap() as usize + 3])
+        .collect();
+    assert_eq!(
+        firsts,
+        ["fun", "x=>", "m()", "get", "sta", "#p(", "fun", "asy"]
+    );
+}
+
+#[test]
+fn every_statement_mark_has_its_depth() {
+    let code = "var i=w(()=>{a();if(b){c()}});d();";
+    let formatted = format_file_with_origins(code, &FormatOptions::default(), &[]).unwrap();
+    assert_eq!(formatted.statement_depths, [1, 2, 2, 3, 1]);
+    assert_eq!(
+        formatted.statement_depths.len(),
+        formatted.statement_origins.len()
+    );
+}

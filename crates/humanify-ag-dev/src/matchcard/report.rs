@@ -1,26 +1,61 @@
 //! The `match score` verb's report and card.
 
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 
-use humanify_ag_core::matching::decisions::MATCH_DECISIONS_PATH;
-use humanify_ag_core::provenance::PROVENANCE_PATH;
-
-use serde::Deserialize;
+use humanify_ag_core::layout_record::{FunctionId, Layout, Match, checksum};
 use serde_json::{Value, json};
 
-use super::join::{NAMED_TEXT, locate, locate_init_wrappers};
+use super::join::{functions, is_init_wrapper, locate, locate_init_wrappers};
 use super::score::{Card, Matcher, score};
-use crate::difflabel::{Tree, Truth, read_input};
+use crate::difflabel::{Truth, read_input};
+use crate::layoutcheck::read_layout;
 
-/// A run's `.humanify/match-decisions.json`.
-#[derive(Deserialize)]
-pub struct Decisions {
-    fresh: Vec<u32>,
-    prior: Vec<u32>,
-    exact: Vec<(usize, usize)>,
-    close: Vec<(usize, usize)>,
-    ambiguous: Vec<usize>,
-    unmatched: Vec<usize>,
+/// What the matcher decided, by position in the two layouts' functions.
+struct Decisions {
+    fresh: usize,
+    prior: usize,
+    matcher: Matcher,
+}
+
+/// The matcher's pairs as the new layout records them against the
+/// previous one.
+fn decisions_of(from: &Layout, to: &Layout) -> Result<Decisions, String> {
+    let prior = functions(from);
+    let at: HashMap<(u32, &FunctionId), usize> = prior
+        .iter()
+        .enumerate()
+        .map(|(i, f)| ((f.input, f.id), i))
+        .collect();
+    let position = |partner: &Option<(u32, FunctionId)>| {
+        let (input, id) = partner
+            .as_ref()
+            .ok_or("the new tree was matched against a tree with no layout record")?;
+        at.get(&(*input, id))
+            .copied()
+            .ok_or_else(|| format!("the previous layout lists no function {id:?} of input {input}"))
+    };
+    let fresh = functions(to);
+    let mut matcher = Matcher {
+        exact: Vec::new(),
+        close: Vec::new(),
+        ambiguous: BTreeSet::new(),
+    };
+    for (i, function) in fresh.iter().enumerate() {
+        match function.matched {
+            Match::New => {}
+            Match::Exact(partner) => matcher.exact.push((position(partner)?, i)),
+            Match::Close(partner) => matcher.close.push((position(partner)?, i)),
+        }
+    }
+    for partner in &to.prior_ambiguous {
+        matcher.ambiguous.insert(position(&Some(partner.clone()))?);
+    }
+    Ok(Decisions {
+        fresh: fresh.len(),
+        prior: prior.len(),
+        matcher,
+    })
 }
 
 pub struct Scored {
@@ -56,27 +91,15 @@ fn card_json(card: &Card) -> Value {
 }
 
 /// The linker's init wrappers, each paired through its input file's pair.
-fn init_wrappers(truth: &Truth, from: &Tree, to: &Tree, decisions: &Decisions) -> (Card, u64) {
-    let of_to = |name: &str| truth.paired_file(true, name).and(to.input_index(name));
-    let of_from = |name: &str| to.input_index(truth.paired_file(false, name)?);
-    let fresh = locate_init_wrappers(to, &decisions.fresh, &of_to);
-    let prior = locate_init_wrappers(from, &decisions.prior, &of_from);
-    let unpaired = wrapper_count(to, &decisions.fresh)
-        - fresh.iter().filter(|f| f.pair.is_some()).count() as u64;
-    (score(&fresh, &prior, &matcher_of(decisions)), unpaired)
-}
-
-fn wrapper_count(tree: &Tree, lines: &[u32]) -> u64 {
-    let all = locate_init_wrappers(tree, lines, &|_| Some(0));
-    all.iter().filter(|f| f.pair.is_some()).count() as u64
-}
-
-fn matcher_of(decisions: &Decisions) -> Matcher {
-    Matcher {
-        exact: decisions.exact.clone(),
-        close: decisions.close.clone(),
-        ambiguous: decisions.ambiguous.iter().copied().collect(),
-    }
+fn init_wrappers(truth: &Truth, from: &Layout, to: &Layout, matcher: &Matcher) -> (Card, u64) {
+    let index = |name: &str| to.inputs.iter().position(|n| n == name).map(|i| i as u32);
+    let of_to = |name: &str| truth.paired_file(true, name).and(index(name));
+    let of_from = |name: &str| index(truth.paired_file(false, name)?);
+    let fresh = locate_init_wrappers(to, &of_to);
+    let prior = locate_init_wrappers(from, &of_from);
+    let wrappers = functions(to).iter().filter(|f| is_init_wrapper(f)).count();
+    let unpaired = wrappers - fresh.iter().filter(|f| f.pair.is_some()).count();
+    (score(&fresh, &prior, matcher), unpaired as u64)
 }
 
 fn block(title: &str, card: &Card) -> String {
@@ -106,17 +129,23 @@ fn block(title: &str, card: &Card) -> String {
     out
 }
 
-pub fn score_decisions(truth: &Truth, from: &Tree, to: &Tree, decisions: &Decisions) -> Scored {
-    let prior = locate(from, &truth.from, &decisions.prior).functions;
-    let located = locate(to, &truth.to, &decisions.fresh);
+pub fn score_layouts(truth: &Truth, from: &Layout, to: &Layout) -> Result<Scored, String> {
+    let decisions = decisions_of(from, to)?;
+    let matcher = &decisions.matcher;
+    let prior = locate(from, &truth.from).functions;
+    let located = locate(to, &truth.to);
     let (fresh, standings) = (located.functions, located.standings);
-    let card = score(&fresh, &prior, &matcher_of(decisions));
-    let (wrappers, unpaired_wrappers) = init_wrappers(truth, from, to, decisions);
+    let card = score(&fresh, &prior, matcher);
+    let (wrappers, unpaired_wrappers) = init_wrappers(truth, from, to, matcher);
+    let paired: BTreeSet<usize> = (matcher.exact.iter().chain(&matcher.close))
+        .map(|pair| pair.0)
+        .collect();
+    let unmatched = decisions.prior - paired.union(&matcher.ambiguous).count();
     let mut json = card_json(&card);
     json["functions"] = json!({
-        "fresh": decisions.fresh.len(), "prior": decisions.prior.len(),
-        "exact": decisions.exact.len(), "close": decisions.close.len(),
-        "ambiguous": decisions.ambiguous.len(), "unmatched": decisions.unmatched.len(),
+        "fresh": decisions.fresh, "prior": decisions.prior,
+        "exact": matcher.exact.len(), "close": matcher.close.len(),
+        "ambiguous": matcher.ambiguous.len(), "unmatched": unmatched,
     });
     json["freshStandings"] = json!(standings);
     json["freshByOwnByte"] = json!(located.by_own_byte);
@@ -137,38 +166,22 @@ pub fn score_decisions(truth: &Truth, from: &Tree, to: &Tree, decisions: &Decisi
          the matcher saw {} new and {} prior functions: {} exact pairs, {} close pairs, {} ambiguous, {} unmatched\n",
         wrappers.not_judged,
         unpaired_wrappers,
-        decisions.fresh.len(),
-        decisions.prior.len(),
-        decisions.exact.len(),
-        decisions.close.len(),
-        decisions.ambiguous.len(),
-        decisions.unmatched.len(),
+        decisions.fresh,
+        decisions.prior,
+        matcher.exact.len(),
+        matcher.close.len(),
+        matcher.ambiguous.len(),
+        unmatched,
     ));
     report.push_str("where the new functions sit in the input:");
     for (name, count) in &standings {
         report.push_str(&format!(" {name} {count};"));
     }
     report.push_str(&format!(
-        "\nnew functions located by their own first byte (the rest by their statement's): {}\n",
+        "\nnew functions with an input byte (the linker wrote the rest): {}\n",
         located.by_own_byte
     ));
-    Scored { report, card: json }
-}
-
-fn read_text(tree: &Path, file: &str) -> Result<String, String> {
-    std::fs::read_to_string(tree.join(file)).map_err(|e| format!("{}/{file}: {e}", tree.display()))
-}
-
-fn named_text_only(tree: &Path) -> Result<Tree, String> {
-    let text = read_text(tree, PROVENANCE_PATH)?;
-    let named = std::fs::read(tree.join(NAMED_TEXT))
-        .map_err(|e| format!("{}/{NAMED_TEXT}: {e}", tree.display()))?;
-    Tree::from_parts([(NAMED_TEXT.to_string(), named)].into(), Some(&text))
-}
-
-fn decisions_of(tree: &Path) -> Result<Decisions, String> {
-    serde_json::from_str(&read_text(tree, MATCH_DECISIONS_PATH)?)
-        .map_err(|e| format!("{}/{MATCH_DECISIONS_PATH}: {e}", tree.display()))
+    Ok(Scored { report, card: json })
 }
 
 /// The `match score` verb: the report text.
@@ -177,21 +190,16 @@ pub fn run(
     inputs: (&Path, &Path),
     out: Option<&Path>,
 ) -> Result<String, String> {
-    let decisions = decisions_of(trees.1)?;
-    if let Ok(earlier) = decisions_of(trees.0)
-        && earlier.fresh.len() != decisions.prior.len()
-    {
+    let ((from_text, from), (_, to)) = (read_layout(trees.0)?, read_layout(trees.1)?);
+    if to.prior_layout.as_deref() != Some(checksum(&from_text).as_str()) {
         return Err(format!(
-            "{} is not the prior {} was matched against: it has {} functions, the prior had {}",
+            "{} is not the previous tree {} was matched against: the layout checksums differ",
             trees.0.display(),
             trees.1.display(),
-            earlier.fresh.len(),
-            decisions.prior.len()
         ));
     }
-    let (from, to) = (named_text_only(trees.0)?, named_text_only(trees.1)?);
     let truth = Truth::compare(read_input(inputs.0)?, read_input(inputs.1)?);
-    let scored = score_decisions(&truth, &from, &to, &decisions);
+    let scored = score_layouts(&truth, &from, &to)?;
     if let Some(out) = out {
         std::fs::write(out, format!("{:#}\n", scored.card))
             .map_err(|e| format!("{}: {e}", out.display()))?;

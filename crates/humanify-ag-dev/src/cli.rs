@@ -162,7 +162,7 @@ const VERBS: &[Verb] = &[
         words: &["diff", "label"],
         usage: "diff label <from-tree> <to-tree> <from-input-dir> <to-input-dir> [<out.json>]",
         proves: "why each changed line between two output trees is in the diff: one label per line, the totals adding up to what `diff -rN` counts",
-        cannot_prove: "which lines of changed input code really changed (every changed line from a changed input function counts as real); anything about a tree with no provenance file",
+        cannot_prove: "which lines of changed input code really changed (every changed line from a changed input function counts as real); anything about a tree with no layout record",
         settings: &[],
         footprint: LIGHT,
     },
@@ -170,7 +170,15 @@ const VERBS: &[Verb] = &[
         words: &["match", "score"],
         usage: "match score <from-tree> <to-tree> <from-input-dir> <to-input-dir> [<out.json>]",
         proves: "how many functions of unchanged input the matcher paired with their true partner, paired with another function or left for the LLM, in the run that wrote <to-tree> with <from-tree> as its prior",
-        cannot_prove: "anything about functions of changed or duplicated input, or about a function whose line has no input byte in the provenance file; whether the names it carried are good",
+        cannot_prove: "anything about functions of changed or duplicated input, or about a function the linker wrote; whether the names it carried are good",
+        settings: &[],
+        footprint: LIGHT,
+    },
+    Verb {
+        words: &["layout", "check"],
+        usage: "layout check <tree> [<previous-tree>]",
+        proves: "that a tree's layout record fits the tree (every entry has its file, lines rise, no identity is given twice) and, with the previous tree, that every partner it names is a function of that tree's record",
+        cannot_prove: "that a line's recorded input byte is the right one; anything about a tree with no layout record",
         settings: &[],
         footprint: LIGHT,
     },
@@ -527,11 +535,29 @@ fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
         ["eval", "walk-report"] => done(verbs::walk_report(&live(), parsed)),
         ["diff", "label"] => two_trees(parsed, "diff label", crate::difflabel::run),
         ["match", "score"] => two_trees(parsed, "match score", crate::matchcard::run),
+        ["layout", "check"] => layout_check(parsed),
         ["run", "stub"] => done(verbs::stub(&live(), parsed)),
         ["index", "build"] => done(verbs::index_build(&live(), parsed)),
         ["boot-gate"] => done(verbs::boot_gate(&live(), parsed)),
         ["library", "score"] => done(verbs::library_score(&live(), parsed)),
         _ => unreachable!("every implemented verb has a runner"),
+    }
+}
+
+fn layout_check(parsed: &settings::Parsed) -> (u8, String, String) {
+    use std::path::Path;
+    let (tree, previous) = match parsed.positionals.as_slice() {
+        [tree] => (tree, None),
+        [tree, previous] => (tree, Some(Path::new(previous))),
+        _ => {
+            let usage = "usage: humanify-ag-dev layout check <tree> [<previous-tree>]\n";
+            return (2, String::new(), usage.into());
+        }
+    };
+    match crate::layoutcheck::run(Path::new(tree), previous) {
+        Ok((report, true)) => (0, report, String::new()),
+        Ok((report, false)) => (1, report, String::new()),
+        Err(e) => (1, String::new(), format!("{e}\n")),
     }
 }
 

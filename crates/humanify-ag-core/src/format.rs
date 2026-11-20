@@ -127,6 +127,12 @@ pub struct Formatted {
     /// the first source-spanned node printed inside the statement, so a
     /// statement the beautify split out of another still names it.
     pub statement_origins: Vec<(u32, u32)>,
+    /// How many statements enclose each of `statement_origins`, itself
+    /// included.
+    pub statement_depths: Vec<u32>,
+    /// `(output start, input start)` per printed function, sorted;
+    /// `None`: the function has no input text.
+    pub function_origins: Vec<(u32, Option<u32>)>,
 }
 
 /// Stage 6 for one processed file (`createBabelPlugin()(code, context)`):
@@ -189,20 +195,25 @@ fn format_file_inner(
     if origins {
         printer.record_statement_origins();
     }
-    let (body, mut statement_origins) = printer.generate_with_origins(root);
+    let (body, mut origins) = printer.generate_with_origins(root);
     let text = with_license_header(body.clone(), &licenses);
     // The license header goes BEFORE the program (after a `#!` line):
     // every statement shifts by the bytes it added.
     let added = (text.len() - body.len()) as u32;
     if added > 0 {
-        for (out, _) in &mut statement_origins {
+        for (out, _) in &mut origins.statements {
+            *out += added;
+        }
+        for (out, _) in &mut origins.functions {
             *out += added;
         }
     }
     Ok(Formatted {
         text,
         library_carry,
-        statement_origins,
+        statement_origins: origins.statements,
+        statement_depths: origins.depths,
+        function_origins: origins.functions,
     })
 }
 

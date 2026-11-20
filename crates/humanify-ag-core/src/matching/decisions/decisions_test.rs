@@ -1,6 +1,4 @@
-use serde_json::json;
-
-use super::{Decided, Functions, record};
+use super::{Decided, Functions, MatchDecisions, record};
 
 const FRESH: &str = "function a() {}\nvar b = function () {}, c = () => 1;\nfunction d() {}\n";
 const PRIOR: &str = "function one() {}\nfunction two() {}\n\nfunction three() {}\n";
@@ -12,7 +10,6 @@ fn at(text: &str, needle: &str) -> u32 {
 #[test]
 fn decisions_name_functions_by_their_place_in_each_text() {
     let fresh = Functions {
-        text: FRESH,
         starts: vec![
             ("f:d", at(FRESH, "function d")),
             ("f:c", at(FRESH, "() => 1")),
@@ -21,7 +18,6 @@ fn decisions_name_functions_by_their_place_in_each_text() {
         ],
     };
     let prior = Functions {
-        text: PRIOR,
         starts: vec![
             ("p:1", 0),
             ("p:2", at(PRIOR, "function two")),
@@ -31,20 +27,16 @@ fn decisions_name_functions_by_their_place_in_each_text() {
     let decided = Decided {
         exact: vec![("p:1", "f:a"), ("p:9", "f:b")],
         close: vec![("p:3", "f:c")],
-        ambiguous: vec!["p:2"],
-        unmatched: vec!["p:3", "p:8"],
+        ambiguous: vec!["p:2", "p:8"],
     };
-    let got = serde_json::to_value(record(&fresh, &prior, &decided)).unwrap();
     assert_eq!(
-        got,
-        json!({
-            "version": 1,
-            "fresh": [1, 2, 2, 3],
-            "prior": [1, 2, 4],
-            "exact": [[0, 0]],
-            "close": [[2, 2]],
-            "ambiguous": [1],
-            "unmatched": [2],
-        })
+        record(&fresh, &prior, &decided),
+        MatchDecisions {
+            fresh: vec![0, 24, 44, 53],
+            prior: 3,
+            exact: vec![(0, 0)],
+            close: vec![(2, 2)],
+            ambiguous: vec![1],
+        }
     );
 }

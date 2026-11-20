@@ -27,7 +27,7 @@ pub enum Label {
     LinkerRenamed,
     LinkerChanged,
     LinkerUnpaired,
-    NoProvenance,
+    NoOrigin,
 }
 
 impl Label {
@@ -50,7 +50,7 @@ impl Label {
         Label::LinkerRenamed,
         Label::LinkerChanged,
         Label::LinkerUnpaired,
-        Label::NoProvenance,
+        Label::NoOrigin,
     ];
 
     /// `(name, group, what it means)`.
@@ -142,10 +142,10 @@ impl Label {
                 "unknown",
                 "linker text of an input file that has no paired file in the other version",
             ),
-            Label::NoProvenance => (
-                "no-provenance",
+            Label::NoOrigin => (
+                "no-origin",
                 "unknown",
-                "a file or line the provenance file does not cover",
+                "a file or line the layout record does not cover",
             ),
         }
     }
@@ -447,7 +447,7 @@ impl<'a> Labeller<'a> {
                 self.text(!to_side, &theirs[i]),
                 theirs[i].path == at.path,
             ),
-            Err(_) => Label::NoProvenance,
+            Err(_) => Label::NoOrigin,
         }
     }
 
@@ -547,7 +547,7 @@ impl<'a> Labeller<'a> {
             &self.truth.from
         };
         match tree.origin(path, line) {
-            None => Label::NoProvenance,
+            None => Label::NoOrigin,
             Some(Origin::Pipeline) => self.pipeline(to_side, (path, line)),
             Some(Origin::Linker(file)) => self.linker(to_side, file, (path, line)),
             Some(Origin::At(file, offset)) => match side.at(tree.input_name(file), offset) {
@@ -557,7 +557,7 @@ impl<'a> Labeller<'a> {
                 Standing::Duplicate => Label::InputDuplicate,
                 Standing::Changed => Label::InputChanged,
                 Standing::OutsideUnits => Label::InputOutsideUnits,
-                Standing::UnknownFile => Label::NoProvenance,
+                Standing::UnknownFile => Label::NoOrigin,
             },
         }
     }

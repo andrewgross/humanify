@@ -1,11 +1,10 @@
-//! An output tree's text files and what its provenance file says about
+//! An output tree's text files and what its layout record says about
 //! each line.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use humanify_ag_core::provenance::PROVENANCE_PATH;
-use serde::Deserialize;
+use humanify_ag_core::layout_record::{FileEntry, LAYOUT_PATH, Layout, Row, Unit};
 
 /// Where a line of an output file came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,17 +23,10 @@ struct TextFile {
     starts: Vec<u32>,
 }
 
-#[derive(Deserialize)]
-struct ProvenanceFile {
-    #[serde(rename = "inputFiles")]
-    input_files: Vec<String>,
-    files: BTreeMap<String, Vec<Vec<Option<u32>>>>,
-}
-
 pub struct Tree {
     /// `None`: not a text file.
     files: BTreeMap<String, Option<TextFile>>,
-    input_files: Vec<String>,
+    layout: Option<Layout>,
     rows: BTreeMap<String, Vec<(u32, Origin)>>,
 }
 
@@ -53,45 +45,66 @@ fn text_file(bytes: Vec<u8>) -> Option<TextFile> {
     Some(TextFile { text, starts })
 }
 
-fn row(raw: &[Option<u32>]) -> Result<(u32, Origin), String> {
-    match raw {
-        [Some(line)] => Ok((*line, Origin::Pipeline)),
-        [Some(line), Some(file), None] => Ok((*line, Origin::Linker(*file))),
-        [Some(line), Some(file), Some(offset)] => Ok((*line, Origin::At(*file, *offset))),
-        other => Err(format!(
-            "a provenance row this reader does not know: {other:?}"
-        )),
+fn origin_of(unit: &Unit) -> Origin {
+    match unit.at {
+        None => Origin::Pipeline,
+        Some((file, Some(byte))) if unit.linker.is_none() => Origin::At(file, byte),
+        Some((file, _)) => Origin::Linker(file),
     }
+}
+
+/// A line takes the last origin given for it; a row that repeats the
+/// origin before it adds nothing.
+fn push(rows: &mut Vec<(u32, Origin)>, line: u32, origin: Origin) {
+    rows.pop_if(|last| last.0 == line);
+    if rows.last().is_none_or(|last| last.1 != origin) {
+        rows.push((line, origin));
+    }
+}
+
+fn push_unit(rows: &mut Vec<(u32, Origin)>, unit: &Unit) {
+    push(rows, unit.line, origin_of(unit));
+    let file = unit.at.map_or(0, |at| at.0);
+    for row in &unit.rows {
+        if let Row::Origin { line, byte } = row {
+            let origin = byte.map_or(Origin::Linker(file), |b| Origin::At(file, b));
+            push(rows, *line, origin);
+        }
+    }
+}
+
+/// A file's rows: the pipeline's lines first, then each unit's.
+fn rows_of(entry: &FileEntry) -> Vec<(u32, Origin)> {
+    let mut rows = vec![(1, Origin::Pipeline)];
+    entry
+        .all_units()
+        .for_each(|unit| push_unit(&mut rows, unit));
+    rows
 }
 
 impl Tree {
     pub fn read(root: &Path) -> Result<Tree, String> {
         let mut files =
             humanify_ag_io::tree::read_tree(root, &|_| true).map_err(|e| e.to_string())?;
-        let provenance = files
-            .remove(PROVENANCE_PATH)
+        let layout = files
+            .remove(LAYOUT_PATH)
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
-        Tree::from_parts(files, provenance.as_deref())
+        Tree::from_parts(files, layout.as_deref())
     }
 
     pub fn from_parts(
         files: BTreeMap<String, Vec<u8>>,
-        provenance: Option<&str>,
+        layout: Option<&str>,
     ) -> Result<Tree, String> {
-        let parsed: Option<ProvenanceFile> = provenance
-            .map(serde_json::from_str)
+        let layout = layout
+            .map(Layout::parse)
             .transpose()
-            .map_err(|e| format!("{PROVENANCE_PATH}: {e}"))?;
-        let (input_files, raw_rows) = parsed.map(|p| (p.input_files, p.files)).unwrap_or_default();
-        let mut rows = BTreeMap::new();
-        for (path, raw) in raw_rows {
-            let parsed: Result<Vec<_>, _> = raw.iter().map(|r| row(r)).collect();
-            rows.insert(path, parsed?);
-        }
+            .map_err(|e| format!("{LAYOUT_PATH}: {e}"))?;
+        let rows = layout.iter().flat_map(|l| &l.files);
         Ok(Tree {
+            rows: rows.map(|(path, e)| (path.clone(), rows_of(e))).collect(),
             files: files.into_iter().map(|(p, b)| (p, text_file(b))).collect(),
-            input_files,
-            rows,
+            layout,
         })
     }
 
@@ -123,14 +136,16 @@ impl Tree {
         Some(rest.split('\n').next().unwrap_or(rest))
     }
 
+    fn inputs(&self) -> &[String] {
+        self.layout.as_ref().map_or(&[], |l| l.inputs.as_slice())
+    }
+
     pub fn input_name(&self, file: u32) -> &str {
-        self.input_files
-            .get(file as usize)
-            .map_or("", String::as_str)
+        self.inputs().get(file as usize).map_or("", String::as_str)
     }
 
     pub fn input_index(&self, name: &str) -> Option<u32> {
-        let at = self.input_files.iter().position(|n| n == name)?;
+        let at = self.inputs().iter().position(|n| n == name)?;
         Some(at as u32)
     }
 
@@ -160,6 +175,34 @@ impl Tree {
         let after = rows.partition_point(|r| r.0 <= line);
         Some(rows.get(after.checked_sub(1)?)?.1)
     }
+}
+
+/// A layout whose files hold one unit per given row: `[line]` no input,
+/// `[line, file, byte]`, `[line, file, null]` linker text.
+#[cfg(test)]
+pub fn layout_of_rows(inputs: &[&str], files: &str) -> String {
+    use serde_json::{Value, json};
+    let files: BTreeMap<String, Vec<Vec<Option<u32>>>> = serde_json::from_str(files).unwrap();
+    let unit = |row: &Vec<Option<u32>>| match row.as_slice() {
+        [line] => json!({"at": null, "line": line}),
+        [line, file, None] => json!({"at": [file, null], "linker": "init", "line": line}),
+        [line, file, byte] => json!({"at": [file, byte], "line": line}),
+        other => panic!("{other:?}"),
+    };
+    let files: BTreeMap<String, Value> = files
+        .iter()
+        .map(|(path, rows)| {
+            (
+                path.clone(),
+                json!({"units": rows.iter().map(unit).collect::<Vec<_>>()}),
+            )
+        })
+        .collect();
+    json!({
+        "format": 1, "inputs": inputs, "priorLayout": null, "namedText": "",
+        "files": files, "priorAmbiguous": [],
+    })
+    .to_string()
 }
 
 #[cfg(test)]

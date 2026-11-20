@@ -832,7 +832,7 @@ fn definitions() -> Vec<String> {
         "- **real**: changed lines from input code that changed, is new or was removed. A ceiling: every changed line inside a changed input function counts.",
         "- **noise**: changed lines from input code that is unchanged (renamed, moved, printed differently). Lower is better.",
         "- **wiring**: require and export lines whose cause is not known.",
-        "- **unknown**: lines the labeller cannot place (duplicated input text, unpaired input files, files with no provenance).",
+        "- **unknown**: lines the labeller cannot place (duplicated input text, unpaired input files, files the layout record does not cover).",
         "- **renamed … requireEdge**: single labels; `cargo dev diff label` lists them all with examples.",
         "- **cache+**: LLM cache entries written; 0 on a cold walk. **wall s / RSS MB**: from the hop's run manifest (RSS = peak of the whole process tree).",
         "",

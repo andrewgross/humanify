@@ -10,6 +10,7 @@ pub mod env;
 pub mod failed_output;
 pub mod index_files;
 pub mod kill_switches;
+pub mod layout_stage;
 pub mod llm_sim;
 pub mod log;
 pub mod match_verb;

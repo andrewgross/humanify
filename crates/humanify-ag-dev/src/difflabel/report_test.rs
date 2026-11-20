@@ -33,9 +33,7 @@ fn write(root: &std::path::Path, files: &[(&str, &str)]) {
 #[test]
 fn a_run_labels_every_changed_line_and_adds_up_to_the_diff() {
     let root = humanify_ag_io::scratch::temp_dir("difflabel-test").unwrap();
-    let rows = |files: &str| {
-        format!(r#"{{"version":1,"rows":"","inputFiles":["index.js"],"files":{files}}}"#)
-    };
+    let rows = |files: &str| crate::difflabel::layout_of_rows(&["index.js"], files);
     write(
         &root.join("in-a"),
         &[(
@@ -58,7 +56,7 @@ fn a_run_labels_every_changed_line_and_adds_up_to_the_diff() {
                 "function alpha(x) {\n  return x + 1;\n}\nfunction beta(y) {\n  return y * 2;\n}\n",
             ),
             (
-                ".humanify/provenance.json",
+                ".humanify/layout.json",
                 &rows(r#"{"src/m.js":[[1,0,0],[4,0,25]]}"#),
             ),
         ],
@@ -72,7 +70,7 @@ fn a_run_labels_every_changed_line_and_adds_up_to_the_diff() {
             ),
             ("src/new.txt", "one\ntwo\n"),
             (
-                ".humanify/provenance.json",
+                ".humanify/layout.json",
                 &rows(r#"{"src/m.js":[[1,0,0],[4,0,25]]}"#),
             ),
         ],
@@ -94,7 +92,7 @@ fn a_run_labels_every_changed_line_and_adds_up_to_the_diff() {
     let lines = |label: &str| json["labels"][label]["lines"].as_u64();
     assert_eq!(lines("renamed"), Some(4));
     assert_eq!(lines("input-changed"), Some(2));
-    assert_eq!(lines("no-provenance"), Some(2));
+    assert_eq!(lines("no-origin"), Some(2));
     assert_eq!(
         json["pairedInputFiles"],
         serde_json::json!([["index.js", "index.js"]])

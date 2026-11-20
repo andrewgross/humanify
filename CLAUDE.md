@@ -135,6 +135,7 @@ cargo dev eval score <label>            # cold scored run of the binary
 cargo dev eval neutrality <ref>         # byte-identity gate for should-change-nothing edits
 cargo dev diff label <from-tree> <to-tree> <from-input-dir> <to-input-dir> [out.json]   # one label per changed line
 cargo dev eval walk <from>..<to> --walk-dir D   # a real version walk; its report flags the hops to read
+cargo dev layout check <tree> [<previous-tree>]   # a tree's layout record held against the tree and its previous tree
 cargo dev library score <label> --index D --rule agreement|structural   # library naming P/R on a frozen corpus
 ```
 
@@ -296,7 +297,8 @@ two inputs they were made from, and gives every changed line of `diff -rN`
 exactly one label; the labels must add up to the diff's count or the verb
 fails. It compares the inputs unit by unit (every function and top-level
 statement, identifiers ignored) to find input code that is certainly
-unchanged, and reads each tree's `.humanify/provenance.json` to know which
+unchanged, and reads each tree's `.humanify/layout.json` (the layout record,
+held to its tree by `cargo dev layout check` and by e2e) to know which
 input bytes each output line came from. Labels fall into four groups:
 
 - **real**: from input code that changed, is new or was removed. A ceiling:
@@ -304,8 +306,8 @@ input bytes each output line came from. Labels fall into four groups:
 - **noise**: from unchanged input (renamed, moved, printed differently,
   linker text reordered or renamed).
 - **wiring**: require and export lines whose cause is not known yet.
-- **unknown**: duplicated input text, unpaired input files, files with no
-  provenance.
+- **unknown**: duplicated input text, unpaired input files, files the layout
+  record does not cover.
 
 `eval score` writes one label card per pair (`<v>.json`) and a summary table
 of the groups; the walk report shows the same groups per hop. There are no

@@ -818,15 +818,35 @@ fn build_tree(
     let mut split_method = None;
     let mut failed_calls = naming.failed_calls;
     failed_calls.vendor = unpacked.vendor_naming.batches_failed;
+    let layout = last.as_ref().map(|named| crate::layout_stage::LayoutInput {
+        link: input_link_map,
+        unpack: unpacked.origins.as_ref(),
+        marks: &named.marks,
+        fresh: &named.fresh,
+        input_file: Path::new(input),
+        prior: prior.tree.as_ref(),
+    });
+    if !config.split.enabled
+        && let (Some(named), Some(layout)) = (&last, &layout)
+        && let Some(code) = &named.outcome.code
+    {
+        let carry = named.outcome.prior_carry.as_ref();
+        let written =
+            crate::layout_stage::write_layout(layout, code, &named.path, carry, None, tree);
+        if let Err(e) = written {
+            renderer.message(&format!("WARNING: no layout record written: {e}"));
+        }
+    }
     if config.split.enabled
-        && let Some(NamedFile {
+        && let (Some(named), Some(layout)) = (&last, layout)
+        && let Some(code) = &named.outcome.code
+    {
+        let NamedFile {
             outcome,
             path: source,
             fresh,
-            origins,
-        }) = &last
-        && let Some(code) = &outcome.code
-    {
+            ..
+        } = named;
         let app_module_vars: Vec<String> = unpacked
             .app_modules
             .iter()
@@ -836,11 +856,7 @@ fn build_tree(
             Crash("no working directory: the config was not read from a process".into())
         })?;
         let mut split = crate::split_stage::SplitStageInput {
-            provenance: crate::split_stage::ProvenanceInput {
-                link: input_link_map,
-                unpack: unpacked.origins.as_ref(),
-                origins,
-            },
+            layout,
             embedded_files: input_link.as_ref().map_or(&[], |l| l.embedded.as_slice()),
             input_file: Path::new(input),
             working_dir,
@@ -1436,8 +1452,7 @@ struct NamedFile {
     outcome: NamingOutcome,
     path: std::path::PathBuf,
     fresh: String,
-    /// `(offset in fresh, offset in the unpacked file)` per statement.
-    origins: Vec<(u32, u32)>,
+    marks: crate::layout_stage::FormatMarks,
 }
 
 /// Stages 6-9 per processed file (unminify's plugin loop): the formatted
@@ -1532,7 +1547,11 @@ impl NamingRun<'_> {
                     outcome,
                     path: file.path.clone(),
                     fresh: formatted.text,
-                    origins: formatted.statement_origins,
+                    marks: crate::layout_stage::FormatMarks {
+                        statements: formatted.statement_origins,
+                        depths: formatted.statement_depths,
+                        functions: formatted.function_origins,
+                    },
                 });
             }
         }

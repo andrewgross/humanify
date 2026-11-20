@@ -237,19 +237,16 @@ impl Side {
         self.standing[unit.0 as usize][unit.1 as usize] = standing;
     }
 
-    /// Where the file's functions that start in `from..to` start, in order.
-    pub fn function_starts(&self, file: &str, from: u32, to: u32) -> Vec<u32> {
-        let Some(&f) = self.by_name.get(file) else {
-            return Vec::new();
-        };
-        let units = &self.files[f].units;
-        let first = units.partition_point(|u| u.start < from);
+    /// Where the function a layout names by `byte` starts here: at that
+    /// byte, or for a method, whose layout byte is its key's, at the first
+    /// function after it.
+    pub fn function_from(&self, file: &str, byte: u32) -> Option<u32> {
+        let units = &self.files[*self.by_name.get(file)?].units;
+        let first = units.partition_point(|u| u.start < byte);
         units[first..]
             .iter()
-            .take_while(|u| u.start < to)
-            .filter(|u| !u.statement)
+            .find(|u| !u.statement)
             .map(|u| u.start)
-            .collect()
     }
 
     /// What the inputs say about the byte: the outermost unchanged unit

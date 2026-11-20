@@ -185,11 +185,12 @@ pub struct LinkMap {
 }
 
 impl LinkMap {
-    /// The chunk and the piece of linker text a linked offset is in.
-    pub fn linker_text_at(&self, at: u32) -> Option<(u32, LinkerText)> {
+    /// The chunk and the piece of linker text a linked offset is in, and
+    /// the offset within that piece.
+    pub fn linker_text_at(&self, at: u32) -> Option<(u32, LinkerText, u32)> {
         let i = self.marks.partition_point(|m| m.out <= at);
         let m = self.marks[i.checked_sub(1)?];
-        (at < m.out + m.len).then_some((m.chunk, m.text))
+        (at < m.out + m.len).then_some((m.chunk, m.text, at - m.out))
     }
 
     /// The chunk a linked offset belongs to, and its offset in that chunk

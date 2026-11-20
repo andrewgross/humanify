@@ -11,8 +11,11 @@ fn tree(files: &[(&str, &str)], rows: &str) -> Tree {
         .iter()
         .map(|(p, t)| (p.to_string(), t.as_bytes().to_vec()))
         .collect();
-    let provenance = format!(r#"{{"version":1,"rows":"","inputFiles":["a.js"],"files":{rows}}}"#);
-    Tree::from_parts(files, Some(&provenance)).unwrap()
+    Tree::from_parts(
+        files,
+        Some(&crate::difflabel::layout_of_rows(&["a.js"], rows)),
+    )
+    .unwrap()
 }
 
 fn truth() -> Truth {
@@ -52,7 +55,7 @@ fn a_line_of_unchanged_input_is_labelled_by_how_its_text_differs() {
     assert_eq!(labeller.label(true, "src/n.js", 3), Label::Reshaped);
     assert_eq!(labeller.label(true, "src/n.js", 4), Label::MovedFile);
     assert_eq!(labeller.label(true, "src/m.js", 2), Label::InputChanged);
-    assert_eq!(labeller.label(true, "README.md", 1), Label::NoProvenance);
+    assert_eq!(labeller.label(true, "README.md", 1), Label::NoOrigin);
     assert_eq!(labeller.label(false, "src/m.js", 2), Label::Renamed);
     assert_eq!(labeller.label(false, "src/m.js", 6), Label::InputChanged);
     assert_eq!(labeller.label(false, "src/m.js", 8), Label::Export);

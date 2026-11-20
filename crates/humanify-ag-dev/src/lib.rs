@@ -21,6 +21,7 @@ pub(crate) mod gate;
 pub(crate) mod identity;
 pub(crate) mod json;
 pub(crate) mod launch;
+pub(crate) mod layoutcheck;
 pub(crate) mod library;
 pub(crate) mod matchcard;
 pub(crate) mod paths;

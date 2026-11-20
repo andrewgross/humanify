@@ -1026,7 +1026,7 @@ var k=7;class C{{v(){{return k+c()+sep.length}}}}function b(){{return new C().v(
         let at = text
             .find(needle)
             .unwrap_or_else(|| panic!("{needle} in:\n{text}"));
-        map.linker_text_at(at as u32)
+        map.linker_text_at(at as u32).map(|(c, t, _)| (c, t))
     };
     let init_b = text
         .find("return new C")
@@ -1037,6 +1037,7 @@ var k=7;class C{{v(){{return k+c()+sep.length}}}}function b(){{return new C().v(
             .find(needle)
             .unwrap_or_else(|| panic!("{needle} in:\n{text}"));
         map.linker_text_at((init_b + at) as u32)
+            .map(|(c, t, _)| (c, t))
     };
     assert_eq!(mark("var sep"), Some((1, ExternalNames)));
     assert_eq!(mark("={};"), Some((1, Namespace)));

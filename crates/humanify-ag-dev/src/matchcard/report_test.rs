@@ -1,44 +1,50 @@
-use std::collections::BTreeMap;
-
+use humanify_ag_core::layout_record::{FunctionId, Match};
 use serde_json::json;
 
-use super::{Decisions, score_decisions};
-use crate::difflabel::{InputFile, Tree, Truth};
+use super::score_layouts;
+use crate::difflabel::{InputFile, Truth};
+use crate::matchcard::join::join_test::{at, layout};
 
 const FROM: &str = "function a(x){return x+1}function b(y){return y*2}function c(z){return z-3}";
 const TO: &str =
     "function r(y){return y*2}function n(){}function q(x){return x+1}function s(z){return z-3}";
 
-fn tree(text: &str, functions: &[&str]) -> Tree {
-    let rows: Vec<String> = functions
-        .iter()
-        .enumerate()
-        .map(|(i, f)| format!("[{},0,{}]", i + 1, text.find(f).unwrap()))
-        .collect();
-    let provenance = format!(
-        r#"{{"version":1,"rows":"","inputFiles":["index.js"],"files":{{".humanify/humanified.js":[{}]}}}}"#,
-        rows.join(",")
-    );
-    Tree::from_parts(BTreeMap::new(), Some(&provenance)).unwrap()
+fn truth() -> Truth {
+    Truth::compare(
+        vec![InputFile::parse("index.js", FROM)],
+        vec![InputFile::parse("index.js", TO)],
+    )
+}
+
+fn new(id: FunctionId) -> (u32, FunctionId, Match) {
+    (0, id, Match::New)
+}
+
+fn exact(id: FunctionId, prior: FunctionId) -> (u32, FunctionId, Match) {
+    (0, id, Match::Exact(Some((0, prior))))
 }
 
 #[test]
 fn the_card_counts_each_unchanged_function_once() {
-    let truth = Truth::compare(
-        vec![InputFile::parse("index.js", FROM)],
-        vec![InputFile::parse("index.js", TO)],
+    let from = layout(
+        &["index.js"],
+        &[
+            new(at(FROM, "function a")),
+            new(at(FROM, "function b")),
+            new(at(FROM, "function c")),
+        ],
     );
-    let from = tree(FROM, &["function a", "function b", "function c"]);
-    let to = tree(
-        TO,
-        &["function r", "function n", "function q", "function s"],
+    let mut to = layout(
+        &["index.js"],
+        &[
+            exact(at(TO, "function r"), at(FROM, "function b")),
+            new(at(TO, "function n")),
+            exact(at(TO, "function q"), at(FROM, "function c")),
+            new(at(TO, "function s")),
+        ],
     );
-    let decisions: Decisions = serde_json::from_value(json!({
-        "version": 1, "fresh": [1, 2, 3, 4], "prior": [1, 2, 3],
-        "exact": [[1, 0], [2, 2]], "close": [], "ambiguous": [0], "unmatched": [],
-    }))
-    .unwrap();
-    let scored = score_decisions(&truth, &from, &to, &decisions);
+    to.prior_ambiguous = vec![(0, at(FROM, "function a"))];
+    let scored = score_layouts(&truth(), &from, &to).unwrap();
     assert_eq!(
         scored.card,
         json!({
@@ -63,5 +69,19 @@ fn the_card_counts_each_unchanged_function_once() {
             .contains("precision 50.0% (1 of 2); recall 33.3% (1 of 3)"),
         "{}",
         scored.report
+    );
+}
+
+#[test]
+fn a_partner_the_previous_layout_does_not_list_is_an_error() {
+    let from = layout(&["index.js"], &[new(at(FROM, "function a"))]);
+    let to = layout(
+        &["index.js"],
+        &[exact(at(TO, "function r"), at(FROM, "function b"))],
+    );
+    let got = score_layouts(&truth(), &from, &to).map(|s| s.report);
+    assert_eq!(
+        got,
+        Err("the previous layout lists no function Byte(25) of input 0".into())
     );
 }

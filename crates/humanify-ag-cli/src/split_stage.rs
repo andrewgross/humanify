@@ -42,15 +42,8 @@ use crate::writers::{
 use humanify_ag_core::output_tree::OutputTree;
 
 /// What the split stage is given.
-/// What the stages before the split recorded for the provenance file.
-pub struct ProvenanceInput<'a> {
-    pub link: Option<&'a humanify_ag_core::unpack::chunk_link::LinkMap>,
-    pub unpack: Option<&'a humanify_ag_core::unpack::bun::UnpackOrigins>,
-    pub origins: &'a [(u32, u32)],
-}
-
 pub struct SplitStageInput<'a> {
-    pub provenance: ProvenanceInput<'a>,
+    pub layout: crate::layout_stage::LayoutInput<'a>,
     /// The embedded files the linked input reads by path (exp217): the
     /// runnable tree's `embedded/`.
     pub embedded_files: &'a [humanify_ag_core::unpack::chunk_link::EmbeddedFile],
@@ -268,11 +261,13 @@ pub fn run_split(
         {
             Ok(count) => InputGate::Settled(count),
             Err(why) => {
+                let why = why.to_string();
                 return Ok(finish_unsplit(
                     code,
+                    prior_carry,
                     input,
                     tree,
-                    &why.to_string(),
+                    &why,
                     renderer,
                 ));
             }
@@ -333,6 +328,7 @@ pub fn run_split(
 /// a layout the split cannot cut (finding C3; docs/plugin-spec.md P9).
 fn finish_unsplit(
     code: &str,
+    prior_carry: Option<&PriorCarry>,
     input: &SplitStageInput<'_>,
     tree: &mut OutputTree,
     why: &str,
@@ -341,6 +337,16 @@ fn finish_unsplit(
     let written = match input.processed_source {
         Some(path) => {
             tree.put(path.to_path_buf(), code);
+            if let Err(e) = crate::layout_stage::write_layout(
+                &input.layout,
+                code,
+                path,
+                prior_carry,
+                None,
+                tree,
+            ) {
+                renderer.message(&format!("WARNING: no layout record written: {e}"));
+            }
             path.display().to_string()
         }
         None => String::from("(no processed file)"),
@@ -464,41 +470,6 @@ fn report_namer(namer: &ProviderSplitNamer<'_>, renderer: &mut dyn ProgressRende
     ));
 }
 
-fn write_provenance(
-    code: &str,
-    outcome: &SplitOutcome,
-    input: &SplitStageInput<'_>,
-    tree: &mut OutputTree,
-) -> Result<(), humanify_ag_core::provenance::ProvenanceError> {
-    use humanify_ag_core::provenance::{PROVENANCE_PATH, Sources, provenance_json};
-    let (Some(fresh), false) = (input.fresh, outcome.lines.is_empty()) else {
-        return Ok(());
-    };
-    let input_name = input
-        .input_file
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let sources = Sources {
-        link: input.provenance.link,
-        input_name: &input_name,
-        unpack: input.provenance.unpack,
-        fresh,
-        origins: input.provenance.origins,
-        shipped: code,
-        spans: &outcome.spans,
-    };
-    let root = tree.root().to_path_buf();
-    let line_count = |path: &str| {
-        tree.read(&root.join(path)).map_or(0, |bytes| {
-            bytes.iter().filter(|b| **b == b'\n').count() as u32
-        })
-    };
-    let text = provenance_json(&sources, &outcome.lines, &line_count)?;
-    tree.put_rel(PROVENANCE_PATH, text);
-    Ok(())
-}
-
 /// A failure after the commit point (committing into the in-memory tree
 /// cannot fail).
 struct PostCommit(String);
@@ -530,12 +501,6 @@ fn commit_and_finish(
         tree.put_rel(
             ".humanify/prior-match-map.json",
             serde_json::to_string(&map).expect("a name map serializes"),
-        );
-    }
-    if let Some(carry) = prior_carry {
-        tree.put_rel(
-            humanify_ag_core::matching::decisions::MATCH_DECISIONS_PATH,
-            serde_json::to_string(&carry.decisions).expect("match decisions serialize"),
         );
     }
     tree.put_rel(
@@ -582,7 +547,18 @@ fn commit_and_finish(
         renderer.message(m);
     }
     let (relinked, reconciled) = finished.map_err(|e| PostCommit(e.to_string()))?;
-    write_provenance(code, outcome, input, tree).map_err(|e| PostCommit(e.to_string()))?;
+    let named = tree
+        .root()
+        .join(humanify_ag_core::place::layout::HUMANIFIED_SOURCE_PATH);
+    crate::layout_stage::write_layout(
+        &input.layout,
+        code,
+        &named,
+        prior_carry,
+        Some(outcome),
+        tree,
+    )
+    .map_err(|e| PostCommit(format!("no layout record written: {e}")))?;
     if let Some(names) = report.library_names.take() {
         post_split.trail = names.trail;
     }

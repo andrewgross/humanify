@@ -8,9 +8,12 @@ fn tree() -> Tree {
         ("src/b.bin".to_string(), b"\0\x01".to_vec()),
         ("notes.txt".to_string(), b"x".to_vec()),
     ]);
-    let provenance = r#"{"version":1,"rows":"","inputFiles":["index.js","chunk-a.js"],
-        "files":{"src/a.js":[[1],[2,1,40],[4,1,null]]}}"#;
-    Tree::from_parts(files, Some(provenance)).unwrap()
+    let layout = r#"{"format":1,"inputs":["index.js","chunk-a.js"],"priorLayout":null,
+        "namedText":"a.js","priorAmbiguous":[],
+        "files":{"src/a.js":{"units":[
+            {"at":[1,40],"line":2,"rows":[[2,40,"new"],[3,40]]},
+            {"at":[1,null],"linker":"init","line":4,"body":[{"at":[1,null],"linker":"call","target":0,"line":4}]}]}}}"#;
+    Tree::from_parts(files, Some(layout)).unwrap()
 }
 
 #[test]
@@ -35,8 +38,17 @@ fn a_file_gives_its_lines_and_says_when_it_is_not_text() {
 }
 
 #[test]
-fn a_tree_without_a_provenance_file_has_no_origins() {
+fn a_tree_without_a_layout_record_has_no_origins() {
     let files = BTreeMap::from([("a.js".to_string(), b"x\n".to_vec())]);
     let t = Tree::from_parts(files, None).unwrap();
     assert_eq!(t.origin("a.js", 1), None);
+}
+
+#[test]
+fn a_layout_of_another_format_is_refused() {
+    let got = Tree::from_parts(BTreeMap::new(), Some(r#"{"format":7}"#));
+    assert_eq!(
+        got.err().as_deref(),
+        Some(".humanify/layout.json: layout format 7: this binary reads format 1")
+    );
 }
