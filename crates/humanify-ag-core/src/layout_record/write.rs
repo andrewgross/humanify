@@ -6,6 +6,7 @@ use super::{FORMAT, FileEntry, FunctionId, Layout, LayoutParseError, Match, Row,
 use crate::babel_view::{line_of, line_starts};
 use crate::emit::cjs::FileLines;
 use crate::matching::decisions::MatchDecisions;
+use crate::place::ledger::SplitLedger;
 use crate::unpack::bun::UnpackOrigins;
 use crate::unpack::chunk_link::{LinkMap, LinkerText};
 
@@ -46,6 +47,8 @@ pub struct Split<'a> {
     /// The statements the split cut: their spans in the shipped text.
     pub spans: &'a [(u32, u32)],
     pub files: &'a [FileLines],
+    /// What the split recorded for each statement.
+    pub ledger: Option<&'a SplitLedger>,
     /// A written file's line ends.
     pub line_count: &'a dyn Fn(&str) -> u32,
 }
@@ -62,6 +65,8 @@ pub struct Run<'a> {
 /// Why no layout could be written.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum LayoutError {
+    #[error("the split's ledger was not read: {0}")]
+    SplitLedger(String),
     #[error("the named text has {shipped} lines, the formatted text {fresh}")]
     LinesDiffer { fresh: usize, shipped: usize },
     #[error("the named text in the tree has {written} lines, the formatted text {fresh}")]
@@ -491,6 +496,7 @@ fn split_file(
     shipped_starts: &[u32],
     lines: &FileLines,
     marked: &Marked,
+    names: &[Vec<String>],
 ) -> Result<FileEntry, LayoutError> {
     let written = (split.line_count)(&lines.path);
     let mut at = 1 + lines.header_lines + written.saturating_sub(lines.total());
@@ -502,16 +508,34 @@ fn split_file(
         let (start, end) = split.spans[statement];
         let first = line_of(shipped_starts, start);
         let last = line_of(shipped_starts, end.saturating_sub(1).max(start));
-        units.push(marked.unit(&Place {
+        let mut unit = marked.unit(&Place {
             path: &lines.path,
             lines: (first, last),
             at,
             same_lines: last - first + 1 == count,
             functions: false,
-        })?);
+        })?;
+        if let Some(ledger) = split.ledger {
+            unit.n = Some(statement as u32);
+            unit.hash = ledger.hashes.get(statement).cloned();
+            unit.names = names.get(statement).cloned().unwrap_or_default();
+        }
+        units.push(unit);
         at += count;
     }
     Ok(FileEntry { units })
+}
+
+/// The names each statement declares, by its position in the named text.
+fn statement_names(ledger: &SplitLedger) -> Vec<Vec<String>> {
+    let mut names = vec![Vec::new(); ledger.emit_names.len()];
+    for (slot, written) in ledger.emit_names.iter().enumerate() {
+        let statement = ledger.emit_indexes.as_ref().map_or(slot, |at| at[slot]);
+        if let (Some(written), Some(own)) = (written, names.get_mut(statement)) {
+            *own = written.split(',').map(str::to_string).collect();
+        }
+    }
+    names
 }
 
 /// The layout of one run.
@@ -526,8 +550,9 @@ pub fn layout_of(run: &Run<'_>) -> Result<Layout, LayoutError> {
     files.insert(run.named_text.to_string(), whole_text(run, &marked)?);
     if let Some(split) = &run.split {
         let starts = line_starts(run.text.shipped);
+        let names = split.ledger.map(statement_names).unwrap_or_default();
         for lines in split.files {
-            let entry = split_file(split, &starts, lines, &marked)?;
+            let entry = split_file(split, &starts, lines, &marked, &names)?;
             files.insert(lines.path.clone(), entry);
         }
     }
@@ -545,6 +570,7 @@ pub fn layout_of(run: &Run<'_>) -> Result<Layout, LayoutError> {
         files.insert(path.clone(), FileEntry { units });
     }
     let ambiguous = previous.map_or(&[][..], |p| p.matches.ambiguous.as_slice());
+    let ledger = run.split.as_ref().and_then(|s| s.ledger);
     Ok(Layout {
         format: FORMAT,
         inputs: run.input.files(),
@@ -555,5 +581,7 @@ pub fn layout_of(run: &Run<'_>) -> Result<Layout, LayoutError> {
             let listed = ambiguous.iter();
             listed.map(|&p| k.functions[p as usize].clone()).collect()
         }),
+        hash_version: ledger.map(|l| l.hash_version),
+        modules: ledger.and_then(|l| l.fossil_modules.clone()),
     })
 }

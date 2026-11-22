@@ -682,7 +682,7 @@ mod every_variant {
     #[test]
     fn place_errors() {
         use crate::place::assign::fossil::FossilSplitError;
-        use crate::place::ledger::{LedgerParseError, RederiveError};
+        use crate::place::ledger::RederiveError;
         use crate::place::placement_dump::PlaceError;
         use crate::place::tiers::Unclaimed;
         use crate::twins::fossil::FossilMapError;
@@ -722,11 +722,6 @@ mod every_variant {
         same(
             RederiveError::UnknownHash { hash: "h1".into() },
             "hash h1 is not among the ledger's statements",
-        );
-        same(LedgerParseError::Json("bad json".into()), "bad json");
-        same(
-            LedgerParseError::UnsupportedVersion,
-            "Unsupported split ledger version",
         );
     }
 

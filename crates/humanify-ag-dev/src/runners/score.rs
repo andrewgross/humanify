@@ -923,7 +923,7 @@ fn scored_leg(
     }
     .argv();
     let bundle = out.join(".humanify/humanified.js");
-    let ledger = out.join(".humanify/split-ledger.json");
+    let ledger = out.join(".humanify/layout.json");
     let spec = LegSpec {
         pair: pair.to_string(),
         version: to.to_string(),
@@ -1179,7 +1179,7 @@ fn self_hop(run: &Run, to: &str, input: &str) -> Result<(), String> {
         &cache,
     );
     let cold_writes = count_files(&cache) as i64 - before as i64;
-    let missing: Vec<String> = [".humanify/humanified.js", ".humanify/split-ledger.json"]
+    let missing: Vec<String> = [".humanify/humanified.js", ".humanify/layout.json"]
         .iter()
         .map(|a| out.join(a))
         .filter(|p| !p.is_file())
@@ -1237,12 +1237,11 @@ fn cold_verdict(run: &Run, to: &str, base: &Path, out: &Path, cold_cache: &str) 
         identical = false;
         diff = super::tree_diff::changed_lines(&a, &b).unwrap_or(0);
     }
-    let ledger = ".humanify/split-ledger.json";
-    if !super::tree_diff::same_bytes(&base.join(ledger), &out.join(ledger)) {
+    if !crate::layoutcheck::same_split_memory(base, out) {
         identical = false;
     }
     if identical {
-        ctx.say("SELF-HOP INVARIANT: OK — byte-identical bundle and ledger");
+        ctx.say("SELF-HOP INVARIANT: OK — byte-identical bundle, same split memory");
     } else {
         ctx.say(format!(
             "COLD SELF-HOP: {diff} bundle diff lines (cache: {cold_cache}; see {})",

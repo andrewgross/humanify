@@ -23,7 +23,7 @@ write_tree() {
   [[ -n "$out" ]] || return 0
   mkdir -p "$out/.humanify"
   echo "bundle" > "$out/.humanify/humanified.js"
-  echo "{}" > "$out/.humanify/split-ledger.json"
+  echo '{"format":1,"inputs":[],"priorLayout":null,"namedText":"","files":{},"priorAmbiguous":[]}' > "$out/.humanify/layout.json"
   if [[ -n "$cache" && -n "${RECORDER_CACHE_WRITE:-}" && "$cache" == *"$RECORDER_CACHE_WRITE"* ]]; then
     mkdir -p "$cache"; echo x > "$cache/written-$$"
   fi

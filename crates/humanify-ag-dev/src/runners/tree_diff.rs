@@ -20,7 +20,7 @@ const DIFF_DEADLINE: Duration = Duration::from_secs(60 * 60);
 /// The diagnostics-only sidecars excluded from every byte-identity
 /// verdict (neutrality.sh `DIAGNOSTIC_ONLY`, run.sh's warm self-hop):
 /// written for a reader, consumed by nothing. `humanified.js` and
-/// `split-ledger.json` are NOT here: they are the next release's prior.
+/// `layout.json` are NOT here: they are the next release's prior.
 pub const DIAGNOSTIC_ONLY: &[&str] = &[
     ".humanify/placement-stats.json",
     ".humanify/stage-hashes.json",

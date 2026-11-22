@@ -10,7 +10,7 @@
 //!    (`crate::config`, the one parse point): every refusal `Error: <msg>`
 //!    on stderr, all at once, exit 1;
 //! 2. the input files: a missing input exits 1 with the red
-//!    `File <x> not found`, a missing `--prior-version`/`--split-ledger`
+//!    `File <x> not found`, a missing `--prior-version`
 //!    with `Error: <flag> file not found: <path>` — before anything is
 //!    created (config sweep step 4: the input used to be checked after
 //!    the log file and the cache directory were made);
@@ -1941,11 +1941,7 @@ fn load_prior_inputs(
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<crate::prior_tree::PriorInputs, Crash> {
     let prior_file = config.matching.prior_version.as_deref();
-    let inputs = crate::prior_tree::load_prior(
-        prior_file.map(Path::new),
-        config.split.ledger.as_deref().map(Path::new),
-    )
-    .map_err(Crash::of)?;
+    let inputs = crate::prior_tree::load_prior(prior_file.map(Path::new)).map_err(Crash::of)?;
     if let (Some(path), Some(tree)) = (prior_file, &inputs.tree) {
         if humanify_ag_model::js::trim(&tree.code).is_empty() {
             return Err(Crash(format!("--prior-version file is empty: {path}")));

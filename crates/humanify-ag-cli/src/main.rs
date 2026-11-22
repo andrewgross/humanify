@@ -419,9 +419,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), VerbEr
     let prior = match args.prior_version.as_deref() {
         // The verb reads the prior's vendor record only, not its text.
         Some(p) => {
-            humanify_ag_cli::prior_tree::load_prior_tree(Path::new(p), String::new())?
-                .0
-                .vendor
+            humanify_ag_cli::prior_tree::load_prior_tree(Path::new(p), String::new())?.vendor
         }
         None => None,
     };

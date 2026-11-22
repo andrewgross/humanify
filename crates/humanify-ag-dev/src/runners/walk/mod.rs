@@ -580,7 +580,7 @@ fn hop(w: &Walk, v: &str, prior: Option<&str>) -> Result<(), String> {
         cache_dir: None,
         artifacts: vec![
             text(&tree.join(".humanify/humanified.js")),
-            text(&tree.join(".humanify/split-ledger.json")),
+            text(&tree.join(".humanify/layout.json")),
             text(&stats),
         ],
         bin: w.bin.clone(),
@@ -595,7 +595,7 @@ fn hop(w: &Walk, v: &str, prior: Option<&str>) -> Result<(), String> {
     );
     let rc = outcome.as_ref().map_or(-1, |o| o.exit_code);
     let tree_ok = tree.join(".humanify/humanified.js").is_file()
-        && tree.join(".humanify/split-ledger.json").is_file();
+        && tree.join(".humanify/layout.json").is_file();
     if !tree_ok {
         let stdout = std::fs::read_to_string(&spec.stdout_path).unwrap_or_default();
         let errors: Vec<&str> = stdout

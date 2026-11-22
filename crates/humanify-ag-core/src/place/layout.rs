@@ -5,8 +5,6 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::prior_tree::PriorFiles;
-
 /// Folder holding the humanified app code (the nested split tree).
 pub const CODE_DIR: &str = "src";
 /// Folder holding vendored libraries (Bun CJS factories), one file each.
@@ -21,8 +19,6 @@ pub const VENDOR_DIR: &str = "vendor";
 pub const ASSETS_DIR: &str = "src/_assets";
 /// Folder holding generated metadata and runtime shims.
 pub const METADATA_DIR: &str = ".humanify";
-/// The split ledger's filename within the metadata folder.
-pub const SPLIT_LEDGER_FILENAME: &str = "split-ledger.json";
 /// The split ledger's path within the output tree.
 pub const SPLIT_LEDGER_PATH: &str = ".humanify/split-ledger.json";
 /// The full single-file humanified output (the next release's
@@ -51,19 +47,6 @@ pub fn prior_file_in_tree(prior_file: &Path) -> String {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     format!("{}{name}", prior_dir_in_tree(prior_file))
-}
-
-/// `findSplitLedgerPath(priorFile)`: the ledger beside `--prior-version`,
-/// as a path inside its tree — the first candidate the tree holds: the
-/// file's folder IS the metadata folder, or that folder is the tree root.
-pub fn prior_ledger_in(prior_file: &Path, files: &PriorFiles) -> Option<String> {
-    let dir = prior_dir_in_tree(prior_file);
-    [
-        format!("{dir}{SPLIT_LEDGER_FILENAME}"),
-        format!("{dir}{SPLIT_LEDGER_PATH}"),
-    ]
-    .into_iter()
-    .find(|candidate| files.contains(candidate))
 }
 
 /// `splitTreeRootOf(priorFile)`: the tree root `--prior-version` belongs

@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use crate::hash::forms::STATEMENT;
 
 /// One fossil module as the ledger records it (`FossilLedgerModule`).
-#[derive(Clone, Debug, Default, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct FossilLedgerModule {
     pub file: String,
     pub hashes: Vec<String>,
@@ -72,7 +72,7 @@ impl SplitLedger {
 }
 
 /// `StableSplitLedger`.
-#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StableSplitLedger {
     pub version: u64,
@@ -303,28 +303,6 @@ pub fn rederive_stale_era_hashes(
         statements: ledger.order.len(),
         classes,
     })
-}
-
-/// Why a split ledger's text was refused.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-pub enum LedgerParseError {
-    /// Not a ledger this binary reads (bad JSON, a missing field).
-    #[error("{0}")]
-    Json(String),
-    /// A ledger `version` other than 1.
-    #[error("Unsupported split ledger version")]
-    UnsupportedVersion,
-}
-
-/// Parse a ledger's text (`loadPriorSplitLedger`'s parse); the shell reads
-/// the file.
-pub fn parse_ledger(text: &str) -> Result<StableSplitLedger, LedgerParseError> {
-    let ledger: StableSplitLedger =
-        serde_json::from_str(text).map_err(|e| LedgerParseError::Json(e.to_string()))?;
-    if ledger.version != 1 {
-        return Err(LedgerParseError::UnsupportedVersion);
-    }
-    Ok(ledger)
 }
 
 #[cfg(test)]

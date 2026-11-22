@@ -5,6 +5,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::place::ledger::FossilLedgerModule;
+
+pub mod ledger_view;
 pub mod write;
 
 pub const LAYOUT_PATH: &str = ".humanify/layout.json";
@@ -25,6 +28,12 @@ pub struct Layout {
     pub files: BTreeMap<String, FileEntry>,
     /// Previous functions the matcher saw several candidates for.
     pub prior_ambiguous: Vec<(u32, FunctionId)>,
+    /// The version of the statement fingerprint the units' `hash` is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash_version: Option<u64>,
+    /// The split's modules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modules: Option<Vec<FossilLedgerModule>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,6 +60,15 @@ pub struct Unit {
     pub nth: Option<u32>,
     /// Its first line in the output file.
     pub line: u32,
+    /// Of a statement the split placed: its position in the named text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n: Option<u32>,
+    /// Of a statement the split placed: its fingerprint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
+    /// The names it declares, as written.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rows: Vec<Row>,
     /// Of a statement with no input text of its own (a wrapper around

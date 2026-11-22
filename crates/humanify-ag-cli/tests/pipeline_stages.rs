@@ -179,7 +179,7 @@ fn a_run_with_the_formatted_text_goes_end_to_end_through_the_split() {
     assert_eq!(o.status.code(), Some(0), "{err}");
     assert!(err.contains("Split complete: written to"), "{err}");
     for f in [
-        ".humanify/split-ledger.json",
+        ".humanify/layout.json",
         ".humanify/humanified.js",
         ".humanify/stage-hashes.json",
         ".humanify/placement-stats.json",
@@ -189,12 +189,14 @@ fn a_run_with_the_formatted_text_goes_end_to_end_through_the_split() {
     ] {
         assert!(s.out().join(f).is_file(), "{f} written\n{err}");
     }
-    let ledger: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(s.out().join(".humanify/split-ledger.json")).unwrap(),
+    assert!(!s.out().join(".humanify/split-ledger.json").exists());
+    let layout: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(s.out().join(".humanify/layout.json")).unwrap(),
     )
     .unwrap();
-    assert_eq!(ledger["version"], 1);
-    assert_eq!(ledger["order"].as_array().unwrap().len(), 62);
+    let placed = layout["files"].as_object().unwrap().values();
+    let placed = placed.flat_map(|f| f["units"].as_array().unwrap());
+    assert_eq!(placed.filter(|u| u.get("n").is_some()).count(), 62);
     // The passthrough copy of the input was consumed by the tree: the
     // entry index.js is the runnable emit's, not the input's bytes.
     assert_ne!(

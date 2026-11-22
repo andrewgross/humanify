@@ -32,6 +32,6 @@ esac
 if [[ -n "$out" ]]; then
   mkdir -p "$out/.humanify"
   echo "bundle" > "$out/.humanify/humanified.js"
-  echo "{}" > "$out/.humanify/split-ledger.json"
+  echo '{"format":1,"inputs":[],"priorLayout":null,"namedText":"","files":{},"priorAmbiguous":[]}' > "$out/.humanify/layout.json"
 fi
 exit 0

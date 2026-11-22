@@ -358,10 +358,6 @@ Split [split]:
           Emit the byte-exact review tree instead of the runnable module graph (needs enabled).
           [default: off; --no-split-pure turns it off] [config: split.pure]
 
-      --split-ledger <path>
-          A prior split ledger, for cross-release file-assignment inheritance (needs enabled).
-          [unset: auto-discovered next to the prior] [config: split.ledger]
-
 Switches [switches]:
       --switches-disable <a,b,...>
           Ablation: pass switches to turn OFF (unknown names are refused, listing the valid set).

@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::Path;
 
+use humanify_ag_core::layout_record::ledger_view::ledger_of;
 use humanify_ag_core::layout_record::{
     FileEntry, FunctionId, LAYOUT_PATH, Layout, Match, Row, Unit, checksum,
 };
@@ -229,6 +230,13 @@ pub fn check(layout: &Layout, files: &Files, previous: Option<(&str, &Layout)>) 
         }
         check_partners(layout, previous, &mut found);
     }
+    if let Err(e) = ledger_of(layout) {
+        failures.push(Failure {
+            count: 0,
+            what: e.to_string(),
+            first: String::new(),
+        });
+    }
     let mut by_rule = found.failures();
     let after =
         by_rule.partition_point(|f| !f.what.contains("partner") && !f.what.contains("ambiguous"));
@@ -264,6 +272,16 @@ pub fn check_tree(tree: &Path, previous: Option<&Path>) -> Result<Checked, Strin
         .as_ref()
         .map(|(text, layout)| (text.as_str(), layout));
     Ok(check(&layout, &text_files(tree)?, previous))
+}
+
+/// Do two trees' layout records hold the same split memory? Trees
+/// whose record does not read are not the same.
+pub fn same_split_memory(a: &Path, b: &Path) -> bool {
+    let memory = |tree: &Path| {
+        let (_, layout) = read_layout(tree)?;
+        ledger_of(&layout).map_err(|e| e.to_string())
+    };
+    matches!((memory(a), memory(b)), (Ok(a), Ok(b)) if a == b)
 }
 
 /// The `layout check` verb: the report, and whether every rule held.

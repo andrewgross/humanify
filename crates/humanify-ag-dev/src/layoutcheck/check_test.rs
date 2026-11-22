@@ -126,3 +126,17 @@ fn a_partner_must_be_a_function_of_the_previous_layout_claimed_once() {
     );
     assert_eq!(got.len(), 3);
 }
+
+#[test]
+fn split_statements_must_be_numbered_once_each() {
+    let mut text: Value = serde_json::from_str(&layout(json!({"out.js": {"units": [
+        {"at": [0, 0], "line": 1, "n": 0, "hash": "aa"},
+        {"at": [0, 9], "line": 2, "n": 2, "hash": "bb"},
+    ]}})))
+    .unwrap();
+    text["hashVersion"] = json!(3);
+    assert_eq!(
+        failures(&text.to_string(), &files(7), None),
+        ["the layout's 2 split statements are not numbered 0 to 2 once each"]
+    );
+}

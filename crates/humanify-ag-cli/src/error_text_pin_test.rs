@@ -7,7 +7,6 @@
 use std::path::PathBuf;
 
 use humanify_ag_core::error::{FileError, FileOp};
-use humanify_ag_core::place::ledger::LedgerParseError;
 use humanify_ag_core::prior_tree::PriorTreeError;
 
 use crate::output_tree::WriteError;
@@ -60,25 +59,11 @@ fn prior_load_errors_keep_their_words() {
         ),
     );
     same(
-        PriorLoadError::LedgerRead {
-            path: PathBuf::from("p/l.json"),
-            source: io(Other, "gone"),
+        PriorLoadError::Layout {
+            path: PathBuf::from("p/layout.json"),
+            why: "not JSON".into(),
         },
-        "p/l.json: gone",
-    );
-    same(
-        PriorLoadError::Ledger {
-            path: PathBuf::from("p/l.json"),
-            error: LedgerParseError::UnsupportedVersion,
-        },
-        "Unsupported split ledger version in p/l.json",
-    );
-    same(
-        PriorLoadError::Ledger {
-            path: PathBuf::from("p/l.json"),
-            error: LedgerParseError::Json("not JSON".into()),
-        },
-        "p/l.json: not JSON",
+        "prior layout record p/layout.json was not read: not JSON",
     );
 }
 

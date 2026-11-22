@@ -9,6 +9,8 @@ use humanify_ag_core::layout_record::write::{
     Input, LayoutError, Previous, Run, Split, Text, layout_of,
 };
 use humanify_ag_core::output_tree::OutputTree;
+use humanify_ag_core::place::layout::SPLIT_LEDGER_PATH;
+use humanify_ag_core::place::ledger::SplitLedger;
 use humanify_ag_core::prior_tree::PriorTree;
 use humanify_ag_core::rename::transfer::carry::PriorCarry;
 
@@ -39,6 +41,15 @@ fn line_ends(tree: &OutputTree, path: &Path) -> u32 {
     })
 }
 
+/// The split's ledger as the finish left it in the tree.
+fn split_ledger(tree: &OutputTree) -> Result<SplitLedger, LayoutError> {
+    let unread = |e: &dyn std::fmt::Display| LayoutError::SplitLedger(e.to_string());
+    let bytes = tree
+        .read(&tree.root().join(SPLIT_LEDGER_PATH))
+        .map_err(|e| unread(&e))?;
+    serde_json::from_slice(&bytes).map_err(|e| unread(&e))
+}
+
 /// Write the layout of a tree whose named text (`shipped`) sits at
 /// `named`; `split`: the files the split wrote from it.
 pub fn write_layout(
@@ -57,6 +68,7 @@ pub fn write_layout(
     };
     let input_name = name(input.input_file).unwrap_or_default();
     let line_count = |path: &str| line_ends(tree, &root.join(path));
+    let ledger = split.map(|_| split_ledger(tree)).transpose()?;
     let run = Run {
         input: Input {
             link: input.link,
@@ -80,9 +92,14 @@ pub fn write_layout(
             spans: &outcome.spans,
             files: &outcome.lines,
             line_count: &line_count,
+            ledger: ledger.as_ref(),
         }),
     };
     let text = layout_of(&run)?.to_json();
     tree.put_rel(LAYOUT_PATH, text);
+    // The layout record now holds what the ledger held.
+    if ledger.is_some() {
+        tree.remove(&root.join(SPLIT_LEDGER_PATH));
+    }
     Ok(())
 }

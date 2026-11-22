@@ -1,5 +1,5 @@
-//! The ONE reader of the prior release (`--prior-version`, and the split
-//! ledger `--split-ledger` names or the prior tree holds). It reads every
+//! The ONE reader of the prior release (`--prior-version`, with the split's
+//! memory its layout record holds). It reads every
 //! prior file the run uses once, at the start, before anything is written
 //! — so a prior folder that is also the output folder is read whole before
 //! the run changes it — and hands the core values: a
@@ -11,17 +11,19 @@
 
 use std::path::{Path, PathBuf};
 
+use humanify_ag_core::layout_record::ledger_view::ledger_of;
+use humanify_ag_core::layout_record::{LAYOUT_PATH, Layout};
 use humanify_ag_core::place::layout::{
-    METADATA_DIR, prior_file_in_tree, prior_ledger_in, split_tree_root_of,
+    METADATA_DIR, SPLIT_LEDGER_PATH, prior_file_in_tree, split_tree_root_of,
 };
-use humanify_ag_core::place::ledger::{LedgerParseError, StableSplitLedger, parse_ledger};
+use humanify_ag_core::place::ledger::StableSplitLedger;
 use humanify_ag_core::prior_tree::{
     PriorFiles, PriorTree, PriorTreeError, enters_folder, vendor_manifest_path,
 };
 use humanify_ag_io::tree::{TreeError, read_tree};
 
-/// The prior split ledger the run inherits from, with the path it was
-/// read from (the run log names it).
+/// The prior split ledger the run inherits from, with the layout record
+/// it was read from (the run log names it).
 #[derive(Clone, Debug)]
 pub struct PriorLedger {
     pub path: PathBuf,
@@ -33,8 +35,7 @@ pub struct PriorLedger {
 pub struct PriorInputs {
     /// The prior tree; None without `--prior-version`.
     pub tree: Option<PriorTree>,
-    /// `--split-ledger` when given, else the ledger beside
-    /// `--prior-version`; None when neither exists.
+    /// The split's memory the prior tree's layout record holds.
     pub ledger: Option<PriorLedger>,
 }
 
@@ -56,18 +57,9 @@ pub enum PriorLoadError {
         root: PathBuf,
         error: PriorTreeError,
     },
-    /// The ledger file.
-    #[error("{}: {source}", .path.display())]
-    LedgerRead {
-        path: PathBuf,
-        source: std::io::Error,
-    },
-    /// The ledger's text.
-    #[error("{}", ledger_text(.path, .error))]
-    Ledger {
-        path: PathBuf,
-        error: LedgerParseError,
-    },
+    /// The tree's layout record.
+    #[error("prior layout record {} was not read: {why}", .path.display())]
+    Layout { path: PathBuf, why: String },
 }
 
 fn refused_text(root: &Path, error: &PriorTreeError) -> String {
@@ -81,61 +73,57 @@ fn refused_text(root: &Path, error: &PriorTreeError) -> String {
     }
 }
 
-fn ledger_text(path: &Path, error: &LedgerParseError) -> String {
-    match error {
-        LedgerParseError::UnsupportedVersion => {
-            format!("Unsupported split ledger version in {}", path.display())
-        }
-        error => format!("{}: {error}", path.display()),
-    }
+/// Read the prior release: the `--prior-version` file and its tree, with
+/// the split's memory its layout record holds.
+pub fn load_prior(prior_file: Option<&Path>) -> Result<PriorInputs, PriorLoadError> {
+    let Some(p) = prior_file else {
+        return Ok(PriorInputs::default());
+    };
+    let code = std::fs::read(p)
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .map_err(|source| PriorLoadError::PriorFile {
+            path: p.to_path_buf(),
+            source,
+        })?;
+    let tree = load_prior_tree(p, code)?;
+    let ledger = prior_ledger(&split_tree_root_of(p), &tree)?;
+    Ok(PriorInputs {
+        tree: Some(tree),
+        ledger,
+    })
 }
 
-/// A ledger file as read: its path and bytes, parsed by the caller.
-pub type RawLedger = (PathBuf, Vec<u8>);
-
-/// Read the prior release: the `--prior-version` file, its tree and the
-/// split ledger in force (`split_ledger` wins over the one beside the
-/// prior file).
-pub fn load_prior(
-    prior_file: Option<&Path>,
-    split_ledger: Option<&Path>,
-) -> Result<PriorInputs, PriorLoadError> {
-    let (tree, beside) = match prior_file {
-        Some(p) => {
-            let code = std::fs::read(p)
-                .map(|b| String::from_utf8_lossy(&b).into_owned())
-                .map_err(|source| PriorLoadError::PriorFile {
-                    path: p.to_path_buf(),
-                    source,
-                })?;
-            let (tree, beside) = load_prior_tree(p, code)?;
-            (Some(tree), beside)
-        }
-        None => (None, None),
+/// The ledger the prior tree's layout record holds; `None`: the tree has
+/// no layout record or was not split.
+fn prior_ledger(root: &Path, tree: &PriorTree) -> Result<Option<PriorLedger>, PriorLoadError> {
+    let path = root.join(LAYOUT_PATH);
+    let refused = |why: String| PriorLoadError::Layout {
+        path: path.clone(),
+        why,
     };
-    let ledger = match (split_ledger, beside) {
-        (Some(path), _) => {
-            let bytes = std::fs::read(path).map_err(|source| PriorLoadError::LedgerRead {
-                path: path.to_path_buf(),
-                source,
-            })?;
-            Some(parse_prior_ledger(path.to_path_buf(), &bytes)?)
-        }
-        (None, Some((path, bytes))) => Some(parse_prior_ledger(path, &bytes)?),
-        (None, None) => None,
+    let Some(text) = tree.files.text(LAYOUT_PATH) else {
+        return match tree.files.contains(SPLIT_LEDGER_PATH) {
+            true => Err(refused(
+                "the tree holds a split ledger and no layout record; \
+                 rebuild the prior release with this binary"
+                    .into(),
+            )),
+            false => Ok(None),
+        };
     };
-    Ok(PriorInputs { tree, ledger })
+    let layout = Layout::parse(text).map_err(|e| refused(e.to_string()))?;
+    let ledger = ledger_of(&layout).map_err(|e| refused(e.to_string()))?;
+    Ok(ledger.map(|ledger| PriorLedger {
+        path: path.clone(),
+        ledger,
+    }))
 }
 
 /// The tree `prior_file` belongs to, with `code` as the prior's text (the
-/// `unpack` verb reads only the vendor record and passes none), and the
-/// raw ledger beside the prior file (path, bytes) when the tree holds one.
-/// The prior file and the ledger are taken out of the file set, which
-/// would otherwise hold them a second time.
-pub fn load_prior_tree(
-    prior_file: &Path,
-    code: String,
-) -> Result<(PriorTree, Option<RawLedger>), PriorLoadError> {
+/// `unpack` verb reads only the vendor record and passes none). The prior
+/// file is taken out of the file set, which would otherwise hold it a
+/// second time.
+pub fn load_prior_tree(prior_file: &Path, code: String) -> Result<PriorTree, PriorLoadError> {
     let root = split_tree_root_of(prior_file);
     let mut files = PriorFiles::new(read_tree(&root, &enters_folder)?);
     // The prior file is held once, as the code — unless it sits among the
@@ -145,22 +133,7 @@ pub fn load_prior_tree(
     if in_tree.starts_with(&format!("{METADATA_DIR}/")) {
         files.take(&in_tree);
     }
-    let beside = prior_ledger_in(prior_file, &files)
-        .and_then(|rel| files.take(&rel).map(|bytes| (root.join(rel), bytes)));
-    let tree =
-        PriorTree::parse(code, files).map_err(|error| PriorLoadError::Refused { root, error })?;
-    Ok((tree, beside))
-}
-
-fn parse_prior_ledger(path: PathBuf, bytes: &[u8]) -> Result<PriorLedger, PriorLoadError> {
-    let text = std::str::from_utf8(bytes).map_err(|e| PriorLoadError::LedgerRead {
-        path: path.clone(),
-        source: std::io::Error::new(std::io::ErrorKind::InvalidData, e),
-    })?;
-    match parse_ledger(text) {
-        Ok(ledger) => Ok(PriorLedger { path, ledger }),
-        Err(error) => Err(PriorLoadError::Ledger { path, error }),
-    }
+    PriorTree::parse(code, files).map_err(|error| PriorLoadError::Refused { root, error })
 }
 
 #[cfg(test)]

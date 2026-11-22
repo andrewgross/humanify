@@ -28,6 +28,8 @@ pub fn layout(inputs: &[&str], functions: &[(u32, FunctionId, Match)]) -> Layout
         named_text: "named.js".into(),
         files: [("named.js".to_string(), entry)].into(),
         prior_ambiguous: Vec::new(),
+        hash_version: None,
+        modules: None,
     }
 }
 

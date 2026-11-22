@@ -293,14 +293,7 @@ fn toml_of(v: &Value) -> String {
             out.push_str(&format!("[{name}]\n{}", set.concat()));
         }
     };
-    section(
-        "split",
-        &[
-            ("split", "enabled"),
-            ("splitPure", "pure"),
-            ("splitLedger", "ledger"),
-        ],
-    );
+    section("split", &[("split", "enabled"), ("splitPure", "pure")]);
     section(
         "unpack",
         &[("bundler", "bundler"), ("minifier", "minifier")],
@@ -327,7 +320,6 @@ fn violations(toml: &str) -> Vec<String> {
 /// empty value is refused rather than silently "unset".
 fn renamed(m: &str) -> String {
     m.replace("--split-pure", "split.pure")
-        .replace("--split-ledger", "split.ledger")
         .replace("--split", "split.enabled")
         .replace("--bundler", "unpack.bundler")
         .replace("--minifier", "unpack.minifier")
@@ -338,16 +330,14 @@ fn flag_invariants_match() {
     let v = vectors();
     for case in v["invariants"].as_array().unwrap() {
         let toml = toml_of(&case["opts"]);
+        // The ledger flag is gone: its refusals have no successor.
         let mut want: Vec<String> = strs(&case["violations"])
             .iter()
+            .filter(|m| !m.contains("--split-ledger"))
             .map(|m| renamed(m))
             .collect();
         // One deliberate change: an EMPTY value is refused (config sweep
-        // step 4) — the TS treated an empty ledger as unset and an empty
-        // bundler as an unknown name.
-        if case["opts"]["splitLedger"] == "" {
-            want.push("split.ledger must not be empty".to_string());
-        }
+        // step 4) — the TS treated an empty bundler as an unknown name.
         if case["opts"]["bundler"] == "" {
             want = vec!["unpack.bundler must not be empty".to_string()];
         }
@@ -368,25 +358,18 @@ fn unified_test_split_dependents_require_split() {
     // split.enabled is ON by default since exp179: off, explicitly.
     let pure = "[split]\nenabled = false\npure = true\n";
     assert_eq!(violations(pure), ["split.pure requires split.enabled"]);
-    let ledger = "[split]\nenabled = false\nledger = \"ledger.json\"\n";
-    assert_eq!(violations(ledger), ["split.ledger requires split.enabled"]);
-    for t in [pure, ledger] {
-        assert!(violations(&t.replace("enabled = false", "enabled = true")).is_empty());
-        assert!(
-            violations(&t.replace("enabled = false\n", "")).is_empty(),
-            "default on"
-        );
-    }
+    assert!(violations(&pure.replace("enabled = false", "enabled = true")).is_empty());
+    assert!(
+        violations(&pure.replace("enabled = false\n", "")).is_empty(),
+        "default on"
+    );
 }
 
 #[test]
 fn unified_test_every_violation_at_once() {
     assert_eq!(
-        violations("[split]\nenabled = false\npure = true\nledger = \"ledger.json\"\n"),
-        [
-            "split.ledger requires split.enabled",
-            "split.pure requires split.enabled"
-        ]
+        violations("[split]\nenabled = false\npure = true\n"),
+        ["split.pure requires split.enabled"]
     );
 }
 

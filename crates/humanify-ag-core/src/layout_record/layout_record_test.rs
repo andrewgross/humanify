@@ -1,10 +1,14 @@
 use serde_json::{Value, json};
 
+use std::collections::BTreeMap;
+
+use super::ledger_view::{LedgerViewError, ledger_of};
 use super::write::{Input, LayoutError, Previous, Run, Split, Text, layout_of};
 use super::{FunctionId, Layout, Match};
 use crate::emit::cjs::FileLines;
 use crate::format::{FormatOptions, Formatted, format_file_with_origins};
 use crate::matching::decisions::MatchDecisions;
+use crate::place::ledger::{FossilLedgerModule, SplitLedger};
 use crate::unpack::chunk_link::{ChunkSpan, LinkMap, LinkMark, LinkRun, LinkerText};
 
 const CODE: &str = "function a(){return()=>1}var b=2;";
@@ -141,33 +145,7 @@ fn a_match_against_a_tree_with_no_layout_names_no_partner() {
 
 #[test]
 fn a_split_tree_lists_each_file_in_written_order() {
-    let f = formatted("(function(){function a(){return()=>1}var b=2})();");
-    assert_eq!(
-        f.text,
-        "(function () {\n  function a() {\n    return () => 1;\n  }\n  var b = 2;\n})();"
-    );
-    let shipped = f.text.replace("function a", "function alpha");
-    let at = |needle: &str| shipped.find(needle).unwrap() as u32;
-    let spans = [
-        (at("function alpha"), at("  }") + 3),
-        (at("var b"), at("var b") + 10),
-    ];
-    let files = [FileLines {
-        path: "src/a.js".into(),
-        header_lines: 1,
-        statements: vec![(1, 1), (0, 3)],
-    }];
-    let run = Run {
-        text: text(&f, &shipped),
-        named_text: ".humanify/humanified.js",
-        split: Some(Split {
-            spans: &spans,
-            files: &files,
-            line_count: &|_| 6,
-        }),
-        ..one_file(&f, None)
-    };
-    let got = value(&layout_of(&run).unwrap());
+    let got = value(&split_layout(None));
     assert_eq!(
         got["files"],
         json!({
@@ -198,6 +176,7 @@ fn a_statement_written_with_other_lines_is_one_unit_without_rows() {
             spans: &spans,
             files: &files,
             line_count: &|path| if path == "src/a.js" { 6 } else { 3 },
+            ledger: None,
         }),
         ..one_file(&f, None)
     };
@@ -388,5 +367,116 @@ fn the_functions_of_a_file_read_back_in_written_order() {
     assert_eq!(
         got,
         [(0, init(), Match::New, 1), (1, init(), Match::New, 4)]
+    );
+}
+
+fn split_ledger() -> SplitLedger {
+    let file = || "src/a.js".to_string();
+    SplitLedger {
+        version: 1,
+        files: vec![file()],
+        name_to_files: [
+            ("alpha", vec![file()]),
+            ("b", vec![file()]),
+            ("c", vec![file()]),
+        ]
+        .into_iter()
+        .map(|(name, files)| (name.to_string(), files))
+        .collect(),
+        order: vec![file(), file()],
+        hashes: vec!["h0".into(), "h1".into()],
+        emit_hashes: vec!["h1".into(), "h0".into()],
+        emit_names: vec![Some("b,c".into()), Some("alpha".into())],
+        hash_version: 3,
+        fossil_modules: Some(vec![FossilLedgerModule {
+            file: file(),
+            hashes: vec!["h0".into(), "h1".into()],
+            mechanical_stem: "alpha".into(),
+            ..FossilLedgerModule::default()
+        }]),
+        emit_indexes: Some(vec![1, 0]),
+    }
+}
+
+fn split_layout(ledger: Option<&SplitLedger>) -> Layout {
+    let f = formatted("(function(){function a(){return()=>1}var b=2})();");
+    assert_eq!(
+        f.text,
+        "(function () {\n  function a() {\n    return () => 1;\n  }\n  var b = 2;\n})();"
+    );
+    let shipped = f.text.replace("function a", "function alpha");
+    let at = |needle: &str| shipped.find(needle).unwrap() as u32;
+    let spans = [
+        (at("function alpha"), at("  }") + 3),
+        (at("var b"), at("var b") + 10),
+    ];
+    let files = [FileLines {
+        path: "src/a.js".into(),
+        header_lines: 1,
+        statements: vec![(1, 1), (0, 3)],
+    }];
+    let run = Run {
+        text: text(&f, &shipped),
+        named_text: ".humanify/humanified.js",
+        split: Some(Split {
+            spans: &spans,
+            files: &files,
+            line_count: &|_| 6,
+            ledger,
+        }),
+        ..one_file(&f, None)
+    };
+    layout_of(&run).unwrap()
+}
+
+#[test]
+fn a_split_statement_carries_its_position_fingerprint_and_names() {
+    let ledger = split_ledger();
+    let got = value(&split_layout(Some(&ledger)));
+    assert_eq!(
+        got["files"]["src/a.js"],
+        json!({"units": [
+            {"at": [0, 37], "line": 3, "n": 1, "hash": "h1", "names": ["b", "c"]},
+            {"at": [0, 12], "line": 4, "n": 0, "hash": "h0", "names": ["alpha"],
+             "rows": [[5, 25]]},
+        ]})
+    );
+    assert_eq!(got["hashVersion"], json!(3));
+    assert_eq!(got["modules"][0]["mechanicalStem"], json!("alpha"));
+}
+
+#[test]
+fn the_ledger_reads_back_from_the_layout() {
+    let ledger = split_ledger();
+    let layout = Layout::parse(&split_layout(Some(&ledger)).to_json()).unwrap();
+    let got = ledger_of(&layout).unwrap().unwrap();
+    assert_eq!(got.version, 1);
+    assert_eq!(got.files, ledger.files);
+    assert_eq!(got.order, ledger.order);
+    assert_eq!(got.hashes.as_ref(), Some(&ledger.hashes));
+    assert_eq!(got.emit_hashes.as_ref(), Some(&ledger.emit_hashes));
+    assert_eq!(got.emit_names.as_ref(), Some(&ledger.emit_names));
+    assert_eq!(got.emit_indexes, Some(vec![1, 0]));
+    assert_eq!(got.hash_version, 3);
+    assert_eq!(got.fossil_modules, ledger.fossil_modules);
+    let homes: BTreeMap<_, _> = got.name_to_files.into_iter().collect();
+    let want: BTreeMap<_, _> = ledger.name_to_files.0.iter().cloned().collect();
+    assert_eq!(homes, want);
+}
+
+#[test]
+fn a_layout_with_no_split_statements_holds_no_ledger() {
+    let f = formatted(CODE);
+    let layout = layout_of(&one_file(&f, None)).unwrap();
+    assert!(ledger_of(&layout).unwrap().is_none());
+}
+
+#[test]
+fn a_layout_whose_positions_leave_a_gap_holds_no_readable_ledger() {
+    let mut layout = split_layout(Some(&split_ledger()));
+    layout.files.get_mut("src/a.js").unwrap().units[0].n = Some(5);
+    assert_eq!(
+        ledger_of(&layout).unwrap_err(),
+        LedgerViewError::Positions { statements: 2 }
     );
 }

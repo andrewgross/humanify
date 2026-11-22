@@ -4,10 +4,7 @@
 
 use std::collections::HashMap;
 
-use super::{
-    FossilLedgerModule, LedgerParseError, Rederived, StableSplitLedger, parse_ledger,
-    rederive_stale_era_hashes,
-};
+use super::{FossilLedgerModule, Rederived, StableSplitLedger, rederive_stale_era_hashes};
 use crate::hash::forms::STATEMENT;
 use crate::place::input::split_input;
 
@@ -192,16 +189,7 @@ fn written_ledger(fossil: &str) -> String {
 const FOSSIL: &str = r#"{"file":"src/a.js","hashes":["h"],"imports":[],"declared":["a"],"tokens":["a"],"mechanicalStem":"a"}"#;
 
 fn read_text(text: &str) -> Result<StableSplitLedger, String> {
-    parse_ledger(text).map_err(|e| e.to_string())
-}
-
-#[test]
-fn a_ledger_of_another_format_version_is_refused() {
-    let text = written_ledger(FOSSIL).replace(r#""version":1"#, r#""version":2"#);
-    assert_eq!(
-        parse_ledger(&text).expect_err("refused"),
-        LedgerParseError::UnsupportedVersion
-    );
+    serde_json::from_str(text).map_err(|e| e.to_string())
 }
 
 #[test]
