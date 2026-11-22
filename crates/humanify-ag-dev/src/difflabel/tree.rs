@@ -84,11 +84,10 @@ fn rows_of(entry: &FileEntry) -> Vec<(u32, Origin)> {
 
 impl Tree {
     pub fn read(root: &Path) -> Result<Tree, String> {
-        let mut files =
-            humanify_ag_io::tree::read_tree(root, &|_| true).map_err(|e| e.to_string())?;
+        let files = humanify_ag_io::tree::read_tree(root, &|_| true).map_err(|e| e.to_string())?;
         let layout = files
-            .remove(LAYOUT_PATH)
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
+            .get(LAYOUT_PATH)
+            .map(|bytes| String::from_utf8_lossy(bytes).into_owned());
         Tree::from_parts(files, layout.as_deref())
     }
 

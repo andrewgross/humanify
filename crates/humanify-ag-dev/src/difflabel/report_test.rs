@@ -71,7 +71,7 @@ fn a_run_labels_every_changed_line_and_adds_up_to_the_diff() {
             ("src/new.txt", "one\ntwo\n"),
             (
                 ".humanify/layout.json",
-                &rows(r#"{"src/m.js":[[1,0,0],[4,0,25]]}"#),
+                &format!("{}\n", rows(r#"{"src/m.js":[[1,0,0],[4,0,25]]}"#)),
             ),
         ],
     );
@@ -86,13 +86,14 @@ fn a_run_labels_every_changed_line_and_adds_up_to_the_diff() {
         serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
     std::fs::remove_dir_all(&root).unwrap();
     assert!(
-        report.contains("changed lines: 8 (diff -rN counts 8)"),
+        report.contains("changed lines: 10 (diff -rN counts 10)"),
         "{report}"
     );
     let lines = |label: &str| json["labels"][label]["lines"].as_u64();
     assert_eq!(lines("renamed"), Some(4));
     assert_eq!(lines("input-changed"), Some(2));
-    assert_eq!(lines("no-origin"), Some(2));
+    // The layout record's own two lines count like any file's.
+    assert_eq!(lines("no-origin"), Some(4));
     assert_eq!(
         json["pairedInputFiles"],
         serde_json::json!([["index.js", "index.js"]])
