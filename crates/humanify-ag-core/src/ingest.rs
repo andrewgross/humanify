@@ -52,12 +52,12 @@ pub struct Ingest<'a> {
     pub errors: Vec<String>,
 }
 
-/// The program's ESTree JSON, parsed: `program.to_estree_json(false,
-/// true)` (no TS fields; `start`/`end` plus a `range` pair on every node —
-/// the walks' skip lists drop `range`). ONE owner, so a side is serialized
-/// and parsed once and every consumer shares the tree.
+/// The program's ESTree JSON, parsed: no TS fields, `start`/`end` on
+/// every node and no `range` copy of them (a sixth of the tree). ONE
+/// owner, so a side is serialized and parsed once and every consumer
+/// shares the tree.
 pub fn program_estree_json(program: &oxc_ast::ast::Program<'_>) -> serde_json::Value {
-    parse_estree_json(&program.to_estree_json(false, true))
+    parse_estree_json(&program.to_estree_json(false, false))
 }
 
 /// An ESTree JSON node's `type` (empty when absent): the one reader every
