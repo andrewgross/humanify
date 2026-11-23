@@ -51,6 +51,13 @@ pub struct LoadOrderFacts {
     pub effects: bool,
 }
 
+impl LoadOrderFacts {
+    /// Nothing happens when the module loads: a bare `var x;`.
+    fn does_nothing(&self) -> bool {
+        !self.effects && self.writes.is_empty() && self.reads.is_empty()
+    }
+}
+
 /// `LoadOrderOptions`: callee names the caller verified STRUCTURALLY.
 #[derive(Clone, Debug, Default)]
 pub struct LoadOrderOptions {
@@ -870,7 +877,7 @@ fn build_dependencies(
     };
     for &s in slots {
         let f = &facts[s];
-        if f.hoisted {
+        if f.hoisted || f.does_nothing() {
             continue;
         }
         // Barrier edges.

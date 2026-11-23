@@ -39,6 +39,46 @@ fn a_novel_statement_follows_its_predecessor() {
 }
 
 #[test]
+fn a_novel_statement_does_not_follow_a_statement_that_moved() {
+    // The bundle moved `m` from the top to between `b` and `c`; `new`
+    // comes right after it. `m` keeps its prior place; `new` stays with
+    // the statements that did not move.
+    let keys = strings(&["a", "b", "m", "new", "c"]);
+    let prior = strings(&["m", "a", "b", "c"]);
+    assert_eq!(
+        align_file_statements(&[0, 1, 2, 3, 4], &keys, Some(&prior), &pure(5)),
+        vec![2, 0, 1, 3, 4]
+    );
+}
+
+#[test]
+fn a_fingerprint_found_once_on_each_side_keeps_its_place_under_a_new_name() {
+    let key = |hash: &str, name: &str| alignment_key(hash, Some(name));
+    let keys = vec![key("h1", "renamed"), key("h2", "b"), key("h3", "c")];
+    let prior = vec![key("h3", "c"), key("h1", "old"), key("h2", "b")];
+    assert_eq!(
+        align_file_statements(&[0, 1, 2], &keys, Some(&prior), &pure(3)),
+        vec![2, 0, 1]
+    );
+}
+
+#[test]
+fn a_repeated_fingerprint_claims_nothing_by_itself() {
+    let key = |hash: &str, name: &str| alignment_key(hash, Some(name));
+    let keys = vec![
+        key("h1", "x"),
+        key("h2", "b"),
+        key("h3", "c"),
+        key("h1", "y"),
+    ];
+    let prior = vec![key("h3", "c"), key("h1", "old"), key("h2", "b")];
+    assert_eq!(
+        align_file_statements(&[0, 1, 2, 3], &keys, Some(&prior), &pure(4)),
+        vec![0, 2, 1, 3]
+    );
+}
+
+#[test]
 fn ambiguous_keys_do_not_claim_and_fewer_than_two_claims_is_identity() {
     let keys = strings(&["x", "x", "y"]);
     let prior = strings(&["y", "x", "x"]);

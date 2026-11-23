@@ -266,6 +266,21 @@ fn a_hoisted_function_crosses_a_barrier() {
 }
 
 #[test]
+fn a_bare_var_crosses_a_barrier() {
+    // `var b;` does nothing when the module loads: it may sit after the
+    // call it preceded in the bundle.
+    assert_eq!(
+        order("var b;\nsideEffect();\nvar c = 1;", &[1, 2, 0], &[]),
+        [1, 2, 0]
+    );
+    // A `let` has a dead zone, so its place is observable: it stays.
+    assert_eq!(
+        order("let b;\nsideEffect();\nvar c = 1;", &[1, 2, 0], &[]),
+        [0, 1, 2]
+    );
+}
+
+#[test]
 fn pure_lazy_init_declarations_move() {
     let src = "var first = lazyInitializer(() => a());\nvar second = lazyInitializer(() => b());\nvar third = lazyInitializer(() => c());";
     assert_eq!(order(src, &[2, 0, 1], &["lazyInitializer"]), vec![2, 0, 1]);
