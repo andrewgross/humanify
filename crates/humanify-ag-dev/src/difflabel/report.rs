@@ -241,6 +241,8 @@ fn as_json(tally: &Tally, diff_total: u64, truth: &Truth) -> serde_json::Value {
 pub struct Labelled {
     pub report: String,
     pub card: serde_json::Value,
+    /// One row per changed line: side, path, line number, label.
+    pub lines: String,
     /// Whether the labelled lines add up to what `diff -rN` counts.
     pub adds_up: bool,
 }
@@ -255,9 +257,12 @@ pub fn label_trees(trees: (&Path, &Path), inputs: (&Path, &Path)) -> Result<Labe
     let labeller = Labeller::new(&truth, &from, &to);
     let mut not_text = 0;
     let mut tally = Tally::default();
+    let mut lines = String::new();
     for (to_side, path, line) in changed(trees, &from, &to, &mut not_text)? {
         let tree = if to_side { &to } else { &from };
         let label = labeller.label(to_side, path, line);
+        let side = if to_side { '+' } else { '-' };
+        lines.push_str(&format!("{side}\t{path}\t{line}\t{}\n", label.describe().0));
         tally.add(
             label,
             to_side,
@@ -283,12 +288,14 @@ pub fn label_trees(trees: (&Path, &Path), inputs: (&Path, &Path)) -> Result<Labe
     Ok(Labelled {
         report,
         card: as_json(&tally, diff_total, &truth),
+        lines,
         adds_up: tally.total() == diff_total,
     })
 }
 
 /// The `diff label` verb: the report text; `Err` when the totals differ
-/// from the diff's count.
+/// from the diff's count. With `out`, the card goes there and the
+/// per-line listing beside it as `<out>.lines.tsv`.
 pub fn run(
     trees: (&Path, &Path),
     inputs: (&Path, &Path),
@@ -298,6 +305,9 @@ pub fn run(
     if let Some(out) = out {
         std::fs::write(out, format!("{:#}\n", labelled.card))
             .map_err(|e| format!("{}: {e}", out.display()))?;
+        let listing = out.with_extension("lines.tsv");
+        std::fs::write(&listing, &labelled.lines)
+            .map_err(|e| format!("{}: {e}", listing.display()))?;
     }
     if labelled.adds_up {
         Ok(labelled.report)

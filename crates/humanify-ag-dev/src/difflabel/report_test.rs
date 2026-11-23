@@ -84,7 +84,11 @@ fn a_run_labels_every_changed_line_and_adds_up_to_the_diff() {
     .unwrap();
     let json: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+    let lines = std::fs::read_to_string(root.join("labels.lines.tsv")).unwrap();
     std::fs::remove_dir_all(&root).unwrap();
+    assert_eq!(lines.lines().count(), 10, "{lines}");
+    assert!(lines.contains("-\tsrc/m.js\t1\trenamed\n"), "{lines}");
+    assert!(lines.contains("+\tsrc/m.js\t5\tinput-changed\n"), "{lines}");
     assert!(
         report.contains("changed lines: 10 (diff -rN counts 10)"),
         "{report}"

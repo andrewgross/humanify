@@ -161,7 +161,7 @@ const VERBS: &[Verb] = &[
     Verb {
         words: &["diff", "label"],
         usage: "diff label <from-tree> <to-tree> <from-input-dir> <to-input-dir> [<out.json>]",
-        proves: "why each changed line between two output trees is in the diff: one label per line, the totals adding up to what `diff -rN` counts",
+        proves: "why each changed line between two output trees is in the diff: one label per line, the totals adding up to what `diff -rN` counts; with <out.json>, every line and its label in <out>.lines.tsv",
         cannot_prove: "which lines of changed input code really changed (every changed line from a changed input function counts as real); anything about a tree with no layout record",
         settings: &[],
         footprint: LIGHT,
