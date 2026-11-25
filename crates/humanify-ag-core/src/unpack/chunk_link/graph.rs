@@ -187,9 +187,10 @@ pub(super) struct Placement {
 ///
 /// - function declarations (ESM hoists them when the module graph is
 ///   instantiated, before any module body runs);
-/// - a declarator whose value is a literal or a closure (Bun's own
-///   bundler keeps these at the top level of a lazily wrapped module, as
-///   Claude Code's single-file bundles up to 2.1.241 did; exp218 variant);
+/// - a declarator whose value runs no code and reads no binding, and a
+///   class that does the same (`inert`). Bun's own bundler keeps literals
+///   and closures at the top level of a lazily wrapped module, as Claude
+///   Code's single-file bundles up to 2.1.241 did;
 /// - a thunk factory, `var h = (…) => () => …` never written (building a
 ///   closure reads nothing: Bun's `__commonJS` / `__esm` helpers);
 /// - a factory call, `var x = h(fn, …)`, when `h` is a thunk factory
@@ -250,7 +251,8 @@ fn moves(kind: &StmtKind, stays: &[bool]) -> bool {
     match kind {
         StmtKind::Removed | StmtKind::Function => false,
         StmtKind::Var(_) => stays.iter().any(|s| !s),
-        StmtKind::Class { .. } | StmtKind::DefaultExpr { .. } | StmtKind::Other { .. } => true,
+        StmtKind::Class { inert, .. } => !inert,
+        StmtKind::DefaultExpr { .. } | StmtKind::Other { .. } => true,
     }
 }
 

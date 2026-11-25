@@ -610,10 +610,10 @@ fn a_factory_call_waits_for_a_helper_declared_beside_moved_values() {
 fn a_lazy_chunk_runs_every_statement_in_its_init_but_order_free_ones() {
     // ESM: a lazily loaded chunk's statements run when it is loaded, in
     // order. Only what is order-free stays at the top level: function
-    // declarations (hoisted, as ESM instantiation does) and Bun's
-    // `__commonJS` / `__esm` helpers and the factories they wrap (building
-    // a thunk runs nothing; Bun's single-file bundles keep them there, and
-    // the bun adapter extracts them from there).
+    // declarations (hoisted, as ESM instantiation does), values that run
+    // no code, and Bun's `__commonJS` / `__esm` helpers and the factories
+    // they wrap (building a thunk runs nothing; Bun's single-file bundles
+    // keep them there, and the bun adapter extracts them from there).
     let entry = layout(&[
         (
             "index.js",
@@ -622,24 +622,90 @@ fn a_lazy_chunk_runs_every_statement_in_its_init_but_order_free_ones() {
         (
             "chunk-l.js",
             &format!(
-                "{HEAD}var z=5;class K{{m(){{return z}}}}var o={{k:1}},q=()=>o.k;var J={CJS};\
+                "{HEAD}var z=5;class K{{static s=z+1;m(){{return z}}}}var o={{k:z}},q=()=>o.k;var J={CJS};\
                  var r=J((e,m)=>{{m.exports=new K().m()+q()}});function v(){{return r()}}export{{v}};\n"
             ),
         ),
     ]);
     let (text, report) = linked(&entry);
-    assert_eq!(run(&text), "6\n");
+    assert_eq!(run(&text), "10\n");
     assert_eq!(report.inits, 1);
     let init = init_after(&text, "var z");
-    for moved in ["K=class K", "o={k:1}"] {
+    for moved in ["K=class K", "o={k:z}"] {
         assert!(init.contains(moved), "{moved} runs in the init: {init}");
     }
-    // Bun's bundler's shape: a literal or a closure is order-free and
-    // stays at the top level.
     assert!(!init.contains("z=5") && !init.contains("q=()=>"), "{init}");
     assert!(!init.contains("J=") && !init.contains("r="), "{init}");
     assert!(text.contains(&format!("var J={CJS};")), "{text}");
     assert!(text.contains("var r=J((e,m)=>"), "{text}");
+}
+
+#[test]
+fn a_lazy_chunks_values_that_run_no_code_stay_at_the_top_level() {
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!("{HEAD}import(\"/$bunfs/root/chunk-l.js\").then((m)=>console.log(m.v()));\n"),
+        ),
+        (
+            "chunk-l.js",
+            &format!(
+                "{HEAD}var re=/a+/g,s=new Set([\"a\",\"b\"]),o={{k:1,f(){{return 2}},n:[1,-2]}},\
+                 fr=Object.freeze({{a:1}}),sym=Symbol(\"x\");\
+                 class K{{static n=3;m(){{return 1}}[Symbol.iterator](){{}}}}class E extends Error{{}}\
+                 class S{{static n=console.log(\"static ran\")}}class D extends K{{}}\
+                 var u=o.k,w=[console.log(\"w ran\")],sp={{...o}},t=new K,c={{[u]:1}};\
+                 function v(){{return[re.test(\"aa\"),s.size,o.f(),new K().m(),new E instanceof Error,\
+                 fr.a,typeof sym,u,sp.k,new D().m(),S.n,w.length,t.m(),c[1]].join(\":\")}}export{{v}};\n"
+            ),
+        ),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(
+        run(&text),
+        "static ran\nw ran\ntrue:2:2:1:true:1:symbol:1:1:1::1:1:1\n"
+    );
+    let init = init_after(&text, "var re");
+    for moved in [
+        "S=class S",
+        "D=class D",
+        "u=o.k",
+        "w=[",
+        "sp={",
+        "t=new K",
+        "c={",
+    ] {
+        assert!(init.contains(moved), "{moved} runs in the init: {init}");
+    }
+    for kept in ["re=", "s=new Set", "o={", "fr=", "sym=", "K=", "E="] {
+        assert!(
+            !init.contains(kept),
+            "{kept} stays outside the init: {init}"
+        );
+    }
+    assert!(text.contains("class K{static n=3;"), "{text}");
+    assert!(text.contains("class E extends Error{}"), "{text}");
+}
+
+#[test]
+fn a_value_built_by_a_name_the_chunk_binds_runs_in_the_init() {
+    // `Map` here is the chunk's own function, not the built-in.
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!("{HEAD}import(\"/$bunfs/root/chunk-l.js\").then((m)=>console.log(m.v()));\n"),
+        ),
+        (
+            "chunk-l.js",
+            &format!(
+                "{HEAD}function Map(){{console.log(\"own map\")}}var m=new Map();\
+                 function v(){{return typeof m}}export{{v}};\n"
+            ),
+        ),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(run(&text), "own map\nobject\n");
+    assert!(init_after(&text, "var m").contains("m=new Map()"), "{text}");
 }
 
 #[test]
@@ -912,7 +978,7 @@ console.log(main());import(\"/$bunfs/root/chunk-b.js\").then((m)=>console.log(m.
         (
             "chunk-b.js",
             format!(
-                "{HEAD}var k=7;class C{{v(){{return k}}}}function b(){{return new C().v()}}export{{b}};\n"
+                "{HEAD}var k=7;class C{{static s=k;v(){{return k}}}}function b(){{return new C().v()}}export{{b}};\n"
             ),
         ),
     ];
@@ -1010,12 +1076,12 @@ fn the_link_map_names_every_piece_of_text_the_linker_writes() {
             "chunk-b.js",
             format!(
                 "{HEAD}import{{c}}from\"/$bunfs/root/chunk-c.js\";import{{sep}}from\"path\";\
-var k=7;class C{{v(){{return k+c()+sep.length}}}}function b(){{return new C().v()}}export{{b}};\n"
+var k=7;class C{{static s=k;v(){{return k+c()+sep.length}}}}function b(){{return new C().v()}}export{{b}};\n"
             ),
         ),
         (
             "chunk-c.js",
-            format!("{HEAD}var n=[1];function c(){{return n[0]}}export{{c}};\n"),
+            format!("{HEAD}var n=[1+c.length];function c(){{return n[0]}}export{{c}};\n"),
         ),
     ];
     let refs: Vec<(&str, &str)> = files.iter().map(|(n, t)| (*n, t.as_str())).collect();
@@ -1048,7 +1114,7 @@ var k=7;class C{{v(){{return k+c()+sep.length}}}}function b(){{return new C().v(
         Some((
             2,
             Decl {
-                src: c.find("var n=[1]").unwrap() as u32
+                src: c.find("var n=[1+c.length]").unwrap() as u32
             }
         ))
     );

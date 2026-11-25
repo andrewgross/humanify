@@ -32,7 +32,8 @@
 //!   the lazy chunks it imports, then its external loads, then its body.
 //!   Its top-level names are declared at the top level (`var x;`) and
 //!   assigned in the init. Only what is order-free stays outside: function
-//!   declarations, Bun's thunk-factory helpers (`__commonJS`, `__esm`)
+//!   declarations, values and classes that run no code and read no
+//!   binding (`inert`), Bun's thunk-factory helpers (`__commonJS`, `__esm`)
 //!   and the factory calls that use them (so Bun's `__commonJS` modules
 //!   stay where its single-file bundles have them and the bun adapter
 //!   finds them);
@@ -59,6 +60,7 @@ mod embedded;
 mod emit;
 mod error;
 mod graph;
+mod inert;
 mod names;
 
 pub use embedded::{EMBEDDED_DIR, EmbeddedFile};
