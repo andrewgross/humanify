@@ -48,6 +48,8 @@ pub struct FinishInput<'a> {
     pub runnable: Option<&'a [String]>,
     /// The prior release's tree (`--prior-version`), read by the shell.
     pub prior: Option<&'a crate::prior_tree::PriorTree>,
+    /// Bundle name to the previous release's files that declared it.
+    pub prior_names: Option<&'a std::collections::HashMap<String, Vec<String>>>,
     /// The input bundle (its directory resolves installed versions).
     pub input_file: &'a Path,
     /// The working directory the shell read: a relative `input_file`
@@ -400,6 +402,7 @@ pub fn finish_stage(
         super::library_names::name_library_imports_in_tree(
             tree,
             &input.split_files,
+            prior_names(input),
             input.never_rename,
             input.name_profile,
         )?
@@ -425,6 +428,14 @@ pub fn finish_stage(
 // The post-split reconcile + bundle carry (`reconcilePostSplit`,
 // `carryIntoBundle`)
 // ---------------------------------------------------------------------------
+
+/// The previous tree as the library-import pass reads it.
+fn prior_names<'a>(input: &FinishInput<'a>) -> Option<super::library_names::PriorNames<'a>> {
+    Some(super::library_names::PriorNames {
+        files: &input.prior?.files,
+        name_to_files: input.prior_names?,
+    })
+}
 
 /// What the reconcile stage did, for the gate's report.
 #[derive(Debug, Default)]

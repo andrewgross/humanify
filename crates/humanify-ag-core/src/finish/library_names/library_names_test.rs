@@ -3,14 +3,16 @@
 // io: test code reads fixtures and writes scratch trees; it is not the pipeline
 #![allow(clippy::disallowed_methods, clippy::let_underscore_must_use)]
 
-use super::{FileLibraryNames, name_library_imports_in_file, name_library_imports_in_tree};
+use super::{
+    FileLibraryNames, PriorFile, name_library_imports_in_file, name_library_imports_in_tree,
+};
 use crate::naming::plumbing::conventional_import_name;
 use crate::rename::eligibility::{Eligibility, NeverRename};
 use crate::rename::name_profile::NameProfile;
 
 fn run(text: &str) -> FileLibraryNames {
     let eligible = Eligibility::new(NeverRename::default());
-    name_library_imports_in_file("src/a.js", text, &eligible, NameProfile::Bun)
+    name_library_imports_in_file("src/a.js", text, None, &eligible, NameProfile::Bun)
 }
 
 fn text_of(out: &FileLibraryNames) -> &str {
@@ -68,9 +70,14 @@ fn three_files_each_name_their_path_import_path() {
         std::fs::write(root.as_path().join(f), split_file(&binding, "path", "")).unwrap();
     }
     let mut tree = crate::output_tree::disk_test::tree_on_disk(&root);
-    let report =
-        name_library_imports_in_tree(&mut tree, &files, NeverRename::default(), NameProfile::Bun)
-            .unwrap();
+    let report = name_library_imports_in_tree(
+        &mut tree,
+        &files,
+        None,
+        NeverRename::default(),
+        NameProfile::Bun,
+    )
+    .unwrap();
     crate::output_tree::disk_test::write(&tree);
     assert_eq!(report.named, 3);
     for f in files {
@@ -203,4 +210,72 @@ fn what_is_not_a_library_import_is_left_alone() {
 fn a_binding_already_conventional_is_untouched() {
     let out = run("var path = require(\"path\");\nconsole.log(path);\n");
     assert!(out.text.is_none() && out.named.is_empty());
+}
+
+fn run_with_prior(text: &str, prior_text: &str, declared: &[&str]) -> FileLibraryNames {
+    let eligible = Eligibility::new(NeverRename::default());
+    let homes: std::collections::HashMap<String, Vec<String>> = declared
+        .iter()
+        .map(|n| ((*n).to_string(), vec!["src/a.js".to_string()]))
+        .collect();
+    let prior = PriorFile {
+        file: "src/a.js",
+        text: prior_text.into(),
+        name_to_files: &homes,
+    };
+    name_library_imports_in_file("src/a.js", text, Some(&prior), &eligible, NameProfile::Bun)
+}
+
+fn three_imports(order: [&str; 3]) -> String {
+    let lines: Vec<String> = order
+        .iter()
+        .map(|n| format!("var {n} = require(\"fs/promises\");\nuse({n});\n"))
+        .collect();
+    lines.concat()
+}
+
+#[test]
+fn an_import_new_to_the_file_leaves_the_previous_holders_their_names() {
+    let text = three_imports([
+        "fsPromisesModule9",
+        "fsPromisesModule3",
+        "fsPromisesModule5",
+    ]);
+    let prior = three_imports(["fsPromises", "fsPromisesModule", "fsPromisesModule7"]);
+    let out = run_with_prior(
+        &text,
+        &prior,
+        &[
+            "fsPromisesModule3",
+            "fsPromisesModule5",
+            "fsPromisesModule7",
+        ],
+    );
+    assert_eq!(
+        text_of(&out),
+        three_imports(["fsPromisesModule9", "fsPromises", "fsPromisesModule"])
+    );
+}
+
+#[test]
+fn an_import_the_previous_file_left_numbered_takes_no_holders_name() {
+    let text = three_imports([
+        "fsPromisesModule7",
+        "fsPromisesModule3",
+        "fsPromisesModule5",
+    ]);
+    let prior = three_imports(["fsPromises", "fsPromisesModule", "fsPromisesModule7"]);
+    let out = run_with_prior(
+        &text,
+        &prior,
+        &[
+            "fsPromisesModule3",
+            "fsPromisesModule5",
+            "fsPromisesModule7",
+        ],
+    );
+    assert_eq!(
+        text_of(&out),
+        three_imports(["fsPromisesModule7", "fsPromises", "fsPromisesModule"])
+    );
 }
