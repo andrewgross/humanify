@@ -4,8 +4,8 @@
 //! line counts twice; `-rN` for trees), with the scorer's algorithm flags
 //! (`eval::difftool::LINE_DIFF_FLAGS`, the minimal edit). Used for verdicts that must read
 //! zero — neutrality's tree diff, the self-hop's cold count and warm
-//! identity — and for the walk report's per-directory columns; never for
-//! a scorecard KPI (the scorer counts its own lines).
+//! identity — for the walk report's per-directory columns, and as the
+//! total the diff labeller's labels are held to.
 
 use std::path::Path;
 use std::time::Duration;
@@ -20,7 +20,7 @@ const DIFF_DEADLINE: Duration = Duration::from_secs(60 * 60);
 /// The diagnostics-only sidecars excluded from every byte-identity
 /// verdict (neutrality.sh `DIAGNOSTIC_ONLY`, run.sh's warm self-hop):
 /// written for a reader, consumed by nothing. `humanified.js` and
-/// `split-ledger.json` are NOT here: they are the next release's prior.
+/// `layout.json` are NOT here: they are the next release's prior.
 pub const DIAGNOSTIC_ONLY: &[&str] = &[
     ".humanify/placement-stats.json",
     ".humanify/stage-hashes.json",

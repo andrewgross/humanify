@@ -54,17 +54,66 @@ pub(super) fn order_by_hash_sequence(
     })
 }
 
+/// Which claims kept their relative order: a longest run of rising
+/// prior ranks, in list order (of equal runs, the one that ends
+/// earliest, built from the earliest statements). The other claims are
+/// statements the bundle moved.
+fn unmoved(ranks: &[Option<i64>]) -> Vec<bool> {
+    let mut sorted: Vec<i64> = ranks.iter().flatten().copied().collect();
+    sorted.sort_unstable();
+    sorted.dedup();
+    // best[k]: over ranks below the k-th, the longest run and where it
+    // ends, as a prefix-maximum tree.
+    type Run = (usize, std::cmp::Reverse<usize>);
+    let mut best: Vec<Option<Run>> = vec![None; sorted.len() + 1];
+    let mut before: Vec<Option<usize>> = vec![None; ranks.len()];
+    let mut longest: Option<Run> = None;
+    for (i, rank) in ranks.iter().enumerate() {
+        let Some(rank) = rank else { continue };
+        let at = sorted.partition_point(|r| r < rank);
+        let mut prefix: Option<Run> = None;
+        let mut k = at;
+        while k > 0 {
+            prefix = prefix.max(best[k]);
+            k -= k.isolate_lowest_one();
+        }
+        before[i] = prefix.map(|(_, end)| end.0);
+        let run = (prefix.map_or(0, |(len, _)| len) + 1, std::cmp::Reverse(i));
+        longest = longest.max(Some(run));
+        let mut k = at + 1;
+        while k < best.len() {
+            best[k] = best[k].max(Some(run));
+            k += k.isolate_lowest_one();
+        }
+    }
+    let mut kept = vec![false; ranks.len()];
+    let mut cur = longest.map(|(_, end)| end.0);
+    while let Some(i) = cur {
+        kept[i] = true;
+        cur = before[i];
+    }
+    kept
+}
+
 /// Order `list` by each index's claimed prior rank; an index with no
-/// claim keeps its place relative to its predecessor (`prevRank + 0.5`,
-/// doubled here to stay in integers). Stable.
-fn order_by_claimed_ranks(list: &[usize], rank: impl Fn(usize) -> Option<i64>) -> Vec<usize> {
+/// claim keeps its place after the nearest earlier claim that is an
+/// anchor (`anchors` of the claims; `prevRank + 0.5`, doubled here to
+/// stay in integers). Stable.
+fn order_by_ranks(
+    list: &[usize],
+    ranks: &[Option<i64>],
+    anchors: impl Fn(&[Option<i64>]) -> Vec<bool>,
+) -> Vec<usize> {
+    let anchors = anchors(ranks);
     let mut prev_rank: i64 = -1;
     let mut keyed: Vec<(i64, usize, usize)> = list
         .iter()
         .enumerate()
-        .map(|(pos, &idx)| match rank(idx) {
+        .map(|(pos, &idx)| match ranks[pos] {
             Some(r) => {
-                prev_rank = r;
+                if anchors[pos] {
+                    prev_rank = r;
+                }
                 (2 * r, pos, idx)
             }
             None => (2 * prev_rank + 1, pos, idx),
@@ -72,6 +121,13 @@ fn order_by_claimed_ranks(list: &[usize], rank: impl Fn(usize) -> Option<i64>) -
         .collect();
     keyed.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
     keyed.into_iter().map(|(_, _, idx)| idx).collect()
+}
+
+/// [`order_by_ranks`] with every claim an anchor: an index with no claim
+/// follows its predecessor, wherever that goes.
+fn order_by_claimed_ranks(list: &[usize], rank: impl Fn(usize) -> Option<i64>) -> Vec<usize> {
+    let ranks: Vec<Option<i64>> = list.iter().map(|&idx| rank(idx)).collect();
+    order_by_ranks(list, &ranks, |ranks| vec![true; ranks.len()])
 }
 
 /// The names in an [`alignment_key`] (empty for a hash-only key).
@@ -93,6 +149,43 @@ fn name_counts<'k>(keys: impl Iterator<Item = &'k str>) -> HashMap<&'k str, usiz
         }
     }
     counts
+}
+
+/// The hash in an [`alignment_key`].
+fn key_hash(key: &str) -> &str {
+    key.split_once('\u{0}').map_or(key, |(hash, _)| hash)
+}
+
+/// A statement whose key claimed nothing (its name changed) claims the
+/// prior rank of the one prior statement with its hash, when that hash
+/// occurs exactly once on each side. A rank a key claimed stays with
+/// that key.
+fn hash_claims(
+    slots: &[usize],
+    keys: &[String],
+    prior_seq: &[String],
+    key_claimed: &HashMap<usize, i64>,
+) -> HashMap<usize, i64> {
+    let mut fresh: HashMap<&str, usize> = HashMap::new();
+    for &s in slots {
+        *fresh.entry(key_hash(&keys[s])).or_insert(0) += 1;
+    }
+    let mut prior: HashMap<&str, (usize, i64)> = HashMap::new();
+    for (rank, key) in prior_seq.iter().enumerate() {
+        prior.entry(key_hash(key)).or_insert((0, rank as i64)).0 += 1;
+    }
+    let taken: std::collections::HashSet<i64> = key_claimed.values().copied().collect();
+    slots
+        .iter()
+        .filter(|s| !key_claimed.contains_key(s))
+        .filter_map(|&s| {
+            let hash = key_hash(&keys[s]);
+            match (fresh.get(hash), prior.get(hash)) {
+                (Some(1), Some(&(1, rank))) if !taken.contains(&rank) => Some((s, rank)),
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 /// exp227's name tier: a statement whose key claimed nothing (an edited
@@ -167,10 +260,17 @@ pub fn align_file_statements(
     if key_claimed.len() < 2 {
         return slots.to_vec();
     }
-    let by_name = name_claims(slots, keys, prior_seq, &key_claimed);
-    let desired = order_by_claimed_ranks(slots, |s| {
-        key_claimed.get(&s).or_else(|| by_name.get(&s)).copied()
-    });
+    let mut claimed = key_claimed;
+    let by_hash = hash_claims(slots, keys, prior_seq, &claimed);
+    claimed.extend(by_hash);
+    let by_name = name_claims(slots, keys, prior_seq, &claimed);
+    // A statement with no claim stays with the claims the bundle did not
+    // move: one that moved goes back to its prior place alone.
+    let ranks: Vec<Option<i64>> = slots
+        .iter()
+        .map(|s| claimed.get(s).or_else(|| by_name.get(s)).copied())
+        .collect();
+    let desired = order_by_ranks(slots, &ranks, unmoved);
     order_respecting_load_order(slots, &desired, facts)
 }
 

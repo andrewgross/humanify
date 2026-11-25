@@ -190,21 +190,6 @@ impl Identity {
         let value = crate::json::js::JsValue::parse(&compact).expect("serde_json writes JSON");
         crate::json::js_text(&value, true)
     }
-
-    /// A record as written. One written before the base mode was retired
-    /// carries `baseMode`: `scratch` (the mode that is left) reads, any
-    /// other is refused.
-    pub fn from_text(text: &str) -> Result<Identity, String> {
-        let mut v: Value = serde_json::from_str(text).map_err(|e| format!("identity.json: {e}"))?;
-        if let Some(mode) = v.as_object_mut().and_then(|o| o.remove("baseMode"))
-            && mode != Value::String("scratch".into())
-        {
-            return Err(format!(
-                "identity.json: scored on the retired base mode {mode}; only scratch-base labels can be read"
-            ));
-        }
-        serde_json::from_value(v).map_err(|e| format!("identity.json: {e}"))
-    }
 }
 
 /// A pair card's version from its file name (`2.1.86.json` -> `2.1.86`).
@@ -229,37 +214,13 @@ pub fn card_versions(dir: &Path) -> Result<Vec<String>, String> {
     Ok(versions)
 }
 
-/// Every pair card's identity in the eval label `dir`, read from its
-/// `<v>.identity.json`. A card without one is refused: the label was
-/// scored before identities, and `eval rescore` writes them.
-pub fn read_eval_label(dir: &Path) -> Result<Vec<Identity>, String> {
-    card_versions(dir)?
-        .iter()
-        .map(|v| {
-            let path = dir.join(format!("{v}.identity.json"));
-            let text = std::fs::read_to_string(&path).map_err(|e| {
-                format!(
-                    "{}: {e} — this label was scored before identities; `cargo dev eval rescore` \
-                     re-scores it into a label that has them",
-                    path.display()
-                )
-            })?;
-            Identity::from_text(&text).map_err(|e| format!("{}: {e}", path.display()))
-        })
-        .collect()
-}
-
 /// What a comparison is for; each purpose has its own equal-field list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Purpose {
     /// Adding a card to a label: everything but what differs card to card.
     AddCard,
-    /// The eval leaderboard: compare labels' KPIs.
-    Leaderboard,
     /// The library leaderboard.
     LibraryLeaderboard,
-    /// Noise bands from same-commit repeats.
-    Bands,
 }
 
 /// Fields that differ card to card within one label by construction.
@@ -276,23 +237,12 @@ const PER_CARD: &[&str] = &[
     "runConfigSha256",
 ];
 
-const LEADERBOARD: &[&str] = &[
-    "namingMode",
-    "libraryIndex.id",
-    "scorer",
-    "llm.model",
-    "llm.reasoningEffort",
-    "corpus.entry",
-    "corpus.inputs",
-];
-
 impl Purpose {
     /// The fields (dotted paths; a path covers everything under it) that
     /// must be equal. `None` = every field except [`PER_CARD`].
     pub fn fields(self) -> Option<Vec<&'static str>> {
         match self {
             Purpose::AddCard => None,
-            Purpose::Leaderboard => Some(LEADERBOARD.to_vec()),
             Purpose::LibraryLeaderboard => Some(vec![
                 "corpus.name",
                 "corpus.manifestSha256",
@@ -300,11 +250,6 @@ impl Purpose {
                 "corpus.entry",
                 "scorer",
             ]),
-            Purpose::Bands => {
-                let mut f = vec!["binary.sha256"];
-                f.extend_from_slice(LEADERBOARD);
-                Some(f)
-            }
         }
     }
 }
@@ -494,107 +439,7 @@ pub fn guard(
     }
 }
 
-impl Purpose {
-    /// Whether two labels may be compared over the pairs they share when
-    /// their pair sets differ. The leaderboard may: an off-mode reference
-    /// scored the four original pairs, a label scored after exp201 has
-    /// five, and the comparison is still meaningful over the common four
-    /// — said out loud, its totals re-folded over those pairs only. Bands
-    /// may not: a band is the spread of TOTALS, and totals over different
-    /// pair sets measure the pair set, not the floor.
-    fn compares_common_pairs(self) -> bool {
-        matches!(self, Purpose::Leaderboard)
-    }
-}
-
-/// Which pairs a two-label comparison covers, and what to say about it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LabelScope {
-    /// The pairs both labels scored, in the first label's order.
-    pub common: Vec<String>,
-    /// The loud lines (`!! COMMON PAIRS`, `!! MIXED`); empty when the two
-    /// labels scored the same pairs and agree on every field.
-    pub lines: Vec<String>,
-}
-
-/// The pairs (card entries) a label's cards cover, in card order.
-pub fn pairs_of(cards: &[Identity]) -> Vec<String> {
-    let mut v: Vec<String> = Vec::new();
-    for i in cards {
-        if !v.contains(&i.corpus.entry) {
-            v.push(i.corpus.entry.clone());
-        }
-    }
-    v
-}
-
-/// THE guard over two LABELS (each a list of per-pair cards): the pair
-/// sets first, then [`guard`] on every common pair. Different pair sets
-/// are compared over their common pairs with a `!! COMMON PAIRS` line when
-/// the purpose allows it ([`Purpose::compares_common_pairs`]), and refused
-/// otherwise — `--force-mixed` never forces a pair-set mismatch, since a
-/// total over different pairs is not a comparison of anything. Two labels
-/// with no pair in common are always refused.
-pub fn guard_labels(
-    purpose: Purpose,
-    a: (&str, &[Identity]),
-    b: (&str, &[Identity]),
-    force_mixed: bool,
-) -> Result<LabelScope, String> {
-    let (ea, eb) = (pairs_of(a.1), pairs_of(b.1));
-    let common: Vec<String> = ea.iter().filter(|e| eb.contains(e)).cloned().collect();
-    let only = |x: &[String], y: &[String]| -> Vec<String> {
-        x.iter().filter(|e| !y.contains(e)).cloned().collect()
-    };
-    let (only_a, only_b) = (only(&ea, &eb), only(&eb, &ea));
-    let mut lines = Vec::new();
-    if !only_a.is_empty() || !only_b.is_empty() {
-        let side = |name: &str, v: &[String]| {
-            (!v.is_empty()).then(|| format!("only {name}: {}", v.join(",")))
-        };
-        let diff: Vec<String> = [side(a.0, &only_a), side(b.0, &only_b)]
-            .into_iter()
-            .flatten()
-            .collect();
-        let diff = diff.join("; ");
-        if common.is_empty() {
-            return Err(format!(
-                "refusing ({purpose:?}): {} and {} have no pair in common ({diff}).",
-                a.0, b.0
-            ));
-        }
-        if !purpose.compares_common_pairs() {
-            return Err(format!(
-                "refusing ({purpose:?}): {} and {} scored different pairs ({diff}) — totals over \
-                 different pair sets measure the pair set, not this comparison.",
-                a.0, b.0
-            ));
-        }
-        lines.push(format!(
-            "!! COMMON PAIRS: {} and {} scored different pairs ({diff}); every total is over the {} \
-             common pairs ({}) — the other pairs are left out of BOTH sides.",
-            a.0,
-            b.0,
-            common.len(),
-            common.join(",")
-        ));
-    }
-    for e in &common {
-        let (Some(ia), Some(ib)) = (
-            a.1.iter().find(|i| &i.corpus.entry == e),
-            b.1.iter().find(|i| &i.corpus.entry == e),
-        ) else {
-            continue;
-        };
-        lines.extend(guard(
-            purpose,
-            (&format!("{}[{e}]", a.0), ia),
-            (&format!("{}[{e}]", b.0), ib),
-            force_mixed,
-        )?);
-    }
-    Ok(LabelScope { common, lines })
-}
+impl Purpose {}
 
 /// A label is the set of its cards' identities: they must agree on
 /// everything but the per-card fields ([`Purpose::AddCard`]). Err lists

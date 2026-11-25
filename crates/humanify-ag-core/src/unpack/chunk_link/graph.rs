@@ -187,9 +187,10 @@ pub(super) struct Placement {
 ///
 /// - function declarations (ESM hoists them when the module graph is
 ///   instantiated, before any module body runs);
-/// - a declarator whose value is a literal or a closure (Bun's own
-///   bundler keeps these at the top level of a lazily wrapped module, as
-///   Claude Code's single-file bundles up to 2.1.241 did; exp218 variant);
+/// - a declarator whose value runs no code and reads no binding, and a
+///   class that does the same (`inert`). Bun's own bundler keeps literals
+///   and closures at the top level of a lazily wrapped module, as Claude
+///   Code's single-file bundles up to 2.1.241 did;
 /// - a thunk factory, `var h = (…) => () => …` never written (building a
 ///   closure reads nothing: Bun's `__commonJS` / `__esm` helpers);
 /// - a factory call, `var x = h(fn, …)`, when `h` is a thunk factory
@@ -250,7 +251,8 @@ fn moves(kind: &StmtKind, stays: &[bool]) -> bool {
     match kind {
         StmtKind::Removed | StmtKind::Function => false,
         StmtKind::Var(_) => stays.iter().any(|s| !s),
-        StmtKind::Class { .. } | StmtKind::DefaultExpr { .. } | StmtKind::Other { .. } => true,
+        StmtKind::Class { inert, .. } => !inert,
+        StmtKind::DefaultExpr { .. } | StmtKind::Other { .. } => true,
     }
 }
 
@@ -280,6 +282,88 @@ fn has_externals(chunk: &Chunk) -> bool {
         .imports
         .iter()
         .any(|d| matches!(d.spec, Spec::External(_)))
+}
+
+/// Per chunk: can a walk from it over `edges` come back to it, or reach a
+/// chunk that can? (Found by removing, until none is left, every chunk
+/// with no edge to a remaining chunk.)
+fn reaches_a_cycle(edges: &[Vec<usize>]) -> Vec<bool> {
+    let mut left = vec![true; edges.len()];
+    loop {
+        let before = left.iter().filter(|l| **l).count();
+        for c in 0..edges.len() {
+            left[c] = left[c] && edges[c].iter().any(|&d| left[d]);
+        }
+        if before == left.iter().filter(|l| **l).count() {
+            return left;
+        }
+    }
+}
+
+/// The chunks on a cycle of static imports and synchronous requires, or
+/// between two such cycles: one of them can be loaded while its own init
+/// is still running.
+fn in_sync_load_cycle(chunks: &[Chunk]) -> Vec<bool> {
+    let forward: Vec<Vec<usize>> = chunks
+        .iter()
+        .map(|ch| {
+            let sync = ch.lazy.iter().filter(|e| e.sync).map(|e| e.target);
+            ch.static_deps.iter().copied().chain(sync).collect()
+        })
+        .collect();
+    let mut backward = vec![Vec::new(); chunks.len()];
+    for (c, deps) in forward.iter().enumerate() {
+        deps.iter().for_each(|&d| backward[d].push(c));
+    }
+    let (down, up) = (reaches_a_cycle(&forward), reaches_a_cycle(&backward));
+    down.iter().zip(up).map(|(d, u)| *d && u).collect()
+}
+
+/// Mark every chunk the init of `start` runs.
+fn mark_run(calls: &[Vec<usize>], start: usize, run: &mut [bool]) {
+    let mut stack = vec![start];
+    while let Some(c) = stack.pop() {
+        if !run[c] {
+            run[c] = true;
+            stack.extend(calls[c].iter().copied());
+        }
+    }
+}
+
+/// One chunk's init calls that run a chunk, in import order. A call whose
+/// chunk an earlier call already ran does nothing wherever it stands,
+/// and the bundler moves it between builds of unchanged code.
+fn live_calls(calls: &[Vec<usize>], c: usize) -> Vec<usize> {
+    let mut run = vec![false; calls.len()];
+    run[c] = true;
+    let mut live = Vec::new();
+    for &d in &calls[c] {
+        if !run[d] {
+            live.push(d);
+            mark_run(calls, d, &mut run);
+        }
+    }
+    live
+}
+
+/// Per chunk, the chunks whose init its own init calls, in call order. A
+/// chunk in a synchronous load cycle keeps every call of its import order.
+pub(super) fn init_calls(chunks: &[Chunk], order: &Order, needs_init: &[bool]) -> Vec<Vec<usize>> {
+    let called = |ch: &Chunk| -> Vec<usize> {
+        let deps = ch.static_deps.iter().copied();
+        deps.filter(|&d| needs_init[d] && !order.eager[d]).collect()
+    };
+    let calls: Vec<Vec<usize>> = chunks.iter().map(called).collect();
+    let cyclic = in_sync_load_cycle(chunks);
+    (0..chunks.len())
+        .map(|c| {
+            if cyclic[c] {
+                calls[c].clone()
+            } else {
+                live_calls(&calls, c)
+            }
+        })
+        .collect()
 }
 
 /// A lazy chunk needs an init when it moved a statement or any lazy chunk

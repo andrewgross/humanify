@@ -1063,13 +1063,6 @@ pub static KEYS: &[Key] = &[
         doc: "Emit the byte-exact review tree instead of the runnable module graph (needs \
               enabled).",
     },
-    unset_text(
-        "split",
-        "ledger",
-        "auto-discovered next to the prior",
-        "A prior split ledger, for cross-release file-assignment inheritance (needs \
-         enabled).",
-    ),
     // [switches]
     Key {
         section: "switches",

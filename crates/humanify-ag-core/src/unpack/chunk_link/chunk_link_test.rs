@@ -307,7 +307,7 @@ fn external_imports_become_requires() {
     // A lone entry with only externals is not a chunked layout ...
     assert!(read_input(&entry, &Disk).unwrap().link.is_none());
     // ... but the linker still maps its externals when it links one.
-    let (text, _) = link(&entry, &Disk).unwrap();
+    let (text, _, _) = link(&entry, &Disk).unwrap();
     assert_eq!(run(&text), "/ a/b /\n");
 }
 
@@ -610,10 +610,10 @@ fn a_factory_call_waits_for_a_helper_declared_beside_moved_values() {
 fn a_lazy_chunk_runs_every_statement_in_its_init_but_order_free_ones() {
     // ESM: a lazily loaded chunk's statements run when it is loaded, in
     // order. Only what is order-free stays at the top level: function
-    // declarations (hoisted, as ESM instantiation does) and Bun's
-    // `__commonJS` / `__esm` helpers and the factories they wrap (building
-    // a thunk runs nothing; Bun's single-file bundles keep them there, and
-    // the bun adapter extracts them from there).
+    // declarations (hoisted, as ESM instantiation does), values that run
+    // no code, and Bun's `__commonJS` / `__esm` helpers and the factories
+    // they wrap (building a thunk runs nothing; Bun's single-file bundles
+    // keep them there, and the bun adapter extracts them from there).
     let entry = layout(&[
         (
             "index.js",
@@ -622,24 +622,90 @@ fn a_lazy_chunk_runs_every_statement_in_its_init_but_order_free_ones() {
         (
             "chunk-l.js",
             &format!(
-                "{HEAD}var z=5;class K{{m(){{return z}}}}var o={{k:1}},q=()=>o.k;var J={CJS};\
+                "{HEAD}var z=5;class K{{static s=z+1;m(){{return z}}}}var o={{k:z}},q=()=>o.k;var J={CJS};\
                  var r=J((e,m)=>{{m.exports=new K().m()+q()}});function v(){{return r()}}export{{v}};\n"
             ),
         ),
     ]);
     let (text, report) = linked(&entry);
-    assert_eq!(run(&text), "6\n");
+    assert_eq!(run(&text), "10\n");
     assert_eq!(report.inits, 1);
     let init = init_after(&text, "var z");
-    for moved in ["K=class K", "o={k:1}"] {
+    for moved in ["K=class K", "o={k:z}"] {
         assert!(init.contains(moved), "{moved} runs in the init: {init}");
     }
-    // Bun's bundler's shape: a literal or a closure is order-free and
-    // stays at the top level.
     assert!(!init.contains("z=5") && !init.contains("q=()=>"), "{init}");
     assert!(!init.contains("J=") && !init.contains("r="), "{init}");
     assert!(text.contains(&format!("var J={CJS};")), "{text}");
     assert!(text.contains("var r=J((e,m)=>"), "{text}");
+}
+
+#[test]
+fn a_lazy_chunks_values_that_run_no_code_stay_at_the_top_level() {
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!("{HEAD}import(\"/$bunfs/root/chunk-l.js\").then((m)=>console.log(m.v()));\n"),
+        ),
+        (
+            "chunk-l.js",
+            &format!(
+                "{HEAD}var re=/a+/g,s=new Set([\"a\",\"b\"]),o={{k:1,f(){{return 2}},n:[1,-2]}},\
+                 fr=Object.freeze({{a:1}}),sym=Symbol(\"x\");\
+                 class K{{static n=3;m(){{return 1}}[Symbol.iterator](){{}}}}class E extends Error{{}}\
+                 class S{{static n=console.log(\"static ran\")}}class D extends K{{}}\
+                 var u=o.k,w=[console.log(\"w ran\")],sp={{...o}},t=new K,c={{[u]:1}};\
+                 function v(){{return[re.test(\"aa\"),s.size,o.f(),new K().m(),new E instanceof Error,\
+                 fr.a,typeof sym,u,sp.k,new D().m(),S.n,w.length,t.m(),c[1]].join(\":\")}}export{{v}};\n"
+            ),
+        ),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(
+        run(&text),
+        "static ran\nw ran\ntrue:2:2:1:true:1:symbol:1:1:1::1:1:1\n"
+    );
+    let init = init_after(&text, "var re");
+    for moved in [
+        "S=class S",
+        "D=class D",
+        "u=o.k",
+        "w=[",
+        "sp={",
+        "t=new K",
+        "c={",
+    ] {
+        assert!(init.contains(moved), "{moved} runs in the init: {init}");
+    }
+    for kept in ["re=", "s=new Set", "o={", "fr=", "sym=", "K=", "E="] {
+        assert!(
+            !init.contains(kept),
+            "{kept} stays outside the init: {init}"
+        );
+    }
+    assert!(text.contains("class K{static n=3;"), "{text}");
+    assert!(text.contains("class E extends Error{}"), "{text}");
+}
+
+#[test]
+fn a_value_built_by_a_name_the_chunk_binds_runs_in_the_init() {
+    // `Map` here is the chunk's own function, not the built-in.
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!("{HEAD}import(\"/$bunfs/root/chunk-l.js\").then((m)=>console.log(m.v()));\n"),
+        ),
+        (
+            "chunk-l.js",
+            &format!(
+                "{HEAD}function Map(){{console.log(\"own map\")}}var m=new Map();\
+                 function v(){{return typeof m}}export{{v}};\n"
+            ),
+        ),
+    ]);
+    let (text, _) = linked(&entry);
+    assert_eq!(run(&text), "own map\nobject\n");
+    assert!(init_after(&text, "var m").contains("m=new Map()"), "{text}");
 }
 
 #[test]
@@ -893,4 +959,189 @@ fn chunks_with_no_code_are_named_by_what_they_load_not_where_they_are_written() 
     let (a2, b2) = link_in("bb", "ba");
     assert_ne!(a1, b1);
     assert_eq!((a1, b1), (a2, b2));
+}
+
+#[test]
+fn the_link_map_points_every_copied_run_at_its_chunk_bytes() {
+    let files = [
+        (
+            "index.js",
+            format!(
+                "{HEAD}import{{a as x}}from\"/$bunfs/root/chunk-a.js\";function main(){{return x()+1}}\
+console.log(main());import(\"/$bunfs/root/chunk-b.js\").then((m)=>console.log(m.b()));\n"
+            ),
+        ),
+        (
+            "chunk-a.js",
+            format!("{HEAD}function a(){{return 41}}export{{a}};\n"),
+        ),
+        (
+            "chunk-b.js",
+            format!(
+                "{HEAD}var k=7;class C{{static s=k;v(){{return k}}}}function b(){{return new C().v()}}export{{b}};\n"
+            ),
+        ),
+    ];
+    let refs: Vec<(&str, &str)> = files.iter().map(|(n, t)| (*n, t.as_str())).collect();
+    let entry = layout(&refs);
+    let (text, _, map) = link(&entry, &Disk).unwrap();
+    assert_eq!(run(&text), "42\n7\n");
+    assert_eq!(map.files, ["index.js", "chunk-a.js", "chunk-b.js"]);
+    for r in map.runs.iter().filter(|r| !r.edited) {
+        let chunk = &files[r.chunk as usize].1;
+        let (out, src, len) = (r.out as usize, r.src as usize, r.len as usize);
+        assert_eq!(text[out..out + len], chunk[src..src + len]);
+    }
+    let at = |needle: &str| map.source_of(text.find(needle).unwrap() as u32);
+    let in_chunk = |file: usize, needle: &str| {
+        Some((
+            file as u32,
+            Some(files[file].1.find(needle).unwrap() as u32),
+        ))
+    };
+    assert_eq!(at("return 41"), in_chunk(1, "return 41"));
+    assert_eq!(at("return k"), in_chunk(2, "return k"));
+    assert_eq!(at("return new C"), in_chunk(2, "return new C"));
+    assert_eq!(at("console.log(main"), in_chunk(0, "console.log(main"));
+    let renamed = map.source_of(text.find("()+1").unwrap() as u32 - 1);
+    assert_eq!(renamed, in_chunk(0, "x()+1"));
+    assert_eq!(at("=class"), in_chunk(2, "class C"));
+    assert_eq!(at("// @bun"), None);
+    let init = text.find("=7").unwrap() as u32;
+    assert_eq!(map.source_of(init - 1).map(|s| s.0), Some(2));
+}
+
+/// A lazy chunk `x` importing `s`, `d`, `t` in the given order, where `s`
+/// imports `d`; `x_body` is the rest of `x`, `y` a chunk importing `x`.
+fn shuffled(order: [&str; 3], x_body: &str) -> String {
+    let import = |name: &str| format!("import\"/$bunfs/root/chunk-{name}.js\";");
+    let imports: String = order.iter().map(|n| import(n)).collect();
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!("{HEAD}import(\"/$bunfs/root/chunk-x.js\");\n"),
+        ),
+        (
+            "chunk-x.js",
+            &format!("{HEAD}{imports}console.log(\"x\");{x_body}\n"),
+        ),
+        (
+            "chunk-s.js",
+            &format!("{HEAD}{}console.log(\"s\");\n", import("d")),
+        ),
+        ("chunk-d.js", &format!("{HEAD}console.log(\"d\");\n")),
+        ("chunk-t.js", &format!("{HEAD}console.log(\"t\");\n")),
+        (
+            "chunk-y.js",
+            &format!("{HEAD}{}console.log(\"y\");\n", import("x")),
+        ),
+    ]);
+    linked(&entry).0
+}
+
+#[test]
+fn an_init_call_that_runs_nothing_is_not_written() {
+    // `d` has run by the time `s` returns, so `x` calling it does nothing
+    // wherever the call stands: both import orders link to one program.
+    let (first, second) = (shuffled(["s", "d", "t"], ""), shuffled(["s", "t", "d"], ""));
+    assert_eq!(run(&first), "d\ns\nt\nx\n");
+    assert_eq!(first, second);
+    let x_init = first.lines().find(|l| l.contains("log(\"x\")")).unwrap();
+    let calls = x_init.split_once("=>{").unwrap().1.matches("();").count();
+    assert_eq!(calls, 2, "{x_init}");
+}
+
+#[test]
+fn a_chunk_in_a_synchronous_load_cycle_keeps_its_import_order() {
+    // `x` can load `y` while `y`'s import of `x` is still running, so a
+    // call counted as running nothing may run something.
+    let body = "function later(){return import.meta.require(\"/$bunfs/root/chunk-y.js\")}";
+    let (first, second) = (
+        shuffled(["s", "d", "t"], body),
+        shuffled(["s", "t", "d"], body),
+    );
+    assert_eq!(run(&first), "d\ns\nt\nx\n");
+    assert_ne!(first, second);
+}
+
+#[test]
+fn the_link_map_names_every_piece_of_text_the_linker_writes() {
+    use super::LinkerText::{Call, Decl, Exports, ExternalNames, Init, Load, Namespace};
+    let files = [
+        (
+            "index.js",
+            format!("{HEAD}import(\"/$bunfs/root/chunk-b.js\").then((m)=>console.log(m.b()));\n"),
+        ),
+        (
+            "chunk-b.js",
+            format!(
+                "{HEAD}import{{c}}from\"/$bunfs/root/chunk-c.js\";import{{sep}}from\"path\";\
+var k=7;class C{{static s=k;v(){{return k+c()+sep.length}}}}function b(){{return new C().v()}}export{{b}};\n"
+            ),
+        ),
+        (
+            "chunk-c.js",
+            format!("{HEAD}var n=[1+c.length];function c(){{return n[0]}}export{{c}};\n"),
+        ),
+    ];
+    let refs: Vec<(&str, &str)> = files.iter().map(|(n, t)| (*n, t.as_str())).collect();
+    let (text, _, map) = link(&layout(&refs), &Disk).unwrap();
+    assert_eq!(run(&text), "9\n");
+    let b = &files[1].1;
+    let mark = |needle: &str| {
+        let at = text
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle} in:\n{text}"));
+        map.linker_text_at(at as u32).map(|(c, t, _)| (c, t))
+    };
+    let init_b = text
+        .find("return new C")
+        .map(|at| text[..at].len())
+        .unwrap();
+    let in_b = |needle: &str| {
+        let at = text[init_b..]
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle} in:\n{text}"));
+        map.linker_text_at((init_b + at) as u32)
+            .map(|(c, t, _)| (c, t))
+    };
+    assert_eq!(mark("var sep"), Some((1, ExternalNames)));
+    assert_eq!(mark("={};"), Some((1, Namespace)));
+    assert_eq!(mark(",{b:()=>"), Some((1, Exports)));
+    let c = &files[2].1;
+    assert_eq!(
+        mark("var n;"),
+        Some((
+            2,
+            Decl {
+                src: c.find("var n=[1+c.length]").unwrap() as u32
+            }
+        ))
+    );
+    assert_eq!(
+        mark("var C;"),
+        Some((
+            1,
+            Decl {
+                src: b.find("class C").unwrap() as u32
+            }
+        ))
+    );
+    assert_eq!(in_b("=__esm(()=>{"), Some((1, Init)));
+    assert_eq!(in_b("();"), Some((1, Call { target: 2 })));
+    assert_eq!(in_b("=require(\"path\")"), Some((1, Load { nth: 0 })));
+    assert_eq!(mark("return k+"), None);
+    // An init is two pieces, its opening and its close; every other
+    // piece of linker text is written once per chunk.
+    let mut seen = std::collections::BTreeMap::new();
+    for m in &map.marks {
+        *seen.entry((m.chunk, m.text)).or_insert(0) += 1;
+    }
+    for ((chunk, kind), n) in seen {
+        assert_eq!(
+            n,
+            if kind == Init { 2 } else { 1 },
+            "chunk {chunk} {kind:?}"
+        );
+    }
 }

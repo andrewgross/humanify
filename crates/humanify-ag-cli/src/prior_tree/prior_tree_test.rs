@@ -1,5 +1,5 @@
 //! The prior release read once: what the loader finds in a prior folder,
-//! which ledger is in force, and that a prior which is there but cannot be
+//! the split's memory its layout record holds, and that a prior which is there but cannot be
 //! read fails the run instead of reading as "no prior".
 
 use std::path::{Path, PathBuf};
@@ -8,10 +8,10 @@ use humanify_ag_testkit::ScratchDir;
 
 use super::{PriorLoadError, load_prior};
 
-/// A ledger this binary reads.
-fn ledger_text(file: &str) -> String {
+/// A layout record that holds one split statement in `file`.
+fn layout_text(file: &str) -> String {
     format!(
-        r#"{{"version":1,"files":["{file}"],"nameToFiles":{{}},"order":["{file}"],"hashVersion":{}}}"#,
+        r#"{{"format":1,"inputs":["in.js"],"priorLayout":null,"namedText":".humanify/humanified.js","files":{{"{file}":{{"units":[{{"at":[0,0],"line":1,"n":0,"hash":"aa","names":["a"]}}]}}}},"priorAmbiguous":[],"hashVersion":{}}}"#,
         humanify_ag_core::hash::forms::STATEMENT.version
     )
 }
@@ -39,11 +39,7 @@ fn prior_folder(dir: &ScratchDir) -> PathBuf {
     );
     write(root, "node_modules/x/index.js", "installed");
     write(root, ".git/HEAD", "ref");
-    write(
-        root,
-        ".humanify/split-ledger.json",
-        &ledger_text("src/app.js"),
-    );
+    write(root, ".humanify/layout.json", &layout_text("src/app.js"));
     write(root, ".humanify/vendor-humanified.js", "joined");
     write(root, ".humanify/humanified.js", "prior code")
 }
@@ -52,7 +48,7 @@ fn prior_folder(dir: &ScratchDir) -> PathBuf {
 fn a_prior_folder_is_read_once_into_values() {
     let dir = ScratchDir::new("prior-load-folder");
     let prior = prior_folder(&dir);
-    let inputs = load_prior(Some(&prior), None).unwrap();
+    let inputs = load_prior(Some(&prior)).unwrap();
     let tree = inputs.tree.expect("a prior tree");
     assert_eq!(tree.code, "prior code");
     assert_eq!(tree.files.text("src/app.js"), Some("app"));
@@ -60,9 +56,10 @@ fn a_prior_folder_is_read_once_into_values() {
     assert!(!tree.files.contains(".git/HEAD"));
     assert_eq!(tree.vendor_naming.as_deref(), Some("joined"));
     assert!(tree.vendor.is_some(), "the vendor manifest is read");
-    let ledger = inputs.ledger.expect("the ledger beside the prior");
-    assert_eq!(ledger.path, dir.path().join(".humanify/split-ledger.json"));
+    let ledger = inputs.ledger.expect("the ledger the layout record holds");
+    assert_eq!(ledger.path, dir.path().join(".humanify/layout.json"));
     assert_eq!(ledger.ledger.files, vec!["src/app.js".to_string()]);
+    assert_eq!(ledger.ledger.name_to_files["a"], ["src/app.js"]);
     // The values outlive the folder: a run writing into the prior folder
     // (output folder = prior folder) cannot change what it read.
     std::fs::remove_dir_all(dir.path()).unwrap();
@@ -71,53 +68,41 @@ fn a_prior_folder_is_read_once_into_values() {
 
 #[test]
 fn no_prior_version_is_the_only_absent_prior() {
-    let inputs = load_prior(None, None).unwrap();
+    let inputs = load_prior(None).unwrap();
     assert!(inputs.tree.is_none() && inputs.ledger.is_none());
 }
 
 #[test]
-fn split_ledger_wins_over_the_ledger_beside_the_prior() {
-    let dir = ScratchDir::new("prior-load-override");
+fn a_layout_record_that_does_not_read_fails_with_its_path() {
+    let dir = ScratchDir::new("prior-load-bad-layout");
     let prior = prior_folder(&dir);
-    // The beside ledger is broken: with the override it is not read.
-    write(dir.path(), ".humanify/split-ledger.json", "not json");
-    let given = write(
-        dir.path(),
-        "elsewhere/ledger.json",
-        &ledger_text("src/given.js"),
-    );
-    let inputs = load_prior(Some(&prior), Some(&given)).unwrap();
-    let ledger = inputs.ledger.expect("the given ledger");
-    assert_eq!(ledger.path, given);
-    assert_eq!(ledger.ledger.files, vec!["src/given.js".to_string()]);
-    // A ledger with no prior is still read.
-    let alone = load_prior(None, Some(&given)).unwrap();
-    assert!(alone.tree.is_none());
-    assert_eq!(alone.ledger.unwrap().path, given);
+    let path = write(dir.path(), ".humanify/layout.json", "not json");
+    let err = load_prior(Some(&prior)).expect_err("a broken layout record is not absent");
+    assert!(matches!(err, PriorLoadError::Layout { .. }), "{err}");
+    let head = format!("prior layout record {} was not read: ", path.display());
+    assert!(err.to_string().starts_with(&head), "{err}");
 }
 
 #[test]
-fn a_broken_ledger_beside_the_prior_fails_with_its_path() {
-    let dir = ScratchDir::new("prior-load-bad-ledger");
+fn a_tree_with_a_ledger_file_and_no_layout_record_is_refused() {
+    let dir = ScratchDir::new("prior-load-old-tree");
     let prior = prior_folder(&dir);
-    let path = write(dir.path(), ".humanify/split-ledger.json", "not json");
-    let err = load_prior(Some(&prior), None).expect_err("a broken ledger is not absent");
-    assert!(matches!(err, PriorLoadError::Ledger { .. }), "{err}");
+    std::fs::remove_file(dir.path().join(".humanify/layout.json")).unwrap();
+    write(dir.path(), ".humanify/split-ledger.json", "{}");
+    let err = load_prior(Some(&prior)).expect_err("a tree of an older binary");
     assert!(
         err.to_string()
-            .starts_with(&format!("{}: ", path.display())),
+            .ends_with("rebuild the prior release with this binary"),
         "{err}"
     );
-    write(
-        dir.path(),
-        ".humanify/split-ledger.json",
-        &ledger_text("src/app.js").replace(r#""version":1"#, r#""version":9"#),
-    );
-    let err = load_prior(Some(&prior), None).expect_err("another ledger version");
-    assert_eq!(
-        err.to_string(),
-        format!("Unsupported split ledger version in {}", path.display())
-    );
+}
+
+#[test]
+fn a_tree_that_was_not_split_holds_no_ledger() {
+    let dir = ScratchDir::new("prior-load-unsplit");
+    let prior = prior_folder(&dir);
+    std::fs::remove_file(dir.path().join(".humanify/layout.json")).unwrap();
+    assert!(load_prior(Some(&prior)).unwrap().ledger.is_none());
 }
 
 #[test]
@@ -129,7 +114,7 @@ fn a_vendor_manifest_this_binary_cannot_read_fails_with_its_path() {
         "vendor/_bun-modules.json",
         r#"{"factories":[]}"#,
     );
-    let err = load_prior(Some(&prior), None).expect_err("refused");
+    let err = load_prior(Some(&prior)).expect_err("refused");
     let text = err.to_string();
     assert!(
         text.starts_with(&format!(
@@ -145,7 +130,7 @@ fn a_vendor_manifest_this_binary_cannot_read_fails_with_its_path() {
 fn a_missing_prior_file_fails_as_the_read_does() {
     let dir = ScratchDir::new("prior-load-missing");
     let prior = dir.path().join(".humanify/humanified.js");
-    let err = load_prior(Some(&prior), None).expect_err("no prior file");
+    let err = load_prior(Some(&prior)).expect_err("no prior file");
     assert_eq!(
         err.to_string(),
         format!(
@@ -159,7 +144,7 @@ fn a_missing_prior_file_fails_as_the_read_does() {
 fn a_prior_file_among_the_tree_files_stays_readable_by_path() {
     let dir = ScratchDir::new("prior-load-in-tree");
     let prior = write(dir.path(), "index.js", "entry");
-    let tree = load_prior(Some(&prior), None).unwrap().tree.unwrap();
+    let tree = load_prior(Some(&prior)).unwrap().tree.unwrap();
     assert_eq!(tree.code, "entry");
     assert_eq!(tree.files.text("index.js"), Some("entry"));
 }

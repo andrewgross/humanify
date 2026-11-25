@@ -288,6 +288,20 @@ fn is_bun_cjs(file: &Path) -> bool {
         .any(|(i, m)| !rest[i + m.len()..].starts_with(word))
 }
 
+/// The run's layout record fits its tree and the tree it was matched
+/// against.
+fn layout_holds(tree: &Path, previous: Option<&Path>, label: &str) -> Step<()> {
+    let checked = crate::layoutcheck::check_tree(tree, previous)
+        .map_err(|e| Stop::Failure(format!("{label}: {e}")))?;
+    let Some(first) = checked.failures.first() else {
+        return Ok(());
+    };
+    fail(format!(
+        "{label}: the layout record breaks {} rule(s), the first: {first}",
+        checked.failures.len()
+    ))
+}
+
 /// The prior the next release diffs against, from the run's `Next
 /// release: --prior-version <path>` line.
 fn next_release_prior(stderr: &str, label: &str) -> Step<String> {
@@ -690,6 +704,13 @@ impl Stage {
         let split = vec![setting("split.enabled", JsValue::Bool(fp.bundle))];
         let prior_ref = self.fresh_leg(fp, &fresh, &split, bundler)?;
         self.prior_leg(fp, &prior_ref, root, &split)?;
+        let label = fp.label();
+        layout_holds(&fresh, None, &format!("{label} fresh"))?;
+        layout_holds(
+            &root.join("prior-a"),
+            Some(&fresh),
+            &format!("{label} prior"),
+        )?;
         let legs = Legs {
             fresh: fresh.clone(),
             prior: root.join("prior-a"),

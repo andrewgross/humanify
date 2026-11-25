@@ -273,15 +273,12 @@ fn missing_input_files_are_named() {
         &["in.js", "--prior-version", "/nonexistent/prior.js"],
         // library off: names (the default) would add its own refusal for
         // the empty store (exp174, library_config_test.rs).
-        "[split]\nenabled = true\nledger = \"/nonexistent/ledger.json\"\n\
+        "[split]\nenabled = true\n\
          [library]\nmatching = \"off\"\n",
     );
     assert_eq!(
         c.missing_inputs(),
-        [
-            "prior version (--prior-version) file not found: /nonexistent/prior.js",
-            "split.ledger file not found: /nonexistent/ledger.json"
-        ]
+        ["prior version (--prior-version) file not found: /nonexistent/prior.js"]
     );
 }
 

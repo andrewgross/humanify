@@ -35,6 +35,7 @@ pub mod comments;
 pub mod convert;
 pub mod error;
 pub mod jsesc;
+pub mod labels;
 pub mod printer;
 pub mod scope;
 pub mod template_raw;
@@ -104,6 +105,8 @@ pub struct FormatOptions {
     pub plugins: Plugins,
     /// A planted perturbation (None in every real run).
     pub plant: Option<Plant>,
+    /// Statement labels are named for what they mark ([`labels`]).
+    pub label_names: bool,
 }
 
 impl Default for FormatOptions {
@@ -111,6 +114,7 @@ impl Default for FormatOptions {
         FormatOptions {
             plugins: Plugins::STAGE6,
             plant: None,
+            label_names: true,
         }
     }
 }
@@ -127,6 +131,12 @@ pub struct Formatted {
     /// the first source-spanned node printed inside the statement, so a
     /// statement the beautify split out of another still names it.
     pub statement_origins: Vec<(u32, u32)>,
+    /// How many statements enclose each of `statement_origins`, itself
+    /// included.
+    pub statement_depths: Vec<u32>,
+    /// `(output start, input start)` per printed function, sorted;
+    /// `None`: the function has no input text.
+    pub function_origins: Vec<(u32, Option<u32>)>,
 }
 
 /// Stage 6 for one processed file (`createBabelPlugin()(code, context)`):
@@ -175,6 +185,9 @@ fn format_file_inner(
         let undefined_scopes = scope::undefined_binding_scopes(&tree, &ingest)?;
         beautify::run(&mut tree, root, plugins, &undefined_scopes, opts.plant)?;
     }
+    if opts.label_names {
+        labels::name_labels(&mut tree, root);
+    }
     // `libraryCarryPlugin.post`: after every visitor, before the printer,
     // on the transformed tree whose function nodes keep their raw spans.
     let library_carry = if regions.is_empty() {
@@ -189,20 +202,25 @@ fn format_file_inner(
     if origins {
         printer.record_statement_origins();
     }
-    let (body, mut statement_origins) = printer.generate_with_origins(root);
+    let (body, mut origins) = printer.generate_with_origins(root);
     let text = with_license_header(body.clone(), &licenses);
     // The license header goes BEFORE the program (after a `#!` line):
     // every statement shifts by the bytes it added.
     let added = (text.len() - body.len()) as u32;
     if added > 0 {
-        for (out, _) in &mut statement_origins {
+        for (out, _) in &mut origins.statements {
+            *out += added;
+        }
+        for (out, _) in &mut origins.functions {
             *out += added;
         }
     }
     Ok(Formatted {
         text,
         library_carry,
-        statement_origins,
+        statement_origins: origins.statements,
+        statement_depths: origins.depths,
+        function_origins: origins.functions,
     })
 }
 
@@ -243,6 +261,9 @@ pub fn format(code: &str, opts: &FormatOptions) -> Result<String, FormatError> {
 
 #[cfg(test)]
 mod format_test;
+
+#[cfg(test)]
+mod labels_test;
 
 #[cfg(test)]
 mod beautify_test;

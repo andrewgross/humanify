@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use super::*;
-use crate::identity::{Purpose, comparable, label_cards};
+use crate::identity::label_cards;
 use crate::paths::{LIBRARY_LABEL_FIXTURES, repo_root};
 
 fn labels(tree: &str) -> Vec<PathBuf> {
@@ -67,7 +67,6 @@ fn a_label_as_eval_score_writes_it_derives_known_identities() {
         Some("4736dcfadff79ee2dd921d1d778fd7d92f604a708f3ad5b652c146ed89d67c84")
     );
     assert_eq!(label_cards(&ids), Ok(()), "a label's cards agree");
-    assert_eq!(comparable(Purpose::Leaderboard, &ids[0], &ids[0]), Ok(()));
 }
 
 /// A card that records no scorer version is not this scorer's: refused,

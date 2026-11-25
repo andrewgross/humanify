@@ -251,6 +251,29 @@ struct Marks {
     open: Vec<(Option<u32>, Option<u32>)>,
     /// Closed marks: (output start, depth, input origin).
     done: Vec<(u32, u32, u32)>,
+    /// The functions being printed: (output start, input start).
+    functions_open: Vec<(Option<u32>, Option<u32>)>,
+    functions: Vec<(u32, Option<u32>)>,
+}
+
+/// What a printer that records origins saw, each list sorted by output
+/// start (an enclosing statement before one that starts at the same byte).
+#[derive(Default)]
+pub struct Origins {
+    /// `(output start, input origin)` per printed statement.
+    pub statements: Vec<(u32, u32)>,
+    /// How many statements enclose each one, itself included.
+    pub depths: Vec<u32>,
+    /// `(output start, input start)` per printed function; `None`: the
+    /// function has no input text.
+    pub functions: Vec<(u32, Option<u32>)>,
+}
+
+impl Marks {
+    fn unresolved(&self) -> bool {
+        let open = self.open.iter().chain(&self.functions_open);
+        open.into_iter().any(|m| m.0.is_none())
+    }
 }
 
 impl<'t> Printer<'t> {
@@ -277,22 +300,23 @@ impl<'t> Printer<'t> {
         self.marks = Some(Marks::default());
     }
 
-    /// [`Printer::generate`] plus the statement provenance: `(output
-    /// start, input origin)` per printed statement, sorted by output start
-    /// (an enclosing statement before one that starts at the same byte).
-    /// Empty unless [`Printer::record_statement_origins`] was called.
-    pub fn generate_with_origins(mut self, root: NodeId) -> (String, Vec<(u32, u32)>) {
+    /// [`Printer::generate`] plus what was recorded; empty unless
+    /// [`Printer::record_statement_origins`] was called.
+    pub fn generate_with_origins(mut self, root: NodeId) -> (String, Origins) {
         let program = match self.kind(root) {
             Kind::File { program } => *program,
             _ => root,
         };
         self.print_program(program);
-        let mut done = self.marks.take().map(|m| m.done).unwrap_or_default();
+        let marks = self.marks.take().unwrap_or_default();
+        let (mut done, mut functions) = (marks.done, marks.functions);
         done.sort_unstable();
-        let origins = done
-            .into_iter()
-            .map(|(out, _, origin)| (out, origin))
-            .collect();
+        functions.sort_unstable();
+        let origins = Origins {
+            statements: done.iter().map(|&(out, _, origin)| (out, origin)).collect(),
+            depths: done.iter().map(|&(_, depth, _)| depth).collect(),
+            functions,
+        };
         (self.buf.get(), origins)
     }
 
@@ -302,13 +326,33 @@ impl<'t> Printer<'t> {
             return;
         };
         if let Some(hit) = self.buf.hit.take() {
-            for mark in &mut marks.open {
+            for mark in marks.open.iter_mut().chain(&mut marks.functions_open) {
                 if mark.0.is_none() {
                     mark.0 = Some(hit);
                 }
             }
         }
-        self.buf.watch = marks.open.iter().any(|m| m.0.is_none());
+        self.buf.watch = marks.unresolved();
+    }
+
+    fn open_function_mark(&mut self, node: NodeId) {
+        self.resolve_hit();
+        let start = self.tree.node(node).span.map(|(start, _)| start);
+        if let Some(marks) = self.marks.as_mut() {
+            marks.functions_open.push((None, start));
+        }
+        self.buf.watch = true;
+    }
+
+    fn close_function_mark(&mut self) {
+        self.resolve_hit();
+        let Some(marks) = self.marks.as_mut() else {
+            return;
+        };
+        if let Some((Some(out), start)) = marks.functions_open.pop() {
+            marks.functions.push((out, start));
+        }
+        self.buf.watch = marks.unresolved();
     }
 
     fn open_mark(&mut self) {
@@ -334,12 +378,16 @@ impl<'t> Printer<'t> {
         if let Some((Some(out), Some(origin))) = marks.open.pop() {
             marks.done.push((out, depth, origin));
         }
-        self.buf.watch = marks.open.iter().any(|m| m.0.is_none());
+        self.buf.watch = marks.unresolved();
     }
 
     /// The first source-spanned node printed inside an open statement is
-    /// its origin.
+    /// its origin. An expression statement's own span is skipped: after a
+    /// sequence split it still spans the whole sequence.
     fn note_origin(&mut self, node: NodeId) {
+        if matches!(self.kind(node), Kind::ExpressionStatement { .. }) {
+            return;
+        }
         let Some(marks) = self.marks.as_mut() else {
             return;
         };
@@ -689,6 +737,19 @@ impl<'t> Printer<'t> {
             .is_some_and(|c| c.trailing.iter().any(|&c| comment_is_newline(self.tree, c)))
     }
 
+    /// The node's own text, a function's between its mark's open and
+    /// close.
+    fn print_marked(&mut self, node: NodeId, parent: Option<NodeId>) {
+        let function = self.marks.is_some() && self.kind(node).is_function();
+        if function {
+            self.open_function_mark(node);
+        }
+        self.print_method(node, parent);
+        if function {
+            self.close_function_mark();
+        }
+    }
+
     fn print(&mut self, node: NodeId, opts: PrintOpts) {
         let PrintOpts {
             parent,
@@ -732,7 +793,7 @@ impl<'t> Printer<'t> {
         {
             self.catch_up(loc.start);
         }
-        self.print_method(node, parent);
+        self.print_marked(node, parent);
         if should_parens {
             if indent_parenthesized {
                 self.dedent_with(self.flags);

@@ -9,8 +9,8 @@ use humanify_ag_model::llm::Renames;
 use oxc_allocator::Allocator;
 
 use super::{
-    ReaskCtx, SweepGroup, SweepResult, apply_group_response, collect_sweep_targets,
-    refuse_not_shown, split_shown,
+    ReaskCtx, SweepGroup, SweepResult, VisibleNames, apply_group_response, build_groups,
+    collect_sweep_targets, refuse_not_shown, split_shown,
 };
 use crate::ingest::Ingest;
 use crate::modules::soundness::collect_eval_with_taint;
@@ -74,7 +74,7 @@ fn an_answer_for_an_identifier_the_ask_did_not_show_is_never_applied() {
     let group = SweepGroup {
         code: "var Kq_ = one();".to_string(),
         targets: shown,
-        used_names: Vec::new(),
+        used_names: VisibleNames::default(),
     };
     // The model answers the shown target AND one it was never shown.
     let renames = Renames::from_entries(vec![
@@ -97,4 +97,34 @@ fn an_answer_for_an_identifier_the_ask_did_not_show_is_never_applied() {
         code.contains("var Och_ = two();"),
         "the unshown answer never applied: {code}"
     );
+}
+
+#[test]
+fn groups_in_one_scope_share_one_copy_of_its_names() {
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, TEXT);
+    let semantic = ingest.semantic();
+    let taint = collect_eval_with_taint(semantic);
+    let eligible = Eligibility::new(NeverRename::UNIVERSAL);
+    let state = RenameState::new(semantic, Anchor::Fresh, NameProfile::Bun);
+    let targets = collect_sweep_targets(semantic, &state, &eligible, &taint, None);
+    let built = build_groups(semantic, &state, targets, 500);
+    let [first, second, ..] = built.groups.as_slice() else {
+        panic!("two statements, two groups: {}", built.groups.len());
+    };
+    assert_eq!(first.used_names.list(), ["Kq_", "Och_", "f"]);
+    assert_eq!(second.used_names.list(), ["Kq_", "Och_", "f"]);
+    assert!(std::sync::Arc::ptr_eq(
+        &first.used_names.0[0],
+        &second.used_names.0[0]
+    ));
+}
+
+#[test]
+fn visible_names_list_the_inner_scope_first_and_a_shadowed_name_once() {
+    let scope = |names: &[&str]| names.iter().map(|n| n.to_string()).collect();
+    let visible = VisibleNames(vec![scope(&["Kq_", "Och_"]), scope(&["f", "Kq_", "g"])]);
+    assert_eq!(visible.list(), ["Kq_", "Och_", "f", "g"]);
+    assert!(visible.contains("g"));
+    assert!(!visible.contains("one"));
 }

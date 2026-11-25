@@ -5,7 +5,7 @@
 
 use std::process::ExitCode;
 
-use crate::{bin_build, census, e2e, env, eval, gate, runners, settings};
+use crate::{bin_build, census, e2e, env, gate, runners, settings};
 
 /// One verb.
 struct Verb {
@@ -78,9 +78,6 @@ const WALK_SETTINGS: &[&str] = &[
 const INDEX_SECTION: &str = "index";
 const INDEX_SETTINGS: &[&str] = &[INDEX_SECTION];
 const NONE: &[&str] = &[];
-const SCORER: &[&str] = &["scorer"];
-const RESULTS: &[&str] = &["scorer.results"];
-const FORCE_RESULTS: &[&str] = &["run.force_mixed", "scorer.results"];
 
 const VERBS: &[Verb] = &[
     Verb {
@@ -99,8 +96,8 @@ const VERBS: &[Verb] = &[
     Verb {
         words: &["eval", "score"],
         usage: "eval score <label> [--pairs a->b,...] [--llm-cache D] [--force-mixed] [--bin PATH] [--workdir D] [--library-index D] [--no-boot-prompt] [--no-self-hop] [--parallel-pairs N] [--parallel-rebases R] [--pipeline-set section.key=value]...",
-        proves: "how the CURRENT TREE's cross-version diff decomposes (KPIs), pipeline exit, boot",
-        cannot_prove: "any delta inside the measured noise-bands.json floor — it will still print a sign",
+        proves: "why each changed line of the CURRENT TREE's cross-version diffs is there (one label per line, per pair), pipeline exit, boot",
+        cannot_prove: "whether a small move between two cold runs is the change or the LLM's draw: no band is measured for the labels yet",
         settings: SCORE_SETTINGS,
         footprint: Footprint {
             memory: "up to 5 pipeline runs at once (--parallel-pairs 5): summed RSS peak 26.6-30.8 GB, one run 6-19 GB (rebases 6.0-10.7, scored legs 9.7-17.7, self-hops 18.5-18.8; ref-names-40921b9f r1-r3, exp207); the code-split pair 2.1.260->2.1.261 alone: rebase 17.9 GB, scored leg 29.8 GB (exp254-pair261-s1)",
@@ -108,46 +105,6 @@ const VERBS: &[Verb] = &[
             time: "~95 min for the five pairs in parallel lanes, ~119 min serial (--parallel-pairs 1), both stall-free the same night (ref-names-40921b9f-r3, serial-40921b9f-s1; exp207); a scored leg 188-546 s. The sixth pair (2.1.260->2.1.261, not yet in a full run) adds a cold rebase of 2,609 s and a scored leg of 799 s, measured beside a running walk (exp254-pair261-s1)",
             writes: "<workdir>/<label>/ (default /work/eval-work/<label>; claimed while it runs), dev/eval/results/<label>/, this checkout's target/release",
         },
-    },
-    Verb {
-        words: &["eval", "rescore"],
-        usage: "eval rescore <label> --cards <dir> --work <dir> [--results <dir>]",
-        proves: "what the current scorer (v3) reads off a label's recorded trees, every partition checked, old -> new per KPI",
-        cannot_prove: "anything about the pipeline: no binary runs",
-        settings: SCORER,
-        footprint: LIGHT,
-    },
-    Verb {
-        words: &["eval", "summarize"],
-        usage: "eval summarize <label> [--results <dir>]",
-        proves: "nothing new — a re-render of recorded cards and verdicts; plus each pair's LLM call DIAGNOSTICS from its stats `llmCalls` block (server: sent/served, retries by reason, attempt latency p50/p90/p99/max; model answers: raw verdicts per asked identifier — proposed / taken / duplicate / invalid / unchanged / missing / equals the prior's hint; backups and lost answers)",
-        cannot_prove: "validity of cards recorded without run-status (UNKNOWN, not clean); that a diagnostic delta MATTERS — diagnostics have no band and grade nothing, and answer verdicts are RAW (before the pipeline's repairs); runs before exp206 print '-'",
-        settings: RESULTS,
-        footprint: LIGHT,
-    },
-    Verb {
-        words: &["eval", "leaderboard"],
-        usage: "eval leaderboard <label> [label...] [--force-mixed] [--results <dir>]",
-        proves: "relative KPI movement between labels whose identities the guard accepts (base mode, naming mode, index, scorer version, model, pair inputs), over the pairs every label scored (a different pair set prints `!! COMMON PAIRS` and re-folds the totals over the common pairs)",
-        cannot_prove: "that a sub-noise-floor delta is real; only novel/realLn have proven draw-invariance. Its LLM call diagnostics (server speed, model answers, backups, lost answers) explain a KPI move but are not KPIs: no band, latency is the worst pair's percentile, and answer counts move with the model's draws between cold runs ('-' for labels before exp206)",
-        settings: FORCE_RESULTS,
-        footprint: LIGHT,
-    },
-    Verb {
-        words: &["eval", "bands"],
-        usage: "eval bands <label> <label> [label...] [--results <dir>]",
-        proves: "how much two runs of IDENTICAL code disagree per KPI — the floor a delta must clear (written per scorer version and naming mode)",
-        cannot_prove: "anything from labels at different commits, modes, scorer versions or pair sets — that measures a change, not a floor (refused)",
-        settings: RESULTS,
-        footprint: LIGHT,
-    },
-    Verb {
-        words: &["eval", "diff"],
-        usage: "eval diff <priorTree> <freshTree> [label]",
-        proves: "what the on-disk diff between THESE two trees is made of, git-capped",
-        cannot_prove: "which mechanism caused a line",
-        settings: NONE,
-        footprint: LIGHT,
     },
     Verb {
         words: &["eval", "neutrality"],
@@ -199,6 +156,30 @@ const VERBS: &[Verb] = &[
         proves: "the per-hop tables of finished walks side by side, and the hops whose noise or vendor hash turnover is far above the median",
         cannot_prove: "why a flagged hop is noisy: the flag says where to read, not what happened",
         settings: &["walk.report_dir"],
+        footprint: LIGHT,
+    },
+    Verb {
+        words: &["diff", "label"],
+        usage: "diff label <from-tree> <to-tree> <from-input-dir> <to-input-dir> [<out.json>]",
+        proves: "why each changed line between two output trees is in the diff: one label per line, the totals adding up to what `diff -rN` counts; with <out.json>, every line and its label in <out>.lines.tsv",
+        cannot_prove: "which lines of changed input code really changed (every changed line from a changed input function counts as real); anything about a tree with no layout record",
+        settings: &[],
+        footprint: LIGHT,
+    },
+    Verb {
+        words: &["match", "score"],
+        usage: "match score <from-tree> <to-tree> <from-input-dir> <to-input-dir> [<out.json>]",
+        proves: "how many functions of unchanged input the matcher paired with their true partner, paired with another function or left for the LLM, in the run that wrote <to-tree> with <from-tree> as its prior",
+        cannot_prove: "anything about functions of changed or duplicated input, or about a function the linker wrote; whether the names it carried are good",
+        settings: &[],
+        footprint: LIGHT,
+    },
+    Verb {
+        words: &["layout", "check"],
+        usage: "layout check <tree> [<previous-tree>]",
+        proves: "that a tree's layout record fits the tree (every entry has its file, lines rise, no identity is given twice) and, with the previous tree, that every partner it names is a function of that tree's record",
+        cannot_prove: "that a line's recorded input byte is the right one; anything about a tree with no layout record",
+        settings: &[],
         footprint: LIGHT,
     },
     Verb {
@@ -540,11 +521,6 @@ fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
         ["census", "comments"] => census::comments::run(parsed, &host),
         ["e2e"] => e2e::run::run(parsed, &host),
         ["stub-llm", "serve"] => e2e::stub_llm::run(parsed, &host),
-        ["eval", "rescore"] => eval::verbs::rescore(parsed),
-        ["eval", "summarize"] => eval::verbs::summarize(parsed),
-        ["eval", "leaderboard"] => eval::verbs::leaderboard(parsed),
-        ["eval", "bands"] => eval::verbs::bands(parsed),
-        ["eval", "diff"] => eval::verbs::diff(parsed),
         ["library", "rescore"] => library_rescore(parsed),
         ["library", "layers"] => library_layers(parsed),
         ["library", "proof"] => library_proof(parsed),
@@ -557,11 +533,57 @@ fn run(verb: &Verb, parsed: &settings::Parsed) -> (u8, String, String) {
         ["eval", "neutrality"] => done(verbs::neutrality(&live(), parsed, verb.settings)),
         ["eval", "walk"] => done(verbs::walk(&live(), parsed)),
         ["eval", "walk-report"] => done(verbs::walk_report(&live(), parsed)),
+        ["diff", "label"] => two_trees(parsed, "diff label", crate::difflabel::run),
+        ["match", "score"] => two_trees(parsed, "match score", crate::matchcard::run),
+        ["layout", "check"] => layout_check(parsed),
         ["run", "stub"] => done(verbs::stub(&live(), parsed)),
         ["index", "build"] => done(verbs::index_build(&live(), parsed)),
         ["boot-gate"] => done(verbs::boot_gate(&live(), parsed)),
         ["library", "score"] => done(verbs::library_score(&live(), parsed)),
         _ => unreachable!("every implemented verb has a runner"),
+    }
+}
+
+fn layout_check(parsed: &settings::Parsed) -> (u8, String, String) {
+    use std::path::Path;
+    let (tree, previous) = match parsed.positionals.as_slice() {
+        [tree] => (tree, None),
+        [tree, previous] => (tree, Some(Path::new(previous))),
+        _ => {
+            let usage = "usage: humanify-ag-dev layout check <tree> [<previous-tree>]\n";
+            return (2, String::new(), usage.into());
+        }
+    };
+    match crate::layoutcheck::run(Path::new(tree), previous) {
+        Ok((report, true)) => (0, report, String::new()),
+        Ok((report, false)) => (1, report, String::new()),
+        Err(e) => (1, String::new(), format!("{e}\n")),
+    }
+}
+
+type TwoTreeVerb = fn(
+    (&std::path::Path, &std::path::Path),
+    (&std::path::Path, &std::path::Path),
+    Option<&std::path::Path>,
+) -> Result<String, String>;
+
+fn two_trees(parsed: &settings::Parsed, verb: &str, run: TwoTreeVerb) -> (u8, String, String) {
+    use std::path::Path;
+    let (from, to, from_input, to_input, out) = match parsed.positionals.as_slice() {
+        [a, b, c, d] => (a, b, c, d, None),
+        [a, b, c, d, out] => (a, b, c, d, Some(Path::new(out))),
+        _ => {
+            let usage = format!(
+                "usage: humanify-ag-dev {verb} <from-tree> <to-tree> <from-input-dir> <to-input-dir> [<out.json>]\n"
+            );
+            return (2, String::new(), usage);
+        }
+    };
+    let trees = (Path::new(from), Path::new(to));
+    let inputs = (Path::new(from_input), Path::new(to_input));
+    match run(trees, inputs, out) {
+        Ok(report) => (0, report, String::new()),
+        Err(e) => (1, String::new(), format!("{e}\n")),
     }
 }
 

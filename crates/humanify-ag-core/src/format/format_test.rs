@@ -29,6 +29,7 @@ fn check_leg(name: &str, leg: &str, code: &str, want: &Value, plugins: Plugins) 
         &FormatOptions {
             plugins,
             plant: None,
+            label_names: false,
         },
     );
     match (want.get("text").and_then(Value::as_str), got) {

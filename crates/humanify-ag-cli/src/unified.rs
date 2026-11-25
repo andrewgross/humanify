@@ -10,7 +10,7 @@
 //!    (`crate::config`, the one parse point): every refusal `Error: <msg>`
 //!    on stderr, all at once, exit 1;
 //! 2. the input files: a missing input exits 1 with the red
-//!    `File <x> not found`, a missing `--prior-version`/`--split-ledger`
+//!    `File <x> not found`, a missing `--prior-version`
 //!    with `Error: <flag> file not found: <path>` — before anything is
 //!    created (config sweep step 4: the input used to be checked after
 //!    the log file and the cache directory were made);
@@ -331,6 +331,7 @@ fn pipeline_body(
     )
     .map_err(|e| Crash(format!("cannot link the input {input}: {e}")))?;
     let input_link = input_bundle.link.clone();
+    let input_link_map = input_bundle.link_map;
     if let Some(link) = &input_link {
         renderer.message(&format!(
             "Input: a Bun code-split layout, {} chunks linked into one program \
@@ -461,6 +462,7 @@ fn pipeline_body(
                     input,
                     bundled_code: &bundled_code,
                     input_link: input_link.as_ref(),
+                    input_link_map: input_link_map.as_ref(),
                     toolchain,
                     markers,
                     prior: &prior,
@@ -484,6 +486,7 @@ fn pipeline_body(
         outcome,
         fresh,
         path,
+        ..
     }) = &last
     {
         let _ph = phase("reports");
@@ -653,6 +656,7 @@ struct BuildInputs<'a> {
     input: &'a str,
     bundled_code: &'a str,
     input_link: Option<&'a humanify_ag_core::unpack::chunk_link::LinkReport>,
+    input_link_map: Option<&'a humanify_ag_core::unpack::chunk_link::LinkMap>,
     toolchain: Toolchain,
     markers: MarkerOffer,
     prior: &'a crate::prior_tree::PriorInputs,
@@ -695,6 +699,7 @@ fn build_tree(
         input,
         bundled_code,
         input_link,
+        input_link_map,
         toolchain,
         markers,
         prior,
@@ -813,15 +818,35 @@ fn build_tree(
     let mut split_method = None;
     let mut failed_calls = naming.failed_calls;
     failed_calls.vendor = unpacked.vendor_naming.batches_failed;
+    let layout = last.as_ref().map(|named| crate::layout_stage::LayoutInput {
+        link: input_link_map,
+        unpack: unpacked.origins.as_ref(),
+        marks: &named.marks,
+        fresh: &named.fresh,
+        input_file: Path::new(input),
+        prior: prior.tree.as_ref(),
+    });
+    if !config.split.enabled
+        && let (Some(named), Some(layout)) = (&last, &layout)
+        && let Some(code) = &named.outcome.code
+    {
+        let carry = named.outcome.prior_carry.as_ref();
+        let written =
+            crate::layout_stage::write_layout(layout, code, &named.path, carry, None, tree);
+        if let Err(e) = written {
+            renderer.message(&format!("WARNING: no layout record written: {e}"));
+        }
+    }
     if config.split.enabled
-        && let Some(NamedFile {
+        && let (Some(named), Some(layout)) = (&last, layout)
+        && let Some(code) = &named.outcome.code
+    {
+        let NamedFile {
             outcome,
             path: source,
             fresh,
             ..
-        }) = &last
-        && let Some(code) = &outcome.code
-    {
+        } = named;
         let app_module_vars: Vec<String> = unpacked
             .app_modules
             .iter()
@@ -831,6 +856,7 @@ fn build_tree(
             Crash("no working directory: the config was not read from a process".into())
         })?;
         let mut split = crate::split_stage::SplitStageInput {
+            layout,
             embedded_files: input_link.as_ref().map_or(&[], |l| l.embedded.as_slice()),
             input_file: Path::new(input),
             working_dir,
@@ -1426,6 +1452,7 @@ struct NamedFile {
     outcome: NamingOutcome,
     path: std::path::PathBuf,
     fresh: String,
+    marks: crate::layout_stage::FormatMarks,
 }
 
 /// Stages 6-9 per processed file (unminify's plugin loop): the formatted
@@ -1497,7 +1524,7 @@ impl NamingRun<'_> {
             let bridge = self
                 .era_bridge
                 .filter(|b| file.path.ends_with(&b.runtime_file));
-            let formatted = self.format_one(&code, &file.path, bridge.is_some())?;
+            let formatted = self.format_one(&code, &file.path, true)?;
             let library = formatted
                 .library_carry
                 .map(humanify_ag_core::libdetect::function_carry::LibraryClassification::Carried);
@@ -1520,6 +1547,11 @@ impl NamingRun<'_> {
                     outcome,
                     path: file.path.clone(),
                     fresh: formatted.text,
+                    marks: crate::layout_stage::FormatMarks {
+                        statements: formatted.statement_origins,
+                        depths: formatted.statement_depths,
+                        functions: formatted.function_origins,
+                    },
                 });
             }
         }
@@ -1909,11 +1941,7 @@ fn load_prior_inputs(
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<crate::prior_tree::PriorInputs, Crash> {
     let prior_file = config.matching.prior_version.as_deref();
-    let inputs = crate::prior_tree::load_prior(
-        prior_file.map(Path::new),
-        config.split.ledger.as_deref().map(Path::new),
-    )
-    .map_err(Crash::of)?;
+    let inputs = crate::prior_tree::load_prior(prior_file.map(Path::new)).map_err(Crash::of)?;
     if let (Some(path), Some(tree)) = (prior_file, &inputs.tree) {
         if humanify_ag_model::js::trim(&tree.code).is_empty() {
             return Err(Crash(format!("--prior-version file is empty: {path}")));

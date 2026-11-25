@@ -44,6 +44,7 @@ pub fn repo_webcrack_shim() -> WebcrackShim {
 /// What stage 3 handed downstream.
 pub struct Unpacked {
     pub files: Vec<UnpackedFile>,
+    pub origins: Option<bun::UnpackOrigins>,
     /// The vendor namer's tally (`VendorNamingStats`) — all zero when the
     /// adapter never ran the LLM pass.
     pub vendor_naming: VendorNamingStats,
@@ -141,6 +142,7 @@ pub fn unpack_bundle(
         claimed_module_regions,
         era_bridge,
         app_modules,
+        origins,
     ) = match outcome {
         AdapterOutcome::VendorRecord(outcome) => {
             report_vendor_unpack(&outcome, renderer);
@@ -154,6 +156,7 @@ pub fn unpack_bundle(
                 outcome.claimed_module_regions,
                 outcome.era_bridge,
                 outcome.app_modules,
+                outcome.origins,
             )
         }
         AdapterOutcome::Files {
@@ -168,6 +171,7 @@ pub fn unpack_bundle(
             Vec::new(),
             None,
             Vec::new(),
+            None,
         ),
     };
     span.end(Some(
@@ -182,6 +186,7 @@ pub fn unpack_bundle(
     ));
     Ok(Unpacked {
         files,
+        origins,
         vendor_naming: namer.stats,
         vendor_record,
         content_carry,

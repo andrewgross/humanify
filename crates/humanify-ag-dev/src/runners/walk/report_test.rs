@@ -13,7 +13,7 @@ fn numbers_print_as_en_us_locale_strings() {
 
 fn row(from: &str, to: &str, noise: f64, turnover: (usize, usize)) -> Row {
     let card = JsValue::parse(&format!(
-        "{{\"churn\":{{\"layout\":{{\"noise\":{noise}}},\"vendor\":{{\"noise\":0}}}}}}"
+        "{{\"groups\":{{\"noise\":{{\"outsideMetadata\":{noise}}}}}}}"
     ))
     .unwrap();
     Row {

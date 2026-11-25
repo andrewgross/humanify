@@ -465,12 +465,6 @@ fn a_pairs_subset_self_hops_the_last_scored_pair() {
     assert_eq!(get(&self_hop(&h), &["version"]), &JsValue::str("2.1.86"));
 }
 
-#[test]
-fn a_missing_diagnostics_trail_is_said_out_loud() {
-    let h = run_score(&bin_flags(), |_| {}).unwrap();
-    assert!(h.said.contains("NO DIAGNOSTICS TRAIL"), "{}", h.said);
-}
-
 /// Plant a label's earlier record before the run.
 fn plant(rec: &Rec, pipeline: Option<&str>, manifest: Option<&str>) {
     let repo = rec.root.join("repo");
@@ -523,20 +517,14 @@ fn with_strict(extra: &[&'static str]) -> Vec<&'static str> {
     f
 }
 
-/// The run went to the end. The recorder's trees are not bundles, so the
-/// scorer writes no card for any pair: the run fails loudly on exactly
-/// that (ANALYZE FAILED, then the closing FAILED verdict), the one failure
-/// a recorder run is allowed.
+/// The run went to the end. The recorder's trees fail to boot, so the run
+/// fails on exactly that, the one failure a recorder run is allowed.
 fn assert_ran(h: &Harness) {
     assert!(h.said.contains("=== summarizing model"), "{}", h.said);
     assert_eq!(h.status, 1, "{}", h.said);
     let verdict = h.said.rfind("!! eval score FAILED").expect(&h.said);
     for line in h.said[verdict..].lines().skip(1) {
-        assert!(
-            line.contains(": analysis failed") || line.starts_with("  the summary:"),
-            "{line}\n{}",
-            h.said
-        );
+        assert!(line.ends_with(": boot gate failed"), "{line}\n{}", h.said);
     }
 }
 

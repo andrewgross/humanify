@@ -432,7 +432,7 @@ exp171 worktree to `/work/dev-harness-proof/cards/`. Then it runs
 prints `OLD-FIELDS IDENTICAL` and equal cards. That run is the oracle. Next,
 `cargo dev eval rescore <label> --work <tree> --out <dir>` for each label,
 then `cmp -r <dir> <oracle>`. Each pair needs both sides' `humanified.js`,
-`split-ledger.json`, `src/` and `vendor/`, plus the run's `stats.json` (in
+`layout.json`, `src/` and `vendor/`, plus the run's `stats.json` (in
 the cards dir). On scratch bases the prior is
 `<work>/<label>/<from>-rebased/`. Beneath it sits a hash-level check: every
 top-level statement of all 12 trees hashed by both implementations (millions

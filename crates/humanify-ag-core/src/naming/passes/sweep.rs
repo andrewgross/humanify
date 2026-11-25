@@ -39,6 +39,7 @@
 //! and is EXHAUSTED when the budget dies — never applied, never a keep.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use humanify_ag_model::llm::{
     BatchRenameRequest, CacheKeyParams, CallSite, LlmCall, LlmErrorKind, NameProvider, Renames,
@@ -269,27 +270,56 @@ const USE_NEAR: i64 = 40;
 /// How many refused names the stats keep as examples.
 const NOT_SHOWN_EXAMPLES: usize = 20;
 
-/// `Object.keys(scope.getAllBindings())`.
-fn all_binding_names(state: &RenameState, from: BScopeId) -> Vec<String> {
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::new();
-    let mut cur = Some(from);
-    while let Some(s) = cur {
-        for (name, _) in state.bindings_in(s) {
-            if seen.insert(name.clone()) {
-                out.push(name);
-            }
-        }
-        cur = state.view().scope(s).parent;
+/// The names visible from one scope (`Object.keys(scope.getAllBindings())`)
+/// as they stood when the groups were built: each scope's own names,
+/// innermost scope first. Groups share a scope's names.
+#[derive(Clone, Default)]
+struct VisibleNames(Vec<Arc<[String]>>);
+
+impl VisibleNames {
+    /// Every visible name once, inner scopes first.
+    fn list(&self) -> Vec<String> {
+        let mut seen: HashSet<&str> = HashSet::new();
+        self.0
+            .iter()
+            .flat_map(|scope| scope.iter())
+            .filter(|name| seen.insert(name.as_str()))
+            .cloned()
+            .collect()
     }
-    out
+
+    fn contains(&self, name: &str) -> bool {
+        self.0.iter().any(|scope| scope.iter().any(|n| n == name))
+    }
+}
+
+/// Each scope's own names, read once per build.
+struct ScopeNames<'s> {
+    state: &'s RenameState,
+    own: HashMap<BScopeId, Arc<[String]>>,
+}
+
+impl ScopeNames<'_> {
+    fn visible_from(&mut self, from: BScopeId) -> VisibleNames {
+        let mut chain = Vec::new();
+        let mut cur = Some(from);
+        while let Some(scope) = cur {
+            let own = self.own.entry(scope).or_insert_with(|| {
+                let names = self.state.bindings_in(scope);
+                names.into_iter().map(|(name, _)| name).collect()
+            });
+            chain.push(Arc::clone(own));
+            cur = self.state.view().scope(scope).parent;
+        }
+        VisibleNames(chain)
+    }
 }
 
 /// One sweep group (`SweepGroup`).
 struct SweepGroup {
     code: String,
     targets: Vec<MintedBinding>,
-    used_names: Vec<String>,
+    used_names: VisibleNames,
 }
 
 /// What the sweep shows, and what it could not show.
@@ -427,6 +457,10 @@ fn build_groups(
     }
     let view = TextView::build(semantic);
     let occ = Occurrences::build(semantic, state);
+    let mut names = ScopeNames {
+        state,
+        own: HashMap::new(),
+    };
     let mut built = BuiltGroups {
         groups: Vec::new(),
         not_shown: Vec::new(),
@@ -436,7 +470,7 @@ fn build_groups(
             .remove(&(span.start, span.end))
             .expect("every key has its bucket");
         let scope = state.scope_of_binding(bucket[0].binding);
-        let used_names = all_binding_names(state, scope);
+        let used_names = names.visible_from(scope);
         let code = view.pretty(span, &occ.edits(view.text, state, span), true);
         let batches = if code.split('\n').count() <= max_lines {
             vec![(code, bucket)]
@@ -685,9 +719,8 @@ fn apply_group_response(
     let mut reasks = Vec::new();
     let profile = state.name_profile();
     let asked: Vec<String> = group.targets.iter().map(|t| t.name.clone()).collect();
-    let keyed = crate::naming::answer_keys::key_answer(renames, &asked, &|k| {
-        group.used_names.iter().any(|n| n == k)
-    });
+    let keyed =
+        crate::naming::answer_keys::key_answer(renames, &asked, &|k| group.used_names.contains(k));
     for target in &group.targets {
         let answer_key = keyed.answer_key(&target.name);
         if !keyed.answered(&target.name) && !keyed.stray.is_empty() {
@@ -877,7 +910,7 @@ pub fn sweep_minted_names<P: NameProvider>(
             let request = BatchRenameRequest {
                 code: g.code.clone(),
                 identifiers: g.targets.iter().map(|t| t.name.clone()).collect(),
-                used_names: g.used_names.clone(),
+                used_names: g.used_names.list(),
                 ..BatchRenameRequest::default()
             };
             calls.push(sweep_call(
@@ -1139,12 +1172,11 @@ fn sweep_reask<P: NameProvider>(
             let identifiers: Vec<String> = g.targets.iter().map(|t| t.name.clone()).collect();
             let refused =
                 crate::naming::waves::processor::refused_answers(&identifiers, &prev, Some(&prior));
+            let visible = g.used_names.list();
             let request = BatchRenameRequest {
                 code: g.code.clone(),
                 used_names: crate::naming::waves::processor::build_retry_used_names(
-                    &refused,
-                    &g.used_names,
-                    &g.used_names,
+                    &refused, &visible, &visible,
                 ),
                 identifiers,
                 is_retry: Some(true),

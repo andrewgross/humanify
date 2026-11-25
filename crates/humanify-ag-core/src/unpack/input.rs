@@ -20,7 +20,7 @@
 
 use std::path::Path;
 
-use super::chunk_link::{self, LinkError, LinkReport};
+use super::chunk_link::{self, LinkError, LinkMap, LinkReport};
 use crate::error::{FileError, FileOp};
 use crate::output_tree::FolderReader;
 
@@ -61,10 +61,10 @@ impl InputLayout {
         path: &Path,
         text: String,
         disk: &dyn FolderReader,
-    ) -> Result<(String, Option<LinkReport>), LinkError> {
+    ) -> Result<(String, Option<(LinkReport, LinkMap)>), LinkError> {
         match self {
             InputLayout::BunChunks => {
-                chunk_link::link(path, disk).map(|(text, report)| (text, Some(report)))
+                chunk_link::link(path, disk).map(|(text, report, map)| (text, Some((report, map))))
             }
             InputLayout::SingleFile => Ok((text, None)),
         }
@@ -86,6 +86,7 @@ pub struct InputBundle {
     pub text: String,
     pub layout: InputLayout,
     pub link: Option<LinkReport>,
+    pub link_map: Option<LinkMap>,
 }
 
 /// Why a run's input could not be read.
@@ -117,8 +118,14 @@ pub fn input_from_text(
     disk: &dyn FolderReader,
 ) -> Result<InputBundle, InputError> {
     let layout = choose_input_layout(path, &text, disk);
-    let (text, link) = layout.read(path, text, disk)?;
-    Ok(InputBundle { text, layout, link })
+    let (text, linked) = layout.read(path, text, disk)?;
+    let (link, link_map) = linked.unzip();
+    Ok(InputBundle {
+        text,
+        layout,
+        link,
+        link_map,
+    })
 }
 
 #[cfg(test)]

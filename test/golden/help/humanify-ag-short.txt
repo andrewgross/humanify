@@ -72,9 +72,8 @@ Unpack [unpack]:
       --minifier <terser|esbuild|swc|bun|none>  Force the minifier verdict
 
 Split [split]:
-      --split                Split the output into a multi-file tree (src/ + vendor/ + run scaffold); off writes one...
-      --split-pure           Emit the byte-exact review tree instead of the runnable module graph (needs enabled)
-      --split-ledger <path>  A prior split ledger, for cross-release file-assignment inheritance (needs enabled)
+      --split       Split the output into a multi-file tree (src/ + vendor/ + run scaffold); off writes one...
+      --split-pure  Emit the byte-exact review tree instead of the runnable module graph (needs enabled)
 
 Switches [switches]:
       --switches-disable <a,b,...>  Ablation: pass switches to turn OFF (unknown names are refused, listing the valid set)

@@ -1491,7 +1491,7 @@ pub struct SideIndex<'j> {
 }
 
 /// Build one side's [`SideIndex`] from its semantic and its whole-program
-/// ESTree JSON (`program.to_estree_json(false, true)`, parsed).
+/// ESTree JSON (`ingest::program_estree_json`).
 pub fn build_side_index<'j>(semantic: &Semantic<'_>, program_json: &'j Value) -> SideIndex<'j> {
     SideIndex {
         json_by_span: json_span_index(program_json),

@@ -613,7 +613,6 @@ pub struct Unpack {
 pub struct Split {
     pub enabled: bool,
     pub pure: bool,
-    pub ledger: Option<String>,
 }
 
 /// What the run reports, and where.
@@ -797,9 +796,6 @@ pub fn cross_key_violations(r: &Resolved) -> Vec<String> {
     if r.flag_on("split.pure") && !split {
         out.push("split.pure requires split.enabled".to_string());
     }
-    if r.text("split.ledger").is_some() && !split {
-        out.push("split.ledger requires split.enabled".to_string());
-    }
     let context = r
         .int("llm.context_tokens")
         .unwrap_or(DEFAULT_CONTEXT_TOKENS);
@@ -874,7 +870,6 @@ impl Config {
             split: Split {
                 enabled: r.flag_on("split.enabled"),
                 pure: r.flag_on("split.pure"),
-                ledger: r.text("split.ledger"),
             },
             switches: switches.expect("checked above"),
             diagnostics: Diagnostics {
@@ -971,9 +966,6 @@ impl Config {
             )),
             (_, Some(p)) => file("prior version (--prior-version)", p, &mut out),
             _ => {}
-        }
-        if let Some(p) = &self.split.ledger {
-            file("split.ledger", p, &mut out);
         }
         out.extend(self.library_index_problem());
         out

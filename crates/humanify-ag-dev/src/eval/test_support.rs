@@ -1,44 +1,5 @@
 //! Test support shared by the eval readers' tests.
 
-use std::path::Path;
-
-use crate::json::js::JsValue;
-
-use super::card::at;
-
-/// Give `label_dir`'s `summary.json` a per-pair diagnostics array under
-/// `key` (`llmDiagnostics`, `matchingDiagnostics`): one `{"pair":…,
-/// <fields>}` entry per card, `fields` being the JSON members after the
-/// pair.
-pub fn set_pair_diagnostics(label_dir: &Path, key: &str, fields: &str) {
-    let path = label_dir.join("summary.json");
-    let summary = JsValue::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
-    let diags: Vec<JsValue> = match at(&summary, "pairs") {
-        Some(JsValue::Array(a)) => a
-            .iter()
-            .map(|c| {
-                let pair = at(c, "pair").and_then(JsValue::as_str).unwrap();
-                JsValue::parse(&format!(r#"{{"pair":"{pair}",{fields}}}"#)).unwrap()
-            })
-            .collect(),
-        _ => panic!("summary.json pairs"),
-    };
-    let JsValue::Object(mut o) = summary else {
-        panic!("summary.json is an object")
-    };
-    o.insert(key, JsValue::Array(diags));
-    std::fs::write(&path, crate::json::js_text(&JsValue::Object(o), true)).unwrap();
-}
-
-/// The matching fields the bands and leaderboard tests vary.
-pub fn set_matching(label_dir: &Path, fn_asked: f64, mb_renamed: f64) {
-    set_pair_diagnostics(
-        label_dir,
-        "matchingDiagnostics",
-        &format!(r#""fnTotal":100,"fnAsked":{fn_asked},"mbLLMRenamed":{mb_renamed}"#),
-    );
-}
-
 /// Two texts on which GNU `diff`'s default speed heuristic charges more
 /// lines than the minimal edit script (exp222), with that minimum.
 ///
@@ -66,33 +27,4 @@ pub fn overcharged_pair(n: usize) -> (String, String, usize) {
     let kept = (p + m) / 10 * 9;
     let text = |v: &[String]| v.join("\n") + "\n";
     (text(&a), text(&b), 2 * (n - kept))
-}
-
-/// Copy the frozen label `src` (this box only; the test FAILS without it)
-/// into `dst` as `eval score` writes a label today: every card stamped
-/// `scorerVersion: scorer`, `pipeline.json` carrying a naming mode, and
-/// each card's identity record derived beside it.
-pub fn frozen_label(src: &Path, dst: &Path, scorer: u64) {
-    std::fs::create_dir_all(dst).unwrap();
-    for e in std::fs::read_dir(src).expect("the frozen reference cards") {
-        let p = e.unwrap().path();
-        let n = p.file_name().unwrap().to_str().unwrap().to_string();
-        let mut text = std::fs::read_to_string(&p).unwrap();
-        let parsed = JsValue::parse(&text).unwrap_or(JsValue::Null);
-        if super::card::is_scorecard(&parsed) && at(&parsed, "scorerVersion").is_none() {
-            text = text.replacen(
-                "{\n  \"pair\"",
-                &format!("{{\n  \"scorerVersion\": {scorer},\n  \"pair\""),
-                1,
-            );
-        }
-        if n == "pipeline.json" && !text.contains("\"namingMode\"") {
-            text = text.replacen("}}", "}},\"namingMode\":\"off\"", 1);
-        }
-        std::fs::write(dst.join(n), text).unwrap();
-    }
-    for id in crate::identity::derive::eval_label(dst).unwrap() {
-        let v = id.corpus.entry.rsplit("->").next().unwrap().to_string();
-        std::fs::write(dst.join(format!("{v}.identity.json")), id.to_text()).unwrap();
-    }
 }

@@ -3,8 +3,7 @@
 //! Eval labels: `commit.txt`, `pipeline.json`, each pair's run manifest
 //! (`<v>-run.json`) and card (`<v>.json`), in the shapes `eval score`
 //! writes them. `eval score` writes each card's `<v>.identity.json` from
-//! these, and `eval rescore` does for a label scored before identities;
-//! every reader then reads the records ([`super::read_eval_label`]).
+//! these.
 //! Library labels: `summary.json` (the library leaderboard's reader).
 //! A field the label did not record is UNKNOWN, naming what was missing —
 //! never a guess.

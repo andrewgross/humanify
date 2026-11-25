@@ -137,3 +137,14 @@ fn a_json_node_type_is_its_type_string_or_empty() {
     assert_eq!(node_type(&json!({"type": 3})), "");
     assert_eq!(node_type(&json!([1, 2])), "");
 }
+
+#[test]
+fn the_program_json_has_one_position_per_node_and_no_range_copy() {
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, "var a = 1;");
+    let json = crate::ingest::program_estree_json(ingest.program);
+    let declaration = &json["body"][0];
+    assert_eq!(declaration["start"], 0);
+    assert_eq!(declaration["end"], 10);
+    assert!(declaration.get("range").is_none(), "{declaration}");
+}

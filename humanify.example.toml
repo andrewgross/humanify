@@ -280,9 +280,6 @@
 # Emit the byte-exact review tree instead of the runnable module graph (needs enabled).
 # flag: --split-pure
 # pure = false
-# A prior split ledger, for cross-release file-assignment inheritance (needs enabled).
-# flag: --split-ledger
-# ledger =   (unset: auto-discovered next to the prior)
 
 [switches]
 # Ablation: pass switches to turn OFF (unknown names are refused, listing the valid set).

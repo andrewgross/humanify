@@ -207,7 +207,7 @@ fn statement_inventory_inner(
     // The ESTree substrate per statement: serialize the PROGRAM once (one
     // JSON, the partition dump's own settings), then take each side's
     // statement list out of it.
-    let estree = ingest.program.to_estree_json(false, true);
+    let estree = ingest.program.to_estree_json(false, false);
     let program_json = crate::ingest::try_parse_estree_json(&estree)?;
     statement_inventory_from_json(
         &program_json,

@@ -73,11 +73,7 @@ fn a_pairs_file_with_no_self_hop_pair_or_two_is_refused() {
 }
 
 #[test]
-fn bands_and_self_hop_reference_load_per_mode() {
-    let b = eval::noise_bands(&repo_root()).expect("noise-bands.json");
-    let bands = |mode: &str| b.value.provenance_and_bands(1, mode).map(|(_, b)| b);
-    assert_eq!(bands("off").and_then(|m| m.get("novel")), Some(&0.0));
-    assert!(bands("names").is_some());
+fn the_self_hop_reference_loads_per_mode() {
     let s = eval::self_hop_reference(&repo_root()).expect("self-hop-reference.json");
     assert_eq!(s.value.range("off"), Some((2, 182)));
     assert_eq!(
@@ -240,41 +236,6 @@ fn the_bundev_list_is_entry_id_and_bundle_path_per_line() {
     std::fs::remove_dir_all(&repo).unwrap();
 }
 
-#[test]
-fn bands_are_keyed_by_scorer_version() {
-    // Scorer 1 (the TS scorer) is the top level and its `byMode`; a newer
-    // scorer's bands live under `byScorer.<version>`, never mixed in.
-    let text = r#"{"provenance":{"provisional":false,"sources":[],"commit":"c","labels":[]},
-      "bands":{"novel":0,"noise":17},"byMode":{"names":{"provenance":{"provisional":false,"sources":[],"commit":"c","labels":[]},"bands":{"noise":397}}},
-      "byScorer":{"2":{"provenance":{"provisional":false,"sources":[],"commit":"c","labels":[]},"bands":{"noise":20},
-        "byMode":{"names":{"provenance":{"provisional":false,"sources":[],"commit":"c","labels":[]},"bands":{"noise":300}}}}}}"#;
-    let b: eval::NoiseBands = serde_json::from_str(text).unwrap();
-    let get = |scorer: u64, mode: &str| {
-        b.provenance_and_bands(scorer, mode)
-            .and_then(|(_, m)| m.get("noise"))
-            .copied()
-    };
-    assert_eq!(get(1, "off"), Some(17.0));
-    assert_eq!(get(1, "names"), Some(397.0));
-    assert_eq!(get(2, "off"), Some(20.0));
-    assert_eq!(get(2, "names"), Some(300.0));
-    assert_eq!(get(3, "off"), None);
-}
-
-#[test]
-fn the_committed_bands_carry_scorer_2_for_both_modes() {
-    let b = eval::noise_bands(&repo_root()).expect("noise-bands.json");
-    let get = |mode: &str, k: &str| {
-        b.value
-            .provenance_and_bands(2, mode)
-            .and_then(|(_, m)| m.get(k))
-            .copied()
-    };
-    assert_eq!(get("off", "novel"), Some(0.0));
-    assert_eq!(get("names", "realLn"), Some(0.0));
-    assert!(get("names", "noise").is_some());
-}
-
 /// Every committed file under `dev/` (the labels aside, which have their
 /// own readers) is read by its typed loader: a file moved there that no
 /// loader reads — or a loader still pointing at the old home — fails.
@@ -287,7 +248,6 @@ fn every_committed_dev_file_is_read_by_its_loader() {
         read.insert(p.canonicalize().expect("a loaded file exists"));
     };
     note(&eval::pairs(&repo).unwrap().path);
-    note(&eval::noise_bands(&repo).unwrap().path);
     note(&eval::self_hop_reference(&repo).unwrap().path);
     for g in launch_goldens(&repo).unwrap().values() {
         note(&g.path);

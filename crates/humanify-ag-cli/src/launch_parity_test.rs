@@ -380,7 +380,7 @@ pub(crate) fn record(input: &str, opts: &CommandOptions, file: Option<&ConfigFil
         "outputDir": c.io.output_dir,
         "split": c.split.enabled,
         "splitPure": c.split.pure,
-        "splitLedger": c.split.ledger,
+        "splitLedger": Value::Null,
         "bundler": c.unpack.bundler.map(enum_name),
         "minifier": c.unpack.minifier.map(enum_name),
         "priorVersion": c.matching.prior_version,
@@ -524,6 +524,10 @@ fn every_captured_launch_resolves_to_its_captured_settings() {
     for row in &rows {
         let argv =
             without_api_key(&serde_json::from_value::<Vec<String>>(row["argv"].clone()).unwrap());
+        // The ledger flag is gone: its captures have no successor.
+        if argv.iter().any(|a| a == "--split-ledger") {
+            continue;
+        }
         let launch = to_today(&argv);
         assert_eq!(
             parsed_record(&launch),

@@ -56,6 +56,7 @@ pub mod alternation;
 pub mod cascade;
 pub mod close;
 pub mod close_dump;
+pub mod decisions;
 pub mod features;
 pub mod match_map;
 pub mod member_key;

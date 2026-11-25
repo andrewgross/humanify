@@ -882,10 +882,16 @@ fn score_on_base(run: &Run, i: usize, plan: &Planned, base: &Base) -> PairResult
         i + 1,
         run.pairs.pairs.len()
     ));
-    scored_leg(run, &pair, &plan.to, &plan.input, base)
+    scored_leg(run, &pair, &plan.to, (&plan.from_input, &plan.input), base)
 }
 
-fn scored_leg(run: &Run, pair: &str, to: &str, input: &str, base: &Base) -> PairResult {
+fn scored_leg(
+    run: &Run,
+    pair: &str,
+    to: &str,
+    (from_input, input): (&str, &str),
+    base: &Base,
+) -> PairResult {
     let (ctx, cfg) = (run.ctx, run.cfg);
     let failed = |what: &str, e: String| {
         ctx.say(format!("PIPELINE FAILED for {pair}: {e}"));
@@ -917,7 +923,7 @@ fn scored_leg(run: &Run, pair: &str, to: &str, input: &str, base: &Base) -> Pair
     }
     .argv();
     let bundle = out.join(".humanify/humanified.js");
-    let ledger = out.join(".humanify/split-ledger.json");
+    let ledger = out.join(".humanify/layout.json");
     let spec = LegSpec {
         pair: pair.to_string(),
         version: to.to_string(),
@@ -962,7 +968,7 @@ fn scored_leg(run: &Run, pair: &str, to: &str, input: &str, base: &Base) -> Pair
         ));
         return Err(format!("the scored leg wrote no {}", missing.join(", ")));
     }
-    let analyzed = analyze_and_boot(run, pair, to, &out, base, &diag, &stats);
+    let analyzed = analyze_and_boot(run, pair, to, &out, base, (from_input, input));
     if exit == 0 {
         return analyzed;
     }
@@ -1025,26 +1031,29 @@ fn tree_of(bundle: &Path) -> PathBuf {
         .unwrap_or_default()
 }
 
-/// Score the card, write the evidence page, boot the tree. Err names
-/// what failed (analysis, the card's write, the boot gate); the page and
-/// the boot still run after a failed analysis, so the pair's block says
-/// everything at once.
+/// The folder holding an input file.
+fn folder_of(input: &str) -> &Path {
+    Path::new(input).parent().unwrap_or(Path::new(""))
+}
+
+/// Label the pair's diff, then boot the tree. Err names what failed; the
+/// boot still runs after a failed analysis.
 fn analyze_and_boot(
     run: &Run,
     pair: &str,
     to: &str,
     out: &Path,
     base: &Base,
-    diag: &Path,
-    stats: &Path,
+    (from_input, input): (&str, &str),
 ) -> PairResult {
     let ctx = run.ctx;
-    ctx.say(format!("=== {pair}: churn analysis ==="));
+    ctx.say(format!("=== {pair}: diff labels ==="));
     let prior_tree = tree_of(&base.prior);
     let inputs = PairInputs {
         fresh_tree: out,
         prior_tree: &prior_tree,
-        stats,
+        prior_input: folder_of(from_input),
+        fresh_input: folder_of(input),
         pair,
     };
     let mut failed: Vec<&str> = Vec::new();
@@ -1060,25 +1069,6 @@ fn analyze_and_boot(
             remove(&run.results.join(format!("{to}.json")));
             failed.push("analysis failed");
         }
-    }
-    if !diag.is_file() {
-        ctx.say(format!(
-            "NO DIAGNOSTICS TRAIL for {pair} at {} — report page NOT written.",
-            text(diag)
-        ));
-        ctx.say(format!(
-            "  See {}. Every KPI above is unaffected.",
-            text(&run.results.join(format!("{to}.stdout")))
-        ));
-    } else if let Err(e) = scoring::trail_report(
-        ctx,
-        diag,
-        &run.results.join(format!("{to}-report.html")),
-        &inputs,
-    ) {
-        ctx.say(format!(
-            "REPORT PAGE FAILED for {pair}: {e} (every KPI is unaffected)"
-        ));
     }
     if let Err(e) = boot_pair(run, pair, to, out) {
         failed.push(e);
@@ -1189,7 +1179,7 @@ fn self_hop(run: &Run, to: &str, input: &str) -> Result<(), String> {
         &cache,
     );
     let cold_writes = count_files(&cache) as i64 - before as i64;
-    let missing: Vec<String> = [".humanify/humanified.js", ".humanify/split-ledger.json"]
+    let missing: Vec<String> = [".humanify/humanified.js", ".humanify/layout.json"]
         .iter()
         .map(|a| out.join(a))
         .filter(|p| !p.is_file())
@@ -1247,12 +1237,11 @@ fn cold_verdict(run: &Run, to: &str, base: &Path, out: &Path, cold_cache: &str) 
         identical = false;
         diff = super::tree_diff::changed_lines(&a, &b).unwrap_or(0);
     }
-    let ledger = ".humanify/split-ledger.json";
-    if !super::tree_diff::same_bytes(&base.join(ledger), &out.join(ledger)) {
+    if !crate::layoutcheck::same_split_memory(base, out) {
         identical = false;
     }
     if identical {
-        ctx.say("SELF-HOP INVARIANT: OK — byte-identical bundle and ledger");
+        ctx.say("SELF-HOP INVARIANT: OK — byte-identical bundle, same split memory");
     } else {
         ctx.say(format!(
             "COLD SELF-HOP: {diff} bundle diff lines (cache: {cold_cache}; see {})",

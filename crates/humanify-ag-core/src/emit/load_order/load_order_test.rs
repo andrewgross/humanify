@@ -35,7 +35,12 @@ fn bundle_facts(src: &str) -> Vec<LoadOrderFacts> {
     let json = crate::ingest::program_estree_json(ingest.program);
     let body = json["body"].as_array().expect("body");
     let lazy = crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild.lazy_init_helpers(body);
-    bundle_load_order_facts(&ingest.program.body, &lazy, false)
+    bundle_load_order_facts(
+        &ingest.program.body,
+        ingest.semantic().scoping(),
+        &lazy,
+        false,
+    )
 }
 
 #[test]
@@ -266,6 +271,21 @@ fn a_hoisted_function_crosses_a_barrier() {
 }
 
 #[test]
+fn a_bare_var_crosses_a_barrier() {
+    // `var b;` does nothing when the module loads: it may sit after the
+    // call it preceded in the bundle.
+    assert_eq!(
+        order("var b;\nsideEffect();\nvar c = 1;", &[1, 2, 0], &[]),
+        [1, 2, 0]
+    );
+    // A `let` has a dead zone, so its place is observable: it stays.
+    assert_eq!(
+        order("let b;\nsideEffect();\nvar c = 1;", &[1, 2, 0], &[]),
+        [0, 1, 2]
+    );
+}
+
+#[test]
 fn pure_lazy_init_declarations_move() {
     let src = "var first = lazyInitializer(() => a());\nvar second = lazyInitializer(() => b());\nvar third = lazyInitializer(() => c());";
     assert_eq!(order(src, &[2, 0, 1], &["lazyInitializer"]), vec![2, 0, 1]);
@@ -301,4 +321,22 @@ fn always_a_permutation_that_crosses_no_barrier() {
             }
         }
     }
+}
+
+#[test]
+fn a_declaration_that_runs_no_code_is_a_write_and_no_barrier() {
+    let all = bundle_facts(
+        "var a = Symbol('a'); var b = Object.freeze({ k: [1] }); var c = new Set(['x']); class D extends Error { static n = 1; } var e = /x/;",
+    );
+    for (f, name) in all.iter().zip(["a", "b", "c", "D", "e"]) {
+        assert!(!f.effects, "{name}");
+        assert!(f.reads.is_empty(), "{name}: {:?}", f.reads);
+        assert_eq!(f.writes, strings(&[name]));
+    }
+}
+
+#[test]
+fn a_built_in_name_the_bundle_binds_is_a_call_like_any_other() {
+    let all = bundle_facts("function Symbol(x) { return x; } var a = Symbol('a');");
+    assert!(all[1].effects);
 }

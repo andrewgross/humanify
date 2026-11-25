@@ -43,6 +43,7 @@ use humanify_ag_core::output_tree::OutputTree;
 
 /// What the split stage is given.
 pub struct SplitStageInput<'a> {
+    pub layout: crate::layout_stage::LayoutInput<'a>,
     /// The embedded files the linked input reads by path (exp217): the
     /// runnable tree's `embedded/`.
     pub embedded_files: &'a [humanify_ag_core::unpack::chunk_link::EmbeddedFile],
@@ -260,11 +261,13 @@ pub fn run_split(
         {
             Ok(count) => InputGate::Settled(count),
             Err(why) => {
+                let why = why.to_string();
                 return Ok(finish_unsplit(
                     code,
+                    prior_carry,
                     input,
                     tree,
-                    &why.to_string(),
+                    &why,
                     renderer,
                 ));
             }
@@ -325,6 +328,7 @@ pub fn run_split(
 /// a layout the split cannot cut (finding C3; docs/plugin-spec.md P9).
 fn finish_unsplit(
     code: &str,
+    prior_carry: Option<&PriorCarry>,
     input: &SplitStageInput<'_>,
     tree: &mut OutputTree,
     why: &str,
@@ -333,6 +337,16 @@ fn finish_unsplit(
     let written = match input.processed_source {
         Some(path) => {
             tree.put(path.to_path_buf(), code);
+            if let Err(e) = crate::layout_stage::write_layout(
+                &input.layout,
+                code,
+                path,
+                prior_carry,
+                None,
+                tree,
+            ) {
+                renderer.message(&format!("WARNING: no layout record written: {e}"));
+            }
             path.display().to_string()
         }
         None => String::from("(no processed file)"),
@@ -533,6 +547,18 @@ fn commit_and_finish(
         renderer.message(m);
     }
     let (relinked, reconciled) = finished.map_err(|e| PostCommit(e.to_string()))?;
+    let named = tree
+        .root()
+        .join(humanify_ag_core::place::layout::HUMANIFIED_SOURCE_PATH);
+    crate::layout_stage::write_layout(
+        &input.layout,
+        code,
+        &named,
+        prior_carry,
+        Some(outcome),
+        tree,
+    )
+    .map_err(|e| PostCommit(format!("no layout record written: {e}")))?;
     if let Some(names) = report.library_names.take() {
         post_split.trail = names.trail;
     }
