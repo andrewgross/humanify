@@ -63,12 +63,7 @@ fn replay(v: &Value) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
     let lazy = crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild.lazy_init_helpers(&input.body);
-    let facts = bundle_load_order_facts(
-        &view.body.statements,
-        ingest.semantic().scoping(),
-        &lazy,
-        false,
-    );
+    let facts = bundle_load_order_facts(&view.body.statements, ingest.semantic(), &lazy, false);
     let names = vec![None; order.len()];
     let got = emit_runnable_cjs(&RunnableInput {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
@@ -208,12 +203,7 @@ fn emit_tree_with_priors(
     )
     .expect("split input");
     let lazy = crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild.lazy_init_helpers(&input.body);
-    let facts = bundle_load_order_facts(
-        &view.body.statements,
-        ingest.semantic().scoping(),
-        &lazy,
-        false,
-    );
+    let facts = bundle_load_order_facts(&view.body.statements, ingest.semantic(), &lazy, false);
     let order: Vec<String> = order.iter().map(|s| s.to_string()).collect();
     let mut files: Vec<String> = Vec::new();
     for f in &order {

@@ -53,6 +53,25 @@ pub(super) struct ImportDecl {
     pub specifiers: Vec<(Imported, SymbolId)>,
 }
 
+impl ImportDecl {
+    /// A lazy chunk loads this import in its init. Not a Node built-in
+    /// read by name or as a namespace: that load runs no code of the
+    /// program.
+    pub fn loads_in_init(&self) -> bool {
+        let Spec::External(spec) = &self.spec else {
+            return false;
+        };
+        let default = |i: &Imported| match i {
+            Imported::Default => true,
+            Imported::Name(n) => n == "default",
+            Imported::Namespace => false,
+        };
+        !crate::inert::built_in_module(spec)
+            || self.specifiers.is_empty()
+            || self.specifiers.iter().any(|(i, _)| default(i))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(super) enum ExportTarget {
     Local(SymbolId),
@@ -450,9 +469,10 @@ impl Ctx<'_, '_> {
         }
     }
 
-    fn inert(&self) -> Inert<'_> {
+    fn inert(&self) -> Inert<'_, '_> {
         Inert {
             scoping: self.scoping,
+            nodes: None,
         }
     }
 
