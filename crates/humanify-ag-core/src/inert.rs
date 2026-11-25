@@ -1,5 +1,6 @@
 //! Which values run no code and read no binding when they are evaluated:
-//! a lazy chunk's declarations of these stay at the top level.
+//! a lazy chunk's declarations of these stay at the top level, and no
+//! statement's place in a file depends on them.
 
 use oxc_ast::ast::{
     Argument, ArrayExpressionElement, Class, ClassElement, Expression, ObjectPropertyKind,
@@ -30,7 +31,7 @@ const BASES: [&str; 9] = [
 /// Built-in constants.
 const CONSTANTS: [&str; 3] = ["undefined", "NaN", "Infinity"];
 
-pub(super) struct Inert<'s> {
+pub(crate) struct Inert<'s> {
     pub scoping: &'s Scoping,
 }
 

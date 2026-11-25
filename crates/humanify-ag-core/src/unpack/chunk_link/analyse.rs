@@ -20,8 +20,8 @@ use oxc_syntax::symbol::SymbolFlags;
 use super::ROOT;
 use super::embedded::{Callee, FileRef, is_bun_module};
 use super::error::LinkError;
-use super::inert::Inert;
 use crate::error::{FileError, FileOp};
+use crate::inert::Inert;
 use crate::output_tree::FolderReader;
 
 /// A text edit: replace `[start, end)` with `text`.

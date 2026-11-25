@@ -60,7 +60,6 @@ mod embedded;
 mod emit;
 mod error;
 mod graph;
-mod inert;
 mod names;
 
 pub use embedded::{EMBEDDED_DIR, EmbeddedFile};

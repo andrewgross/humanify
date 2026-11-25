@@ -17,6 +17,7 @@ pub mod finish;
 pub mod format;
 pub mod graph;
 pub mod hash;
+mod inert;
 pub mod ingest;
 pub mod layout_record;
 pub mod libdetect;

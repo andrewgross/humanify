@@ -35,7 +35,12 @@ fn bundle_facts(src: &str) -> Vec<LoadOrderFacts> {
     let json = crate::ingest::program_estree_json(ingest.program);
     let body = json["body"].as_array().expect("body");
     let lazy = crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild.lazy_init_helpers(body);
-    bundle_load_order_facts(&ingest.program.body, &lazy, false)
+    bundle_load_order_facts(
+        &ingest.program.body,
+        ingest.semantic().scoping(),
+        &lazy,
+        false,
+    )
 }
 
 #[test]
@@ -316,4 +321,22 @@ fn always_a_permutation_that_crosses_no_barrier() {
             }
         }
     }
+}
+
+#[test]
+fn a_declaration_that_runs_no_code_is_a_write_and_no_barrier() {
+    let all = bundle_facts(
+        "var a = Symbol('a'); var b = Object.freeze({ k: [1] }); var c = new Set(['x']); class D extends Error { static n = 1; } var e = /x/;",
+    );
+    for (f, name) in all.iter().zip(["a", "b", "c", "D", "e"]) {
+        assert!(!f.effects, "{name}");
+        assert!(f.reads.is_empty(), "{name}: {:?}", f.reads);
+        assert_eq!(f.writes, strings(&[name]));
+    }
+}
+
+#[test]
+fn a_built_in_name_the_bundle_binds_is_a_call_like_any_other() {
+    let all = bundle_facts("function Symbol(x) { return x; } var a = Symbol('a');");
+    assert!(all[1].effects);
 }

@@ -390,8 +390,12 @@ pub fn stable_split(
         .map(|s| statement_align_name(declared_names(s)))
         .collect();
     let lazy_init = options.module_wrappers.lazy_init_helpers(&input.body);
-    let facts =
-        bundle_load_order_facts(statements, &lazy_init, options.registrar_exemption_disabled);
+    let facts = bundle_load_order_facts(
+        statements,
+        ingest.semantic().scoping(),
+        &lazy_init,
+        options.registrar_exemption_disabled,
+    );
     let scopes = (!options.split_pure).then(|| BabelScopes::build(ingest.semantic()));
     let prior_entry = options
         .prior_tree
