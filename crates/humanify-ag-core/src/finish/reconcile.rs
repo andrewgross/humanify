@@ -63,6 +63,9 @@ pub struct PostSplitRename {
     pub kind: &'static str,
     pub votes: usize,
     pub top_level: bool,
+    /// The file's export key and its uses in other files took the name
+    /// too ([`super::export_names`]).
+    pub key_moved: bool,
     /// (bodyOrdinal, nameOrdinal).
     pub locator: Option<(usize, usize)>,
 }
@@ -719,6 +722,7 @@ fn reconcile_one_file(
             kind: r.kind.as_str(),
             votes: r.votes,
             top_level: declared.contains(&r.to_name),
+            key_moved: false,
             locator: None,
         })
         .collect();

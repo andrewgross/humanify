@@ -3,9 +3,9 @@
 //!
 //! `.humanify/humanified.js` is the NEXT release's prior; without the carry
 //! the tree and the bundle disagree by exactly the post-split renames.
-//! TOP-LEVEL renames are never carried (the export key is a string the
-//! tree's rename cannot reach — carrying drifted 238/238 export keys on
-//! 85→86). A rename is located by the ledger's `emitIndexes` (file slot →
+//! A TOP-LEVEL rename is carried only when the tree's export key moved
+//! with it ([`super::export_names`]); otherwise the bundle and the key
+//! would disagree. A rename is located by the ledger's `emitIndexes` (file slot →
 //! bundle statement) and its `nameOrdinal` among same-named declarations
 //! in that statement; everything abstains rather than guesses, and the
 //! rewrite must re-parse to the same structural signature.
@@ -115,7 +115,7 @@ fn resolve_targets<'r>(
     let indexes = ledger.emit_indexes.as_ref();
     let mut targets = Vec::new();
     for rename in renames {
-        if rename.top_level {
+        if rename.top_level && !rename.key_moved {
             bump(abstained, "top-level-would-move-an-export-key");
             continue;
         }
