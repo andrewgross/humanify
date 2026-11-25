@@ -671,6 +671,7 @@ fn format_verb(input: &str, out: Option<&str>, no_transforms: bool, plant: Optio
             Plugins::STAGE6
         },
         plant,
+        label_names: false,
     };
     let text = match format(&code, &opts) {
         Ok(t) => t,
@@ -720,7 +721,12 @@ fn format_check_verb(path: &str, show: usize, plant: Option<&str>) {
         for (leg, plugins) in [("none", Plugins::NONE), ("full", Plugins::STAGE6)] {
             let want = &row[leg];
             let plant = if plugins.is_empty() { None } else { plant };
-            let got = format(code, &FormatOptions { plugins, plant });
+            let opts = FormatOptions {
+                plugins,
+                plant,
+                label_names: false,
+            };
+            let got = format(code, &opts);
             let ok = match (want.get("text").and_then(serde_json::Value::as_str), &got) {
                 (Some(w), Ok(g)) => w == g,
                 (None, Err(_)) => true,

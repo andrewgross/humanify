@@ -162,7 +162,7 @@ fn labeled_var_in_a_loop_body_formats_and_keeps_its_label() {
         "for (;;) lbl: var a = 1, b = 2;",
     ] {
         let out = full(code);
-        assert!(out.contains("lbl:"), "{code} → {out}");
+        assert!(out.contains("block:"), "{code} → {out}");
     }
     same_behaviour("let i = 0; do lbl: var a = 1, b = 2; while (i++ < 2); console.log(a, b, i);");
 }
@@ -171,9 +171,12 @@ fn labeled_var_in_a_loop_body_formats_and_keeps_its_label() {
 fn labeled_var_in_an_if_branch_keeps_its_label() {
     assert_eq!(
         full("if (x) lbl: var a = 1, b = 2;"),
-        "if (x) {\n  lbl: var a = 1,\n    b = 2;\n}"
+        "if (x) {\n  block: var a = 1,\n    b = 2;\n}"
     );
-    assert_eq!(full("lbl: var a = 1, b = 2;"), "lbl: var a = 1,\n  b = 2;");
+    assert_eq!(
+        full("lbl: var a = 1, b = 2;"),
+        "block: var a = 1,\n  b = 2;"
+    );
 }
 
 #[test]

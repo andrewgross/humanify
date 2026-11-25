@@ -35,6 +35,7 @@ pub mod comments;
 pub mod convert;
 pub mod error;
 pub mod jsesc;
+pub mod labels;
 pub mod printer;
 pub mod scope;
 pub mod template_raw;
@@ -104,6 +105,8 @@ pub struct FormatOptions {
     pub plugins: Plugins,
     /// A planted perturbation (None in every real run).
     pub plant: Option<Plant>,
+    /// Statement labels are named for what they mark ([`labels`]).
+    pub label_names: bool,
 }
 
 impl Default for FormatOptions {
@@ -111,6 +114,7 @@ impl Default for FormatOptions {
         FormatOptions {
             plugins: Plugins::STAGE6,
             plant: None,
+            label_names: true,
         }
     }
 }
@@ -180,6 +184,9 @@ fn format_file_inner(
     if !plugins.is_empty() {
         let undefined_scopes = scope::undefined_binding_scopes(&tree, &ingest)?;
         beautify::run(&mut tree, root, plugins, &undefined_scopes, opts.plant)?;
+    }
+    if opts.label_names {
+        labels::name_labels(&mut tree, root);
     }
     // `libraryCarryPlugin.post`: after every visitor, before the printer,
     // on the transformed tree whose function nodes keep their raw spans.
@@ -254,6 +261,9 @@ pub fn format(code: &str, opts: &FormatOptions) -> Result<String, FormatError> {
 
 #[cfg(test)]
 mod format_test;
+
+#[cfg(test)]
+mod labels_test;
 
 #[cfg(test)]
 mod beautify_test;
