@@ -1,9 +1,9 @@
 # exp256 — a label for every changed line, and less noise on real hops
 
 STATUS: BUILT, GATED (`cargo dev check`, all 13 stages, at `2e7d6391a`),
-measured on one real-LLM walk of two hops (2.1.285 -> 286 -> 287). No
-band yet: no commit has been walked cold twice, so a small difference
-between two walks proves nothing. Branch `exp256-provenance`.
+measured on one real-LLM walk of two hops (2.1.285 -> 286 -> 287). The
+run-to-run variation was measured afterwards, in exp257. Branch
+`exp256-provenance`.
 
 ## Totals
 
@@ -87,13 +87,14 @@ Noise lines in `src/` by label, before and after:
 
 ## Open
 
-- A late step (the per-file reconcile) gives a top-level function its
-  prior name inside its own file but leaves the exported name and every
-  caller on the new name. On 285 -> 286 one init function accounts for
-  about 240 caller lines this way.
-- An import alias moves to a longer name when a new local variable
-  takes its name (about 80 lines on 286 -> 287).
-- Numbered import names (`pathModule327`) are renumbered now and then.
-- No band. Two cold walks of one commit are needed before small
-  differences can be read.
+The first three items below and the missing band were closed by
+[exp257](../257-stable-names/README.md).
+
+- A late step (the per-file reconcile) gave a top-level function its
+  prior name inside its own file but left the exported name and every
+  caller on the new name (fixed in exp257).
+- An import alias moved to a longer name when a new local variable
+  took its name (fixed in exp257).
+- Numbered import names (`pathModule327`) were renumbered now and then
+  (fixed in exp257).
 - The first, cold version takes about 50 minutes.
