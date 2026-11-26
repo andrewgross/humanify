@@ -297,9 +297,27 @@ fn reaches_a_cycle(edges: &[Vec<usize>]) -> Vec<bool> {
     }
 }
 
-/// The chunks on a cycle of static imports and synchronous requires, or
-/// between two such cycles: one of them can be loaded while its own init
-/// is still running.
+/// Can a walk from `start` over `edges`, through chunks of `within`,
+/// come back to it?
+fn returns_to(edges: &[Vec<usize>], within: &[bool], start: usize) -> bool {
+    let mut seen = vec![false; edges.len()];
+    let mut stack = edges[start].clone();
+    while let Some(c) = stack.pop() {
+        if c == start {
+            return true;
+        }
+        if within[c] && !seen[c] {
+            seen[c] = true;
+            stack.extend(edges[c].iter().copied());
+        }
+    }
+    false
+}
+
+/// The chunks on a cycle of static imports and synchronous requires: one
+/// of them can be loaded while its own init is still running. A chunk
+/// that is only between two cycles cannot: whatever it imports that is
+/// part-way through its init would have to reach back to it.
 fn in_sync_load_cycle(chunks: &[Chunk]) -> Vec<bool> {
     let forward: Vec<Vec<usize>> = chunks
         .iter()
@@ -313,7 +331,10 @@ fn in_sync_load_cycle(chunks: &[Chunk]) -> Vec<bool> {
         deps.iter().for_each(|&d| backward[d].push(c));
     }
     let (down, up) = (reaches_a_cycle(&forward), reaches_a_cycle(&backward));
-    down.iter().zip(up).map(|(d, u)| *d && u).collect()
+    let near: Vec<bool> = down.iter().zip(up).map(|(d, u)| *d && u).collect();
+    (0..chunks.len())
+        .map(|c| near[c] && returns_to(&forward, &near, c))
+        .collect()
 }
 
 /// Mark every chunk the init of `start` runs.
