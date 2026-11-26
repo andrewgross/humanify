@@ -35,8 +35,21 @@ fn a_local_that_can_see_the_module_keeps_the_alias_away() {
 }
 
 #[test]
-fn a_top_level_binding_of_that_name_keeps_the_alias_away() {
-    let top = "var pluginCache = new Map();\n";
+fn a_new_top_level_binding_of_that_name_makes_way_for_the_alias() {
+    let top = |name: &str| {
+        format!("var {name} = new Map();\nfunction has(k) {{\n  return {name}.has(k);\n}}\n")
+    };
+    let out = run(
+        &file("srcPluginCache", &top("pluginCache")),
+        &file("pluginCache", ""),
+    );
+    assert_eq!(out, Some(file("pluginCache", &top("pluginCacheVal"))));
+}
+
+#[test]
+fn an_exported_binding_of_that_name_keeps_the_alias_away() {
+    let top = "var pluginCache = new Map();\n\
+        Object.defineProperty(module.exports, \"pluginCache\", { get: () => pluginCache, enumerable: true, configurable: true });\n";
     assert_eq!(
         run(&file("srcPluginCache", top), &file("pluginCache", "")),
         None

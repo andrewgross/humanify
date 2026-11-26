@@ -326,7 +326,7 @@ pub(super) fn may_keep(name: &str, semantic: &Semantic<'_>, eligible: &Eligibili
 
 /// Every name the file uses: each declared name (any scope) and each name
 /// it reads free.
-fn names_in_use(semantic: &Semantic<'_>) -> HashSet<String> {
+pub(super) fn names_in_use(semantic: &Semantic<'_>) -> HashSet<String> {
     let scoping = semantic.scoping();
     let mut taken: HashSet<String> = scoping.symbol_names().map(str::to_string).collect();
     taken.extend(

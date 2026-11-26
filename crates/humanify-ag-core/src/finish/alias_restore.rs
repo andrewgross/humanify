@@ -5,7 +5,9 @@
 //! reconcile then gives many locals their previous names back, and an
 //! alias that made way for such a local has no reason left. This pass
 //! runs after the reconcile and renames the alias back wherever the
-//! validated rename allows it.
+//! validated rename allows it. A top-level binding the file does not
+//! export, holding the name the previous copy gave the import, is new
+//! to that name and makes way for the alias.
 
 use std::collections::HashMap;
 
@@ -14,6 +16,7 @@ use oxc_allocator::Allocator;
 use crate::babel_view::DiffLines;
 use crate::emit::import_alias::parse_require_aliases;
 use crate::error::FileError;
+use crate::naming::validation::resolve_conflict;
 use crate::output_tree::OutputTree;
 use crate::prior_tree::PriorFiles;
 use crate::rename::eligibility::{Eligibility, NeverRename};
@@ -21,7 +24,7 @@ use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
 use crate::trail::Anchor;
 
-use super::library_names::{may_keep, split_js_files};
+use super::library_names::{may_keep, names_in_use, split_js_files};
 use super::reconcile::rewrite_renamed_text;
 use super::relink::parse_or_err;
 use super::vendor_inherit::file_signature;
@@ -56,10 +59,29 @@ pub fn restore_aliases_in_file(
     let semantic = ingest.semantic();
     let mut state = RenameState::new(semantic, Anchor::Generated, profile);
     let scope = state.view().program_scope();
+    let mut taken = names_in_use(semantic);
     let mut restored = 0usize;
     for (alias, was) in &wanted {
         if !may_keep(was, semantic, eligible) {
             continue;
+        }
+        if state.get_binding(scope, was).is_some() && !exports_binding(text, was) {
+            let away = resolve_conflict(was, |c| taken.contains(c));
+            let moved = state.attempt_validated_rename(
+                RenameRequest {
+                    scope,
+                    old_name: was,
+                    new_name: &away,
+                    expected: None,
+                },
+                TrailSpec::Untrailed {
+                    why: "alias-restore",
+                },
+            );
+            if !moved.applied {
+                continue;
+            }
+            taken.insert(away);
         }
         let attempt = state.attempt_validated_rename(
             RenameRequest {
@@ -80,6 +102,13 @@ pub fn restore_aliases_in_file(
     let rewritten = rewrite_renamed_text(semantic, &state, text, &DiffLines::new(text));
     let same = file_signature(&rewritten).is_some_and(|s| Some(s) == file_signature(text));
     same.then_some(rewritten)
+}
+
+/// Does the file export the top-level binding `name`?
+fn exports_binding(text: &str, name: &str) -> bool {
+    let getter = format!("get: () => {name},");
+    text.lines()
+        .any(|l| l.starts_with("Object.defineProperty(module.exports, ") && l.contains(&getter))
 }
 
 /// Restore the aliases of every split file that has a previous copy;
