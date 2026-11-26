@@ -484,8 +484,8 @@ fn group_lines(card: &JsValue, group: &str) -> f64 {
 /// The per-pair table of changed lines by group, with a total row.
 fn group_table(cards: &[JsValue]) -> Vec<String> {
     let mut out = vec![format!(
-        "{:<18} {:>10} {:>10} {:>10} {:>10} {:>10}",
-        "pair", "changed", "real", "noise", "wiring", "unknown"
+        "{:<18} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10}",
+        "pair", "changed", "real", "kept", "noise", "wiring", "unknown"
     )];
     let row = |name: &str, of: &dyn Fn(&str) -> f64| {
         let cells: Vec<String> = GROUPS.iter().map(|g| format!("{:>10}", of(g))).collect();
@@ -501,7 +501,8 @@ fn group_table(cards: &[JsValue]) -> Vec<String> {
         cards.iter().map(|c| group_lines(c, g)).sum()
     }));
     out.push(
-        "lines outside .humanify/; real = from changed input code (a ceiling), noise = from \
+        "lines outside .humanify/; real = from changed input code, kept = changed \
+         input code the other side also has (renamed or moved), noise = from \
          unchanged input, wiring = require and export lines of unknown cause"
             .into(),
     );

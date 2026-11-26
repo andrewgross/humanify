@@ -8,13 +8,14 @@ use std::time::Instant;
 
 use serde_json::json;
 
+use super::kept::{ChangedLine, refine};
 use super::{InputFile, Label, Labeller, Tree, Truth};
 use crate::eval::difftool::Differ;
 use crate::runners::tree_diff::{DIAGNOSTIC_ONLY, changed_lines_in_trees};
 
 const SURFACES: [&str; 4] = ["src", "vendor", "metadata", "other"];
 const EXAMPLES_PER_LABEL: usize = 20;
-pub const GROUPS: [&str; 4] = ["real", "noise", "wiring", "unknown"];
+pub const GROUPS: [&str; 5] = ["real", "kept", "noise", "wiring", "unknown"];
 
 pub fn surface(path: &str) -> &'static str {
     match path.split('/').next() {
@@ -30,9 +31,12 @@ fn range(text: &str) -> Option<(u32, u32)> {
     Some((first.parse().ok()?, last.parse().ok()?))
 }
 
-/// The changed line numbers of each side, from a normal-format diff.
-pub fn changed_lines(diff: &str) -> Result<(Vec<u32>, Vec<u32>), String> {
-    let (mut from, mut to) = (Vec::new(), Vec::new());
+type Hunk = (Vec<u32>, Vec<u32>);
+
+/// Each hunk's changed line numbers of each side, from a normal-format
+/// diff.
+pub fn hunks(diff: &str) -> Result<Vec<Hunk>, String> {
+    let mut out = Vec::new();
     for header in diff
         .lines()
         .filter(|l| l.starts_with(|c: char| c.is_ascii_digit()))
@@ -47,14 +51,16 @@ pub fn changed_lines(diff: &str) -> Result<(Vec<u32>, Vec<u32>), String> {
         let Some((left, kind, right)) = parsed else {
             return Err(format!("not a diff header: {header}"));
         };
-        if kind != "a" {
-            from.extend(left.0..=left.1);
-        }
-        if kind != "d" {
-            to.extend(right.0..=right.1);
-        }
+        let lines = |skip: bool, (first, last): (u32, u32)| -> Vec<u32> {
+            if skip {
+                Vec::new()
+            } else {
+                (first..=last).collect()
+            }
+        };
+        out.push((lines(kind == "a", left), lines(kind == "d", right)));
     }
-    Ok((from, to))
+    Ok(out)
 }
 
 pub fn read_input(dir: &Path) -> Result<Vec<InputFile>, String> {
@@ -85,37 +91,45 @@ fn counted(path: &str) -> bool {
         .any(|d| d.rsplit('/').next() == Some(name))
 }
 
-/// Every changed line: `(in the to tree, path, line)`.
+/// One changed line: its diff hunk, side (true for the to tree), path
+/// and line.
+type Changed<'a> = (u32, bool, &'a str, u32);
+
+/// Every changed line, hunks numbered over the whole diff.
 fn changed<'a>(
     roots: (&Path, &Path),
     from: &'a Tree,
     to: &'a Tree,
     not_text: &mut u64,
-) -> Result<Vec<(bool, &'a str, u32)>, String> {
+) -> Result<Vec<Changed<'a>>, String> {
     let paths: BTreeSet<&str> = from
         .paths()
         .chain(to.paths())
         .filter(|p| counted(p))
         .collect();
     let mut out = Vec::new();
+    let mut hunk = 0;
     for path in paths {
         let (a, b) = (from.text(path), to.text(path));
         if (from.has(path) && a.is_none()) || (to.has(path) && b.is_none()) {
             *not_text += 1;
             continue;
         }
-        let (lines_from, lines_to) = match (a, b) {
+        let of_file = match (a, b) {
             (Some(a), Some(b)) if a == b => continue,
             (Some(_), Some(_)) => {
-                changed_lines(&Differ.normal_diff(&roots.0.join(path), &roots.1.join(path))?)?
+                hunks(&Differ.normal_diff(&roots.0.join(path), &roots.1.join(path))?)?
             }
-            _ => (
+            _ => vec![(
                 (1..=from.line_count(path).unwrap_or(0)).collect(),
                 (1..=to.line_count(path).unwrap_or(0)).collect(),
-            ),
+            )],
         };
-        out.extend(lines_from.into_iter().map(|l| (false, path, l)));
-        out.extend(lines_to.into_iter().map(|l| (true, path, l)));
+        for (lines_from, lines_to) in of_file {
+            out.extend(lines_from.into_iter().map(|l| (hunk, false, path, l)));
+            out.extend(lines_to.into_iter().map(|l| (hunk, true, path, l)));
+            hunk += 1;
+        }
     }
     Ok(out)
 }
@@ -258,18 +272,26 @@ pub fn label_trees(trees: (&Path, &Path), inputs: (&Path, &Path)) -> Result<Labe
     let mut not_text = 0;
     let mut tally = Tally::default();
     let mut lines = String::new();
-    for (to_side, path, line) in changed(trees, &from, &to, &mut not_text)? {
+    let changed = changed(trees, &from, &to, &mut not_text)?;
+    let text = |to_side: bool, path: &str, line: u32| -> &str {
         let tree = if to_side { &to } else { &from };
-        let label = labeller.label(to_side, path, line);
-        let side = if to_side { '+' } else { '-' };
-        lines.push_str(&format!("{side}\t{path}\t{line}\t{}\n", label.describe().0));
-        tally.add(
-            label,
-            to_side,
-            path,
-            line,
-            tree.line(path, line).unwrap_or(""),
-        );
+        tree.line(path, line).unwrap_or("")
+    };
+    let mut labelled: Vec<ChangedLine<'_>> = changed
+        .iter()
+        .map(|(hunk, to_side, path, line)| ChangedLine {
+            hunk: *hunk,
+            to_side: *to_side,
+            text: text(*to_side, path, *line),
+            label: labeller.label(*to_side, path, *line),
+        })
+        .collect();
+    refine(&mut labelled);
+    for ((_, to_side, path, line), row) in changed.iter().zip(&labelled) {
+        let side = if *to_side { '+' } else { '-' };
+        let name = row.label.describe().0;
+        lines.push_str(&format!("{side}\t{path}\t{line}\t{name}\n"));
+        tally.add(row.label, *to_side, path, *line, row.text);
     }
     let label_seconds = started.elapsed().as_secs_f64() - read_seconds;
     let diff_total = changed_lines_in_trees(trees.0, trees.1)?;

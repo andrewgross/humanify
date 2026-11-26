@@ -2,6 +2,7 @@
 //! gets one label, from what the two inputs and each tree's layout
 //! record say about it.
 
+mod kept;
 mod label;
 mod report;
 mod tree;
