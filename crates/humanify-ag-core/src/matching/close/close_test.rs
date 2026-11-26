@@ -421,6 +421,45 @@ fn picks_the_best_match_when_multiple_candidates_exist() {
     );
 }
 
+/// A function the same shape as one prior function, reading the names
+/// and strings of another, pairs with the one whose content it shares.
+#[test]
+fn content_ranks_before_shape() {
+    with_sides(
+        r#"
+      function viewer(p) {
+        if (!p.transcript) return null;
+        if (p.memories.length) { log("memory"); }
+        return p.onDone;
+      }
+      function importer(p) {
+        if (!p.servers) return null;
+        for (var k in p.servers) { log("import", p.scope, k); }
+        log("done");
+        return p.onDone(p.scope);
+      }
+    "#,
+        r#"
+      function importerV2(p) {
+        if (!p.servers) return null;
+        if (p.scope.length) { log("import"); }
+        return p.onDone;
+      }
+    "#,
+        |old, new| {
+            let close = find_close_matches(
+                &old.all_fn_ids(),
+                &new.all_fn_ids(),
+                old.fn_index,
+                new.fn_index,
+                Some(0.3),
+            );
+            assert_eq!(close.pairs.len(), 1);
+            assert_eq!(close.pairs[0].prior_id, old.id_of("importer"));
+        },
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Skip counters
 // ---------------------------------------------------------------------------

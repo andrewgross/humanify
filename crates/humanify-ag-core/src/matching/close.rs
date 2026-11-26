@@ -155,6 +155,31 @@ pub struct CloseCandidate {
     pub old_id: String,
     pub new_id: String,
     pub score: f64,
+    /// The share of external calls, property names and string literals
+    /// the two functions have in common; it ranks before `score`.
+    pub content: f64,
+}
+
+impl CloseCandidate {
+    fn rank(&self) -> (f64, f64) {
+        (self.content, self.score)
+    }
+}
+
+/// The names a function reads that no rename touches, sorted.
+fn content_tokens(features: &StructuralFeatures) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    out.extend(features.external_calls.iter().map(|x| format!("ext:{x}")));
+    out.extend(
+        features
+            .property_accesses
+            .iter()
+            .map(|x| format!("prop:{x}")),
+    );
+    out.extend(features.string_literals.iter().map(|x| format!("str:{x}")));
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 /// One assigned close match, in ASSIGNMENT order (the TS's `closeMatches`
@@ -185,8 +210,9 @@ pub struct CloseMatchResult {
 }
 
 /// TS `findCloseMatches` (:111): close matches between unmatched old and
-/// unmatched new functions by cosine similarity on structural feature
-/// vectors. Each old matches at most one fresh (best above threshold);
+/// unmatched new functions. Cosine similarity on structural feature
+/// vectors admits a pair; among admitted pairs the one sharing more
+/// content ranks first, then the higher cosine. Each old matches at most one fresh (best above threshold);
 /// each fresh at most one old (greedy best-first, tie-abstaining).
 /// `threshold` is `options?.threshold ?? 0.8` — pass [`None`] for the
 /// default.
@@ -203,10 +229,12 @@ pub fn find_close_matches(
         return CloseMatchResult::default();
     }
 
-    let (old_vectors, skipped_old) = build_vector_map(unmatched_old, old_index);
-    let (fresh_vectors, skipped_new) = build_vector_map(unmatched_new, new_index);
+    let (old_vectors, old_tokens, skipped_old) = build_vector_map(unmatched_old, old_index);
+    let (fresh_vectors, fresh_tokens, skipped_new) = build_vector_map(unmatched_new, new_index);
 
-    let mut candidates = score_pairs(&old_vectors, &fresh_vectors, threshold);
+    let content =
+        |o: usize, n: usize| crate::similarity::sorted_jaccard(&old_tokens[o], &fresh_tokens[n]);
+    let mut candidates = score_pairs_by(&old_vectors, &fresh_vectors, threshold, content);
     let pairs = assign_greedy(&mut candidates);
 
     CloseMatchResult {
@@ -223,8 +251,9 @@ pub fn find_close_matches(
 fn build_vector_map(
     ids: &[String],
     index: &FingerprintIndex<'_>,
-) -> (Vec<(String, FeatureVector)>, usize) {
+) -> (Vec<(String, FeatureVector)>, Vec<Vec<String>>, usize) {
     let mut vectors = Vec::with_capacity(ids.len());
+    let mut tokens = Vec::with_capacity(ids.len());
     let mut skipped = 0usize;
     for id in ids {
         let entry = index.entry_of_session(id).map(|i| &index.entries[i]);
@@ -243,8 +272,9 @@ fn build_vector_map(
         // present, possibly empty) — the first arm is the whole rule.
         let callee_count = entry.fingerprint.callee_hashes().len();
         vectors.push((id.clone(), compute_feature_vector(features, callee_count)));
+        tokens.push(content_tokens(features));
     }
-    (vectors, skipped)
+    (vectors, tokens, skipped)
 }
 
 /// TS `scorePairs` (:177): cosine similarity for (old, new) pairs above
@@ -256,10 +286,21 @@ pub fn score_pairs(
     fresh_vectors: &[(String, FeatureVector)],
     threshold: f64,
 ) -> Vec<CloseCandidate> {
+    score_pairs_by(old_vectors, fresh_vectors, threshold, |_, _| 0.0)
+}
+
+/// [`score_pairs`] with each pair's shared content (`content(old row,
+/// fresh row)`), which ranks before the cosine score.
+fn score_pairs_by(
+    old_vectors: &[(String, FeatureVector)],
+    fresh_vectors: &[(String, FeatureVector)],
+    threshold: f64,
+    content: impl Fn(usize, usize) -> f64,
+) -> Vec<CloseCandidate> {
     let mut candidates: Vec<CloseCandidate> = Vec::new();
-    for (old_id, old_vec) in old_vectors {
+    for (o, (old_id, old_vec)) in old_vectors.iter().enumerate() {
         let mut top: Vec<CloseCandidate> = Vec::new();
-        for (new_id, new_vec) in fresh_vectors {
+        for (n, (new_id, new_vec)) in fresh_vectors.iter().enumerate() {
             let score = cosine_similarity(old_vec, new_vec);
             if score < threshold {
                 continue;
@@ -270,6 +311,7 @@ pub fn score_pairs(
                     old_id: old_id.clone(),
                     new_id: new_id.clone(),
                     score,
+                    content: content(o, n),
                 },
             );
         }
@@ -283,7 +325,7 @@ pub fn score_pairs(
 /// equal score stops the walk and the candidate lands AFTER its equal).
 fn insert_top_k(list: &mut Vec<CloseCandidate>, candidate: CloseCandidate) {
     let mut i = list.len();
-    while i > 0 && list[i - 1].score < candidate.score {
+    while i > 0 && list[i - 1].rank() < candidate.rank() {
         i -= 1;
     }
     list.insert(i, candidate);
@@ -305,8 +347,8 @@ fn assign_greedy(candidates: &mut [CloseCandidate]) -> Vec<CloseMatchPair> {
     // cosine's norms are positive by the early return), so the
     // partial_cmp fallback never fires.
     candidates.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
+        b.rank()
+            .partial_cmp(&a.rank())
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     let mut out: Vec<CloseMatchPair> = Vec::new();
@@ -347,7 +389,7 @@ fn tied_rival(
         old_free && !used_new.contains(&r.new_id) && (r.old_id == c.old_id || r.new_id == c.new_id)
     };
     for r in &candidates[i + 1..] {
-        if r.score != c.score {
+        if r.rank() != c.rank() {
             break;
         }
         if contends(r) {
@@ -355,7 +397,7 @@ fn tied_rival(
         }
     }
     for r in candidates[..i].iter().rev() {
-        if r.score != c.score {
+        if r.rank() != c.rank() {
             break;
         }
         if contends(r) {

@@ -49,6 +49,23 @@ pub fn jaccard<T: Ord>(a: &BTreeSet<T>, b: &BTreeSet<T>) -> f64 {
     jaccard_from_counts(a.intersection(b).count(), a.len(), b.len())
 }
 
+/// Multiset Jaccard of two SORTED lists; 0 when both are empty.
+pub fn sorted_jaccard<T: Ord>(a: &[T], b: &[T]) -> f64 {
+    let (mut i, mut j, mut inter) = (0, 0, 0usize);
+    while i < a.len() && j < b.len() {
+        match a[i].cmp(&b[j]) {
+            std::cmp::Ordering::Less => i += 1,
+            std::cmp::Ordering::Greater => j += 1,
+            std::cmp::Ordering::Equal => {
+                inter += 1;
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    jaccard_from_counts(inter, a.len(), b.len())
+}
+
 /// |A ∩ B| / |A ∪ B| from the sizes and a caller-counted intersection (a
 /// multiset's sum of per-element minima reads the same); 0 when the union
 /// is empty.
