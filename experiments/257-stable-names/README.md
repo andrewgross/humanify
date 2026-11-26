@@ -8,14 +8,14 @@ commit. Branch `exp257-work`. Follows exp256, which built the measure.
 
 Changed lines outside `.humanify/`, real-LLM walk, cold first version.
 "Start" is the exp256 result (walk 4). "End" is the last walk of this
-experiment (walk 12).
+experiment (walk 13).
 
 | hop | walk | all lines | real (ceiling) | noise | wiring | unknown |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | 2.1.285 -> 286 | start | 45,251 | 39,364 | 2,956 | 1,299 | 1,632 |
-| 2.1.285 -> 286 | end | 43,109 | 38,649 | 2,009 | 1,211 | 1,240 |
+| 2.1.285 -> 286 | end | 43,185 | 38,695 | 2,084 | 1,201 | 1,205 |
 | 2.1.286 -> 287 | start | 51,973 | 44,720 | 3,710 | 1,643 | 1,900 |
-| 2.1.286 -> 287 | end | 50,184 | 43,819 | 2,883 | 1,610 | 1,872 |
+| 2.1.286 -> 287 | end | 49,876 | 43,599 | 2,851 | 1,612 | 1,814 |
 
 - Every version of every walk boots, the prompt check included, and
   every run exits 0.
@@ -46,6 +46,7 @@ by name in the labelled diff of the next walk.
 | 10 | exact previous import names, alias restore | 43,879 / 2,132 | 50,843 / 2,974 |
 | 11 | content-first close matching | 43,334 / 2,114 | 51,386 / 3,352 |
 | 12 | new local makes way for an import name, class names from methods | 43,109 / 2,009 | 50,184 / 2,883 |
+| 13 | loop variables, catch parameters and destructured parameters of an edited function | 43,185 / 2,084 | 49,876 / 2,851 |
 
 ## What was built
 
@@ -86,6 +87,16 @@ by name in the labelled diff of the next walk.
    used to depend on the model repeating the name, and a new name also
    moved the class to another file or another place in its file.
 
+9. **An edited function keeps its loop variables, catch parameters
+   and destructured parameters.** The variable in the head of a loop
+   or `try` that has an edit inside it was not carried over, and
+   neither were names inside a destructured parameter. Both now carry
+   when the head, or the parameter's shape, is unchanged. On the
+   second hop the two largest cases (75 and 53 lines) are gone, and
+   changed lines that differ from the previous version only by a name
+   fell from 2,042 to 1,844. The first hop had no large case of this
+   kind (2,716 to 2,692).
+
 ## Decisions
 
 - **Sibling init calls stay in Bun's order** (label
@@ -95,18 +106,18 @@ by name in the labelled diff of the next walk.
   the previous code as context. Only the cases above, where other
   unchanged code names it, are settled without the model.
 
-## Noise left, by label (walk 12)
+## Noise left, by label (walk 13)
 
 | label | 285 -> 286 | 286 -> 287 |
 | --- | ---: | ---: |
-| imports-reordered | 1,266 | 1,899 |
-| linker-renamed | 267 | 443 |
+| imports-reordered | 1,266 | 1,901 |
+| linker-renamed | 270 | 446 |
 | moved-in-file | 149 | 203 |
-| renamed | 98 | 187 |
-| reshaped | 195 | 101 |
+| renamed | 166 | 151 |
+| reshaped | 197 | 100 |
 | moved-file | 32 | 23 |
 | linker-moved | 2 | 21 |
-| require-renamed | 0 | 6 |
+| require-renamed | 2 | 6 |
 
 ## Open
 
@@ -118,4 +129,9 @@ by name in the labelled diff of the next walk.
   same ordering weakness the alias restore fixes for aliases.
 - Assignments inside a startup function move file when Bun moves a
   module's init (about 10 lines).
+- Private class members are numbered by position (`#map3`), so one
+  inserted above renumbers the rest (about 7 lines).
+- About 7 to 8% of `src/` (roughly 125,000 lines) is library code the
+  index did not recognise, mostly ESM packages Bun hoisted to top
+  level with no module wrapper.
 - The first, cold version takes about 50 minutes.
