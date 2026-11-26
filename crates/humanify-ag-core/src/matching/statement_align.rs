@@ -803,6 +803,7 @@ fn collect_aligned_pairs<'v>(
     for (prior_unit, next_unit) in descend {
         let block_pairs =
             corresponding_blocks(prior_unit.value, next_unit.value, prior_tables, next_tables);
+        let before = pairs.len();
         for (prior_block, next_block) in block_pairs {
             let prior_children = hash_units(prior_block, prior_tables);
             let next_children = hash_units(next_block, next_tables);
@@ -814,8 +815,66 @@ fn collect_aligned_pairs<'v>(
                 next_tables,
             ));
         }
+        if pairs.len() > before {
+            pairs.extend(head_pairs(
+                prior_unit.value,
+                next_unit.value,
+                prior_tables,
+                next_tables,
+            ));
+        }
     }
     pairs
+}
+
+/// The parts of a container's head that can declare a binding or say
+/// what it walks: a loop's variable and source, a try's catch parameter.
+fn head_keys(type_name: &str) -> &'static [&'static str] {
+    match type_name {
+        "ForOfStatement" | "ForInStatement" => &["left", "right"],
+        "ForStatement" => &["init", "test", "update"],
+        "TryStatement" => &["handler.param"],
+        _ => &[],
+    }
+}
+
+/// The head parts of two paired containers as aligned units, when every
+/// part is unchanged. The caller has found aligned statements inside the
+/// pair, so the two are the same container and the head's bindings are
+/// the same bindings.
+fn head_pairs<'v>(
+    prior: &'v Value,
+    next: &'v Value,
+    prior_tables: &SymbolTables,
+    next_tables: &SymbolTables,
+) -> Vec<AlignedUnitPair<'v>> {
+    let keys = head_keys(node_type(prior));
+    let mut prior_parts = Vec::new();
+    let mut next_parts = Vec::new();
+    for key in keys {
+        match (child(prior, key), child(next, key)) {
+            (Some(p), Some(n)) => {
+                prior_parts.push(p);
+                next_parts.push(n);
+            }
+            (None, None) => {}
+            _ => return vec![],
+        }
+    }
+    let prior_units = hash_units(prior_parts, prior_tables);
+    let next_units = hash_units(next_parts, next_tables);
+    if prior_units
+        .iter()
+        .zip(&next_units)
+        .any(|(p, n)| p.hash != n.hash)
+    {
+        return vec![];
+    }
+    prior_units
+        .into_iter()
+        .zip(next_units)
+        .map(|(prior, next)| AlignedUnitPair { prior, next })
+        .collect()
 }
 
 /// Child statement lists of a block value, or the single statement

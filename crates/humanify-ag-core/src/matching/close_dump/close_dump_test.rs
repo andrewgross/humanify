@@ -661,3 +661,78 @@ fn positional_parameter_pairs_stand_when_the_body_agrees() {
         "{transfers:?}"
     );
 }
+
+fn arrow_with_params(params: &str) -> serde_json::Value {
+    crate::ingest::parse_estree_json(&format!(
+        r#"{{"type":"ArrowFunctionExpression","start":0,"end":90,"params":[{params}]}}"#
+    ))
+}
+
+fn ident(name: &str) -> String {
+    format!(r#"{{"type":"Identifier","name":"{name}"}}"#)
+}
+
+fn array_pattern(names: &[&str]) -> String {
+    let elements: Vec<String> = names.iter().map(|n| ident(n)).collect();
+    format!(
+        r#"{{"type":"ArrayPattern","elements":[{}]}}"#,
+        elements.join(",")
+    )
+}
+
+fn object_pattern(pairs: &[(&str, &str)]) -> String {
+    let properties: Vec<String> = pairs
+        .iter()
+        .map(|(key, value)| {
+            format!(
+                r#"{{"type":"Property","computed":false,"key":{},"value":{}}}"#,
+                ident(key),
+                ident(value)
+            )
+        })
+        .collect();
+    format!(
+        r#"{{"type":"ObjectPattern","properties":[{}]}}"#,
+        properties.join(",")
+    )
+}
+
+fn pair(new: &str, prior: &str) -> (String, String) {
+    (new.to_string(), prior.to_string())
+}
+
+#[test]
+fn partial_transfer_pairs_the_names_of_a_destructured_parameter_of_one_shape() {
+    let prior = arrow_with_params(&array_pattern(&["serverName", "serverConfig"]));
+    let fresh = arrow_with_params(&array_pattern(&["a", "b"]));
+    assert_eq!(
+        partial_transfer(&prior, &fresh),
+        vec![pair("a", "serverName"), pair("b", "serverConfig")]
+    );
+}
+
+#[test]
+fn partial_transfer_pairs_object_pattern_names_by_their_keys() {
+    let prior = arrow_with_params(&object_pattern(&[
+        ("onClose", "onClose"),
+        ("title", "heading"),
+    ]));
+    let fresh = arrow_with_params(&object_pattern(&[("onClose", "e"), ("title", "t")]));
+    assert_eq!(
+        partial_transfer(&prior, &fresh),
+        vec![pair("e", "onClose"), pair("t", "heading")]
+    );
+}
+
+#[test]
+fn partial_transfer_pairs_nothing_in_a_destructured_parameter_whose_shape_changed() {
+    let prior = arrow_with_params(&array_pattern(&["serverName", "serverConfig"]));
+    let longer = arrow_with_params(&array_pattern(&["a", "b", "c"]));
+    assert_eq!(partial_transfer(&prior, &longer), vec![]);
+    let prior = arrow_with_params(&object_pattern(&[
+        ("onClose", "onClose"),
+        ("title", "heading"),
+    ]));
+    let other_keys = arrow_with_params(&object_pattern(&[("onOpen", "e"), ("title", "t")]));
+    assert_eq!(partial_transfer(&prior, &other_keys), vec![]);
+}

@@ -475,48 +475,127 @@ fn partial_transfer(prior_row: &Value, fresh_row: &Value) -> Vec<(String, String
         record(new_name, prior_name);
     }
 
-    // Parameter i to parameter i (TS :1314-1324), unwrapping the three
-    // simple binding forms (`getParamIdentifier` :1272).
-    let prior_params = signature_params(prior_row);
-    let fresh_params = signature_params(fresh_row);
-    for (prior_name, new_name) in prior_params.into_iter().zip(fresh_params) {
-        if let (Some(prior_name), Some(new_name)) = (prior_name, new_name)
-            && prior_name != new_name
-        {
-            record(new_name, prior_name);
+    // Parameter i to parameter i (TS :1314-1324): a simple parameter by
+    // position, a destructured one name by name when both sides
+    // destructure the same shape.
+    for (prior_param, fresh_param) in row_params(prior_row).iter().zip(row_params(fresh_row)) {
+        let (Some(prior_slots), Some(fresh_slots)) =
+            (param_slots(prior_param), param_slots(fresh_param))
+        else {
+            continue;
+        };
+        if prior_slots.shape != fresh_slots.shape {
+            continue;
+        }
+        for (prior_name, new_name) in prior_slots.names.into_iter().zip(fresh_slots.names) {
+            if prior_name != new_name {
+                record(new_name, prior_name);
+            }
         }
     }
     transfers
 }
 
-/// The simple parameter names of a row, in position order (`None` for a
-/// destructured parameter). Method rows carry the function under `value`
-/// (oxc nests; babel has one node — the TS reads `node.params` directly,
-/// which is the method's params).
-fn signature_params(row: &Value) -> Vec<Option<String>> {
+/// A row's parameters. Method rows carry the function under `value`
+/// (oxc nests; babel has one node).
+fn row_params(row: &Value) -> &[Value] {
     row.get("value")
         .and_then(|v| v.get("params"))
         .or_else(|| row.get("params"))
         .and_then(Value::as_array)
-        .map(|params| params.iter().map(param_identifier).collect())
-        .unwrap_or_default()
+        .map_or(&[], Vec::as_slice)
 }
 
-/// `getParamIdentifier` (TS :1272): the three simple binding forms.
-fn param_identifier(param: &Value) -> Option<String> {
-    let ident = match node_type(param) {
-        "Identifier" => Some(param),
+/// Every name a row's parameters bind, in source order.
+fn signature_params(row: &Value) -> Vec<Option<String>> {
+    row_params(row)
+        .iter()
+        .filter_map(param_slots)
+        .flat_map(|slots| slots.names)
+        .map(Some)
+        .collect()
+}
+
+/// The names one parameter binds, in source order, and the shape that
+/// holds them: empty for a simple parameter, else the pattern's brackets,
+/// holes, rests and object keys.
+struct ParamSlots {
+    shape: String,
+    names: Vec<String>,
+}
+
+/// None for a parameter with a form this does not read (a computed key,
+/// a member target).
+fn param_slots(param: &Value) -> Option<ParamSlots> {
+    let mut slots = ParamSlots {
+        shape: String::new(),
+        names: Vec::new(),
+    };
+    let simple = match node_type(param) {
         "AssignmentPattern" => param.get("left"),
         "RestElement" => param.get("argument"),
-        _ => None,
+        _ => Some(param),
     }?;
-    if node_type(ident) != "Identifier" {
+    if node_type(simple) == "Identifier" {
+        slots.names.push(simple.get("name")?.as_str()?.to_string());
+        return Some(slots);
+    }
+    walk_pattern(param, &mut slots)?;
+    Some(slots)
+}
+
+fn walk_pattern(node: &Value, slots: &mut ParamSlots) -> Option<()> {
+    match node_type(node) {
+        "Identifier" => {
+            slots.shape.push('_');
+            slots.names.push(node.get("name")?.as_str()?.to_string());
+        }
+        "AssignmentPattern" => walk_pattern(node.get("left")?, slots)?,
+        "RestElement" => {
+            slots.shape.push_str("...");
+            walk_pattern(node.get("argument")?, slots)?;
+        }
+        "ArrayPattern" => {
+            slots.shape.push('[');
+            for element in node.get("elements")?.as_array()? {
+                if element.is_null() {
+                    slots.shape.push('-');
+                } else {
+                    walk_pattern(element, slots)?;
+                }
+                slots.shape.push(',');
+            }
+            slots.shape.push(']');
+        }
+        "ObjectPattern" => {
+            slots.shape.push('{');
+            for property in node.get("properties")?.as_array()? {
+                if node_type(property) == "RestElement" {
+                    walk_pattern(property, slots)?;
+                } else {
+                    slots.shape.push_str(&pattern_key(property)?);
+                    slots.shape.push(':');
+                    walk_pattern(property.get("value")?, slots)?;
+                }
+                slots.shape.push(',');
+            }
+            slots.shape.push('}');
+        }
+        _ => return None,
+    }
+    Some(())
+}
+
+/// A pattern property's written key; None when it is computed.
+fn pattern_key(property: &Value) -> Option<String> {
+    if property.get("computed").and_then(Value::as_bool) == Some(true) {
         return None;
     }
-    ident
-        .get("name")
-        .and_then(Value::as_str)
-        .map(str::to_string)
+    let key = property.get("key")?;
+    match node_type(key) {
+        "Identifier" => Some(key.get("name")?.as_str()?.to_string()),
+        _ => Some(key.get("value")?.to_string()),
+    }
 }
 
 /// exp225: the positional signature pairs, checked against what the
