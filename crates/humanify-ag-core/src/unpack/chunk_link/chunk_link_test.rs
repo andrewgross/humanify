@@ -1107,6 +1107,64 @@ fn a_chunk_in_a_synchronous_load_cycle_keeps_its_import_order() {
     assert_ne!(first, second);
 }
 
+/// `x` importing `s`, `d`, `t` in the given order (`s` imports `d`),
+/// imported by one synchronous load cycle (`u`, `v`) and importing
+/// another (`w`, `z`), on neither.
+fn between_cycles(order: [&str; 3]) -> String {
+    let import = |name: &str| format!("import\"/$bunfs/root/chunk-{name}.js\";");
+    let later = |name: &str| {
+        format!("function later(){{return import.meta.require(\"/$bunfs/root/chunk-{name}.js\")}}")
+    };
+    let imports: String = order.iter().map(|n| import(n)).collect();
+    let chunk = |text: String| format!("{HEAD}{text}\n");
+    let files = [
+        (
+            "index.js",
+            chunk("import(\"/$bunfs/root/chunk-u.js\");".into()),
+        ),
+        (
+            "chunk-u.js",
+            chunk(format!("{}console.log(\"u\");{}", import("x"), later("v"))),
+        ),
+        (
+            "chunk-v.js",
+            chunk(format!("{}console.log(\"v\");", import("u"))),
+        ),
+        (
+            "chunk-x.js",
+            chunk(format!("{imports}{}console.log(\"x\");", import("w"))),
+        ),
+        (
+            "chunk-s.js",
+            chunk(format!("{}console.log(\"s\");", import("d"))),
+        ),
+        ("chunk-d.js", chunk("console.log(\"d\");".into())),
+        ("chunk-t.js", chunk("console.log(\"t\");".into())),
+        (
+            "chunk-w.js",
+            chunk(format!("console.log(\"w\");{}", later("z"))),
+        ),
+        (
+            "chunk-z.js",
+            chunk(format!("{}console.log(\"z\");", import("w"))),
+        ),
+    ];
+    let refs: Vec<(&str, &str)> = files.iter().map(|(n, t)| (*n, t.as_str())).collect();
+    linked(&layout(&refs)).0
+}
+
+#[test]
+fn a_chunk_between_two_load_cycles_leaves_out_a_call_that_runs_nothing() {
+    // No chunk `x` imports can be part-way through its init while `x`
+    // runs: that would put `x` on a cycle.
+    let (first, second) = (
+        between_cycles(["s", "d", "t"]),
+        between_cycles(["s", "t", "d"]),
+    );
+    assert_eq!(run(&first), "d\ns\nt\nw\nx\nu\n");
+    assert_eq!(first, second);
+}
+
 #[test]
 fn the_link_map_names_every_piece_of_text_the_linker_writes() {
     use super::LinkerText::{Call, Decl, Exports, ExternalNames, Init, Load, Namespace};

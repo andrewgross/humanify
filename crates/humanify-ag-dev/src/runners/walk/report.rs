@@ -384,6 +384,11 @@ const DETAIL: &[Column] = &[
         total: true,
     },
     Column {
+        head: "kept",
+        get: |r| group(r.card.as_ref(), "kept"),
+        total: true,
+    },
+    Column {
         head: "noise",
         get: |r| group(r.card.as_ref(), "noise"),
         total: true,
@@ -538,6 +543,11 @@ const HEADLINE: &[Column] = &[
     Column {
         head: "real",
         get: |r| group(r.card.as_ref(), "real"),
+        total: true,
+    },
+    Column {
+        head: "kept",
+        get: |r| group(r.card.as_ref(), "kept"),
         total: true,
     },
     Column {
@@ -781,8 +791,9 @@ fn examples_section(
         out.push(String::new());
         let of = |name| fmt(group(r.card.as_ref(), name));
         out.push(format!(
-            "Labels: real {}, noise {}, wiring {}, unknown {}.",
+            "Labels: real {}, kept {}, noise {}, wiring {}, unknown {}.",
             of("real"),
+            of("kept"),
             of("noise"),
             of("wiring"),
             of("unknown")

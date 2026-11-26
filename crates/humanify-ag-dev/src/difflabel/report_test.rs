@@ -1,17 +1,22 @@
-use super::{changed_lines, surface};
+use super::{hunks, surface};
 
 #[test]
-fn a_normal_diff_gives_the_changed_line_numbers_of_each_side() {
+fn a_normal_diff_gives_each_hunk_its_lines() {
     let diff =
         "2c2\n< b\n---\n> B\n4a5,6\n> x\n> y\n8,9d9\n< p\n< q\n12,13c13\n< m\n< n\n---\n> o\n";
-    let (from, to) = changed_lines(diff).unwrap();
-    assert_eq!(from, [2, 8, 9, 12, 13]);
-    assert_eq!(to, [2, 5, 6, 13]);
+    let got = hunks(diff).unwrap();
+    let want = [
+        (vec![2], vec![2]),
+        (vec![], vec![5, 6]),
+        (vec![8, 9], vec![]),
+        (vec![12, 13], vec![13]),
+    ];
+    assert_eq!(got, want);
 }
 
 #[test]
 fn a_diff_header_that_is_not_one_is_an_error() {
-    assert!(changed_lines("2x2\n").is_err());
+    assert!(hunks("2x2\n").is_err());
 }
 
 #[test]

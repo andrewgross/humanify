@@ -299,10 +299,13 @@ fails. It compares the inputs unit by unit (every function and top-level
 statement, identifiers ignored) to find input code that is certainly
 unchanged, and reads each tree's `.humanify/layout.json` (the layout record,
 held to its tree by `cargo dev layout check` and by e2e) to know which
-input bytes each output line came from. Labels fall into four groups:
+input bytes each output line came from. Labels fall into five groups:
 
-- **real**: from input code that changed, is new or was removed. A ceiling:
-  every changed line inside a changed input function counts.
+- **real**: from input code that changed, is new or was removed, with no
+  like line on the other side (a line at another indentation counts here).
+- **kept**: from changed input code, but the other side has the same line
+  under other names (same hunk, in order) or in another hunk. Part real
+  edit, part names that did not carry over.
 - **noise**: from unchanged input (renamed, moved, printed differently,
   linker text reordered or renamed).
 - **wiring**: require and export lines whose cause is not known yet.

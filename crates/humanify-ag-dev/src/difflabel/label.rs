@@ -10,6 +10,9 @@ use super::{Origin, Standing, Tree, Truth};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Label {
     InputChanged,
+    InputReindented,
+    KeptRenamed,
+    KeptMoved,
     InputDuplicate,
     InputOutsideUnits,
     MovedFile,
@@ -31,8 +34,11 @@ pub enum Label {
 }
 
 impl Label {
-    pub const ALL: [Label; 19] = [
+    pub const ALL: [Label; 22] = [
         Label::InputChanged,
+        Label::InputReindented,
+        Label::KeptRenamed,
+        Label::KeptMoved,
         Label::InputDuplicate,
         Label::InputOutsideUnits,
         Label::MovedFile,
@@ -59,7 +65,22 @@ impl Label {
             Label::InputChanged => (
                 "input-changed",
                 "real",
-                "from input code that changed, is new, or was removed",
+                "from input code that changed, is new, or was removed, with no like line on the other side",
+            ),
+            Label::InputReindented => (
+                "input-reindented",
+                "real",
+                "from changed input; the other side has the same text at another indentation",
+            ),
+            Label::KeptRenamed => (
+                "kept-renamed",
+                "kept",
+                "from changed input; the other side has the line in the same hunk, only identifiers differ",
+            ),
+            Label::KeptMoved => (
+                "kept-moved",
+                "kept",
+                "from changed input; the other side has the line in another hunk, identifiers aside",
             ),
             Label::InputDuplicate => (
                 "input-duplicate",
@@ -183,7 +204,7 @@ pub struct Labeller<'a> {
 }
 
 /// The line with every identifier-like word replaced by `$`.
-fn masked(line: &str) -> String {
+pub(super) fn masked(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut in_word = false;
     let mut word_is_name = false;
@@ -304,7 +325,7 @@ fn require_target(text: &str) -> String {
 
 /// How a line of one side is found on the other.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Found {
+pub(super) enum Found {
     SameText,
     SameKey,
     Missing,
@@ -320,7 +341,7 @@ fn counts<'t>(items: impl Iterator<Item = &'t str>) -> BTreeMap<&'t str, u32> {
 
 /// Per line of `mine` (`(text, key)`): whether the other side has a line
 /// of that text left for it, else one of that key.
-fn match_lines(mine: &[(&str, String)], theirs: &[(&str, String)]) -> Vec<Found> {
+pub(super) fn match_lines(mine: &[(&str, String)], theirs: &[(&str, String)]) -> Vec<Found> {
     let their_texts = counts(theirs.iter().map(|l| l.0));
     let my_texts = counts(mine.iter().map(|l| l.0));
     let unmatched = |lines: &[(&str, String)], other: &BTreeMap<&str, u32>| -> Vec<bool> {

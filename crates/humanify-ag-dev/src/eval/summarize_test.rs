@@ -97,8 +97,8 @@ fn the_summary_tables_each_pairs_lines_by_group_and_flags_a_card_that_does_not_a
             .map(str::to_string)
             .collect()
     };
-    assert_eq!(row("1->2"), ["9", "5", "3", "1", "0"]);
-    assert_eq!(row("TOTAL"), ["18", "10", "6", "2", "0"]);
+    assert_eq!(row("1->2"), ["9", "5", "0", "3", "1", "0"]);
+    assert_eq!(row("TOTAL"), ["18", "10", "0", "6", "2", "0"]);
     assert!(
         text.contains("!! LABELS DO NOT ADD UP to the diff's count for: 2->3"),
         "{text}"
