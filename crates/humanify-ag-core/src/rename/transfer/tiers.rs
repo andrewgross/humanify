@@ -120,7 +120,7 @@ pub fn apply_statement_twin_transfers(run: &mut TransferRun<'_, '_>, twins: &Twi
 
 /// TS `applyMatchedRenames`: every exact-matched ("transferred") function's
 /// slot pairs, in graph-row order.
-pub fn apply_matched_renames(run: &mut TransferRun<'_, '_>) {
+pub fn apply_matched_renames(run: &mut TransferRun<'_, '_>, evidence: &TransferEvidence) {
     let mut stats = TransferStats::default();
     for f in 0..run.fn_state.len() {
         let Lifecycle::Transferred(pairs) = &run.fn_state[f] else {
@@ -131,6 +131,15 @@ pub fn apply_matched_renames(run: &mut TransferRun<'_, '_>) {
         apply_function_name_transfers(run, f, &pairs, PairTier::Exact, &mut stats, &mut refs);
         run.refs_exact = refs;
     }
+    // A method's word on its class counts toward the class's name; one
+    // such vote alone is not enough to name it.
+    let mut refs = std::mem::take(&mut run.refs_exact);
+    for (f, pair) in &evidence.class_names {
+        if let Some(binding) = pair.binding {
+            route_external_pair(run, *f, pair, PairTier::Exact, false, binding, &mut refs);
+        }
+    }
+    run.refs_exact = refs;
     run.stats_exact = stats;
 }
 
@@ -191,7 +200,8 @@ fn apply_function_name_transfers(
         match resolve_pair_target(run, f, pair, &mut owned) {
             PairTarget::External(binding) => {
                 stats.skipped += 1;
-                route_external_pair(run, f, pair, tier, binding, external_refs);
+                let pins = tier == PairTier::Exact && pair.binding.is_some();
+                route_external_pair(run, f, pair, tier, pins, binding, external_refs);
             }
             PairTarget::Drop => stats.skipped += 1,
             PairTarget::Scope(scope) => {
@@ -265,6 +275,7 @@ fn route_external_pair(
     f: usize,
     pair: &TransferPair,
     tier: PairTier,
+    exact_slot: bool,
     binding: BindingId,
     external_refs: &mut Vec<ExternalRef>,
 ) {
@@ -273,7 +284,7 @@ fn route_external_pair(
         new_name: pair.new_name.clone(),
         source_function_id: run.rows.fns[f].session_id.clone(),
         binding,
-        exact_slot: tier == PairTier::Exact && pair.binding.is_some(),
+        exact_slot,
     });
     run.rename.record(
         binding,

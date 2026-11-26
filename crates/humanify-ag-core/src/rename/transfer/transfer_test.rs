@@ -370,3 +370,42 @@ c1(c2(1));
     );
     assert_eq!(names, ["resolveSpellings", "s", "checkOne", "checkTwo"]);
 }
+
+const CLASS_PRIOR: &str = r#"class SleepInhibitor {
+  acquire(owner) { this.count = this.count + 1; return this.spawn(owner, "acquire"); }
+  release(owner) { this.count = this.count - 1; return this.stop(owner, "release"); }
+  spawn(owner, why) { return [owner, why, "caffeinate"]; }
+}
+use(new SleepInhibitor());
+"#;
+
+#[test]
+fn a_changed_class_takes_the_name_of_the_class_its_methods_match() {
+    let names = names_after_transfer(
+        CLASS_PRIOR,
+        r#"class q {
+  acquire(o) { this.count = this.count + 1; return this.spawn(o, "acquire"); }
+  release(o) { this.count = this.count - 1; return this.stop(o, "release"); }
+  spawn(o, w, t) { return [o, w, "systemd-inhibit", t]; }
+}
+use(new q(), 2);
+"#,
+    );
+    assert_eq!(names, ["SleepInhibitor"]);
+}
+
+#[test]
+fn an_unrelated_class_sharing_one_method_takes_no_name_from_it() {
+    let names = names_after_transfer(
+        CLASS_PRIOR,
+        r#"class q {
+  acquire(o) { this.count = this.count + 1; return this.spawn(o, "acquire"); }
+  render(p, n) { this.frame = paint(p.rows, n); return this.frame.join("\n"); }
+  resize(c, r) { this.columns = c; this.rows = r; return layout(this, "resize"); }
+  clear() { this.frame = []; return write("\x1b[2J"); }
+}
+use(new q(), 2);
+"#,
+    );
+    assert_eq!(names, ["q"]);
+}

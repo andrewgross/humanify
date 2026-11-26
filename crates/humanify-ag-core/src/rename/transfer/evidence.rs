@@ -146,6 +146,9 @@ pub struct TransferEvidence {
     /// applyExactMatches: (fresh fn row, translated pairs) per match, in
     /// match order. `None` = every slot already named alike.
     pub exact: Vec<ExactTransfer>,
+    /// (fresh method row, its class's name pair) per exact-matched method
+    /// of a declared class, in match order: testimony for the class name.
+    pub class_names: Vec<(usize, TransferPair)>,
     /// buildCloseMatchContext's pairs, assignment order.
     pub close: Vec<CloseInfo>,
     /// deriveBindingRenames (cascade order) then the function var-name
@@ -174,6 +177,7 @@ pub fn collect_evidence(
 ) -> Result<TransferEvidence, TransferError> {
     let function_result = stage.function_result;
     let exact = exact_transfers(stage, fresh, prior, fresh_state)?;
+    let class_names = class_name_pairs(stage, fresh, prior, fresh_state);
     let close = close_infos(stage, fresh, prior, fresh_state, prior_state);
     let (binding_renames, cascade_renames, matched_prior_binding_ids) =
         binding_renames(stage, fresh, prior, fresh_state, &close)?;
@@ -195,6 +199,7 @@ pub fn collect_evidence(
         .collect();
     Ok(TransferEvidence {
         exact,
+        class_names,
         close,
         binding_renames,
         cascade_renames,
@@ -225,6 +230,24 @@ fn exact_transfers(
         exact.push((new_fn, translated));
     }
     Ok(exact)
+}
+
+/// The class-name testimony of every exact-matched method.
+fn class_name_pairs(
+    stage: &MatchStage<'_, '_>,
+    fresh: &SideRows<'_, '_>,
+    prior: &SideRows<'_, '_>,
+    fresh_state: &RenameState,
+) -> Vec<(usize, TransferPair)> {
+    let matches = &stage.function_result.matches;
+    matches
+        .iter_ordered()
+        .filter_map(|(prior_id, new_id)| {
+            let (prior_fn, new_fn) = (prior.fn_of_session(prior_id)?, fresh.fn_of_session(new_id)?);
+            let pair = class_name_pair(prior, prior_fn, fresh, new_fn, fresh_state)?;
+            Some((new_fn, pair))
+        })
+        .collect()
 }
 
 /// The close context's transfer fields, in assignment order.
@@ -423,6 +446,43 @@ fn translate_prior_names(
         }
     }
     Ok((!pairs.is_empty()).then_some(pairs))
+}
+
+/// The declared class a method row sits directly in: (id symbol, name).
+fn class_of_method(side: &SideRows<'_, '_>, fn_row: usize) -> Option<(SymbolId, String)> {
+    let nodes = side.semantic.nodes();
+    let mut cur = side.row_node(fn_row)?;
+    loop {
+        let parent = nodes.parent_id(cur);
+        match nodes.kind(parent) {
+            AstKind::MethodDefinition(_) | AstKind::ClassBody(_) if parent != cur => cur = parent,
+            AstKind::Class(class) if class.is_declaration() => {
+                let id = class.id.as_ref()?;
+                return Some((id.symbol_id.get()?, id.name.to_string()));
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// An unchanged method says which class it belongs to: the class it sits
+/// in now is the class it sat in before. The pair is testimony for the
+/// class's name; the vote step decides whether it is applied.
+fn class_name_pair(
+    prior: &SideRows<'_, '_>,
+    prior_fn: usize,
+    fresh: &SideRows<'_, '_>,
+    new_fn: usize,
+    fresh_state: &RenameState,
+) -> Option<TransferPair> {
+    let (_, prior_name) = class_of_method(prior, prior_fn)?;
+    let (symbol, new_name) = class_of_method(fresh, new_fn)?;
+    let binding = fresh_state.view().binding_of_symbol(symbol)?;
+    (new_name != prior_name).then_some(TransferPair {
+        old_name: new_name,
+        new_name: prior_name,
+        binding: Some(binding),
+    })
 }
 
 /// The function row's parent declarator (skipping parentheses — babel has
