@@ -2192,3 +2192,96 @@ fn positional_fallback_never_crosses_a_constant_anchored_pair() {
         },
     );
 }
+
+/// An edited loop keeps its loop variable: the head is unchanged and
+/// statements inside the body still align.
+#[test]
+fn transfers_the_variable_of_an_edited_loop() {
+    with_fn_pair(
+        r#"
+      function drain(queue, io) {
+        for (let systemEvent of queue.items) {
+          io.push(systemEvent.uuid);
+          io.flush(systemEvent.time);
+        }
+        for (let slotIndex = 0; slotIndex < queue.size; slotIndex++) {
+          io.mark(slotIndex);
+          io.seal(queue.size);
+        }
+      }"#,
+        r#"
+      function drain(q, o) {
+        for (let e of q.items) {
+          o.anchor(e.parent);
+          o.push(e.uuid);
+          o.flush(e.time);
+        }
+        for (let i = 0; i < q.size; i++) {
+          o.mark(i);
+          o.sealAll(q.size);
+        }
+      }"#,
+        |prior, next| {
+            let transfers = transfer_map(&compute_body_local_transfers(prior, next));
+            assert_eq!(transfers.get("e").map(String::as_str), Some("systemEvent"));
+            assert_eq!(transfers.get("i").map(String::as_str), Some("slotIndex"));
+        },
+    );
+}
+
+/// An edited try keeps its catch parameter.
+#[test]
+fn transfers_the_catch_parameter_of_an_edited_try() {
+    with_fn_pair(
+        r#"
+      function load(io) {
+        try {
+          io.open(1);
+          io.read(2);
+        } catch (readError) {
+          io.report(readError);
+          io.close(3);
+        }
+      }"#,
+        r#"
+      function load(o) {
+        try {
+          o.open(1);
+          o.readAll(2);
+        } catch (x) {
+          o.report(x);
+          o.close(3);
+        }
+      }"#,
+        |prior, next| {
+            let transfers = transfer_map(&compute_body_local_transfers(prior, next));
+            assert_eq!(transfers.get("x").map(String::as_str), Some("readError"));
+        },
+    );
+}
+
+/// A loop whose head changed gives its variable no name: the variable
+/// now walks something else.
+#[test]
+fn does_not_transfer_the_variable_of_a_loop_whose_head_changed() {
+    with_fn_pair(
+        r#"
+      function drain(queue, io) {
+        for (let systemEvent of queue.items) {
+          io.push(1);
+          io.flush(2);
+        }
+      }"#,
+        r#"
+      function drain(q, o) {
+        for (let e of q.pending) {
+          o.push(1);
+          o.flushAll(2);
+        }
+      }"#,
+        |prior, next| {
+            let transfers = transfer_map(&compute_body_local_transfers(prior, next));
+            assert_eq!(transfers.get("e"), None);
+        },
+    );
+}
