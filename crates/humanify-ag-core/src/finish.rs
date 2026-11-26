@@ -20,8 +20,10 @@
 //! - [`carry`] — the reconcile's inner-local renames into the bundle;
 //! - [`driver`] — the stage in the TS's order over a tree on disk.
 
+pub mod alias_restore;
 pub mod carry;
 pub mod driver;
+pub mod export_names;
 pub mod library_names;
 pub mod reconcile;
 pub mod relink;

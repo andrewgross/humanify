@@ -392,7 +392,7 @@ pub fn stable_split(
     let lazy_init = options.module_wrappers.lazy_init_helpers(&input.body);
     let facts = bundle_load_order_facts(
         statements,
-        ingest.semantic().scoping(),
+        ingest.semantic(),
         &lazy_init,
         options.registrar_exemption_disabled,
     );

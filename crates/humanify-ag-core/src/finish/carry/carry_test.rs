@@ -116,6 +116,7 @@ fn rename(from: &str, to: &str) -> PostSplitRename {
         kind: "local",
         votes: 1,
         top_level: false,
+        key_moved: false,
         locator: Some((0, 0)),
     }
 }
@@ -171,4 +172,24 @@ fn two_statement_ledger() -> crate::place::ledger::SplitLedger {
         emit_indexes: Some(vec![0, 1]),
         ..Default::default()
     }
+}
+
+/// A top-level rename reaches the bundle only when the tree's export key
+/// moved with it.
+#[test]
+fn a_top_level_rename_is_carried_when_its_export_key_moved() {
+    let bundle = "(function () {\n  var a = 1;\n  var b = a;\n})();\n";
+    let ledger = two_statement_ledger();
+    let top = |key_moved| PostSplitRename {
+        top_level: true,
+        key_moved,
+        ..rename("a", "alpha")
+    };
+    let left = carry_renames_into_bundle(bundle, &ledger, &[top(false)], LAYOUT).unwrap();
+    assert_eq!(left.code, None);
+    let moved = carry_renames_into_bundle(bundle, &ledger, &[top(true)], LAYOUT).unwrap();
+    assert_eq!(
+        moved.code.as_deref(),
+        Some("(function () {\n  var alpha = 1;\n  var b = alpha;\n})();\n")
+    );
 }

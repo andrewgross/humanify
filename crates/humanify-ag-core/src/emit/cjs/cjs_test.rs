@@ -63,12 +63,7 @@ fn replay(v: &Value) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
     let lazy = crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild.lazy_init_helpers(&input.body);
-    let facts = bundle_load_order_facts(
-        &view.body.statements,
-        ingest.semantic().scoping(),
-        &lazy,
-        false,
-    );
+    let facts = bundle_load_order_facts(&view.body.statements, ingest.semantic(), &lazy, false);
     let names = vec![None; order.len()];
     let got = emit_runnable_cjs(&RunnableInput {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
@@ -208,12 +203,7 @@ fn emit_tree_with_priors(
     )
     .expect("split input");
     let lazy = crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild.lazy_init_helpers(&input.body);
-    let facts = bundle_load_order_facts(
-        &view.body.statements,
-        ingest.semantic().scoping(),
-        &lazy,
-        false,
-    );
+    let facts = bundle_load_order_facts(&view.body.statements, ingest.semantic(), &lazy, false);
     let order: Vec<String> = order.iter().map(|s| s.to_string()).collect();
     let mut files: Vec<String> = Vec::new();
     for f in &order {
@@ -401,6 +391,38 @@ fn a_clash_in_one_importer_widens_only_that_importers_alias() {
         require_line_of(&tree.files, "src/b.js", "./validatePathVal.js"),
         "const validatePathVal = require(\"./validatePathVal.js\");"
     );
+    assert_eq!(
+        require_line_of(
+            &tree.files,
+            "src/parse-tool-rule.js",
+            "./validatePathVal.js"
+        ),
+        "const srcValidatePathVal = require(\"./validatePathVal.js\");"
+    );
+}
+
+/// A local with the alias's name blocks the alias only where the module
+/// is read inside that local's scope.
+#[test]
+fn a_local_outside_every_read_of_the_module_leaves_the_alias_alone() {
+    let (code, order) = shadowing_fixture(
+        "",
+        "return [r].map(function (validatePathVal) { return validatePathVal; }).concat(checkPath(r));",
+    );
+    let tree = emit_tree(&code, &order);
+    assert_eq!(
+        require_line_of(
+            &tree.files,
+            "src/parse-tool-rule.js",
+            "./validatePathVal.js"
+        ),
+        "const validatePathVal = require(\"./validatePathVal.js\");"
+    );
+    let (code, order) = shadowing_fixture(
+        "",
+        "return [r].map(function (validatePathVal) { return checkPath(validatePathVal); });",
+    );
+    let tree = emit_tree(&code, &order);
     assert_eq!(
         require_line_of(
             &tree.files,

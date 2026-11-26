@@ -36,7 +36,7 @@ use oxc_ast::ast::{
     Statement, UnaryOperator, VariableDeclaration, VariableDeclarationKind, VariableDeclarator,
 };
 
-use oxc_semantic::Scoping;
+use oxc_semantic::Semantic;
 
 use crate::babel_view::unparen;
 use crate::inert::Inert;
@@ -835,7 +835,7 @@ pub fn identify_export_registrar(stmts: &[Statement<'_>]) -> Option<String> {
 /// `--disable registrar-exemption` kill switch (the pre-049 behaviour).
 pub fn bundle_load_order_facts(
     stmts: &[Statement<'_>],
-    scoping: &Scoping,
+    semantic: &Semantic<'_>,
     lazy_init_helpers: &std::collections::HashSet<String>,
     registrar_exemption_disabled: bool,
 ) -> Vec<LoadOrderFacts> {
@@ -845,7 +845,10 @@ pub fn bundle_load_order_facts(
     if !registrar_exemption_disabled && let Some(reg) = identify_export_registrar(stmts) {
         opts.target_writing_call_names.insert(reg);
     }
-    let inert = Inert { scoping };
+    let inert = Inert {
+        scoping: semantic.scoping(),
+        nodes: Some(semantic.nodes()),
+    };
     stmts
         .iter()
         .map(|s| inert_declaration(&inert, s).unwrap_or_else(|| analyze_statement(s, &opts)))
@@ -854,7 +857,7 @@ pub fn bundle_load_order_facts(
 
 /// A declaration whose values run no code ([`Inert`]): it writes its
 /// names and nothing else.
-fn inert_declaration(inert: &Inert<'_>, stmt: &Statement<'_>) -> Option<LoadOrderFacts> {
+fn inert_declaration(inert: &Inert<'_, '_>, stmt: &Statement<'_>) -> Option<LoadOrderFacts> {
     let mut writes = Vec::new();
     match stmt {
         Statement::VariableDeclaration(decl) => {

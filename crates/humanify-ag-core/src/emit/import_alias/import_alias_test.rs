@@ -20,6 +20,8 @@ fn scope(imports: &[(usize, &[usize])], names: &[(usize, &[&str])]) -> ImportSco
             .iter()
             .map(|(i, ms)| (*i, ms.iter().copied().collect::<BTreeSet<_>>()))
             .collect(),
+        locals: HashMap::new(),
+        reads: HashMap::new(),
     }
 }
 

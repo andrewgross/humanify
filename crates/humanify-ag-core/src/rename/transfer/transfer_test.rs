@@ -261,3 +261,151 @@ fn a_nested_binding_sharing_a_module_bindings_name_never_settles_that_module_row
         assert!(!run.binding_state[row].is_pending());
     });
 }
+
+/// The program-scope names, in declaration order, after the prior
+/// transfer of `fresh`.
+fn names_after_transfer(prior: &str, fresh: &str) -> Vec<String> {
+    let input = PriorMatchInput {
+        layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
+        fresh,
+        prior,
+        never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
+        same_program_check: true,
+    };
+    match_prior_version(input, |stage| {
+        let (outcome, _) = apply_prior_version(
+            stage,
+            &Default::default(),
+            crate::rename::name_profile::NameProfile::Bun,
+        )
+        .map_err(|e| e.to_string())?;
+        let scope = outcome.rename.view().program_scope();
+        let mut names = outcome.rename.bindings_in(scope);
+        names.sort_by_key(|(_, b)| outcome.rename.view().binding(*b).id_span.start);
+        Ok::<_, String>(names.into_iter().map(|(n, _)| n).collect())
+    })
+    .expect("the pair matches")
+}
+
+const WRAPPED_PRIOR: &str = r#"function buildHeaders(token) { return { auth: "Bearer " + token, kind: "json" }; }
+function fetchOne(token) { return send("one", buildHeaders(token)); }
+function fetchTwo(token) { return send("two", buildHeaders(token), 2); }
+fetchOne(fetchTwo(1));
+"#;
+
+#[test]
+fn a_wrapper_the_old_callers_now_call_takes_the_wrapped_functions_name() {
+    let names = names_after_transfer(
+        WRAPPED_PRIOR,
+        r#"function h(t) { return { auth: "Bearer " + t, kind: "json" }; }
+function w(t) { return { agent: "cli", ...h(t) }; }
+function f1(t) { return send("one", w(t)); }
+function f2(t) { return send("two", w(t), 2); }
+f1(f2(1));
+"#,
+    );
+    assert_eq!(names, ["h", "buildHeaders", "fetchOne", "fetchTwo"]);
+}
+
+#[test]
+fn a_function_an_old_caller_still_calls_keeps_its_name() {
+    let prior = format!(
+        "{WRAPPED_PRIOR}function fetchThree(token) {{ return send(\"three\", buildHeaders(token), 3, 4); }}\n"
+    );
+    let names = names_after_transfer(
+        &prior,
+        r#"function h(t) { return { auth: "Bearer " + t, kind: "json" }; }
+function w(t) { return { agent: "cli", ...h(t) }; }
+function f1(t) { return send("one", w(t)); }
+function f2(t) { return send("two", w(t), 2); }
+f1(f2(1));
+function f3(t) { return send("three", h(t), 3, 4); }
+"#,
+    );
+    assert_eq!(
+        names,
+        ["buildHeaders", "w", "fetchOne", "fetchTwo", "fetchThree"]
+    );
+}
+
+#[test]
+fn a_new_function_that_does_not_wrap_the_old_one_takes_no_name_from_it() {
+    let names = names_after_transfer(
+        WRAPPED_PRIOR,
+        r#"function h(t) { return { auth: "Bearer " + t, kind: "json" }; }
+function w(t) { return { agent: "cli", token: t }; }
+function f1(t) { return send("one", w(t)); }
+function f2(t) { return send("two", w(t), 2); }
+f1(f2(1));
+"#,
+    );
+    assert_eq!(names, ["buildHeaders", "w", "fetchOne", "fetchTwo"]);
+}
+
+#[test]
+fn a_wrapper_takes_the_name_of_a_wrapped_function_whose_body_changed() {
+    let names = names_after_transfer(
+        r#"function resolveSpellings(input) {
+  let entry = lookupEntry(input);
+  if (!entry.unresolved) { return entry.spellings; }
+  let resolved = validate(entry.requested);
+  if (resolved.ok && !entry.spellings.includes(resolved.path)) { return [...entry.spellings, resolved.path]; }
+  return entry.spellings;
+}
+function checkOne(input) { return report("one", resolveSpellings(input)); }
+function checkTwo(input) { return report("two", resolveSpellings(input), 2); }
+checkOne(checkTwo(1));
+"#,
+        r#"function w(i) { return s(lookupEntry(i)); }
+function s(e) {
+  if (!e.unresolved) { return e.spellings; }
+  let r = validate(e.requested);
+  if (r.ok && !e.spellings.includes(r.path)) { return [...e.spellings, r.path]; }
+  return e.spellings;
+}
+function c1(i) { return report("one", w(i)); }
+function c2(i) { return report("two", w(i), 2); }
+c1(c2(1));
+"#,
+    );
+    assert_eq!(names, ["resolveSpellings", "s", "checkOne", "checkTwo"]);
+}
+
+const CLASS_PRIOR: &str = r#"class SleepInhibitor {
+  acquire(owner) { this.count = this.count + 1; return this.spawn(owner, "acquire"); }
+  release(owner) { this.count = this.count - 1; return this.stop(owner, "release"); }
+  spawn(owner, why) { return [owner, why, "caffeinate"]; }
+}
+use(new SleepInhibitor());
+"#;
+
+#[test]
+fn a_changed_class_takes_the_name_of_the_class_its_methods_match() {
+    let names = names_after_transfer(
+        CLASS_PRIOR,
+        r#"class q {
+  acquire(o) { this.count = this.count + 1; return this.spawn(o, "acquire"); }
+  release(o) { this.count = this.count - 1; return this.stop(o, "release"); }
+  spawn(o, w, t) { return [o, w, "systemd-inhibit", t]; }
+}
+use(new q(), 2);
+"#,
+    );
+    assert_eq!(names, ["SleepInhibitor"]);
+}
+
+#[test]
+fn an_unrelated_class_sharing_one_method_takes_no_name_from_it() {
+    let names = names_after_transfer(
+        CLASS_PRIOR,
+        r#"class q {
+  acquire(o) { this.count = this.count + 1; return this.spawn(o, "acquire"); }
+  render(p, n) { this.frame = paint(p.rows, n); return this.frame.join("\n"); }
+  resize(c, r) { this.columns = c; this.rows = r; return layout(this, "resize"); }
+  clear() { this.frame = []; return write("\x1b[2J"); }
+}
+use(new q(), 2);
+"#,
+    );
+    assert_eq!(names, ["q"]);
+}

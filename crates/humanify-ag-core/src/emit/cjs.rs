@@ -903,6 +903,7 @@ fn identifier_names_by_file(
     ranges: &[(u32, u32)],
     stmt_file: &[usize],
     rewritten: &HashSet<NodeId>,
+    local: &HashSet<u32>,
 ) -> HashMap<usize, HashSet<String>> {
     let mut by_file: HashMap<usize, HashSet<String>> = HashMap::new();
     for &f in stmt_file {
@@ -919,11 +920,15 @@ fn identifier_names_by_file(
     for node in nodes.iter() {
         match node.kind() {
             AstKind::IdentifierReference(r) => {
-                if !rewritten.contains(&node.id()) {
+                if !rewritten.contains(&node.id()) && !local.contains(&r.span.start) {
                     add(r.span, &r.name);
                 }
             }
-            AstKind::BindingIdentifier(b) => add(b.span, &b.name),
+            AstKind::BindingIdentifier(b) => {
+                if !local.contains(&b.span.start) {
+                    add(b.span, &b.name);
+                }
+            }
             AstKind::LabelIdentifier(l) => add(l.span, &l.name),
             AstKind::PrivateIdentifier(p) => add(p.span, &p.name),
             AstKind::IdentifierName(n) => {
@@ -1625,6 +1630,7 @@ fn build_import_scope(plan: &Plan<'_, '_>) -> ImportScope {
     let scopes = plan.input.scopes;
     let mut rewritten = HashSet::new();
     let mut imports: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+    let mut reads: HashMap<(usize, usize), Vec<u32>> = HashMap::new();
     for (_, bid) in plan.wrapper_scope_bindings() {
         let b = scopes.binding(*bid);
         if b.kind == BindingKind::Param {
@@ -1642,6 +1648,10 @@ fn build_import_scope(plan: &Plan<'_, '_>) -> ImportScope {
                     rewritten.insert(site.node);
                 }
                 imports.entry(f).or_default().insert(decl_file);
+                reads
+                    .entry((f, decl_file))
+                    .or_default()
+                    .push(site.span.start);
             }
         }
         for site in &b.violations {
@@ -1649,9 +1659,14 @@ fn build_import_scope(plan: &Plan<'_, '_>) -> ImportScope {
                 && f != decl_file
             {
                 imports.entry(f).or_default().insert(decl_file);
+                reads
+                    .entry((f, decl_file))
+                    .or_default()
+                    .push(site.span.start);
             }
         }
     }
+    let (locals, local) = local_bindings(plan);
     ImportScope {
         always_taken: plan
             .input
@@ -1666,9 +1681,57 @@ fn build_import_scope(plan: &Plan<'_, '_>) -> ImportScope {
             &plan.ranges,
             &plan.stmt_file,
             &rewritten,
+            &local,
         ),
         imports,
+        locals,
+        reads,
     }
+}
+
+/// Each file's bindings declared below the wrapper's own scope, by name
+/// with the scope they are visible in, and where their identifiers
+/// stand. A function declaration is left out: in a block it can also
+/// bind its name in the enclosing function.
+#[allow(clippy::type_complexity)]
+fn local_bindings(
+    plan: &Plan<'_, '_>,
+) -> (
+    HashMap<usize, HashMap<String, Vec<(u32, u32)>>>,
+    HashSet<u32>,
+) {
+    let scopes = plan.input.scopes;
+    let wrapper = scopes.scope_of_node(plan.input.wrapper.node);
+    let below_wrapper = |mut scope: crate::rename::validated::scopes::BScopeId| {
+        while let Some(parent) = scopes.scope(scope).parent {
+            if parent == wrapper {
+                return true;
+            }
+            scope = parent;
+        }
+        false
+    };
+    let mut by_file: HashMap<usize, HashMap<String, Vec<(u32, u32)>>> = HashMap::new();
+    let mut positions = HashSet::new();
+    for b in &scopes.bindings {
+        if b.kind == BindingKind::Hoisted || !below_wrapper(b.owner) {
+            continue;
+        }
+        let Some((_, file)) = plan.file_at(b.id_span.start) else {
+            continue;
+        };
+        let span = scopes.scope(b.owner).span;
+        by_file
+            .entry(file)
+            .or_default()
+            .entry(b.name.clone())
+            .or_default()
+            .push((span.start, span.end));
+        positions.insert(b.id_span.start);
+        positions.extend(b.refs.iter().map(|site| site.span.start));
+        positions.extend(b.violation_targets.iter().flatten().map(|s| s.start));
+    }
+    (by_file, positions)
 }
 
 /// `orderedIndexesByFile`: each file's statements (relocated grouping,

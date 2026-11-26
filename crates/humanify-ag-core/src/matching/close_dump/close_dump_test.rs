@@ -206,36 +206,43 @@ fn derive_events_labels_won_taken_and_tie() {
             old_id: "o1".into(),
             new_id: "n1".into(),
             score: 0.9,
+            content: 0.0,
         },
         CloseCandidate {
             old_id: "o2".into(),
             new_id: "n2".into(),
             score: 0.8,
+            content: 0.0,
         },
         CloseCandidate {
             old_id: "o3".into(),
             new_id: "n2".into(),
             score: 0.7,
+            content: 0.0,
         },
         CloseCandidate {
             old_id: "o4".into(),
             new_id: "n1".into(),
             score: 0.6,
+            content: 0.0,
         },
         CloseCandidate {
             old_id: "o5".into(),
             new_id: "n3".into(),
             score: 0.5,
+            content: 0.0,
         },
         CloseCandidate {
             old_id: "o6".into(),
             new_id: "n3".into(),
             score: 0.5,
+            content: 0.0,
         },
         CloseCandidate {
             old_id: "o7".into(),
             new_id: "n4".into(),
             score: 0.5,
+            content: 0.0,
         },
     ];
     let won = vec![("o1", "n1"), ("o2", "n2"), ("o7", "n4")]

@@ -13,7 +13,9 @@
 //!
 //! a name two modules want at the same rung goes to neither (both widen),
 //! and a name is free only if it is a legal binding, unclaimed IN THIS
-//! FILE, not a wrapper parameter, and not a name THIS FILE uses.
+//! FILE, not a wrapper parameter, and not a name THIS FILE uses. A name
+//! the file uses only for locals below its top level is free for a
+//! module whose reads in the file all sit outside those locals' scopes.
 //!
 //! What changed (the WIDENING class, exp057 §2): the alias used to be one
 //! per module tree-wide, so a name in ANY importer — or another file
@@ -89,6 +91,26 @@ pub(super) struct ImportScope {
     pub names_by_file: HashMap<usize, HashSet<String>>,
     /// importer → the modules it reads or writes across files.
     pub imports: BTreeMap<usize, BTreeSet<usize>>,
+    /// importer → name → the scope of each binding of that name declared
+    /// below the file's top level (its names are not in `names_by_file`).
+    pub locals: HashMap<usize, HashMap<String, Vec<(u32, u32)>>>,
+    /// (importer, module) → where the importer reads or writes the module.
+    pub reads: HashMap<(usize, usize), Vec<u32>>,
+}
+
+impl ImportScope {
+    /// A local named `name` is in scope where `importer` reads `module`:
+    /// the alias would be shadowed there.
+    fn shadowed(&self, importer: usize, module: usize, name: &str) -> bool {
+        let Some(scopes) = self.locals.get(&importer).and_then(|l| l.get(name)) else {
+            return false;
+        };
+        self.reads.get(&(importer, module)).is_some_and(|reads| {
+            reads
+                .iter()
+                .any(|at| scopes.iter().any(|(start, end)| start <= at && at < end))
+        })
+    }
 }
 
 /// One importer's choice, rung by rung.
@@ -97,6 +119,8 @@ struct Importer<'a> {
     always_taken: &'a HashSet<String>,
     claimed: HashSet<String>,
     chosen: BTreeMap<usize, String>,
+    scope: &'a ImportScope,
+    importer: usize,
 }
 
 impl Importer<'_> {
@@ -122,7 +146,12 @@ impl Importer<'_> {
         let mut next = Vec::new();
         for (m, w) in &wants {
             match w {
-                Some(w) if !w.is_empty() && count[w.as_str()] == 1 && self.is_free(w) => {
+                Some(w)
+                    if !w.is_empty()
+                        && count[w.as_str()] == 1
+                        && self.is_free(w)
+                        && !self.scope.shadowed(self.importer, *m, w) =>
+                {
                     granted.push((*m, w.clone()));
                 }
                 _ => next.push(*m),
@@ -156,6 +185,8 @@ pub(super) fn build_import_aliases(
             always_taken: &scope.always_taken,
             claimed: HashSet::new(),
             chosen: BTreeMap::new(),
+            scope,
+            importer,
         };
         let mut pending: Vec<usize> = modules.iter().copied().collect();
         if let Some(carried) = prior.and_then(|p| p.get(&files[importer])) {

@@ -523,6 +523,7 @@ fn commit_and_finish(
     let finish_input = FinishInput {
         runnable: outcome.runnable.as_deref(),
         prior: input.prior,
+        prior_names: input.ledger.map(|l| &l.ledger.name_to_files),
         input_file: input.input_file,
         working_dir: input.working_dir,
         switches: finish_switches,

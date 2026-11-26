@@ -106,23 +106,6 @@ pub fn prior_module_inits(ledger: &StableSplitLedger) -> Vec<PriorModuleInit> {
         .collect()
 }
 
-/// Multiset Jaccard of two SORTED hash lists.
-fn sorted_jaccard(a: &[String], b: &[String]) -> f64 {
-    let (mut i, mut j, mut inter) = (0, 0, 0usize);
-    while i < a.len() && j < b.len() {
-        match a[i].cmp(&b[j]) {
-            std::cmp::Ordering::Less => i += 1,
-            std::cmp::Ordering::Greater => j += 1,
-            std::cmp::Ordering::Equal => {
-                inter += 1;
-                i += 1;
-                j += 1;
-            }
-        }
-    }
-    crate::similarity::jaccard_from_counts(inter, a.len(), b.len())
-}
-
 /// hash -> the modules holding it, in module order (lookup only).
 fn holders<'a>(side: &[&'a [String]]) -> HashMap<&'a str, Vec<usize>> {
     let mut map: HashMap<&str, Vec<usize>> = HashMap::new();
@@ -155,7 +138,7 @@ fn strict_best(
     candidates.dedup();
     let (mut best, mut best_score, mut second) = (None, 0.0f64, 0.0f64);
     for c in candidates {
-        let score = sorted_jaccard(hashes, other[c]);
+        let score = crate::similarity::sorted_jaccard(hashes, other[c]);
         if score > best_score {
             second = best_score;
             best = Some(c);

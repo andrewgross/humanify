@@ -30,6 +30,7 @@ use std::collections::HashMap;
 use crate::rename::floor::is_below_floor_name;
 use crate::rename::name_profile::NameProfile;
 use crate::rename::transfer::evidence::{SideRows, TransferEvidence};
+use crate::rename::transfer::lifecycle::Lifecycle;
 use crate::rename::transfer::retry::OnApplied;
 use crate::rename::transfer::rows::Rows;
 use crate::rename::transfer::{ExternalRef, TransferRun};
@@ -260,7 +261,7 @@ pub fn propagate_external_references(
     dump::record_vote_dump(run, &refs, &module_by_binding, &tallies_view(&tallies));
     let claimants = count_name_claimants(&tallies);
     apply_propagated_module_bindings(run, &tallies.module, &claimants, evidence, fresh);
-    apply_propagated_function_names(run, &tallies.fn_names, &claimants, evidence, fresh);
+    apply_propagated_function_names(run, &tallies.fn_names, &claimants, evidence, fresh, &refs);
     apply_propagated_closure_captures(run, &tallies.closures);
 }
 
@@ -526,6 +527,7 @@ fn apply_propagated_function_names(
     claimants: &HashMap<String, u64>,
     evidence: &TransferEvidence,
     fresh: &SideRows<'_, '_>,
+    refs: &[ExternalRef],
 ) {
     for entry in entries {
         let Some(top) =
@@ -535,6 +537,7 @@ fn apply_propagated_function_names(
             continue;
         };
         let scope = run.rename.scope_of_binding(entry.binding);
+        release_wrapped_holder(run, entry, &top, refs);
         let attempt = run.rename.attempt_validated_rename(
             RenameRequest {
                 scope,
@@ -563,6 +566,75 @@ fn apply_propagated_function_names(
             continue;
         }
         run.fn_transferred[entry.fn_row].insert(top);
+    }
+}
+
+/// The function that holds `name` by its own match and is wrapped by the
+/// voted function: none when a matched caller still reads it under `name`.
+fn wrapped_holder(
+    run: &TransferRun<'_, '_>,
+    entry: &FnNameEntry,
+    name: &str,
+    refs: &[ExternalRef],
+) -> Option<(BindingId, usize)> {
+    let scope = run.rename.scope_of_binding(entry.binding);
+    let holder = run.rename.binding_in(scope, name)?;
+    let view = run.rename.view();
+    if holder == entry.binding
+        || !Rows::binding_is_function_declaration(view, holder)
+        || run.rename.is_export_involved(holder)
+        || refs
+            .iter()
+            .any(|r| r.binding == holder && r.new_name == name)
+    {
+        return None;
+    }
+    let row = *run.rows.fn_by_node.get(&view.binding(holder).path_node)?;
+    let wrapper = run.rows.fns[entry.fn_row].scope;
+    let read_by_wrapper = view.binding(holder).refs.iter().any(|site| {
+        std::iter::successors(Some(site.scope), |s| view.scope(*s).parent).any(|s| s == wrapper)
+    });
+    let matched = matches!(
+        run.fn_state[row],
+        Lifecycle::Pending | Lifecycle::Transferred(_)
+    );
+    (read_by_wrapper && matched).then_some((holder, row))
+}
+
+/// Upstream wrapped a function and moved its callers to the wrapper: the
+/// wrapped function goes back to its input name, to be named again, so
+/// the wrapper can take the name the callers vote for.
+fn release_wrapped_holder(
+    run: &mut TransferRun<'_, '_>,
+    entry: &FnNameEntry,
+    name: &str,
+    refs: &[ExternalRef],
+) {
+    let Some((holder, row)) = wrapped_holder(run, entry, name, refs) else {
+        return;
+    };
+    let input_name = run.rename.view().binding(holder).name.clone();
+    let attempt = run.rename.attempt_validated_rename(
+        RenameRequest {
+            scope: run.rename.scope_of_binding(holder),
+            old_name: name,
+            new_name: &input_name,
+            expected: Some(holder),
+        },
+        TrailSpec::CallerRecords {
+            tier: Tier::FnNameVote,
+        },
+    );
+    let a = rename_attempt(
+        Tier::FnNameVote,
+        attempt.applied,
+        attempt.reason,
+        &input_name,
+    );
+    run.rename.record(holder, name, a, false);
+    if attempt.applied {
+        run.fn_transferred[row].remove(name);
+        run.fn_state[row] = Lifecycle::Pending;
     }
 }
 

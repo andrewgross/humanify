@@ -280,7 +280,7 @@ pub fn run_transfer_pipeline(
     for step in &TRANSFER_PIPELINE {
         match step.name {
             "statement-twin" => tiers::apply_statement_twin_transfers(&mut run, twins),
-            "exact-match" => tiers::apply_matched_renames(&mut run),
+            "exact-match" => tiers::apply_matched_renames(&mut run, evidence),
             "close-match" => tiers::attach_close_match_context(&mut run, evidence),
             "binding-cascade" => tiers::apply_module_binding_renames(&mut run, evidence),
             "vote-propagation" => {

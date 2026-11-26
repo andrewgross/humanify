@@ -6,6 +6,7 @@ use humanify_ag_testkit::strings;
 use std::collections::HashSet;
 
 use oxc_allocator::Allocator;
+use oxc_ast::ast::{Expression, Statement};
 
 use super::{
     LoadOrderFacts, LoadOrderOptions, analyze_load_order, bundle_load_order_facts,
@@ -35,12 +36,7 @@ fn bundle_facts(src: &str) -> Vec<LoadOrderFacts> {
     let json = crate::ingest::program_estree_json(ingest.program);
     let body = json["body"].as_array().expect("body");
     let lazy = crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild.lazy_init_helpers(body);
-    bundle_load_order_facts(
-        &ingest.program.body,
-        ingest.semantic().scoping(),
-        &lazy,
-        false,
-    )
+    bundle_load_order_facts(&ingest.program.body, ingest.semantic(), &lazy, false)
 }
 
 #[test]
@@ -338,5 +334,43 @@ fn a_declaration_that_runs_no_code_is_a_write_and_no_barrier() {
 #[test]
 fn a_built_in_name_the_bundle_binds_is_a_call_like_any_other() {
     let all = bundle_facts("function Symbol(x) { return x; } var a = Symbol('a');");
+    assert!(all[1].effects);
+}
+
+#[test]
+fn a_require_of_a_node_built_in_is_a_write_and_no_barrier() {
+    let all = bundle_facts(
+        "var a = require('path'); var b = require('node:fs/promises'); var c = { default: require('os') }; var d = require('left-pad'); var e = require(a);",
+    );
+    for (f, name) in all.iter().zip(["a", "b", "c"]) {
+        assert!(!f.effects, "{name}");
+        assert_eq!(f.writes, strings(&[name]));
+    }
+    assert!(all[3].effects);
+    assert!(all[4].effects);
+}
+
+#[test]
+fn a_require_the_bundle_binds_is_a_call_like_any_other() {
+    let all = bundle_facts("function require(x) { return x; } var a = require('path');");
+    assert!(all[1].effects);
+}
+
+#[test]
+fn a_wrapper_parameter_named_require_is_the_programs_require() {
+    let src =
+        "(function (exports, require) { var a = require('path'); var b = require('left-pad'); });";
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, src, "t.js");
+    let Statement::ExpressionStatement(e) = &ingest.program.body[0] else {
+        panic!("an expression statement");
+    };
+    let Expression::FunctionExpression(f) = crate::babel_view::unparen(&e.expression) else {
+        panic!("a function");
+    };
+    let body = &f.body.as_ref().expect("a body").statements;
+    let lazy = HashSet::new();
+    let all = bundle_load_order_facts(body, ingest.semantic(), &lazy, false);
+    assert!(!all[0].effects);
     assert!(all[1].effects);
 }

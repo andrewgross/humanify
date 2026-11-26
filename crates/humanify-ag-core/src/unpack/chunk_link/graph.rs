@@ -4,7 +4,7 @@
 
 use oxc_semantic::SymbolId;
 
-use super::analyse::{Chunk, Declarator, ExportTarget, Imported, Spec, StmtKind};
+use super::analyse::{Chunk, Declarator, ExportTarget, ImportDecl, Imported, Spec, StmtKind};
 use super::error::LinkError;
 
 /// A binding of the linked program.
@@ -274,14 +274,11 @@ fn order_free(chunks: &[Chunk], order: &Order, at: (usize, usize), d: &Declarato
     }
 }
 
-/// Does the chunk import anything that is not a chunk? A lazy chunk loads
-/// those in its init (Bun resolves some packages itself, `ws`; loaded
-/// eagerly under Node they would fail the whole program).
+/// Does the chunk import anything a lazy chunk loads in its init? (Bun
+/// resolves some packages itself, `ws`; loaded eagerly under Node they
+/// would fail the whole program.)
 fn has_externals(chunk: &Chunk) -> bool {
-    chunk
-        .imports
-        .iter()
-        .any(|d| matches!(d.spec, Spec::External(_)))
+    chunk.imports.iter().any(ImportDecl::loads_in_init)
 }
 
 /// Per chunk: can a walk from it over `edges` come back to it, or reach a

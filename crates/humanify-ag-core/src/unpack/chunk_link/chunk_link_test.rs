@@ -236,6 +236,49 @@ fn a_lazy_chunks_functions_stay_at_the_top_level() {
 }
 
 #[test]
+fn a_lazy_chunks_node_built_in_import_is_a_top_level_declaration() {
+    let lazy = |import: &str| {
+        layout(&[
+            (
+                "index.js",
+                &format!(
+                    "{HEAD}import(\"/$bunfs/root/chunk-l.js\").then((m)=>console.log(m.g()));\n"
+                ),
+            ),
+            (
+                "chunk-l.js",
+                &format!("{HEAD}{import}var k=[g];function g(){{return v}}export{{g}};\n"),
+            ),
+        ])
+    };
+    let (text, _) = linked(&lazy("import{sep as v}from\"path\";"));
+    assert_eq!(run(&text), "/\n");
+    let init = text.split("=__esm(()=>{").nth(1).unwrap();
+    assert!(!init.contains("require("), "{text}");
+    assert!(text.contains("=require(\"path\");"), "{text}");
+    let (text, _) = linked(&lazy("import{pad as v}from\"left-pad\";"));
+    let init = text.split("=__esm(()=>{").nth(1).unwrap();
+    assert!(init.contains("=require(\"left-pad\");"), "{text}");
+}
+
+#[test]
+fn a_lazy_chunk_with_only_built_in_imports_has_no_init() {
+    let entry = layout(&[
+        (
+            "index.js",
+            &format!("{HEAD}import(\"/$bunfs/root/chunk-l.js\").then((m)=>console.log(m.g()));\n"),
+        ),
+        (
+            "chunk-l.js",
+            &format!("{HEAD}import{{sep as v}}from\"path\";function g(){{return v}}export{{g}};\n"),
+        ),
+    ]);
+    let (text, report) = linked(&entry);
+    assert_eq!(run(&text), "/\n");
+    assert_eq!(report.inits, 0);
+}
+
+#[test]
 fn a_default_export_expression_is_bound() {
     let entry = layout(&[
         (
@@ -1075,7 +1118,7 @@ fn the_link_map_names_every_piece_of_text_the_linker_writes() {
         (
             "chunk-b.js",
             format!(
-                "{HEAD}import{{c}}from\"/$bunfs/root/chunk-c.js\";import{{sep}}from\"path\";\
+                "{HEAD}import{{c}}from\"/$bunfs/root/chunk-c.js\";import{{sep}}from\"path\";import{{serialize as z}}from\"v8\";\
 var k=7;class C{{static s=k;v(){{return k+c()+sep.length}}}}function b(){{return new C().v()}}export{{b}};\n"
             ),
         ),
@@ -1105,7 +1148,7 @@ var k=7;class C{{static s=k;v(){{return k+c()+sep.length}}}}function b(){{return
         map.linker_text_at((init_b + at) as u32)
             .map(|(c, t, _)| (c, t))
     };
-    assert_eq!(mark("var sep"), Some((1, ExternalNames)));
+    assert_eq!(mark("var z$1;"), Some((1, ExternalNames)));
     assert_eq!(mark("={};"), Some((1, Namespace)));
     assert_eq!(mark(",{b:()=>"), Some((1, Exports)));
     let c = &files[2].1;
@@ -1129,7 +1172,7 @@ var k=7;class C{{static s=k;v(){{return k+c()+sep.length}}}}function b(){{return
     );
     assert_eq!(in_b("=__esm(()=>{"), Some((1, Init)));
     assert_eq!(in_b("();"), Some((1, Call { target: 2 })));
-    assert_eq!(in_b("=require(\"path\")"), Some((1, Load { nth: 0 })));
+    assert_eq!(in_b("=require(\"v8\")"), Some((1, Load { nth: 1 })));
     assert_eq!(mark("return k+"), None);
     // An init is two pieces, its opening and its close; every other
     // piece of linker text is written once per chunk.

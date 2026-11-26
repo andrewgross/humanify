@@ -388,4 +388,5 @@ const PIN_TEXT_EXTRACTORS: &str = "5aed2a4d97e46b22238b4ab4";
 // fixtures one snap-eligible close-match hint (`It` -> `Ct`) is now carried
 // mechanically (a transfer row instead of a hint/snap row); nothing else in
 // the stage's output moved (diffed line by line against main d3fed6a4).
-const PIN_MATCH_STAGE: &str = "ed22686e0f579bdbe72114f2";
+// Close candidates carry their shared content and rank by it first.
+const PIN_MATCH_STAGE: &str = "d9978561079f109033fe193c";

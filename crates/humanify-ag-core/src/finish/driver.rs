@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::FileError;
 use crate::modules::vendor_names::BunModulesManifest;
-use crate::output_tree::OutputTree;
+use crate::output_tree::{OutputTree, TreeFile};
 use crate::place::layout::METADATA_DIR;
 use crate::rename::eligibility::{Eligibility, NeverRename};
 use crate::rename::name_profile::NameProfile;
@@ -48,6 +48,8 @@ pub struct FinishInput<'a> {
     pub runnable: Option<&'a [String]>,
     /// The prior release's tree (`--prior-version`), read by the shell.
     pub prior: Option<&'a crate::prior_tree::PriorTree>,
+    /// Bundle name to the previous release's files that declared it.
+    pub prior_names: Option<&'a std::collections::HashMap<String, Vec<String>>>,
     /// The input bundle (its directory resolves installed versions).
     pub input_file: &'a Path,
     /// The working directory the shell read: a relative `input_file`
@@ -400,6 +402,7 @@ pub fn finish_stage(
         super::library_names::name_library_imports_in_tree(
             tree,
             &input.split_files,
+            prior_names(input),
             input.never_rename,
             input.name_profile,
         )?
@@ -418,6 +421,19 @@ pub fn finish_stage(
         input.layout,
         report,
     )?;
+    if let Some(prior) = input.prior {
+        let _ph = crate::profiling::phase("split:finish:alias-restore");
+        let files = super::alias_restore::restore_import_aliases(
+            tree,
+            &input.split_files,
+            &prior.files,
+            input.never_rename,
+            input.name_profile,
+        )?;
+        report.messages.push(format!(
+            "Import aliases: {files} file(s) took a previous alias back"
+        ));
+    }
     Ok((relinked, reconciled))
 }
 
@@ -425,6 +441,14 @@ pub fn finish_stage(
 // The post-split reconcile + bundle carry (`reconcilePostSplit`,
 // `carryIntoBundle`)
 // ---------------------------------------------------------------------------
+
+/// The previous tree as the library-import pass reads it.
+fn prior_names<'a>(input: &FinishInput<'a>) -> Option<super::library_names::PriorNames<'a>> {
+    Some(super::library_names::PriorNames {
+        files: &input.prior?.files,
+        name_to_files: input.prior_names?,
+    })
+}
 
 /// What the reconcile stage did, for the gate's report.
 #[derive(Debug, Default)]
@@ -488,7 +512,7 @@ pub fn reconcile_post_split(
     let reading: &OutputTree = tree;
     let read_fresh = |f: &str| read_opt(reading, f);
     let read_prior = |f: &str| prior.text_lossy(f).map(std::borrow::Cow::into_owned);
-    let result = {
+    let mut result = {
         // The per-file read + compute bulk (the reads interleave with the
         // diffing inside post_split_reconcile — one span spans it all).
         let _ph = crate::profiling::phase("split:finish:reconcile");
@@ -521,6 +545,7 @@ pub fn reconcile_post_split(
             tree.put_rel(file, text.as_str());
         }
         tree.put(ledger_path, ledger.to_json());
+        follow_exports(tree, &mut result.renames);
     }
     let carry = {
         let _ph = crate::profiling::phase("split:finish:carry");
@@ -544,6 +569,38 @@ pub fn reconcile_post_split(
         ));
     }
     Ok(Some(ReconcileReport { result, carry }))
+}
+
+/// Each renamed top-level binding's export key, and the key's uses in
+/// the tree's other files, take the binding's name.
+fn follow_exports(tree: &mut OutputTree, renames: &mut [super::reconcile::PostSplitRename]) {
+    if !renames.iter().any(|r| r.top_level) {
+        return;
+    }
+    let root = tree.root().to_path_buf();
+    let files: std::collections::BTreeMap<String, String> = tree
+        .files()
+        .filter_map(|(path, file)| {
+            let TreeFile::Bytes(bytes) = file else {
+                return None;
+            };
+            let Ok(rel) = path.strip_prefix(&root) else {
+                return None;
+            };
+            let rel = rel.to_str()?;
+            (rel.ends_with(".js") && !rel.starts_with(METADATA_DIR))
+                .then(|| (rel.to_string(), String::from_utf8_lossy(bytes).into_owned()))
+        })
+        .collect();
+    let followed = super::export_names::follow_export_renames(renames, &files);
+    for (file, text) in followed.changed {
+        tree.put_rel(&file, text);
+    }
+    for r in renames.iter_mut().filter(|r| r.top_level) {
+        r.key_moved = followed
+            .moved
+            .contains(&(r.file.clone(), r.from_name.clone()));
+    }
 }
 
 /// `carryIntoBundle`: give `.humanify/humanified.js` the names the tree

@@ -2,11 +2,12 @@
 //! a lazy chunk's declarations of these stay at the top level, and no
 //! statement's place in a file depends on them.
 
+use oxc_ast::AstKind;
 use oxc_ast::ast::{
-    Argument, ArrayExpressionElement, Class, ClassElement, Expression, ObjectPropertyKind,
-    PropertyKey,
+    Argument, ArrayExpressionElement, CallExpression, Class, ClassElement, Expression,
+    ObjectPropertyKind, PropertyKey,
 };
-use oxc_semantic::Scoping;
+use oxc_semantic::{AstNodes, Scoping};
 use oxc_syntax::operator::UnaryOperator;
 
 use crate::babel_view::unparen;
@@ -31,11 +32,72 @@ const BASES: [&str; 9] = [
 /// Built-in constants.
 const CONSTANTS: [&str; 3] = ["undefined", "NaN", "Infinity"];
 
-pub(crate) struct Inert<'s> {
-    pub scoping: &'s Scoping,
+/// Node built-in modules: loading one runs no code of the program.
+const BUILT_INS: [&str; 31] = [
+    "assert",
+    "async_hooks",
+    "buffer",
+    "child_process",
+    "crypto",
+    "dns",
+    "events",
+    "fs",
+    "fs/promises",
+    "http",
+    "https",
+    "module",
+    "net",
+    "os",
+    "path",
+    "path/posix",
+    "path/win32",
+    "perf_hooks",
+    "querystring",
+    "readline",
+    "stream",
+    "stream/promises",
+    "string_decoder",
+    "timers",
+    "timers/promises",
+    "tls",
+    "tty",
+    "url",
+    "util",
+    "worker_threads",
+    "zlib",
+];
+
+/// `spec` names a Node built-in whose load runs no code of the program.
+pub(crate) fn built_in_module(spec: &str) -> bool {
+    BUILT_INS.contains(&spec.strip_prefix("node:").unwrap_or(spec))
 }
 
-impl Inert<'_> {
+pub(crate) struct Inert<'s, 'a> {
+    pub scoping: &'s Scoping,
+    /// With the nodes, a parameter named `require` is the program's
+    /// `require` (a CommonJS wrapper's).
+    pub nodes: Option<&'s AstNodes<'a>>,
+}
+
+impl Inert<'_, '_> {
+    /// `e` is the program's `require`: the global, or a parameter.
+    fn require(&self, e: &Expression<'_>) -> bool {
+        let Expression::Identifier(id) = unparen(e) else {
+            return false;
+        };
+        if id.name != "require" {
+            return false;
+        }
+        let Some(symbol) = self.scoping.get_reference(id.reference_id()).symbol_id() else {
+            return true;
+        };
+        let declared = self.scoping.symbol_declaration(symbol);
+        self.nodes.is_some_and(|nodes| {
+            matches!(nodes.kind(declared), AstKind::FormalParameter(_))
+                || matches!(nodes.parent_kind(declared), AstKind::FormalParameter(_))
+        })
+    }
+
     /// `e` is the global `name` (no binding of the chunk shadows it).
     fn global<'a>(&self, e: &'a Expression<'a>) -> Option<&'a str> {
         match unparen(e) {
@@ -84,6 +146,12 @@ impl Inert<'_> {
         }
     }
 
+    /// `require("<built-in>")` through the program's `require`.
+    fn built_in_load(&self, c: &CallExpression<'_>) -> bool {
+        self.require(&c.callee)
+            && matches!(c.arguments.as_slice(), [Argument::StringLiteral(s)] if built_in_module(&s.value))
+    }
+
     fn arguments(&self, args: &[Argument<'_>]) -> bool {
         args.iter()
             .all(|a| a.as_expression().is_some_and(|e| self.value(e)))
@@ -121,7 +189,7 @@ impl Inert<'_> {
                 let known = self.global_in(&c.callee, &["Symbol"])
                     || self.global_member(&c.callee, "Symbol", &["for"])
                     || self.global_member(&c.callee, "Object", &["freeze"]);
-                known && !c.optional && self.arguments(&c.arguments)
+                !c.optional && (self.built_in_load(c) || known && self.arguments(&c.arguments))
             }
             _ => self.primitive(e),
         }
