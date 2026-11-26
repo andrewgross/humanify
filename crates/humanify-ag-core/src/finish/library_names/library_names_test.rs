@@ -279,3 +279,65 @@ fn an_import_the_previous_file_left_numbered_takes_no_holders_name() {
         three_imports(["fsPromisesModule7", "fsPromises", "fsPromisesModule"])
     );
 }
+
+#[test]
+fn an_unrelated_local_takes_no_name_from_a_previous_holder() {
+    let quote = "function quote(fsPromises) {\n  return String(fsPromises);\n}\n";
+    let text = format!(
+        "{}{quote}",
+        three_imports([
+            "fsPromisesModule3",
+            "fsPromisesModule5",
+            "fsPromisesModule7",
+        ])
+    );
+    let prior = three_imports(["fsPromises", "fsPromisesModule", "fsPromisesModule7"]);
+    let out = run_with_prior(
+        &text,
+        &prior,
+        &[
+            "fsPromisesModule3",
+            "fsPromisesModule5",
+            "fsPromisesModule7",
+        ],
+    );
+    assert_eq!(
+        text_of(&out),
+        format!("{prior}{quote}"),
+        "kept: {:?}",
+        out.kept
+    );
+}
+
+#[test]
+fn a_holder_that_cannot_keep_its_name_leaves_the_other_holders_theirs() {
+    let reader =
+        "function read(fsPromises) {\n  return fsPromisesModule3.readFile(fsPromises);\n}\n";
+    let text = format!(
+        "{}{reader}",
+        three_imports([
+            "fsPromisesModule3",
+            "fsPromisesModule5",
+            "fsPromisesModule7",
+        ])
+    );
+    let prior = three_imports(["fsPromises", "fsPromisesModule", "fsPromisesModule7"]);
+    let out = run_with_prior(
+        &text,
+        &prior,
+        &[
+            "fsPromisesModule3",
+            "fsPromisesModule5",
+            "fsPromisesModule7",
+        ],
+    );
+    assert_eq!(
+        text_of(&out),
+        format!(
+            "{}{reader}",
+            three_imports(["fsPromisesModule3", "fsPromisesModule", "fsPromisesModule7"])
+        ),
+        "kept: {:?}",
+        out.kept
+    );
+}

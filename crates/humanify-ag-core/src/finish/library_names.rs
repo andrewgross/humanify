@@ -25,7 +25,8 @@
 //!
 //! With a previous release, the imports that had a package name in the
 //! previous copy of the file come first, so an import new to the file takes
-//! no name from them.
+//! no name from them, and each keeps the name it had there unless a local
+//! of that name can see its reads.
 //!
 //! What counts as a library import here is the naming pass's own shape —
 //! a FILE-level binding whose only write is the call (`naming::plumbing::
@@ -257,31 +258,70 @@ fn library_imports(semantic: &Semantic<'_>) -> Vec<Import> {
     out
 }
 
-/// The imports that had a package name in the previous file: declared
-/// there, and not written there under their bundle name.
-fn previous_holders(
-    prior: &PriorFile<'_>,
-    semantic: &Semantic<'_>,
-    imports: &[Import],
-) -> HashSet<SymbolId> {
+/// What the previous copy of the file says about this file's imports.
+#[derive(Default)]
+struct Previous {
+    /// The imports that had a package name there: declared there, and not
+    /// written there under their bundle name.
+    held: HashSet<SymbolId>,
+    /// The package name each of them had, known when the two copies hold
+    /// equally many such imports of the package (paired in source order).
+    names: HashMap<SymbolId, String>,
+}
+
+fn previous(prior: &PriorFile<'_>, semantic: &Semantic<'_>, imports: &[Import]) -> Previous {
     let allocator = Allocator::default();
     let Ok(ingest) = parse_or_err(&allocator, &prior.text) else {
-        return HashSet::new();
+        return Previous::default();
     };
     let before = ingest.semantic();
-    let written: HashSet<&str> = library_imports(before)
-        .iter()
-        .map(|i| before.scoping().symbol_name(i.symbol))
-        .collect();
-    imports
+    let prior_imports = library_imports(before);
+    let prior_name = |i: &Import| before.scoping().symbol_name(i.symbol);
+    let written: HashSet<&str> = prior_imports.iter().map(prior_name).collect();
+    let holders: Vec<&Import> = imports
         .iter()
         .filter(|i| {
             let name = semantic.scoping().symbol_name(i.symbol);
             prior.declared(name)
                 && (!written.contains(name) || candidates(&i.spec).iter().any(|c| c == name))
         })
-        .map(|i| i.symbol)
-        .collect()
+        .collect();
+    let mut names = HashMap::new();
+    let mut specs: Vec<&str> = holders.iter().map(|i| i.spec.as_str()).collect();
+    specs.sort_unstable();
+    specs.dedup();
+    for spec in specs {
+        let wanted = candidates(spec);
+        let had: Vec<&str> = prior_imports
+            .iter()
+            .filter(|i| i.spec == spec)
+            .map(prior_name)
+            .filter(|n| wanted.iter().any(|c| c == n))
+            .collect();
+        let now: Vec<&&Import> = holders.iter().filter(|i| i.spec == spec).collect();
+        if had.len() == now.len() {
+            names.extend(now.iter().zip(had).map(|(i, n)| (i.symbol, n.to_string())));
+        }
+    }
+    Previous {
+        held: holders.iter().map(|i| i.symbol).collect(),
+        names,
+    }
+}
+
+/// May a previous holder keep `name`? A local elsewhere in the file may
+/// share it: the rename itself refuses a local that can see the import's
+/// reads.
+pub(super) fn may_keep(name: &str, semantic: &Semantic<'_>, eligible: &Eligibility) -> bool {
+    let read_free = semantic
+        .scoping()
+        .root_unresolved_references()
+        .keys()
+        .any(|k| k.as_str() == name);
+    is_valid_rename_target(name)
+        && !is_commonjs_context_name(name)
+        && eligible.is_eligible(name)
+        && !read_free
 }
 
 /// Every name the file uses: each declared name (any scope) and each name
@@ -317,11 +357,11 @@ pub fn name_library_imports_in_file(
     if imports.is_empty() {
         return out;
     }
-    if let Some(prior) = prior {
-        let held = previous_holders(prior, semantic, &imports);
-        imports.sort_by_key(|i| (!held.contains(&i.symbol), i.at));
-    }
+    let previous = prior.map(|p| previous(p, semantic, &imports));
+    let previous = previous.unwrap_or_default();
+    imports.sort_by_key(|i| (!previous.held.contains(&i.symbol), i.at));
     let mut taken = names_in_use(semantic);
+    taken.extend(previous.names.values().cloned());
     let mut state = RenameState::with_trail(
         semantic,
         Anchor::Generated,
@@ -334,9 +374,13 @@ pub fn name_library_imports_in_file(
             out.kept.push((current, "no-binding"));
             continue;
         };
-        let pick = candidates(&import.spec)
-            .into_iter()
-            .find(|c| *c == current || is_free(c, &taken, eligible));
+        let kept = previous.names.get(&import.symbol);
+        let kept = kept.filter(|n| may_keep(n, semantic, eligible)).cloned();
+        let pick = kept.or_else(|| {
+            candidates(&import.spec)
+                .into_iter()
+                .find(|c| *c == current || is_free(c, &taken, eligible))
+        });
         let Some(name) = pick else {
             out.kept.push((current, "no-free-name"));
             continue;
@@ -392,6 +436,13 @@ pub fn name_library_imports_in_file(
     out
 }
 
+/// The split's own JavaScript files: everything outside `.humanify/`.
+pub(super) fn split_js_files<'a>(files: &[&'a str]) -> Vec<&'a str> {
+    let metadata = format!("{METADATA_DIR}/");
+    let own = |f: &&str| f.ends_with(".js") && !f.starts_with(&metadata);
+    files.iter().copied().filter(own).collect()
+}
+
 /// Name the library imports of every split file in the output tree
 /// (`files` are the paths the split wrote; `.humanify/` is skipped).
 pub fn name_library_imports_in_tree(
@@ -402,12 +453,7 @@ pub fn name_library_imports_in_tree(
     profile: NameProfile,
 ) -> Result<LibraryNamesReport, FileError> {
     let eligible = Eligibility::new(never_rename);
-    let metadata = format!("{METADATA_DIR}/");
-    let files: Vec<&str> = files
-        .iter()
-        .copied()
-        .filter(|f| f.ends_with(".js") && !f.starts_with(&metadata))
-        .collect();
+    let files = split_js_files(files);
     let reading: &OutputTree = tree;
     let works = crate::par::map_ordered(&files, |file| {
         let text = reading.read_lossy(&reading.root().join(file))?;

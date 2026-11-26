@@ -421,6 +421,19 @@ pub fn finish_stage(
         input.layout,
         report,
     )?;
+    if let Some(prior) = input.prior {
+        let _ph = crate::profiling::phase("split:finish:alias-restore");
+        let files = super::alias_restore::restore_import_aliases(
+            tree,
+            &input.split_files,
+            &prior.files,
+            input.never_rename,
+            input.name_profile,
+        )?;
+        report.messages.push(format!(
+            "Import aliases: {files} file(s) took a previous alias back"
+        ));
+    }
     Ok((relinked, reconciled))
 }
 
