@@ -25,13 +25,16 @@ fn the_previous_alias_comes_back_beside_a_local_that_cannot_see_the_module() {
 }
 
 #[test]
-fn a_local_that_can_see_the_module_keeps_the_alias_away() {
-    let local =
-        "function size(pluginCache) {\n  return (0, srcPluginCache.read)(pluginCache);\n}\n";
-    assert_eq!(
-        run(&file("srcPluginCache", local), &file("pluginCache", "")),
-        None
+fn a_local_that_can_see_the_module_makes_way_for_the_alias() {
+    let local = |alias: &str, name: &str| {
+        format!("function size({name}) {{\n  return (0, {alias}.read)({name});\n}}\n")
+    };
+    let out = run(
+        &file("srcPluginCache", &local("srcPluginCache", "pluginCache")),
+        &file("pluginCache", ""),
     );
+    let want = file("pluginCache", &local("pluginCache", "pluginCacheVal"));
+    assert_eq!(out, Some(want));
 }
 
 #[test]
