@@ -19,6 +19,8 @@
 //!
 //! 1. a public accessor that only returns it or only writes it
 //!    (`get size() { return this.#a }` → `#size`);
+//!    then a public method with no parameter that only returns it
+//!    (`size() { return this.#a }` → `#size`);
 //! 2. an object key whose value reads it (`{ keyMap: c.#a }` → `#keyMap`);
 //! 3. an assignment from a property read (`this.#a = o.timeout ?? 5` →
 //!    `#timeout`);
@@ -105,6 +107,7 @@ impl Kind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Source {
     Accessor,
+    Getter,
     ObjectKey,
     ReadKey,
     Constructs,
@@ -316,8 +319,11 @@ fn evidence_at(semantic: &Semantic<'_>, private: NodeId) -> Option<(Source, u32,
             static_key(&op.key).map(|k| (Source::ObjectKey, op.span.start, k))
         }
         AstKind::ReturnStatement(_) if on_this => {
-            accessor_name(semantic, parent_id, MethodDefinitionKind::Get)
-                .map(|k| (Source::Accessor, field_span.start, k))
+            let named = |kind, source| {
+                accessor_name(semantic, parent_id, kind).map(|k| (source, field_span.start, k))
+            };
+            named(MethodDefinitionKind::Get, Source::Accessor)
+                .or_else(|| named(MethodDefinitionKind::Method, Source::Getter))
         }
         AstKind::AssignmentExpression(a) if on_this && a.left.span() == field_span => {
             if a.operator.is_assign() {
@@ -335,7 +341,8 @@ fn evidence_at(semantic: &Semantic<'_>, private: NodeId) -> Option<(Source, u32,
 }
 
 /// The public accessor of `kind` whose body is exactly the statement
-/// `statement` (`get size() { return this.#a }`), if any.
+/// `statement` (`get size() { return this.#a }`), if any. A plain method
+/// counts when it takes no parameter (`size() { return this.#a }`).
 fn accessor_name(
     semantic: &Semantic<'_>,
     statement: NodeId,
@@ -350,7 +357,10 @@ fn accessor_name(
         return None;
     }
     let function_id = nodes.parent_id(body_id);
-    if !matches!(nodes.kind(function_id), AstKind::Function(_)) {
+    let AstKind::Function(function) = nodes.kind(function_id) else {
+        return None;
+    };
+    if kind == MethodDefinitionKind::Method && function.params.parameters_count() > 0 {
         return None;
     }
     match nodes.kind(nodes.parent_id(function_id)) {
