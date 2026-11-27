@@ -154,3 +154,56 @@ fn a_require_line_is_matched_against_the_same_files_require_lines() {
     assert_eq!(labeller.label(true, "src/m.js", 2), Label::RequireRenamed);
     assert_eq!(labeller.label(true, "src/m.js", 3), Label::RequireEdge);
 }
+
+/// A tree with one file of `calls` the linker wrote for input file 0,
+/// and one file per `(path, init name, input file)`.
+fn tree_of_inits(inputs: &[&str], calls: &str, inits: &[(&str, &str, u32)]) -> Tree {
+    use serde_json::json;
+    let mut files = BTreeMap::from([("src/m.js".to_string(), calls.as_bytes().to_vec())]);
+    let mut layout = BTreeMap::from([(
+        "src/m.js".to_string(),
+        json!({"units": [{"at": [0, null], "linker": "init", "line": 1, "names": ["initM"]}]}),
+    )]);
+    for (path, name, input) in inits {
+        files.insert(path.to_string(), format!("var {name};\n").into_bytes());
+        let unit = json!({"at": [input, null], "linker": "init", "line": 1, "names": [name]});
+        layout.insert(path.to_string(), json!({"units": [unit]}));
+    }
+    let layout = json!({
+        "format": 1, "inputs": inputs, "priorLayout": null, "namedText": "",
+        "files": layout, "priorAmbiguous": [],
+    });
+    Tree::from_parts(files, Some(&layout.to_string())).unwrap()
+}
+
+#[test]
+fn an_init_call_is_matched_by_the_chunk_it_calls() {
+    let chunk =
+        |n: u32| format!("function f{n}(x){{return x+{n}}}function g{n}(y){{return y*{n}}}");
+    let input = |names: [&str; 3], bodies: [u32; 3]| -> Vec<InputFile> {
+        let files = names.iter().zip(bodies);
+        files.map(|(n, b)| InputFile::parse(n, &chunk(b))).collect()
+    };
+    let truth = Truth::compare(
+        input(["m.js", "one.js", "gone.js"], [1, 2, 3]),
+        input(["m.js", "uno.js", "fresh.js"], [1, 2, 4]),
+    );
+    let from = tree_of_inits(
+        &["m.js", "one.js", "gone.js"],
+        "(0, one.initOne)();\n(0, gone.initGone)();\n",
+        &[("src/one.js", "initOne", 1), ("src/gone.js", "initGone", 2)],
+    );
+    let to = tree_of_inits(
+        &["m.js", "uno.js", "fresh.js"],
+        "(0, fresh.initFresh)();\n(0, uno.initUno)();\n",
+        &[
+            ("src/uno.js", "initUno", 1),
+            ("src/fresh.js", "initFresh", 2),
+        ],
+    );
+    let labeller = Labeller::new(&truth, &from, &to);
+    assert_eq!(labeller.label(false, "src/m.js", 1), Label::LinkerRenamed);
+    assert_eq!(labeller.label(true, "src/m.js", 2), Label::LinkerRenamed);
+    assert_eq!(labeller.label(false, "src/m.js", 2), Label::InitCallChanged);
+    assert_eq!(labeller.label(true, "src/m.js", 1), Label::InitCallChanged);
+}

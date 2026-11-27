@@ -28,6 +28,8 @@ pub struct Tree {
     files: BTreeMap<String, Option<TextFile>>,
     layout: Option<Layout>,
     rows: BTreeMap<String, Vec<(u32, Origin)>>,
+    /// Per init function's name, the input file it is the init of.
+    init_chunks: BTreeMap<String, u32>,
 }
 
 fn text_file(bytes: Vec<u8>) -> Option<TextFile> {
@@ -48,7 +50,7 @@ fn text_file(bytes: Vec<u8>) -> Option<TextFile> {
 fn origin_of(unit: &Unit) -> Origin {
     match unit.at {
         None => Origin::Pipeline,
-        Some((file, Some(byte))) if unit.linker.is_none() => Origin::At(file, byte),
+        Some((file, Some(byte))) => Origin::At(file, byte),
         Some((file, _)) => Origin::Linker(file),
     }
 }
@@ -71,6 +73,16 @@ fn push_unit(rows: &mut Vec<(u32, Origin)>, unit: &Unit) {
             push(rows, *line, origin);
         }
     }
+}
+
+/// Each init function the linker wrote, with its input file.
+fn init_chunks(layout: &Layout) -> BTreeMap<String, u32> {
+    let units = layout.files.values().flat_map(FileEntry::all_units);
+    let inits = units.filter(|u| u.linker.as_deref() == Some("init"));
+    inits
+        .filter_map(|u| Some((u.at?.0, &u.names)))
+        .flat_map(|(file, names)| names.iter().map(move |n| (n.clone(), file)))
+        .collect()
 }
 
 /// A file's rows: the pipeline's lines first, then each unit's.
@@ -101,6 +113,7 @@ impl Tree {
             .map_err(|e| format!("{LAYOUT_PATH}: {e}"))?;
         let rows = layout.iter().flat_map(|l| &l.files);
         Ok(Tree {
+            init_chunks: layout.as_ref().map(init_chunks).unwrap_or_default(),
             rows: rows.map(|(path, e)| (path.clone(), rows_of(e))).collect(),
             files: files.into_iter().map(|(p, b)| (p, text_file(b))).collect(),
             layout,
@@ -146,6 +159,11 @@ impl Tree {
     pub fn input_index(&self, name: &str) -> Option<u32> {
         let at = self.inputs().iter().position(|n| n == name)?;
         Some(at as u32)
+    }
+
+    /// The input file an init function of this name is the init of.
+    pub fn init_chunk(&self, name: &str) -> Option<u32> {
+        self.init_chunks.get(name).copied()
     }
 
     /// Every line of a file with its origin.

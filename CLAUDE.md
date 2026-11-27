@@ -308,7 +308,9 @@ input bytes each output line came from. Labels fall into five groups:
   edit, part names that did not carry over.
 - **noise**: from unchanged input (renamed, moved, printed differently,
   linker text reordered or renamed).
-- **wiring**: require and export lines whose cause is not known yet.
+- **wiring**: require and export lines whose cause is not known yet, and
+  init calls of a chunk the file does not call on the other side (the
+  bundler grouped the code into other chunks).
 - **unknown**: duplicated input text, unpaired input files, files the layout
   record does not cover.
 

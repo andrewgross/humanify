@@ -52,3 +52,16 @@ fn a_layout_of_another_format_is_refused() {
         Some(".humanify/layout.json: layout format 7: this binary reads format 1")
     );
 }
+
+#[test]
+fn a_declaration_the_linker_hoisted_comes_from_its_input_statement() {
+    use serde_json::json;
+    let unit = json!({"at": [0, 12], "linker": "decl", "line": 1, "names": ["total"]});
+    let layout = json!({
+        "format": 1, "inputs": ["a.js"], "priorLayout": null, "namedText": "",
+        "files": {"src/m.js": {"units": [unit]}}, "priorAmbiguous": [],
+    });
+    let files = BTreeMap::from([("src/m.js".to_string(), b"var total;\n".to_vec())]);
+    let tree = Tree::from_parts(files, Some(&layout.to_string())).unwrap();
+    assert_eq!(tree.origin("src/m.js", 1), Some(Origin::At(0, 12)));
+}
