@@ -72,7 +72,7 @@ impl Label {
             Label::InputReindented => (
                 "input-reindented",
                 "real",
-                "from changed input; the other side has the same text at another indentation",
+                "the other side has the same text at another indentation: the code around it was nested differently",
             ),
             Label::KeptRenamed => (
                 "kept-renamed",
@@ -193,6 +193,7 @@ type UnitLines<'a> = BTreeMap<u32, Vec<UnitLine<'a>>>;
 /// different numbers of lines.
 struct LineSet<'a> {
     exact: BTreeSet<(&'a str, &'a str)>,
+    trimmed: BTreeSet<&'a str>,
     masked: BTreeSet<String>,
 }
 
@@ -393,6 +394,8 @@ fn compare(mine: &str, theirs: &str, same_path: bool) -> Label {
         } else {
             Label::MovedFile
         }
+    } else if mine.trim() == theirs.trim() {
+        Label::InputReindented
     } else if masked(mine) == masked(theirs) {
         Label::Renamed
     } else {
@@ -435,6 +438,10 @@ impl<'a> Labeller<'a> {
                 .iter()
                 .map(|l| (self.text(!to_side, l), l.path))
                 .collect(),
+            trimmed: theirs
+                .iter()
+                .map(|l| self.text(!to_side, l).trim())
+                .collect(),
             masked: theirs
                 .iter()
                 .map(|l| masked(self.text(!to_side, l)))
@@ -449,6 +456,8 @@ impl<'a> Labeller<'a> {
             .is_some_and(|(t, _)| *t == text)
         {
             Label::MovedFile
+        } else if set.trimmed.contains(text.trim()) {
+            Label::InputReindented
         } else if set.masked.contains(&masked(text)) {
             Label::Renamed
         } else {

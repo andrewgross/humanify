@@ -207,3 +207,18 @@ fn an_init_call_is_matched_by_the_chunk_it_calls() {
     assert_eq!(labeller.label(false, "src/m.js", 2), Label::InitCallChanged);
     assert_eq!(labeller.label(true, "src/m.js", 1), Label::InitCallChanged);
 }
+
+#[test]
+fn unchanged_input_at_another_indentation_was_nested_differently() {
+    let to = tree(
+        &[(
+            "src/m.js",
+            "function alpha(x) {\n    return x + 1;\n}\nfunction beta(y) {\n  return y * 3;\n}\n",
+        )],
+        r#"{"src/m.js":[[1,0,0],[4,0,25]]}"#,
+    );
+    let (truth, from) = (truth(), from_tree());
+    let labeller = Labeller::new(&truth, &from, &to);
+    assert_eq!(labeller.label(true, "src/m.js", 2), Label::InputReindented);
+    assert_eq!(labeller.label(false, "src/m.js", 3), Label::InputReindented);
+}
