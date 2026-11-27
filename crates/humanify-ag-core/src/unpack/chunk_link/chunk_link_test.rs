@@ -1057,6 +1057,11 @@ console.log(main());import(\"/$bunfs/root/chunk-b.js\").then((m)=>console.log(m.
 /// A lazy chunk `x` importing `s`, `d`, `t` in the given order, where `s`
 /// imports `d`; `x_body` is the rest of `x`, `y` a chunk importing `x`.
 fn shuffled(order: [&str; 3], x_body: &str) -> String {
+    shuffled_with(order, x_body, "")
+}
+
+/// [`shuffled`], with `s_body` as the rest of `s`.
+fn shuffled_with(order: [&str; 3], x_body: &str, s_body: &str) -> String {
     let import = |name: &str| format!("import\"/$bunfs/root/chunk-{name}.js\";");
     let imports: String = order.iter().map(|n| import(n)).collect();
     let entry = layout(&[
@@ -1070,7 +1075,7 @@ fn shuffled(order: [&str; 3], x_body: &str) -> String {
         ),
         (
             "chunk-s.js",
-            &format!("{HEAD}{}console.log(\"s\");\n", import("d")),
+            &format!("{HEAD}{}console.log(\"s\");{s_body}\n", import("d")),
         ),
         ("chunk-d.js", &format!("{HEAD}console.log(\"d\");\n")),
         ("chunk-t.js", &format!("{HEAD}console.log(\"t\");\n")),
@@ -1094,14 +1099,28 @@ fn an_init_call_that_runs_nothing_is_not_written() {
     assert_eq!(calls, 2, "{x_init}");
 }
 
+const LOADS_Y: &str = "function later(){return import.meta.require(\"/$bunfs/root/chunk-y.js\")}";
+
 #[test]
-fn a_chunk_in_a_synchronous_load_cycle_keeps_its_import_order() {
-    // `x` can load `y` while `y`'s import of `x` is still running, so a
-    // call counted as running nothing may run something.
-    let body = "function later(){return import.meta.require(\"/$bunfs/root/chunk-y.js\")}";
+fn a_chunk_in_a_load_cycle_leaves_out_a_call_covered_from_outside_the_cycle() {
+    // `x` is on a cycle with `y`, but `s` is not: nothing `s` runs can
+    // be part-way through its init, so `d` has run when `s` returns.
     let (first, second) = (
-        shuffled(["s", "d", "t"], body),
-        shuffled(["s", "t", "d"], body),
+        shuffled(["s", "d", "t"], LOADS_Y),
+        shuffled(["s", "t", "d"], LOADS_Y),
+    );
+    assert_eq!(run(&first), "d\ns\nt\nx\n");
+    assert_eq!(first, second);
+}
+
+#[test]
+fn a_chunk_in_a_load_cycle_keeps_a_call_covered_only_from_inside_the_cycle() {
+    // `s` can load `x` while its own init is still running, so `s` may
+    // return to `x` without having run `d`.
+    let s_loads_x = "function back(){return import.meta.require(\"/$bunfs/root/chunk-x.js\")}";
+    let (first, second) = (
+        shuffled_with(["s", "d", "t"], "", s_loads_x),
+        shuffled_with(["s", "t", "d"], "", s_loads_x),
     );
     assert_eq!(run(&first), "d\ns\nt\nx\n");
     assert_ne!(first, second);

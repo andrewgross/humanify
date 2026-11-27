@@ -297,28 +297,27 @@ fn reaches_a_cycle(edges: &[Vec<usize>]) -> Vec<bool> {
     }
 }
 
-/// Can a walk from `start` over `edges`, through chunks of `within`,
-/// come back to it?
-fn returns_to(edges: &[Vec<usize>], within: &[bool], start: usize) -> bool {
+/// The chunks a walk from `start` over `edges` comes to, through chunks
+/// of `within` (`start` itself only when the walk comes back to it).
+fn reached(edges: &[Vec<usize>], within: &[bool], start: usize) -> Vec<bool> {
     let mut seen = vec![false; edges.len()];
     let mut stack = edges[start].clone();
     while let Some(c) = stack.pop() {
-        if c == start {
-            return true;
-        }
         if within[c] && !seen[c] {
             seen[c] = true;
             stack.extend(edges[c].iter().copied());
         }
     }
-    false
+    seen
 }
 
-/// The chunks on a cycle of static imports and synchronous requires: one
-/// of them can be loaded while its own init is still running. A chunk
-/// that is only between two cycles cannot: whatever it imports that is
-/// part-way through its init would have to reach back to it.
-fn in_sync_load_cycle(chunks: &[Chunk]) -> Vec<bool> {
+/// Per chunk, the chunks that share a cycle of static imports and
+/// synchronous requires with one of the chunks it loads: only those can
+/// be part-way through their init while the chunk's own init runs. Empty
+/// for a chunk on no cycle, one that is only between two cycles included:
+/// whatever it imports that is part-way through its init would have to
+/// reach back to it.
+fn may_be_running(chunks: &[Chunk]) -> Vec<Vec<bool>> {
     let forward: Vec<Vec<usize>> = chunks
         .iter()
         .map(|ch| {
@@ -333,7 +332,14 @@ fn in_sync_load_cycle(chunks: &[Chunk]) -> Vec<bool> {
     let (down, up) = (reaches_a_cycle(&forward), reaches_a_cycle(&backward));
     let near: Vec<bool> = down.iter().zip(up).map(|(d, u)| *d && u).collect();
     (0..chunks.len())
-        .map(|c| near[c] && returns_to(&forward, &near, c))
+        .map(|c| {
+            let loaders = reached(&backward, &near, c);
+            if near[c] && loaders[c] {
+                loaders
+            } else {
+                vec![false; chunks.len()]
+            }
+        })
         .collect()
 }
 
@@ -350,37 +356,34 @@ fn mark_run(calls: &[Vec<usize>], start: usize, run: &mut [bool]) {
 
 /// One chunk's init calls that run a chunk, in import order. A call whose
 /// chunk an earlier call already ran does nothing wherever it stands,
-/// and the bundler moves it between builds of unchanged code.
-fn live_calls(calls: &[Vec<usize>], c: usize) -> Vec<usize> {
+/// and the bundler moves it between builds of unchanged code. A call of
+/// a chunk in `running` may return early, so it counts for nothing it
+/// would run.
+fn live_calls(calls: &[Vec<usize>], c: usize, running: &[bool]) -> Vec<usize> {
     let mut run = vec![false; calls.len()];
     run[c] = true;
     let mut live = Vec::new();
     for &d in &calls[c] {
         if !run[d] {
             live.push(d);
-            mark_run(calls, d, &mut run);
+            if !running[d] {
+                mark_run(calls, d, &mut run);
+            }
         }
     }
     live
 }
 
-/// Per chunk, the chunks whose init its own init calls, in call order. A
-/// chunk in a synchronous load cycle keeps every call of its import order.
+/// Per chunk, the chunks whose init its own init calls, in call order.
 pub(super) fn init_calls(chunks: &[Chunk], order: &Order, needs_init: &[bool]) -> Vec<Vec<usize>> {
     let called = |ch: &Chunk| -> Vec<usize> {
         let deps = ch.static_deps.iter().copied();
         deps.filter(|&d| needs_init[d] && !order.eager[d]).collect()
     };
     let calls: Vec<Vec<usize>> = chunks.iter().map(called).collect();
-    let cyclic = in_sync_load_cycle(chunks);
+    let running = may_be_running(chunks);
     (0..chunks.len())
-        .map(|c| {
-            if cyclic[c] {
-                calls[c].clone()
-            } else {
-                live_calls(&calls, c)
-            }
-        })
+        .map(|c| live_calls(&calls, c, &running[c]))
         .collect()
 }
 

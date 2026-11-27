@@ -223,3 +223,26 @@ fn counts_say_how_each_member_was_named() {
         }
     );
 }
+
+#[test]
+fn a_method_that_only_returns_a_field_names_it() {
+    let out =
+        run("class A {\n  #a = 0;\n  #b = 1;\n  toolsMachine() {\n    return this.#b;\n  }\n}\n");
+    assert!(
+        out.contains("#field1 = 0;") && out.contains("#toolsMachine = 1;"),
+        "{out}"
+    );
+    assert!(out.contains("return this.#toolsMachine;"), "{out}");
+}
+
+#[test]
+fn a_method_with_a_parameter_names_no_field() {
+    let out = run("class A {\n  #a = 0;\n  pick(key) {\n    return this.#a;\n  }\n}\n");
+    assert!(out.contains("#field1 = 0;"), "{out}");
+}
+
+#[test]
+fn an_accessor_wins_over_a_method() {
+    let text = "class A {\n  #a = 0;\n  peek() {\n    return this.#a;\n  }\n  get size() {\n    return this.#a;\n  }\n}\n";
+    assert!(run(text).contains("#size = 0;"), "{}", run(text));
+}
