@@ -27,6 +27,7 @@ pub enum Label {
     PipelineWritten,
     LinkerMoved,
     ImportsReordered,
+    InitCallChanged,
     LinkerRenamed,
     LinkerChanged,
     LinkerUnpaired,
@@ -34,7 +35,7 @@ pub enum Label {
 }
 
 impl Label {
-    pub const ALL: [Label; 22] = [
+    pub const ALL: [Label; 23] = [
         Label::InputChanged,
         Label::InputReindented,
         Label::KeptRenamed,
@@ -53,6 +54,7 @@ impl Label {
         Label::PipelineWritten,
         Label::LinkerMoved,
         Label::ImportsReordered,
+        Label::InitCallChanged,
         Label::LinkerRenamed,
         Label::LinkerChanged,
         Label::LinkerUnpaired,
@@ -70,7 +72,7 @@ impl Label {
             Label::InputReindented => (
                 "input-reindented",
                 "real",
-                "from changed input; the other side has the same text at another indentation",
+                "the other side has the same text at another indentation: the code around it was nested differently",
             ),
             Label::KeptRenamed => (
                 "kept-renamed",
@@ -148,6 +150,11 @@ impl Label {
                 "noise",
                 "a linker init call the paired input file also has, at another position: the bundler wrote the same imports in another order",
             ),
+            Label::InitCallChanged => (
+                "init-call-changed",
+                "wiring",
+                "a linker init call of a chunk the paired input file does not call on the other side: the bundler grouped the code into other chunks",
+            ),
             Label::LinkerRenamed => (
                 "linker-renamed",
                 "noise",
@@ -186,6 +193,7 @@ type UnitLines<'a> = BTreeMap<u32, Vec<UnitLine<'a>>>;
 /// different numbers of lines.
 struct LineSet<'a> {
     exact: BTreeSet<(&'a str, &'a str)>,
+    trimmed: BTreeSet<&'a str>,
     masked: BTreeSet<String>,
 }
 
@@ -224,10 +232,6 @@ pub(super) fn masked(line: &str) -> String {
     out
 }
 
-fn masked_owned(line: &str) -> String {
-    masked(line)
-}
-
 /// The other tree's require lines of a path it may not have.
 fn require_lines_in<'a>(tree: &'a Tree, path: &str) -> Vec<Place<'a>> {
     match tree.files_with_rows().find(|p| *p == path) {
@@ -256,20 +260,23 @@ fn wiring(text: &str) -> Label {
     }
 }
 
-/// A statement that only calls a name with no arguments, as the linker
-/// writes a chunk's init: `name();` or `(0, module.name)();`.
-fn is_init_call(text: &str) -> bool {
-    let Some(callee) = text.trim().strip_suffix("();") else {
-        return false;
-    };
+/// The name a statement calls with no arguments, as the linker writes
+/// a chunk's init: `name();` or `(0, module.name)();`.
+fn init_callee(text: &str) -> Option<&str> {
+    let callee = text.trim().strip_suffix("();")?;
     let callee = callee
         .strip_prefix("(0, ")
         .and_then(|c| c.strip_suffix(')'))
         .unwrap_or(callee);
-    !callee.is_empty()
+    let named = !callee.is_empty()
         && callee
             .chars()
-            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '$' | '.'))
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '$' | '.'));
+    named.then(|| callee.rsplit('.').next().unwrap_or(callee))
+}
+
+fn is_init_call(text: &str) -> bool {
+    init_callee(text).is_some()
 }
 
 fn unit_lines<'a>(tree: &'a Tree, side: &Side) -> UnitLines<'a> {
@@ -387,6 +394,8 @@ fn compare(mine: &str, theirs: &str, same_path: bool) -> Label {
         } else {
             Label::MovedFile
         }
+    } else if mine.trim() == theirs.trim() {
+        Label::InputReindented
     } else if masked(mine) == masked(theirs) {
         Label::Renamed
     } else {
@@ -429,6 +438,10 @@ impl<'a> Labeller<'a> {
                 .iter()
                 .map(|l| (self.text(!to_side, l), l.path))
                 .collect(),
+            trimmed: theirs
+                .iter()
+                .map(|l| self.text(!to_side, l).trim())
+                .collect(),
             masked: theirs
                 .iter()
                 .map(|l| masked(self.text(!to_side, l)))
@@ -443,6 +456,8 @@ impl<'a> Labeller<'a> {
             .is_some_and(|(t, _)| *t == text)
         {
             Label::MovedFile
+        } else if set.trimmed.contains(text.trim()) {
+            Label::InputReindented
         } else if set.masked.contains(&masked(text)) {
             Label::Renamed
         } else {
@@ -476,10 +491,11 @@ impl<'a> Labeller<'a> {
         &self,
         to_side: bool,
         lines: &[Place<'a>],
-        key: fn(&str) -> String,
+        key: &dyn Fn(bool, &str) -> String,
     ) -> Vec<(&'a str, String)> {
         let text = |place: &Place<'a>| self.tree(to_side).line(place.0, place.1).unwrap_or("");
-        lines.iter().map(|p| (text(p), key(text(p)))).collect()
+        let keyed = |p| (text(p), key(to_side, text(p)));
+        lines.iter().map(keyed).collect()
     }
 
     /// How a wiring line is found on the other side, among its group's
@@ -490,7 +506,7 @@ impl<'a> Labeller<'a> {
         group: String,
         at: Place<'a>,
         lines: impl FnOnce() -> (Vec<Place<'a>>, Vec<Place<'a>>),
-        key: fn(&str) -> String,
+        key: &dyn Fn(bool, &str) -> String,
     ) -> Found {
         let mut wiring = self.wiring.borrow_mut();
         let found = wiring.entry((to_side, group)).or_insert_with(|| {
@@ -522,14 +538,34 @@ impl<'a> Labeller<'a> {
         if self.truth.paired_file(to_side, name).is_none() {
             return Label::LinkerUnpaired;
         }
-        match self.found(to_side, format!("linker {name}"), at, lines, masked_owned) {
-            Found::SameText if is_init_call(self.tree(to_side).line(at.0, at.1).unwrap_or("")) => {
-                Label::ImportsReordered
-            }
+        let text = self.tree(to_side).line(at.0, at.1).unwrap_or("");
+        let key = |side: bool, text: &str| self.linker_key(side, text);
+        match self.found(to_side, format!("linker {name}"), at, lines, &key) {
+            Found::SameText if is_init_call(text) => Label::ImportsReordered,
             Found::SameText => Label::LinkerMoved,
             Found::SameKey => Label::LinkerRenamed,
+            Found::Missing if self.called_chunk(to_side, text).is_some() => Label::InitCallChanged,
             Found::Missing => Label::LinkerChanged,
         }
+    }
+
+    /// The input file whose init a linker line calls, named as the to
+    /// side names it; `None` when the line is no known init's call.
+    fn called_chunk(&self, to_side: bool, text: &str) -> Option<String> {
+        let tree = self.tree(to_side);
+        let name = tree.input_name(tree.init_chunk(init_callee(text)?)?);
+        Some(match self.truth.paired_file(to_side, name) {
+            _ if to_side => format!("call {name}"),
+            Some(partner) => format!("call {partner}"),
+            None => format!("call of the from side {name}"),
+        })
+    }
+
+    /// What pairs a linker line with one of the other side: the chunk an
+    /// init call calls, else the line with its names set aside.
+    fn linker_key(&self, to_side: bool, text: &str) -> String {
+        self.called_chunk(to_side, text)
+            .unwrap_or_else(|| masked(text))
     }
 
     fn require(&self, to_side: bool, at: Place<'a>) -> Label {
@@ -539,13 +575,8 @@ impl<'a> Labeller<'a> {
                 require_lines_in(self.tree(!to_side), at.0),
             )
         };
-        match self.found(
-            to_side,
-            format!("require {}", at.0),
-            at,
-            lines,
-            require_target,
-        ) {
+        let key = |_: bool, text: &str| require_target(text);
+        match self.found(to_side, format!("require {}", at.0), at, lines, &key) {
             Found::SameText => Label::RequireMoved,
             Found::SameKey => Label::RequireRenamed,
             Found::Missing => Label::RequireEdge,
